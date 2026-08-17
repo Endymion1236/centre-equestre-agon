@@ -89,7 +89,7 @@ export default function FamilyCard({
   });
   // ── Édition famille ────────────────────────────────────────────────────────
   const [editingFamily, setEditingFamily] = useState(false);
-  const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "", siren: "" });
+  const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "", siren: "", accountType: "particulier", raisonSociale: "", structureParente: "" });
   const [editTags, setEditTags] = useState<string[]>([]);
 
   const startEditFamily = () => {
@@ -103,6 +103,9 @@ export default function FamilyCard({
       parentPhone: family.parentPhone || "", parentPhone2: (family as any).parentPhone2 || "", address: family.address || "",
       zipCode: family.zipCode || "", city: family.city || "",
       siren: String((family as any).siren || ""),
+      accountType: (family as any).accountType || "particulier",
+      raisonSociale: (family as any).raisonSociale || "",
+      structureParente: (family as any).structureParente || "",
     });
     setEditTags(family.tags || []);
   };
@@ -112,9 +115,23 @@ export default function FamilyCard({
     try {
       const lastName = editForm.lastName.trim().toUpperCase();
       const firstName = editForm.firstName.trim();
-      const computedName = lastName && firstName
-        ? `${lastName} ${firstName}`
-        : lastName || firstName || editForm.parentName.trim();
+      // Même règle de nom qu'à la création (CreateFamilyModal) : un
+      // établissement s'appelle par sa raison sociale, pas par un nom de
+      // famille. Sans ça, corriger la raison sociale ici n'aurait aucun effet
+      // sur le nom affiché partout ailleurs.
+      const estEtablissement = editForm.accountType !== "particulier";
+      const computedName = estEtablissement
+        ? (editForm.accountType === "collectivite" && editForm.structureParente.trim() && editForm.raisonSociale.trim()
+            ? `${editForm.structureParente.trim()} — ${editForm.raisonSociale.trim()}`
+            : editForm.raisonSociale.trim() || editForm.parentName.trim())
+        : (lastName && firstName
+            ? `${lastName} ${firstName}`
+            : lastName || firstName || editForm.parentName.trim());
+      // Le fléchage « Établissement » suit le type de compte, comme à la
+      // création : c'est lui qui pose la pastille violette sur la fiche.
+      const tagsFinaux = estEtablissement
+        ? Array.from(new Set([...editTags, "etablissement"]))
+        : editTags.filter(t => t !== "etablissement");
 
       const newEmail = editForm.parentEmail.trim().toLowerCase();
       const oldEmail = (family.parentEmail || "").trim().toLowerCase();
@@ -147,7 +164,10 @@ export default function FamilyCard({
           parentPhone: editForm.parentPhone.trim(), parentPhone2: editForm.parentPhone2.trim(), address: editForm.address.trim(),
           siren: editForm.siren.replace(/\s/g, "") || null,
           zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
-          tags: editTags,
+          accountType: editForm.accountType,
+          raisonSociale: editForm.raisonSociale.trim() || null,
+          structureParente: editForm.structureParente.trim() || null,
+          tags: tagsFinaux,
           updatedAt: serverTimestamp(),
         });
         toast(data.message || "Email mis a jour", "success");
@@ -162,7 +182,10 @@ export default function FamilyCard({
           parentPhone: editForm.parentPhone.trim(), parentPhone2: editForm.parentPhone2.trim(), address: editForm.address.trim(),
           siren: editForm.siren.replace(/\s/g, "") || null,
           zipCode: editForm.zipCode.trim(), city: editForm.city.trim(),
-          tags: editTags,
+          accountType: editForm.accountType,
+          raisonSociale: editForm.raisonSociale.trim() || null,
+          structureParente: editForm.structureParente.trim() || null,
+          tags: tagsFinaux,
           updatedAt: serverTimestamp(),
         });
       }
@@ -469,6 +492,55 @@ export default function FamilyCard({
             {editingFamily ? (
               <div className="bg-blue-50 rounded-lg p-4 mb-5">
                 <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Modifier les informations</div>
+
+                {/* Type de compte — il ne se voyait nulle part une fois la fiche
+                    créée : impossible de savoir d'où venait la pastille
+                    « Collectivité », ni de corriger un type mal choisi. */}
+                <div className="mb-3">
+                  <label className={labelStyle}>Type de compte</label>
+                  <div className="flex gap-2">
+                    {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"]] as const).map(([val, label]) => (
+                      <button key={val} type="button" onClick={() => setEditForm(f => ({ ...f, accountType: val }))}
+                        className={`flex-1 py-2 px-3 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${editForm.accountType === val ? "border-blue-500 bg-blue-100 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="font-body text-[10px] text-slate-500 mt-1">
+                    {editForm.accountType === "particulier"
+                      ? "Une famille. Le nom affiché vient du nom et du prénom."
+                      : "Le fléchage 🏫 Établissement est posé automatiquement, et le nom affiché vient de la raison sociale."}
+                  </p>
+                </div>
+
+                {editForm.accountType !== "particulier" && (
+                  <div className="mb-3 grid grid-cols-1 gap-3">
+                    {editForm.accountType === "collectivite" && (
+                      <div>
+                        <label className={labelStyle}>Structure parente</label>
+                        <input value={editForm.structureParente}
+                          onChange={e => setEditForm(f => ({ ...f, structureParente: e.target.value }))}
+                          placeholder="Ex: Coutances Mer et Bocage" className={inputStyle}/>
+                      </div>
+                    )}
+                    <div>
+                      <label className={labelStyle}>
+                        {editForm.accountType === "collectivite" ? "Nom du centre / service" : "Nom de l'association"}
+                      </label>
+                      <input value={editForm.raisonSociale}
+                        onChange={e => setEditForm(f => ({ ...f, raisonSociale: e.target.value }))}
+                        placeholder={editForm.accountType === "collectivite" ? "Ex: Centre de loisirs" : "Ex: Club équestre..."} className={inputStyle}/>
+                      {(editForm.structureParente.trim() || editForm.raisonSociale.trim()) && (
+                        <div className="font-body text-[10px] text-green-600 mt-1">
+                          → <strong>{editForm.accountType === "collectivite" && editForm.structureParente.trim() && editForm.raisonSociale.trim()
+                            ? `${editForm.structureParente.trim()} — ${editForm.raisonSociale.trim()}`
+                            : editForm.raisonSociale.trim() || editForm.parentName}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="mb-3">
                   <label className={labelStyle}>Civilité</label>
                   <div className="flex gap-2">
