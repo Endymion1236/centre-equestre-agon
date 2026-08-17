@@ -50,6 +50,7 @@ import {
   TrendingUp,
   Trophy,
   UserMinus,
+  UserX,
   Users,
   Wallet,
   X,
@@ -123,6 +124,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/preinscrits", icon: UserPlus, label: "Pré-inscrits" },
       { href: "/admin/inscriptions-impayees", icon: AlertTriangle, label: "Inscriptions non payées" },
       { href: "/admin/doublons", icon: GitMerge, label: "Doublons" },
+      { href: "/admin/comptes-orphelins", icon: UserX, label: "Comptes orphelins" },
     ],
   },
   {

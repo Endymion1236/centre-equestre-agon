@@ -8,7 +8,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
-import { generateOrderId } from "@/lib/utils";
+import { generateOrderId, emailValide } from "@/lib/utils";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
 import { tarifPourFrequence } from "@/lib/forfait-pricing";
@@ -3136,6 +3136,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     }
                     if (!newFam.parentName.trim() || validChildren.length === 0) {
                       panelToast("Nom du parent et prénom d'au moins un cavalier requis", "error");
+                      return;
+                    }
+                    // Adresse obligatoire, comme dans « Nouvelle famille » :
+                    // une fiche sans adresse se dédouble en compte orphelin le
+                    // jour où le parent se connecte.
+                    if (!emailValide(newFam.parentEmail)) {
+                      panelToast(
+                        newFam.parentEmail.trim()
+                          ? "Cette adresse email ne semble pas valide — vérifiez-la"
+                          : "L'adresse email est obligatoire : sans elle, la connexion du parent créera une fiche vide en double",
+                        "error",
+                      );
                       return;
                     }
                     setCreatingFamily(true);

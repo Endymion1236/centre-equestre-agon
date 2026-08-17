@@ -5,6 +5,22 @@
  * utilisées dans toute l'application.
  */
 
+/**
+ * L'adresse est-elle exploitable pour envoyer un accès ?
+ *
+ * Volontairement permissif sur la forme (les adresses réelles sont plus
+ * variées que la plupart des expressions régulières) : on vérifie qu'il y a
+ * un identifiant, un arobase, un domaine et une extension, sans espace.
+ *
+ * Sert de garde-fou à la création d'une fiche famille : une fiche sans
+ * adresse ne permet pas de lier le compte de connexion du parent. Le jour où
+ * il se connecte, l'application ne retrouve pas sa fiche et en crée une
+ * seconde, vide — le compte orphelin, qui bloque ensuite l'attribution de
+ * l'adresse à la bonne fiche.
+ */
+export const emailValide = (email: unknown): boolean =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email ?? "").trim());
+
 /** Convertit une valeur en nombre sûr (jamais NaN, jamais Infinity) */
 export const safeNumber = (v: any): number => {
   const n = Number(v);

@@ -6,6 +6,7 @@ import { X, Save, Loader2, Plus, Trash2 } from "lucide-react";
 import { emailTemplates } from "@/lib/email-templates";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
+import { emailValide } from "@/lib/utils";
 
 const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 
@@ -65,6 +66,17 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
       ? (newFamily.lastName.trim() || newFamily.parentName.trim())
       : newFamily.raisonSociale.trim();
     if (!isValid) return;
+    // Adresse obligatoire : sans elle, la connexion du parent ne retrouve pas
+    // cette fiche et en crée une seconde, vide (compte orphelin).
+    if (!emailValide(newFamily.parentEmail)) {
+      toast(
+        newFamily.parentEmail.trim()
+          ? "Cette adresse email ne semble pas valide — vérifiez-la."
+          : "L'adresse email est obligatoire : sans elle, la connexion du parent créera une fiche vide en double.",
+        "error",
+      );
+      return;
+    }
     setSaving(true);
     try {
       // Nom du foyer : sert de valeur par defaut a chaque enfant dont le champ
@@ -141,9 +153,9 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
     setSaving(false);
   };
 
-  const canCreate = newFamily.accountType === "particulier"
+  const canCreate = (newFamily.accountType === "particulier"
     ? (newFamily.lastName.trim() || newFamily.parentName.trim())
-    : newFamily.raisonSociale.trim();
+    : newFamily.raisonSociale.trim()) && emailValide(newFamily.parentEmail);
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center pt-12 overflow-y-auto" onClick={handleClose}>
@@ -236,9 +248,14 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
               )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className={labelStyle}>Email</label>
+                  <label className={labelStyle}>Email *</label>
                   <input type="email" className={inputStyle} value={newFamily.parentEmail}
                     onChange={e => setNewFamily({ ...newFamily, parentEmail: e.target.value })} placeholder="exemple@email.com"/>
+                  {!emailValide(newFamily.parentEmail) && (
+                    <p className="font-body text-[10px] text-slate-400 mt-1">
+                      Obligatoire : c&apos;est elle qui rattache le compte de connexion du parent à cette fiche.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className={labelStyle}>Téléphone</label>
