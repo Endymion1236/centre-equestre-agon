@@ -273,7 +273,8 @@ export default function GlobalSearch() {
           subtitle: (pay.items || []).slice(0, 2).map((i: any) => i.activityTitle).join(", "),
           badge: isUnpaid ? `${due.toFixed(0)}€ dû` : `${(pay.totalTTC || 0).toFixed(0)}€ payé`,
           badgeColor: isUnpaid ? "bg-red-50 text-red-500" : "bg-green-50 text-green-600",
-          url: `/admin/paiements${isUnpaid ? "?tab=impayes" : "?tab=historique"}`,
+          url: `/admin/paiements?tab=${isUnpaid ? "impayes" : "historique"}`
+            + `&search=${encodeURIComponent(pay.familyName || "")}`,
           score,
         });
       }
