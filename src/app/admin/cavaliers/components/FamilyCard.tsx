@@ -600,7 +600,7 @@ export default function FamilyCard({
                     )}
                   </div>
                   {resteDu > 0 && (
-                    <a href={`/admin/paiements?family=${fid}`} className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg font-body text-xs font-semibold text-white bg-red-500 hover:bg-red-400 no-underline mt-1">
+                    <a href={`/admin/paiements?tab=impayes&search=${encodeURIComponent(family.parentName || "")}&family=${fid}`} className="flex items-center justify-center gap-1.5 w-full py-2 rounded-lg font-body text-xs font-semibold text-white bg-red-500 hover:bg-red-400 no-underline mt-1">
                       💳 Encaisser l'impayé ({resteDu.toFixed(2)}€) →
                     </a>
                   )}
