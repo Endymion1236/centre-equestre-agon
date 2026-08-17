@@ -144,6 +144,7 @@ const NAV_GROUPS: NavGroup[] = [
     icon: Mail,
     items: [
       { href: "/admin/boite", icon: Inbox, label: "Boîte email (IA)" },
+      { href: "/admin/messages-contact", icon: Inbox, label: "Messages du site" },
       { href: "/admin/communication", icon: Mail, label: "Campagnes" },
       { href: "/admin/whatsapp", icon: MessageCircle, label: "WhatsApp" },
       { href: "/admin/email-templates", icon: LayoutTemplate, label: "Modèles d’email" },
