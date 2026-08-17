@@ -3,6 +3,7 @@
 import { ChevronLeft, ChevronRight, Loader2, Plus, Settings, Trash2, Users } from "lucide-react";
 import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye } from "./types";
 import type { Creneau } from "./types";
+import { dateSaisieComplete } from "@/lib/date-saisie";
 
 interface Props {
   loading: boolean;
@@ -286,9 +287,12 @@ export default function WeekView({
             aria-label="Aller à une date"
             className="mt-0.5 border border-slate-200 bg-slate-50 px-2 py-1 font-body text-[10px] text-slate-500"
             onChange={(event) => {
-              if (!event.target.value) return;
-              const [year, month, day] = event.target.value.split("-").map(Number);
-              const picked = new Date(year, month - 1, day);
+              // Ne réagir qu'à une date complète : le champ émet un événement à
+              // chaque frappe, et l'année arrive par la gauche (0002, 0020,
+              // 0202, 2026). Sans ce filtre on naviguait vers « Octobre 1902 »,
+              // et la remise à zéro du champ ci-dessous coupait la saisie.
+              const picked = dateSaisieComplete(event.target.value);
+              if (!picked) return;
               const today = new Date();
               today.setHours(0, 0, 0, 0);
               const pickedDow = (picked.getDay() + 6) % 7;

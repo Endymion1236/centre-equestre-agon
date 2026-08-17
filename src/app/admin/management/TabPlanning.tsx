@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
 import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour, bornesJournee } from "./types";
+import { dateSaisieComplete } from "@/lib/date-saisie";
 
 interface Props {
   semaine: string;
@@ -1959,11 +1960,13 @@ Réponds de façon concise et pratique, en français.`,
               <input type="date" title="Aller à cette date"
                 className="font-body text-[10px] px-2 py-0.5 rounded-lg border border-gray-200 bg-white cursor-pointer focus:border-blue-400 focus:outline-none text-gray-400 mt-0.5"
                 onChange={e => {
-                  if (!e.target.value) return;
-                  const [py, pm, pd] = e.target.value.split("-").map(Number);
-                  const picked = new Date(py, pm - 1, pd, 12);
-                  const targetIso = getISOWeek(picked);
-                  setSemaine(targetIso);
+                  // Attendre la date complète : sinon chaque frappe de l'année
+                  // faisait sauter la semaine affichée, et la remise à zéro du
+                  // champ empêchait de finir la saisie (cf. lib/date-saisie).
+                  const jour = dateSaisieComplete(e.target.value);
+                  if (!jour) return;
+                  jour.setHours(12);
+                  setSemaine(getISOWeek(jour));
                   e.target.value = "";
                 }}/>
             </div>
