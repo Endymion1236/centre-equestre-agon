@@ -2,7 +2,7 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, setDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, orderBy, where, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import AssistantRedaction from "@/components/admin/AssistantRedaction";
 import { Card, Badge, Button } from "@/components/ui";
@@ -396,13 +396,107 @@ export default function ActivitesPage() {
     const { firestoreId, ...rest } = data;
     const payload = { ...rest, updatedAt: serverTimestamp() };
     if (firestoreId) {
+      const avant = activities.find(a => a.firestoreId === firestoreId);
       await updateDoc(doc(db, "activities", firestoreId), payload);
+      // Les créneaux du planning sont des COPIES de l'activité, figées à leur
+      // génération : modifier le catalogue ne les touchait pas, et les
+      // créneaux futurs gardaient l'ancien titre, l'ancien prix, l'ancienne
+      // couleur. On propose donc de reporter les changements sur les créneaux
+      // à venir. (La description, elle, n'est pas copiée : le site public la
+      // lit en direct, rien à propager.)
+      if (avant) await propagerAuxCreneauxFuturs(firestoreId, avant, rest);
     } else {
       await addDoc(collection(db, "activities"), { ...payload, createdAt: serverTimestamp() });
     }
     await fetchActivities();
     setShowForm(false);
     setEditActivity(null);
+  };
+
+  /**
+   * Reporte les changements d'une activité sur ses créneaux FUTURS.
+   *
+   * Règles :
+   *  - jamais les créneaux passés — l'historique doit rester ce qui a été vendu ;
+   *  - prix et places ne sont réécrits que si le créneau portait encore
+   *    l'ANCIENNE valeur du catalogue : un tarif ou une capacité réglés à la
+   *    main sur un jour précis sont des choix délibérés, on ne les écrase pas ;
+   *  - les places ne descendent jamais sous le nombre d'inscrits ;
+   *  - un renommage suit aussi les forfaits actifs : leur slotKey commence par
+   *    le titre, et un forfait dont le titre ne correspond plus ne couvre plus
+   *    le créneau — l'enfant serait facturé une seconde fois.
+   */
+  const propagerAuxCreneauxFuturs = async (activityId: string, avant: any, apres: any) => {
+    const champsChanges: string[] = [];
+    const titreChange = apres.title !== undefined && apres.title !== avant.title;
+    const typeChange = apres.type !== undefined && apres.type !== avant.type;
+    const prixChange = apres.priceTTC !== undefined && apres.priceTTC !== avant.priceTTC;
+    const tvaChange = apres.tvaTaux !== undefined && apres.tvaTaux !== avant.tvaTaux;
+    const couleurChange = apres.color !== undefined && apres.color !== avant.color;
+    const placesChange = apres.maxPlaces !== undefined && apres.maxPlaces !== avant.maxPlaces;
+    if (titreChange) champsChanges.push("titre");
+    if (typeChange) champsChanges.push("type");
+    if (prixChange || tvaChange) champsChanges.push("prix");
+    if (couleurChange) champsChanges.push("couleur");
+    if (placesChange) champsChanges.push("places");
+    if (champsChanges.length === 0) return;
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    const snap = await getDocs(query(collection(db, "creneaux"), where("date", ">=", todayStr)));
+    // Rattachés par identifiant, ou par l'ancien titre pour les créneaux
+    // d'avant le champ activityId.
+    const cibles = snap.docs.filter(d => {
+      const c = d.data() as any;
+      return c.activityId === activityId || (!c.activityId && c.activityTitle === avant.title);
+    });
+    if (cibles.length === 0) return;
+
+    if (!confirm(
+      `Reporter les changements (${champsChanges.join(", ")}) sur ${cibles.length} créneau(x) à venir ?\n\n` +
+      `Les créneaux passés ne bougent pas. Un prix ou un nombre de places réglé à la main sur un jour précis est conservé.`
+    )) return;
+
+    let maj = 0;
+    for (const d of cibles) {
+      const c = d.data() as any;
+      const upd: any = {};
+      if (titreChange) upd.activityTitle = apres.title;
+      if (typeChange) upd.activityType = apres.type;
+      // Prix : uniquement si le créneau suivait encore le catalogue.
+      if ((prixChange || tvaChange) && (c.priceTTC === undefined || c.priceTTC === avant.priceTTC)) {
+        const tva = apres.tvaTaux ?? avant.tvaTaux ?? 5.5;
+        upd.priceTTC = apres.priceTTC;
+        upd.priceHT = Math.round((apres.priceTTC / (1 + tva / 100)) * 100) / 100;
+        upd.tvaTaux = tva;
+      }
+      if (couleurChange && (!c.color || c.color === avant.color)) upd.color = apres.color || null;
+      if (placesChange && (c.maxPlaces === undefined || c.maxPlaces === avant.maxPlaces)) {
+        upd.maxPlaces = Math.max(apres.maxPlaces, (c.enrolled || []).length);
+      }
+      if (Object.keys(upd).length === 0) continue;
+      await updateDoc(doc(db, "creneaux", d.id), { ...upd, updatedAt: serverTimestamp() });
+      maj++;
+    }
+
+    // Renommage : suivre les forfaits actifs, sinon leur slotKey (qui commence
+    // par le titre) ne matche plus les créneaux renommés et l'enfant repart
+    // facturé malgré son forfait.
+    let forfaitsMaj = 0;
+    if (titreChange) {
+      const fSnap = await getDocs(query(collection(db, "forfaits")));
+      for (const fd of fSnap.docs) {
+        const f = fd.data() as any;
+        if (f.activityTitle !== avant.title) continue;
+        if (f.status && f.status !== "actif" && f.status !== "active") continue;
+        const updF: any = { activityTitle: apres.title, updatedAt: serverTimestamp() };
+        if (typeof f.slotKey === "string" && f.slotKey.startsWith(`${avant.title} — `)) {
+          updF.slotKey = `${apres.title}${f.slotKey.slice(avant.title.length)}`;
+        }
+        await updateDoc(doc(db, "forfaits", fd.id), updF);
+        forfaitsMaj++;
+      }
+    }
+    alert(`✅ ${maj} créneau(x) mis à jour${forfaitsMaj > 0 ? ` · ${forfaitsMaj} forfait(s) suivis` : ""}.`);
   };
 
   const handleDelete = async (id: string, title: string) => {
