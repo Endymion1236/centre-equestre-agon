@@ -123,10 +123,16 @@ export default function FamilyCard({
       // famille. Sans ça, corriger la raison sociale ici n'aurait aucun effet
       // sur le nom affiché partout ailleurs.
       const estEtablissement = editForm.accountType !== "particulier";
+      // Repli sur la structure parente AVANT l'ancien parentName : vider le
+      // champ « service » doit ramener la fiche au nom de la structure seule.
+      // L'ancien repli retombait sur parentName — qui contenait déjà le
+      // service — et il devenait impossible de le retirer du nom.
+      const nomEtablissement =
+        editForm.accountType === "collectivite" && editForm.structureParente.trim() && editForm.raisonSociale.trim()
+          ? `${editForm.structureParente.trim()} — ${editForm.raisonSociale.trim()}`
+          : editForm.raisonSociale.trim() || editForm.structureParente.trim() || editForm.parentName.trim();
       const computedName = estEtablissement
-        ? (editForm.accountType === "collectivite" && editForm.structureParente.trim() && editForm.raisonSociale.trim()
-            ? `${editForm.structureParente.trim()} — ${editForm.raisonSociale.trim()}`
-            : editForm.raisonSociale.trim() || editForm.parentName.trim())
+        ? nomEtablissement
         : (lastName && firstName
             ? `${lastName} ${firstName}`
             : lastName || firstName || editForm.parentName.trim());
@@ -544,7 +550,7 @@ export default function FamilyCard({
                         <div className="font-body text-[10px] text-green-600 mt-1">
                           → <strong>{editForm.accountType === "collectivite" && editForm.structureParente.trim() && editForm.raisonSociale.trim()
                             ? `${editForm.structureParente.trim()} — ${editForm.raisonSociale.trim()}`
-                            : editForm.raisonSociale.trim() || editForm.parentName}</strong>
+                            : editForm.raisonSociale.trim() || editForm.structureParente.trim() || editForm.parentName}</strong>
                         </div>
                       )}
                     </div>
