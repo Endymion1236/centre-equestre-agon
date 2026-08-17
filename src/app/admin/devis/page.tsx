@@ -35,6 +35,8 @@ interface Devis {
   numero: string;
   familyId: string;
   familyName: string;
+  /** Site facturé quand le client est une structure à plusieurs services. */
+  serviceFacture?: string;
   familyEmail: string;
   items: DevisItem[];
   totalTTC: number;
@@ -67,6 +69,8 @@ export default function DevisPage() {
   // Form state
   const [selFamily, setSelFamily] = useState("");
   const [selChild, setSelChild] = useState("");
+  /** Service facturé — une collectivité règle pour plusieurs sites. */
+  const [serviceFacture, setServiceFacture] = useState("");
   const [familySearch, setFamilySearch] = useState("");
   const [items, setItems] = useState<DevisItem[]>([{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
 
@@ -166,6 +170,9 @@ export default function DevisPage() {
   ], [tarifs]);
   const fam = families.find(f => f.firestoreId === selFamily);
   const child = fam?.children?.find((c: any) => c.id === selChild);
+  const servicesFacturables: string[] = Array.isArray((fam as any)?.services)
+    ? (fam as any).services.filter(Boolean)
+    : [];
 
   // Déduit -18/+18 de la date de naissance de l'enfant sélectionné
   useEffect(() => {
@@ -193,6 +200,7 @@ export default function DevisPage() {
         familyId: selFamily,
         familyName: fam.parentName || "",
         familyEmail: (fam as any).parentEmail || "",
+        ...(serviceFacture ? { serviceFacture } : {}),
         items: items.filter(i => i.label),
         totalTTC: Math.round(totalTTC * 100) / 100,
         status: "draft",
@@ -204,7 +212,7 @@ export default function DevisPage() {
       await fetchData();
       setShowForm(false);
       setItems([{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
-      setSelFamily(""); setSelChild(""); setNote(""); setFamilySearch("");
+      setSelFamily(""); setSelChild(""); setNote(""); setFamilySearch(""); setServiceFacture("");
     } catch (e) { console.error(e); }
     setSaving(false);
   };
@@ -252,6 +260,7 @@ export default function DevisPage() {
         </div>
         <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
           <p style="color:#1e3a5f;">Bonjour <strong>${d.familyName}</strong>,</p>
+          ${d.serviceFacture ? `<p style="color:#1e3a5f;margin:0 0 8px;">Service : <strong>${d.serviceFacture}</strong></p>` : ""}
           <p style="color:#555;">Voici votre devis pour la saison équestre :</p>
           <table style="width:100%;border-collapse:collapse;margin:16px 0;">
             <thead>
@@ -303,6 +312,9 @@ export default function DevisPage() {
       await addDoc(collection(db, "payments"), {
         familyId: d.familyId,
         familyName: d.familyName,
+        // Le service suit le devis jusqu'à la facture : sans ça, il fallait le
+        // resaisir en caisse et un devis accepté pouvait se facturer au mauvais site.
+        ...((d as any).serviceFacture ? { serviceFacture: (d as any).serviceFacture } : {}),
         items: d.items.map(i => {
           const unitNet = (i.priceTTC || 0) * (1 - (i.remisePct || 0) / 100);
           return {
@@ -360,12 +372,12 @@ export default function DevisPage() {
             {/* Famille */}
             <div>
               <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Famille *</label>
-              <input value={familySearch} onChange={e => { setFamilySearch(e.target.value); setSelFamily(""); setSelChild(""); }}
+              <input value={familySearch} onChange={e => { setFamilySearch(e.target.value); setSelFamily(""); setSelChild(""); setServiceFacture(""); }}
                 placeholder="Rechercher une famille..." className={inp} />
               {familySearch && !selFamily && (
                 <div className="mt-1 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
                   {filteredFams.slice(0, 6).map(f => (
-                    <button key={f.firestoreId} onClick={() => { setSelFamily(f.firestoreId); setSelChild(""); setFamilySearch(f.parentName || ""); }}
+                    <button key={f.firestoreId} onClick={() => { setSelFamily(f.firestoreId); setSelChild(""); setServiceFacture(""); setFamilySearch(f.parentName || ""); }}
                       className="w-full text-left px-3 py-2 font-body text-sm hover:bg-blue-50 bg-white border-none cursor-pointer border-b border-gray-100 last:border-0">
                       <div className="font-semibold text-blue-800">{f.parentName}</div>
                       <div className="text-xs text-slate-400">{(f as any).parentEmail}</div>
@@ -391,6 +403,23 @@ export default function DevisPage() {
                 </div>
               )}
             </div>
+
+            {/* Service facturé — mêmes services que ceux de la fiche client.
+                Le devis d'une collectivité doit pouvoir viser un centre puis
+                un autre sans changer de client ni de fiche. */}
+            {servicesFacturables.length > 0 && (
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Service facturé</label>
+                <select value={serviceFacture} onChange={e => setServiceFacture(e.target.value)} className={inp}>
+                  <option value="">Aucun (devis au nom de la structure)</option>
+                  {servicesFacturables.map((sv: string) => <option key={sv} value={sv}>{sv}</option>)}
+                </select>
+                <p className="font-body text-[11px] text-slate-500 mt-1">
+                  Apparaîtra sur le devis et sera repris sur la facture à la conversion.
+                  La liste se règle sur la fiche du client.
+                </p>
+              </div>
+            )}
 
             {/* Validité */}
             <div className="flex gap-3">
@@ -560,6 +589,9 @@ export default function DevisPage() {
                     )}
                   </div>
                   <div className="font-body text-base font-semibold text-blue-800 mt-1">{d.familyName}</div>
+                  {d.serviceFacture && (
+                    <div className="font-body text-xs text-slate-600">Service : {d.serviceFacture}</div>
+                  )}
                   <div className="font-body text-xs text-slate-500">
                     {d.items.length} ligne{d.items.length > 1 ? "s" : ""} · valable jusqu'au {d.validUntil ? new Date(d.validUntil).toLocaleDateString("fr-FR") : "—"}
                     {d.createdAt?.seconds && ` · Créé le ${new Date(d.createdAt.seconds * 1000).toLocaleDateString("fr-FR")}`}
