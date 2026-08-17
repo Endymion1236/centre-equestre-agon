@@ -1686,7 +1686,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             updatedAt: serverTimestamp(),
           });
 
-          // Acompte réglé au comptoir : même écriture comptable que la caisse.
+          // Acompte réglé au comptoir : même écriture comptable que la caisse,
+          // et même confirmation d'acompte que lorsqu'il est payé en ligne.
           if (showAcompte && acompteReglement === "sur_place") {
             await enregistrerEncaissement(
               openOrder.id,
@@ -1696,6 +1697,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               acompteRef,
               `Acompte ${creneau.activityTitle}`,
             );
+            authFetch("/api/admin/stage-acompte-recu", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paymentId: openOrder.id, montant: stageAcompte, mode: acompteMode }),
+            }).catch(e => console.warn("Confirmation acompte:", e));
           }
         } else {
           // Créer une nouvelle commande stage avec infos acompte
@@ -1730,6 +1736,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               acompteRef,
               `Acompte ${creneau.activityTitle}`,
             );
+            // Confirmation d'acompte — le pendant du webhook CAWL, qui ne se
+            // déclenche pas quand l'argent est reçu au comptoir.
+            authFetch("/api/admin/stage-acompte-recu", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paymentId: newPayRef.id, montant: stageAcompte, mode: acompteMode }),
+            }).catch(e => console.warn("Confirmation acompte:", e));
           }
 
           // Envoyer automatiquement le lien de paiement pour l'acompte
