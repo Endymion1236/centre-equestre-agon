@@ -56,6 +56,40 @@ export function isForfaitActif(status?: string | null): boolean {
   return !status || status === "actif" || status === "active";
 }
 
+/**
+ * Rang de l'enfant dans sa famille pour une saison : 1er, 2e, 3e…
+ *
+ * Sert à la réduction fratrie. On compte les AUTRES enfants de la famille
+ * ayant un forfait actif sur la même saison, et on ajoute 1.
+ *
+ * Deux filtres décident du montant facturé :
+ *   - le statut : un forfait annulé ne compte plus. Sans ce filtre, un aîné
+ *     désinscrit continuait de faire passer le cadet en 2e enfant, avec la
+ *     réduction indue qui va avec ;
+ *   - la saison : les saisons ne se mélangent pas, sinon le rang gonflerait
+ *     d'année en année.
+ *
+ * @param forfaits    forfaits connus (base et/ou panier en cours)
+ * @param childId     enfant pour lequel on calcule le rang (exclu du compte)
+ * @param saison      année de début de la saison visée
+ * @param saisonDe    lit la saison d'un forfait (champ dédié ou date de création)
+ */
+export function rangEnfantPourSaison(
+  forfaits: { childId?: string | null; status?: string | null; seasonStartYear?: number; createdAt?: unknown }[],
+  childId: string,
+  saison: number,
+  saisonDe: (f: { seasonStartYear?: number; createdAt?: unknown }) => number,
+): number {
+  const autresEnfants = new Set<string>();
+  for (const f of forfaits) {
+    if (!f.childId || f.childId === childId) continue;
+    if (!isForfaitActif(f.status)) continue;
+    if (saisonDe(f) !== saison) continue;
+    autresEnfants.add(f.childId);
+  }
+  return autresEnfants.size + 1;
+}
+
 // Calcul du nombre de séances dans une période
 export function countSessionsInPeriod(
   startDate: string,

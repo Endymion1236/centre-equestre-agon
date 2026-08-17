@@ -622,11 +622,35 @@ export default function PaiementsPage() {
   // ═══ SUPPRESSION / MODIFICATION DE COMMANDE ═══
   // Règle : non encaissé = supprimable, encaissé = avoir automatique
 
+  // Affichage seulement : calculé sur les 500 encaissements les plus récents
+  // chargés par la page. Suffisant pour une pastille à l'écran, PAS pour
+  // décider d'une suppression (cf. getTotalEncaisseExhaustif).
   const getTotalEncaisse = (payment: any) => {
     // Chercher dans la collection encaissements
     return encaissements
       .filter((e: any) => e.paymentId === payment.id)
       .reduce((s: number, e: any) => s + (e.montant || 0), 0);
+  };
+
+  /**
+   * Total encaissé faisant foi, relu depuis Firestore pour CE paiement.
+   *
+   * La page ne charge que les 500 encaissements les plus récents. Une commande
+   * ancienne dont l'encaissement est sorti de cette fenêtre paraîtrait donc
+   * non encaissée — et « non encaissé = supprimable » : on supprimerait une
+   * commande dont l'argent est bien entré. Avant toute opération destructive,
+   * on interroge donc la collection sur ce seul paymentId.
+   *
+   * En cas d'échec de lecture on lève : mieux vaut renoncer à l'opération que
+   * la fonder sur un montant potentiellement faux.
+   */
+  const getTotalEncaisseExhaustif = async (payment: any): Promise<number> => {
+    const snap = await getDocs(
+      query(collection(db, "encaissements"), where("paymentId", "==", payment.id)),
+    );
+    return Math.round(
+      snap.docs.reduce((s, d) => s + safeNumber((d.data() as any).montant), 0) * 100,
+    ) / 100;
   };
 
   /** Désinscrit un enfant des créneaux/réservations liés à un item de commande */
@@ -689,7 +713,14 @@ export default function PaiementsPage() {
   };
 
   const deletePaymentCommand = async (payment: any) => {
-    const totalEnc = getTotalEncaisse(payment);
+    let totalEnc: number;
+    try {
+      totalEnc = await getTotalEncaisseExhaustif(payment);
+    } catch (e) {
+      console.error("Lecture des encaissements impossible:", e);
+      toast("Impossible de vérifier les encaissements de cette commande — opération annulée", "error");
+      return;
+    }
     const hasInscriptions = (payment.items || []).some((i: any) => i.childId && (i.creneauId || i.activityType));
     const isForfait = (payment as any).forfaitType || (payment.items || []).some((i: any) => i.activityTitle?.includes("Forfait"));
     const inscriptionMsg = hasInscriptions || isForfait ? "\n\n⚠️ Les cavaliers seront aussi désinscrits des créneaux associés." : "";
@@ -908,7 +939,14 @@ export default function PaiementsPage() {
   };
 
   const removePaymentItem = async (payment: any, itemIndex: number) => {
-    const totalEnc = getTotalEncaisse(payment);
+    let totalEnc: number;
+    try {
+      totalEnc = await getTotalEncaisseExhaustif(payment);
+    } catch (e) {
+      console.error("Lecture des encaissements impossible:", e);
+      toast("Impossible de vérifier les encaissements de cette commande — opération annulée", "error");
+      return;
+    }
     const items = payment.items || [];
     const itemToRemove = items[itemIndex];
     if (!itemToRemove) return;

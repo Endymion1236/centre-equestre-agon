@@ -2,11 +2,12 @@
 import { authFetch } from "@/lib/auth-fetch";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { generateSepaXml, SEPA_CREDITOR } from "@/lib/sepa";
+import { createEncaissement } from "@/lib/compta-encaissement";
 import type { SepaTransaction, SepaRemise } from "@/lib/sepa";
 import { validateIban, validateBic, formatIban } from "@/lib/sepa-validation";
 import type { Family } from "@/types";
@@ -379,7 +380,17 @@ export default function SepaPage() {
 
   // ─── Marquer une remise comme déposée ───
   const markDeposited = async (remiseId: string) => {
-    await updateDoc(doc(db, "remises-sepa", remiseId), { status: "deposited" });
+    // Verrou : deux clics rapprochés (ou deux postes) créeraient deux
+    // encaissements pour chaque échéance. On relit le statut en base — pas
+    // celui de l'écran, qui peut dater — et on renonce s'il a déjà basculé.
+    const remiseRef = doc(db, "remises-sepa", remiseId);
+    const remiseSnap = await getDoc(remiseRef);
+    if (!remiseSnap.exists()) { toast("Remise introuvable", "error"); return; }
+    if ((remiseSnap.data() as any)?.status === "deposited") {
+      toast("Cette remise est déjà marquée déposée", "info");
+      return;
+    }
+    await updateDoc(remiseRef, { status: "deposited", depositedAt: serverTimestamp() });
     const remiseEcheances = echeances.filter(e => e.remiseId === remiseId);
     for (const ech of remiseEcheances) {
       await updateDoc(doc(db, "echeances-sepa", ech.id), { status: "preleve" });
@@ -393,8 +404,18 @@ export default function SepaPage() {
         const payDoc = payments.find((p: any) => p.orderId === ech.orderId);
         if (payDoc) linkedPaymentId = payDoc.id;
       }
-      await addDoc(collection(db, "encaissements"), {
-        paymentId: linkedPaymentId,
+      // Ceinture et bretelles : une échéance ne peut donner qu'un encaissement.
+      // `sepaEcheanceId` est la source du mouvement ; s'il en existe déjà un,
+      // on passe. Protège le cas où la remise aurait été déposée en deux fois.
+      const dejaEncaisse = await getDocs(query(
+        collection(db, "encaissements"), where("sepaEcheanceId", "==", ech.id),
+      ));
+      if (!dejaEncaisse.empty) continue;
+
+      // createEncaissement plutôt qu'un addDoc direct : le journal reste
+      // horodaté et haché en chaîne, comme tout autre encaissement (NF525).
+      await createEncaissement({
+        paymentId: linkedPaymentId || undefined,
         familyId: ech.familyId,
         familyName: ech.familyName,
         montant: ech.montant,
@@ -402,7 +423,7 @@ export default function SepaPage() {
         modeLabel: "Prélèvement SEPA",
         ref: `Remise n°${remiseDoc?.numero || "?"} — ${ech.mandatId}`,
         activityTitle: ech.description || `Échéance SEPA ${ech.mandatId}`,
-        date: serverTimestamp(),
+        sepaEcheanceId: ech.id,
       });
     }
 

@@ -123,10 +123,13 @@ export function TabDeclarations({
                           });
                         }
                       }
-                      // Finalisation d'une inscription annuelle réglée chèque/espèces :
-                      // on lève le "pending" sur les créneaux, on confirme les
-                      // réservations et on crée les forfaits (contexte admin = autorisé).
-                      if (decl.type === "inscription_annuelle") {
+                      // Finalisation d'un règlement chèque/espèces/virement : on
+                      // lève le "pending" sur les créneaux et on confirme les
+                      // réservations. Vaut pour l'inscription annuelle comme pour
+                      // le panier ponctuel — les deux tiennent la place en attente
+                      // du règlement, et les listes sont vides pour les anciennes
+                      // déclarations, qui traversent donc ce bloc sans effet.
+                      {
                         for (const pe of (decl.pendingEnrollments || [])) {
                           try {
                             const crRef = doc(db, "creneaux", pe.creneauId);

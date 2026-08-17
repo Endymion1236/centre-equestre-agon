@@ -2090,6 +2090,11 @@ export default function ReserverPage() {
                           if (!user || !family) return;
                           setPaying(true);
                           try {
+                            // Places tenues et réservations créées ici : elles
+                            // sont confirmées par l'admin à réception du
+                            // règlement (cf. onglet Déclarations).
+                            const pendingEnrollments: { childId: string; creneauId: string }[] = [];
+                            const reservationIds: string[] = [];
                             // 1. Inscrire + créer réservations + paiement pending
                             for (const item of cart) {
                               // Inscription sécurisée côté serveur (audit P0 #3 + #7).
@@ -2101,6 +2106,13 @@ export default function ReserverPage() {
                                     childId: item.childId,
                                     childName: item.childName,
                                     creneauIds: item.creneauIds,
+                                    // Place TENUE, pas acquise : le règlement est
+                                    // seulement déclaré. Sans ce marqueur, une
+                                    // déclaration jamais honorée laissait une
+                                    // inscription normale, que la purge des places
+                                    // temporaires ne peut pas libérer.
+                                    pending: true,
+                                    paymentMethod: cartPayMode,
                                     ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
                                   }],
                                 }),
@@ -2109,8 +2121,11 @@ export default function ReserverPage() {
                                 const err = await enrollRes.json().catch(() => ({} as any));
                                 throw new Error(err.error || "Inscription refusée (créneau complet ?)");
                               }
+                              for (const cid of item.creneauIds) {
+                                pendingEnrollments.push({ childId: item.childId, creneauId: cid });
+                              }
                               const firstCr = creneaux.find(c => c.id === item.creneauIds[0]);
-                              await addDoc(collection(db, "reservations"), {
+                              const resRef = await addDoc(collection(db, "reservations"), {
                                 familyId: user.uid, familyName: family.parentName,
                                 ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
                                 childId: item.childId, childName: item.childName,
@@ -2121,6 +2136,7 @@ export default function ReserverPage() {
                                 priceTTC: item.prixFinal, status: "pending_payment", source: "client",
                                 createdAt: serverTimestamp(),
                               });
+                              reservationIds.push(resRef.id);
                             }
                             const payDoc = await addDoc(collection(db, "payments"), {
                               familyId: user.uid, familyName: family.parentName,
@@ -2145,6 +2161,11 @@ export default function ReserverPage() {
                               note: "",
                               activityTitle: cart.map(i => i.activityTitle).join(", "),
                               status: "pending_confirmation",
+                              // De quoi lever les places tenues à la confirmation
+                              // du règlement — même mécanique que l'inscription
+                              // annuelle réglée par chèque ou espèces.
+                              pendingEnrollments,
+                              reservationIds,
                               createdAt: serverTimestamp(),
                             });
                             // 3. Email admin

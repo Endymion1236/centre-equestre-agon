@@ -13,6 +13,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { isForfaitActif, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
+import { estSemaineAttendue } from "@/lib/rythme";
 
 interface Forfait {
   id: string;
@@ -266,7 +267,21 @@ export default function ForfaitsPage() {
 
     try {
       // 1. Batch enroll child in all creneaux for selected slots
-      const allCreneauIds = selectedSlotsData.flatMap(s => s.creneauIds);
+      //
+      // Rythme : en quinzaine, le cavalier ne doit être posé QUE sur les
+      // semaines de sa parité — exactement comme le panneau d'inscription du
+      // planning. Sans ce filtre, il était facturé une semaine sur deux
+      // (séances et tarif divisés par deux plus haut) mais inscrit toutes les
+      // semaines : place occupée en trop, et feuille d'appel qui le compte
+      // présent une semaine où il n'est pas attendu.
+      const rythmeForfait = { rythme: rythmeQuinzaine ? "quinzaine" : "hebdo", semainePaire };
+      const creneauAttendu = (creneauId: string) => {
+        const c = creneaux.find(x => x.id === creneauId);
+        return !!c && estSemaineAttendue(c.date, rythmeForfait);
+      };
+      const allCreneauIds = selectedSlotsData
+        .flatMap(s => s.creneauIds)
+        .filter(creneauAttendu);
       // Précalcul des forfaitIds par slotKey (rempli après la création des forfaits)
       // En attendant, on marque l'enrolled avec paymentSource pour que la
       // désinscription d'UN créneau crée un rattrapage et non un avoir.
@@ -326,7 +341,8 @@ export default function ForfaitsPage() {
           // pour le cumul licence/adhésion/fréquence (cf. lib/forfaits.ts).
           status: FORFAIT_STATUT_ACTIF,
           frequence,
-          creneauIds: sp.slot.creneauIds,
+          // Séances réellement posées : en quinzaine, une semaine sur deux.
+          creneauIds: sp.slot.creneauIds.filter(creneauAttendu),
           seasonStartYear: _seasonStartYear,
           createdAt: serverTimestamp(),
         });
@@ -349,7 +365,7 @@ export default function ForfaitsPage() {
           startTime: sp.slot.startTime,
           endTime: sp.slot.endTime,
           totalSessions: sp.sessions,
-          creneauIds: sp.slot.creneauIds,
+          creneauIds: sp.slot.creneauIds.filter(creneauAttendu),
           status: "confirmed",
           createdAt: serverTimestamp(),
         });
@@ -385,7 +401,7 @@ export default function ForfaitsPage() {
       setFrequence("1x"); setSlotSearch(""); setFamilySearch("");
       setShowCreate(false);
       fetchData();
-      alert(`✅ ${childName} inscrit(e) à ${selectedSlotsData.length} créneau(x) — ${allCreneauIds.length} séances sur la saison.`);
+      alert(`✅ ${childName} inscrit(e) à ${selectedSlotsData.length} créneau(x) — ${allCreneauIds.length} séances sur la saison${rythmeQuinzaine ? ` (une semaine sur deux, semaines ${semainePaire ? "paires" : "impaires"})` : ""}.`);
     } catch (e: any) {
       console.error(e);
       alert("Erreur lors de la création du forfait.");
@@ -1194,7 +1210,7 @@ export default function ForfaitsPage() {
                 className={`px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${
                   !selFamily || !selChild || !slotsComplete || creating ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"
                 }`}>
-                {creating ? <><Loader2 size={14} className="inline animate-spin mr-1" /> Inscription...</> : `Inscrire${slotsComplete ? ` (${selectedSlotsData.flatMap(s => s.creneauIds).length} séances)` : ""}`}
+                {creating ? <><Loader2 size={14} className="inline animate-spin mr-1" /> Inscription...</> : `Inscrire${slotsComplete ? ` (${slotsPrices.reduce((n, sp) => n + sp.sessions, 0)} séances)` : ""}`}
               </button>
             </div>
           </div>

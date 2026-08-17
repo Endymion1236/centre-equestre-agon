@@ -132,9 +132,12 @@ export async function POST(req: NextRequest) {
               // Sans date d'expiration, une place tenue le reste pour toujours :
               // c'est exactement le bug des inscriptions fantômes. On en pose
               // donc systématiquement une.
+              // La durée dépend du mode : trente minutes pour une CB en ligne,
+              // plusieurs jours pour un chèque ou des espèces, que le bureau
+              // encaissera plus tard.
               entry.holdUntil = typeof item.holdUntil === "string" && item.holdUntil
                 ? item.holdUntil
-                : dateExpirationHold();
+                : dateExpirationHold(new Date(), item.paymentMethod);
               if (item.paymentMethod) entry.paymentMethod = item.paymentMethod;
             }
             tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });

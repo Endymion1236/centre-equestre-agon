@@ -9,7 +9,7 @@ import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Ca
 import { authFetch } from "@/lib/auth-fetch";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
-import { isForfaitActif, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
+import { isForfaitActif, FORFAIT_STATUT_ACTIF, rangEnfantPourSaison } from "@/lib/forfaits";
 import { useToast } from "@/components/ui/Toast";
 import {
   calculerForfaitAnnuel, seasonOf, tarifPourFrequence,
@@ -302,19 +302,27 @@ export default function InscriptionAnnuellePage() {
   const targetSeason = selectedSlotsData[0] ? seasonOf(firstSlotDate) : MIN_SEASON_INSCRIPTION;
   const rangEnfant = useMemo(() => {
     if (!family?.id) return 1;
-    const enfants = new Set<string>();
-    // Enfants déjà inscrits en base pour cette saison
-    allForfaits.forEach((f: any) => {
-      if (!f.childId || f.childId === selectedChild) return;
-      const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
-      if (fSeason !== targetSeason) return;
-      enfants.add(f.childId);
-    });
-    // + enfants déjà placés dans le panier (hors enfant courant)
+    // Forfaits en base (filtrés sur le statut et la saison par le helper)…
+    const rangBase = rangEnfantPourSaison(
+      allForfaits as any[],
+      selectedChild,
+      targetSeason,
+      (f: any) => f.seasonStartYear ?? seasonOf(f.createdAt),
+    );
+    // …+ les enfants déjà placés dans le panier, qui n'ont pas encore de forfait.
+    const dansLePanier = new Set<string>();
     panier.forEach(p => {
-      if (p.childId !== selectedChild) enfants.add(p.childId);
+      if (p.childId !== selectedChild) dansLePanier.add(p.childId);
     });
-    return enfants.size + 1;
+    const dejaComptes = new Set(
+      (allForfaits as any[])
+        .filter(f => f.childId && f.childId !== selectedChild && isForfaitActif(f.status)
+          && (f.seasonStartYear ?? seasonOf(f.createdAt)) === targetSeason)
+        .map(f => f.childId),
+    );
+    let nouveaux = 0;
+    dansLePanier.forEach(id => { if (!dejaComptes.has(id)) nouveaux++; });
+    return rangBase + nouveaux;
   }, [allForfaits, selectedChild, targetSeason, family?.id, panier]);
 
   // ── Détection des enfants DÉJÀ inscrits pour la saison d'inscription ──

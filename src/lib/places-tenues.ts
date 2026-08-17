@@ -21,11 +21,30 @@ import { adminDb } from "@/lib/firebase-admin";
  * `waitlistHold`.
  */
 
-/** Durée de protection d'une place le temps de payer. */
+/** Durée de protection d'une place le temps de payer en ligne. */
 export const HOLD_PAIEMENT_MINUTES = 30;
 
-export function dateExpirationHold(depuis: Date = new Date()): string {
-  return new Date(depuis.getTime() + HOLD_PAIEMENT_MINUTES * 60_000).toISOString();
+/**
+ * Durée de protection quand le règlement est différé (chèque, espèces,
+ * virement). La famille déclare son paiement en ligne mais l'argent arrive
+ * au bureau : la place doit tenir jusqu'à ce que l'admin confirme la
+ * réception, pas trente minutes. Sans cette distinction, une inscription
+ * réglée par chèque était purgée la demi-heure suivante.
+ *
+ * Sept jours : de quoi laisser passer un week-end et un envoi postal. Au-delà,
+ * la place repart — un chèque annoncé et jamais reçu ne doit pas bloquer une
+ * place toute la saison.
+ */
+export const HOLD_REGLEMENT_DIFFERE_MINUTES = 7 * 24 * 60;
+
+/** Modes de règlement dont l'encaissement se fait hors ligne. */
+const MODES_DIFFERES = ["cheque", "especes", "virement", "ancv", "cheque_vacances", "pass_sport"];
+
+export function dateExpirationHold(depuis: Date = new Date(), paymentMethod?: string): string {
+  const minutes = paymentMethod && MODES_DIFFERES.includes(paymentMethod)
+    ? HOLD_REGLEMENT_DIFFERE_MINUTES
+    : HOLD_PAIEMENT_MINUTES;
+  return new Date(depuis.getTime() + minutes * 60_000).toISOString();
 }
 
 /**
