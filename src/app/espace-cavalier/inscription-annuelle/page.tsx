@@ -11,9 +11,10 @@ import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
 import { useToast } from "@/components/ui/Toast";
 import {
-  calculerForfaitAnnuel, seasonOf,
+  calculerForfaitAnnuel, seasonOf, tarifPourFrequence,
   type ForfaitTarifs, type FamilyDiscountRule,
 } from "@/lib/forfait-pricing";
+import { frequenceEquivalente, formatFrequence } from "@/lib/rythme";
 
 // Saison minimale autorisée pour les inscriptions annuelles en self-service.
 // Règle métier : on bloque la saison en cours, on n'ouvre qu'à partir de
@@ -364,6 +365,11 @@ export default function InscriptionAnnuellePage() {
   // Somme des fréquences des forfaits actifs (base + panier) sur la saison
   // visée. Sert à facturer une heure supplémentaire au DIFFÉRENTIEL (passage
   // 1×→2× etc.) plutôt qu'à plein tarif, et à plafonner le choix à 3×/sem.
+  // Un forfait en quinzaine (saisi côté admin — l'espace famille ne propose
+  // que l'hebdo) ne compte que pour MOITIÉ : le cavalier ne vient qu'une
+  // semaine sur deux. Sans cette conversion, une famille dont l'enfant est en
+  // garde alternée verrait le tarif dégressif calculé depuis une fréquence
+  // deux fois trop haute.
   const frequenceDejaInscrite = useMemo(() => {
     if (!selectedChild) return 0;
     let total = 0;
@@ -372,18 +378,20 @@ export default function InscriptionAnnuellePage() {
       if (f.status && f.status !== "actif") return;
       const fSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
       if (fSeason !== targetSeason) return;
-      total += Number(f.frequence) || 0;
+      total += frequenceEquivalente(f.frequence, f);
     });
     panier.forEach(p => {
       if (p.childId !== selectedChild) return;
       if ((p as any).seasonStartYear !== undefined && (p as any).seasonStartYear !== targetSeason) return;
-      total += Number(p.frequence) || 0;
+      total += frequenceEquivalente(p.frequence, p as any);
     });
     return total;
   }, [allForfaits, panier, selectedChild, targetSeason]);
 
   // Nombre d'heures/semaine encore disponibles (plafond 3×/sem cumulé).
-  const freqMaxAjoutable = Math.max(0, 3 - frequenceDejaInscrite);
+  // Arrondi vers le bas : l'espace famille ne vend que des heures entières,
+  // donc un reste de 2,5 ne permet d'en ajouter que 2.
+  const freqMaxAjoutable = Math.floor(Math.max(0, 3 - frequenceDejaInscrite));
 
   // ── Séances restantes / total saison pour le prorata ──
   // total saison = sessions du 1er créneau choisi (nb d'occurrences réelles
@@ -1047,11 +1055,14 @@ export default function InscriptionAnnuellePage() {
           {step === 3 && mode === "annuel" && (() => {
             const ajout = frequenceDejaInscrite > 0;
             // Tarif différentiel affiché pour un ajout de n heure(s).
-            const tarifFreq = (f: number) => f >= 3 ? tarifs.forfait3x : f === 2 ? tarifs.forfait2x : tarifs.forfait1x;
+            // Même échelle que le calcul réel (demi-fréquences comprises) :
+            // frequenceDejaInscrite peut valoir 0,5 si l'enfant a déjà un
+            // forfait en quinzaine saisi côté admin.
+            const tarifFreq = (f: number) => tarifPourFrequence(tarifs, f);
             const prixAffiche = (nNouveau: number) => {
-              if (!ajout) return tarifFreq(nNouveau);
+              if (!ajout) return Math.round(tarifFreq(nNouveau));
               const cumul = Math.min(3, frequenceDejaInscrite + nNouveau);
-              return Math.max(0, tarifFreq(cumul) - tarifFreq(frequenceDejaInscrite));
+              return Math.round(Math.max(0, tarifFreq(cumul) - tarifFreq(frequenceDejaInscrite)));
             };
             const options = ([
               { type: "1x", freq: 1, emoji: "🐴", label: ajout ? "+1 cours" : "1 cours" },
@@ -1067,7 +1078,7 @@ export default function InscriptionAnnuellePage() {
               {ajout && (
                 <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-xl">
                   <p className="font-body text-xs text-blue-800">
-                    🏇 Cet enfant a déjà <strong>{frequenceDejaInscrite}×/semaine</strong> cette saison. Les heures ajoutées sont facturées au <strong>tarif dégressif</strong> (différence vers le forfait {Math.min(3, frequenceDejaInscrite + 1)}×), pas à plein tarif.
+                    🏇 Cet enfant a déjà <strong>{formatFrequence(frequenceDejaInscrite)}×/semaine</strong> cette saison. Les heures ajoutées sont facturées au <strong>tarif dégressif</strong> (différence vers le forfait {formatFrequence(Math.min(3, frequenceDejaInscrite + 1))}×), pas à plein tarif.
                   </p>
                 </div>
               )}
@@ -1126,7 +1137,7 @@ export default function InscriptionAnnuellePage() {
               <div className="mb-4 p-3 bg-amber-50 rounded-xl border border-amber-200">
                 <span className="font-body text-sm text-amber-800">
                   {frequenceDejaInscrite > 0 ? (
-                    <>💡 Heure(s) supplémentaire(s) (passage {frequenceDejaInscrite}×→{Math.min(3, frequenceDejaInscrite + frequence)}×/sem) : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>{calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}. Tarif dégressif : seule la différence vers le forfait supérieur est facturée.</>
+                    <>💡 Heure(s) supplémentaire(s) (passage {formatFrequence(frequenceDejaInscrite)}×→{formatFrequence(Math.min(3, frequenceDejaInscrite + frequence))}×/sem) : <strong>{Math.round(calcul.prixForfaitAnnuelPlein)}€/an</strong>{calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}. Tarif dégressif : seule la différence vers le forfait supérieur est facturée.</>
                   ) : (
                     <>💡 Forfait {frequence}×/semaine : <strong>{calcul.prixForfaitAnnuelPlein}€/an</strong>{calcul.familyDiscountAmount > 0 && ` (− ${calcul.familyDiscountAmount.toFixed(0)}€ réduction famille)`}. Le prix ne dépend pas du créneau choisi mais du nombre de cours par semaine.</>
                   )}
