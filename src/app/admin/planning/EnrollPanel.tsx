@@ -10,7 +10,8 @@ import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
 import { generateOrderId } from "@/lib/utils";
 import { formatStageSchedule } from "@/lib/format-stage";
-import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme } from "@/lib/rythme";
+import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
+import { tarifPourFrequence } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
 
 // ── Composant warning mandat SEPA ─────────────────────────────────────────────
@@ -1060,7 +1061,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [semainePaire, setSemainePaire] = useState(true);
   const [extraSlots, setExtraSlots] = useState<string[]>([]); // 2ème + 3ème créneaux pour 2×/3×/sem
   const [extraSlotSearch, setExtraSlotSearch] = useState("");
-  const prixForfaitPlein = (f: number) => f >= 3 ? inscParams.forfait3x : f === 2 ? inscParams.forfait2x : inscParams.forfait1x;
+  // Échelle tarifaire partagée avec l'espace famille, demi-fréquences comprises
+  // (une quinzaine vaut 0,5×/semaine). Voir src/lib/forfait-pricing.ts.
+  const prixForfaitPlein = (f: number) => tarifPourFrequence(inscParams, f);
   const totalSessionsSaison = inscParams.totalSessionsSaison * frequenceCours;
   const dateFinSaisonRef = inscParams.dateFinSaison;
 
@@ -1212,6 +1215,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Fréquence (cours/semaine) déjà inscrite pour CET enfant cette saison.
   // Sert à facturer une heure supplémentaire au DIFFÉRENTIEL (dégressivité
   // horaire) plutôt qu'à plein tarif, comme côté famille.
+  //
+  // Un forfait en quinzaine ne compte que pour MOITIÉ : le cavalier en garde
+  // alternée inscrit samedi les semaines paires et mercredi les impaires ne
+  // monte qu'une fois par semaine. Le compter 2 le faisait passer au tarif
+  // 2×/semaine, et son second forfait était facturé au différentiel 1×→2×.
   const frequenceDejaInscrite = useMemo(() => {
     if (!fam || !selChild) return 0;
     const targetSeason = seasonOf(creneau.date);
@@ -1222,25 +1230,42 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         if (f.status && f.status !== "actif" && f.status !== "active") return;
         const forfaitSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
         if (forfaitSeason !== targetSeason) return;
-        total += Number(f.frequence) || 0;
+        total += frequenceEquivalente(f.frequence, f);
       });
     return total;
   }, [fam, allForfaits, selChild, creneau.date]);
-  const freqMaxAjoutable = Math.max(0, 3 - frequenceDejaInscrite);
+  // Place restante sous le plafond de 3×/semaine, exprimée en créneaux à
+  // cocher : sous rythme quinzaine, chaque créneau ne consomme que 0,5.
+  const coefRythme = quinzaine ? 0.5 : 1;
+  const placeRestante = Math.max(0, 3 - frequenceDejaInscrite);
+  const freqMaxAjoutable = Math.floor(placeRestante / coefRythme);
+  // Vrai quand il reste de la place, mais pas assez pour un créneau au rythme
+  // choisi : typiquement 0,5 restant alors qu'on demande un créneau hebdo.
+  // Le message doit dire quoi faire, pas seulement « c'est plein ».
+  const placeInsuffisantePourLeRythme = freqMaxAjoutable === 0 && placeRestante > 0;
+  // Le plafond de 3×/semaine doit bloquer l'inscription, pas seulement masquer
+  // les boutons : `frequenceCours` garde sa valeur quand on change de cavalier
+  // dans le même panneau, et on pouvait valider une fréquence devenue
+  // impossible pour le nouvel enfant.
+  const frequenceHorsPlafond = inscriptionMode === "annuel"
+    && (freqMaxAjoutable === 0 || frequenceCours > freqMaxAjoutable);
 
   // Prix plein du forfait :
   //  - 1re inscription → tarif plein de la fréquence choisie
   //  - ajout d'heure(s) (frequenceDejaInscrite > 0) → DIFFÉRENTIEL vers la
   //    fréquence cumulée (plafonnée à 3×/sem). Aligné sur l'espace famille.
   const ajoutHeureAdmin = frequenceDejaInscrite > 0;
-  const freqCumuleeAdmin = Math.min(3, frequenceDejaInscrite + frequenceCours);
+  // Ce que ce forfait ajoute, en fréquence hebdomadaire équivalente : une
+  // quinzaine 1×/sem ajoute 0,5, pas 1. C'est ce qui remplace l'ancien
+  // « coefficient 0,5 appliqué au prix » — la moitié est désormais portée par
+  // la fréquence elle-même, donc le cumul de deux quinzaines retombe bien sur
+  // le tarif 1×/semaine au lieu de grimper vers le 2×/semaine.
+  const freqAjouteeAdmin = frequenceCours * coefRythme;
+  const freqCumuleeAdmin = Math.min(3, frequenceDejaInscrite + freqAjouteeAdmin);
   const prixForfaitAnnuel = ajoutHeureAdmin
     ? Math.max(0, prixForfaitPlein(freqCumuleeAdmin) - prixForfaitPlein(frequenceDejaInscrite))
-    : prixForfaitPlein(frequenceCours);
-  // Une semaine sur deux = moitié des séances, donc moitié du tarif. Appliqué
-  // avant le prorata et les réductions famille, qui restent proportionnelles.
-  const coefRythme = quinzaine ? 0.5 : 1;
-  const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata * coefRythme);
+    : prixForfaitPlein(freqAjouteeAdmin);
+  const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
 
   // Réduction famille sur le forfait (chargée depuis settings/degressivite)
   const [familyDiscountRules, setFamilyDiscountRules] = useState<{ nth: number; discount: number }[]>([]);
@@ -1867,7 +1892,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         if (adhesion) items.push({ activityTitle: `Adhésion annuelle (enfant ${rangEnfantFamille})`, childId: selChild, childName, priceHT: prixAdhesionDegressif / 1.055, tva: 5.5, priceTTC: prixAdhesionDegressif });
         if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, childId: selChild, childName, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
         // Créneau principal
-        items.push({ activityTitle: ajoutHeureAdmin ? `Forfait — heure suppl. (${frequenceDejaInscrite}×→${freqCumuleeAdmin}×/sem) — ${creneau.activityTitle} (${slotKey})` : `Forfait ${creneau.activityTitle} (${slotKey})`, childId: selChild, childName, creneauId: creneau.id, activityType: creneau.activityType, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
+        items.push({ activityTitle: ajoutHeureAdmin ? `Forfait — heure suppl. (${formatFrequence(frequenceDejaInscrite)}×→${formatFrequence(freqCumuleeAdmin)}×/sem) — ${creneau.activityTitle} (${slotKey})` : `Forfait ${creneau.activityTitle} (${slotKey})`, childId: selChild, childName, creneauId: creneau.id, activityType: creneau.activityType, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
         // Créneaux supplémentaires (2ème, 3ème)
         const dayNames = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
         for (const esKey of extraSlots) {
@@ -3802,20 +3827,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       {ajoutHeureAdmin && (
                         <div className="mb-2 p-2 bg-green-50 border border-green-200 rounded-lg">
                           <p className="font-body text-[11px] text-green-700">
-                            🏇 Déjà <strong>{frequenceDejaInscrite}×/sem</strong> cette saison — heures ajoutées au <strong>tarif dégressif</strong> (différentiel), pas à plein tarif.
+                            🏇 Déjà <strong>{formatFrequence(frequenceDejaInscrite)}×/sem</strong> cette saison — heures ajoutées au <strong>tarif dégressif</strong> (différentiel), pas à plein tarif.
                           </p>
                         </div>
                       )}
                       {freqMaxAjoutable === 0 ? (
                         <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg font-body text-xs text-amber-800">
-                          Déjà au maximum (3×/sem) cette saison.
+                          {placeInsuffisantePourLeRythme
+                            ? <>Il ne reste que <strong>{formatFrequence(placeRestante)}×/sem</strong> sous le plafond de 3×/sem. Cochez « une semaine sur deux » ci-dessous pour ajouter un créneau à mi-temps.</>
+                            : <>Déjà au maximum (3×/sem) cette saison.</>}
                         </div>
                       ) : (
                         <div className="flex gap-2">
                           {([1, 2, 3] as const).filter(f => f <= freqMaxAjoutable).map(f => {
-                            const prixF = ajoutHeureAdmin
-                              ? Math.max(0, prixForfaitPlein(Math.min(3, frequenceDejaInscrite + f)) - prixForfaitPlein(frequenceDejaInscrite))
-                              : prixForfaitPlein(f);
+                            // Même échelle que le calcul réel : la quinzaine
+                            // divise la fréquence ajoutée, pas le prix final.
+                            const fEquiv = f * coefRythme;
+                            const prixF = Math.round(ajoutHeureAdmin
+                              ? Math.max(0, prixForfaitPlein(Math.min(3, frequenceDejaInscrite + fEquiv)) - prixForfaitPlein(frequenceDejaInscrite))
+                              : prixForfaitPlein(fEquiv));
                             return (
                             <button key={f} onClick={() => { setFrequenceCours(f); setExtraSlots([]); setExtraSlotSearch(""); }}
                               className={`flex-1 py-2 rounded-lg border font-body text-sm font-semibold cursor-pointer transition-all ${frequenceCours === f ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 bg-white text-slate-500"}`}>
@@ -4087,7 +4117,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               const totalTTC = priceTTC * nbSel;
               const suffixe = isMulti ? ` (${nbSel} cavaliers)` : "";
               return (
-              <button onClick={handleEnroll} disabled={!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1))?"bg-gray-200 text-slate-500":useRattrapage?"bg-purple-600 text-white hover:bg-purple-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
+              <button onClick={handleEnroll} disabled={!selChild||enrolling||frequenceHorsPlafond||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1)} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selChild||enrolling||frequenceHorsPlafond||(inscriptionMode==="annuel"&&frequenceCours>=2&&extraSlots.length<frequenceCours-1))?"bg-gray-200 text-slate-500":useRattrapage?"bg-purple-600 text-white hover:bg-purple-500":inscriptionMode==="annuel"?"bg-green-600 text-white hover:bg-green-500":"bg-blue-500 text-white hover:bg-blue-400"}`}>
                 {enrolling ? "..."
                   // ── Priorité 0 : inscription établissement (aucune facture) ───
                   : freeEnroll && freeReason === "Établissement" ? `🏫 Inscrire (établissement, sans facture)${suffixe}`

@@ -26,6 +26,8 @@
  *   où prixForfaitNet = prixBrut − réductionFamille
  */
 
+import { formatFrequence } from "./rythme";
+
 export interface ForfaitTarifs {
   forfait1x: number;
   forfait2x: number;
@@ -43,8 +45,48 @@ export interface FamilyDiscountRule {
   discount: number; // pourcentage de réduction (ex: 10 = -10%)
 }
 
+/**
+ * Tarif plein pour une fréquence hebdomadaire donnée, demi-fréquences comprises.
+ *
+ * Les paramètres du club ne définissent que trois barreaux — 1×, 2× et 3× par
+ * semaine. Une quinzaine vaut 0,5, une quinzaine 3×/sem vaut 1,5 : il faut donc
+ * savoir lire l'échelle ENTRE les barreaux. On interpole linéairement.
+ *
+ * Cette forme a une propriété qui compte pour la facturation : le montant total
+ * d'un enfant ne dépend pas de l'ORDRE dans lequel ses forfaits ont été saisis.
+ * Chaque nouveau forfait coûte tarif(cumul après) − tarif(cumul avant), et la
+ * somme se télescope vers tarif(cumul total).
+ *
+ * Réserve : cette égalité est exacte sur les nombres réels, à l'euro près après
+ * l'arrondi final. Avec des barreaux impairs (un forfait 1× à 675 €), deux
+ * demi-forfaits peuvent totaliser 1 € de plus qu'un forfait entier. Sans
+ * conséquence avec des tarifs pairs — à revoir à la prochaine revalorisation
+ * si l'écart d'un euro devient gênant.
+ *
+ *   tarif(0,5) = moitié du forfait 1×          (une quinzaine seule)
+ *   tarif(1)   = forfait 1×                     (deux quinzaines alternées)
+ *   tarif(1,5) = forfait 1× + moitié de l'écart 1×→2×
+ *   tarif(3)   = forfait 3×                     (plafond)
+ */
+export function tarifPourFrequence(
+  tarifs: Pick<ForfaitTarifs, "forfait1x" | "forfait2x" | "forfait3x">,
+  frequence: number,
+): number {
+  if (!(frequence > 0)) return 0;
+  // Index = fréquence entière. Le barreau 0 vaut 0 € : pas de cours, pas de prix.
+  const paliers = [0, tarifs.forfait1x, tarifs.forfait2x, tarifs.forfait3x];
+  const f = Math.min(3, frequence);
+  const bas = Math.floor(f);
+  const reste = f - bas;
+  if (reste === 0) return paliers[bas];
+  return paliers[bas] + (paliers[bas + 1] - paliers[bas]) * reste;
+}
+
 export interface CalculForfaitInput {
-  frequence: 1 | 2 | 3;
+  // Fréquence hebdomadaire ÉQUIVALENTE du forfait ajouté, quinzaine comprise :
+  // un « 1×/semaine une semaine sur deux » se passe ici en 0,5, pas en 1.
+  // Voir frequenceEquivalente() dans src/lib/rythme.ts.
+  frequence: number;
   sessionsRestantes: number;
   sessionsTotalSaison: number;
   rangEnfant: number;           // 1 = 1er enfant de la famille pour cette saison
@@ -87,14 +129,9 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
     frequenceDejaInscrite = 0,
   } = input;
 
-  // Tarif plein pour une fréquence donnée (dégressivité horaire 1x/2x/3x).
-  // Plafonné à 3×/semaine (au-delà, tarif 3x).
-  const tarifPourFreq = (f: number): number => {
-    if (f <= 0) return 0;
-    if (f === 1) return tarifs.forfait1x;
-    if (f === 2) return tarifs.forfait2x;
-    return tarifs.forfait3x;
-  };
+  // Tarif plein pour une fréquence donnée (dégressivité horaire 1x/2x/3x),
+  // demi-fréquences comprises. Plafonné à 3×/semaine.
+  const tarifPourFreq = (f: number): number => tarifPourFrequence(tarifs, f);
 
   // 1. Prix plein.
   //    - Première inscription (frequenceDejaInscrite = 0) → tarif plein de `frequence`.
@@ -141,8 +178,8 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
   if (avecLicence) detailLignes.push({ label: `Licence FFE ${licenceMoins18 ? "-18 ans" : "+18 ans"}`, montantTTC: prixLicence });
   detailLignes.push({
     label: ajoutHeure
-      ? `Forfait — heure suppl. (passage ${frequenceDejaInscrite}×→${freqCumulee}×/sem)${prorata < 1 ? ` (prorata ${Math.round(prorata * 100)}%)` : ""}`
-      : `Forfait ${frequence}×/semaine${prorata < 1 ? ` (prorata ${Math.round(prorata * 100)}%)` : ""}`,
+      ? `Forfait — heure suppl. (passage ${formatFrequence(frequenceDejaInscrite)}×→${formatFrequence(freqCumulee)}×/sem)${prorata < 1 ? ` (prorata ${Math.round(prorata * 100)}%)` : ""}`
+      : `Forfait ${formatFrequence(frequence)}×/semaine${prorata < 1 ? ` (prorata ${Math.round(prorata * 100)}%)` : ""}`,
     montantTTC: prixForfaitBrut,
   });
   if (familyDiscountAmount > 0) {

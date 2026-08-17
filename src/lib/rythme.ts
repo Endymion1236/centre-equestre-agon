@@ -89,6 +89,57 @@ export function expliqueRythme(date: string | Date, porteur: PorteurDeRythme): s
 }
 
 /**
+ * Coefficient de rythme : 1 pour un hebdo, 0,5 pour une quinzaine.
+ * Une quinzaine ne représente que la moitié des séances d'un hebdo, donc la
+ * moitié du volume horaire hebdomadaire.
+ */
+export function coefficientRythme(porteur: PorteurDeRythme): number {
+  return estQuinzaine(porteur) ? 0.5 : 1;
+}
+
+/**
+ * Fréquence hebdomadaire ÉQUIVALENTE d'un forfait, en cours par semaine.
+ *
+ * C'est la seule unité dans laquelle les forfaits d'un même enfant peuvent
+ * s'additionner. Un forfait « 1×/semaine, une semaine sur deux » ne vaut pas
+ * 1 : il vaut 0,5, parce que le cavalier ne vient qu'une semaine sur deux.
+ *
+ * Sans cette conversion, deux quinzaines sur des semaines alternées (le cas
+ * d'une garde alternée : samedi les semaines paires, mercredi les impaires)
+ * totalisent 2 au lieu de 1, et le second forfait est facturé au différentiel
+ * vers le tarif 2×/semaine alors que l'enfant ne monte qu'une fois par semaine.
+ */
+export function frequenceEquivalente(frequence: unknown, porteur: PorteurDeRythme): number {
+  return nombreDeCours(frequence) * coefficientRythme(porteur);
+}
+
+/**
+ * Nombre de cours par semaine porté par un forfait, quel que soit le format
+ * enregistré en base.
+ *
+ * Deux écrans écrivent ce champ et ils ne s'accordent pas : le panneau
+ * d'inscription du planning enregistre un nombre (`1`), la page Forfaits
+ * enregistre une chaîne (`"1x"`). Un simple `Number("2x")` vaut NaN, donc 0 :
+ * le forfait devient invisible pour le cumul de fréquence, et l'heure ajoutée
+ * ensuite est facturée à plein tarif au lieu du différentiel. On lit donc le
+ * premier nombre présent, d'où qu'il vienne.
+ */
+export function nombreDeCours(frequence: unknown): number {
+  if (typeof frequence === "number") return Number.isFinite(frequence) ? frequence : 0;
+  const trouve = String(frequence ?? "").match(/\d+(?:[.,]\d+)?/);
+  return trouve ? Number(trouve[0].replace(",", ".")) : 0;
+}
+
+/**
+ * Affichage d'une fréquence éventuellement fractionnaire : « 1 », « 0,5 »,
+ * « 1,5 ». Évite le « 0.5×/sem » à l'anglaise dans l'interface.
+ */
+export function formatFrequence(f: number): string {
+  const arrondi = Math.round(f * 100) / 100;
+  return Number.isInteger(arrondi) ? String(arrondi) : arrondi.toString().replace(".", ",");
+}
+
+/**
  * Nombre de séances réellement dues sur une liste de dates.
  * Sert à ne pas facturer, ni décompter, les semaines où le cavalier
  * n'est pas attendu.
