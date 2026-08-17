@@ -15,6 +15,8 @@ export async function downloadInvoicePdf(params: {
   familyName: string;
   familyEmail: string;
   familyAddress?: string;
+  /** Site facturé — structure réglant pour plusieurs services. */
+  serviceFacture?: string;
   items: any[];
   totalHT: number;
   totalTVA: number;

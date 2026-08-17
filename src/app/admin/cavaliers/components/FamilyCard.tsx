@@ -91,6 +91,8 @@ export default function FamilyCard({
   const [editingFamily, setEditingFamily] = useState(false);
   const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "", siren: "", accountType: "particulier", raisonSociale: "", structureParente: "" });
   const [editTags, setEditTags] = useState<string[]>([]);
+  /** Sites facturables d'un établissement (plusieurs centres de loisirs d'une même collectivité). */
+  const [editServices, setEditServices] = useState<string[]>([]);
 
   const startEditFamily = () => {
     setEditingFamily(true);
@@ -108,6 +110,7 @@ export default function FamilyCard({
       structureParente: (family as any).structureParente || "",
     });
     setEditTags(family.tags || []);
+    setEditServices(Array.isArray((family as any).services) ? (family as any).services : []);
   };
 
   const handleSaveFamily = async () => {
@@ -132,6 +135,11 @@ export default function FamilyCard({
       const tagsFinaux = estEtablissement
         ? Array.from(new Set([...editTags, "etablissement"]))
         : editTags.filter(t => t !== "etablissement");
+      // Lignes vides ignorées, doublons écartés : la liste sert de menu
+      // déroulant à la facturation, elle doit rester propre.
+      const servicesFinaux = estEtablissement
+        ? Array.from(new Set(editServices.map(s => s.trim()).filter(Boolean)))
+        : [];
 
       const newEmail = editForm.parentEmail.trim().toLowerCase();
       const oldEmail = (family.parentEmail || "").trim().toLowerCase();
@@ -167,6 +175,7 @@ export default function FamilyCard({
           accountType: editForm.accountType,
           raisonSociale: editForm.raisonSociale.trim() || null,
           structureParente: editForm.structureParente.trim() || null,
+          services: servicesFinaux,
           tags: tagsFinaux,
           updatedAt: serverTimestamp(),
         });
@@ -185,6 +194,7 @@ export default function FamilyCard({
           accountType: editForm.accountType,
           raisonSociale: editForm.raisonSociale.trim() || null,
           structureParente: editForm.structureParente.trim() || null,
+          services: servicesFinaux,
           tags: tagsFinaux,
           updatedAt: serverTimestamp(),
         });
@@ -537,6 +547,36 @@ export default function FamilyCard({
                             : editForm.raisonSociale.trim() || editForm.parentName}</strong>
                         </div>
                       )}
+                    </div>
+
+                    {/* Services facturables — une collectivité règle pour
+                        plusieurs sites (plusieurs centres de loisirs). Le payeur
+                        reste cette fiche : le service choisi à la facturation
+                        n'est qu'une mention portée sur la facture, il ne crée ni
+                        second client ni second solde. */}
+                    <div>
+                      <label className={labelStyle}>
+                        Services facturables <span className="text-slate-400 font-normal normal-case">(optionnel)</span>
+                      </label>
+                      <p className="font-body text-[10px] text-slate-500 mb-1.5">
+                        Les sites de cette structure. À la facturation, un menu déroulant
+                        permet de choisir lequel apparaît sur la facture.
+                      </p>
+                      {editServices.map((s, i) => (
+                        <div key={i} className="flex gap-2 mb-1.5">
+                          <input value={s}
+                            onChange={e => setEditServices(prev => prev.map((v, j) => j === i ? e.target.value : v))}
+                            placeholder="Ex: Centre de loisirs de Saint-Sauveur" className={inputStyle}/>
+                          <button type="button" onClick={() => setEditServices(prev => prev.filter((_, j) => j !== i))}
+                            className="shrink-0 w-9 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
+                            <Trash2 size={14}/>
+                          </button>
+                        </div>
+                      ))}
+                      <button type="button" onClick={() => setEditServices(prev => [...prev, ""])}
+                        className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-1">
+                        <UserPlus size={13}/> Ajouter un service
+                      </button>
                     </div>
                   </div>
                 )}

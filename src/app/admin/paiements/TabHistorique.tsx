@@ -299,6 +299,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                     invoiceNumber: invoiceNum, date: date.toLocaleDateString("fr-FR"),
                     familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "",
                     familyAddress: adresseLines,
+                    serviceFacture: (p as any).serviceFacture || undefined,
                     items: p.items || [], totalHT: ht,
                     totalTVA: (p.totalTTC || 0) - ht, totalTTC: p.totalTTC || 0,
                     paymentMode: mode?.label || p.paymentMode || "",

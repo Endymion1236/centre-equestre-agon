@@ -56,6 +56,8 @@ export function TabEncaisser({
   const [activityDropdownOpen, setActivityDropdownOpen] = useState(false);
   const [selectedChild, setSelectedChild] = useState("");
   const [selectedFamily, setSelectedFamily] = useState("");
+  /** Service porté sur la facture quand le client est une structure à plusieurs sites. */
+  const [serviceFacture, setServiceFacture] = useState("");
   const [codeBon, setCodeBon] = useState("");
   const [bonBusy, setBonBusy] = useState(false);
   const [customLabel, setCustomLabel] = useState("");
@@ -92,6 +94,10 @@ export function TabEncaisser({
 
   const selectedFam = families.find((f) => f.firestoreId === selectedFamily);
   const children = selectedFam?.children || [];
+  // Sites facturables du client (collectivité réglant pour plusieurs centres).
+  const servicesFacturables: string[] = Array.isArray((selectedFam as any)?.services)
+    ? (selectedFam as any).services.filter(Boolean)
+    : [];
 
   const filteredFamilies = familySearch
     ? families.filter((f) => {
@@ -295,6 +301,7 @@ export function TabEncaisser({
         orderId: generateOrderId(),
         familyId: selectedFamily,
         familyName: selectedFam?.parentName || "—",
+        ...(serviceFacture ? { serviceFacture } : {}),
         items: revisedBasket,
         totalTTC: revisedTotal,
         paymentMode: "cheque_differe",
@@ -349,6 +356,7 @@ export function TabEncaisser({
       await enregistrerEncaissement(payRef.id, {
         familyId: selectedFamily,
         familyName: selectedFam?.parentName || "—",
+        ...(serviceFacture ? { serviceFacture } : {}),
         items: revisedBasket,
         totalTTC: revisedTotal,
       }, paid, paymentMode, paymentRef, revisedBasket.map(i => i.activityTitle).join(", "), encaissementDate);
@@ -398,12 +406,30 @@ export function TabEncaisser({
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input data-testid="selectedFam-search-input" value={familySearch} onChange={(e) => setFamilySearch(e.target.value)} placeholder="Rechercher..." className={`${inputCls} !pl-9`} />
         </div>
-        <select value={selectedFamily} onChange={(e) => { setSelectedFamily(e.target.value); setSelectedChild(""); }} className={inputCls}>
+        <select value={selectedFamily} onChange={(e) => { setSelectedFamily(e.target.value); setSelectedChild(""); setServiceFacture(""); }} className={inputCls}>
           <option value="">Choisir une famille...</option>
           {filteredFamilies.map((f) => (
             <option key={f.firestoreId} value={f.firestoreId}>{f.parentName} ({f.parentEmail})</option>
           ))}
         </select>
+        {/* Service facturé — une collectivité règle pour plusieurs sites
+            (plusieurs centres de loisirs). Le payeur reste la fiche : le
+            service choisi est une mention portée sur la facture, il ne crée
+            ni second client ni second solde. */}
+        {servicesFacturables.length > 0 && (
+          <div className="mt-3">
+            <div className="font-body text-xs font-semibold text-slate-600 mb-1">Service facturé</div>
+            <select value={serviceFacture} onChange={(e) => setServiceFacture(e.target.value)} className={inputCls}>
+              <option value="">Aucun (facture au nom de la structure)</option>
+              {servicesFacturables.map((s: string) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <p className="font-body text-[10px] text-slate-500 mt-1">
+              Apparaîtra sur la facture sous le nom du client. La liste se règle sur la fiche du client.
+            </p>
+          </div>
+        )}
         {selectedFam && children.length > 0 && (
           <div className="mt-3">
             <div className="font-body text-xs font-semibold text-slate-600 mb-1">Cavalier</div>

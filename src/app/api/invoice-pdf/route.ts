@@ -114,6 +114,9 @@ export async function POST(request: NextRequest) {
     const {
       invoiceNumber, date, prestationDate,
       familyName, familyEmail, familyAddress,
+      // Site facturé quand le client est une structure à plusieurs services
+      // (une collectivité qui règle pour plusieurs centres de loisirs).
+      serviceFacture,
       items = [], totalHT = 0, totalTVA = 0, totalTTC = 0,
       paidAmount = 0, paymentMode, paymentDate,
       paymentDetails, // [{ mode, modeLabel, montant, date }] — sinon reconstruit via paymentId
@@ -198,6 +201,7 @@ export async function POST(request: NextRequest) {
         React.createElement(View, { style: { marginBottom: 20 } },
           React.createElement(Text, { style: s.partyLabel }, "Facturé à"),
           React.createElement(Text, { style: s.partyName }, familyName || ""),
+          serviceFacture ? React.createElement(Text, { style: s.partySub }, `Service : ${serviceFacture}`) : null,
           familyEmail ? React.createElement(Text, { style: s.partySub }, familyEmail) : null,
           familyAddress ? React.createElement(Text, { style: s.partySub }, familyAddress) : null,
         ),

@@ -321,6 +321,7 @@ export default function FacturesPage() {
       familyName: `${civilite}${payment.familyName || familyData?.parentName || ""}`,
       familyEmail: user?.email || "",
       familyAddress: address,
+      serviceFacture: (payment as any).serviceFacture || undefined,
       items: items.map((item) => ({ ...item, childName: item.childName || "" })),
       totalHT,
       totalTVA: totalTTC - totalHT,

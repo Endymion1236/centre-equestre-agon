@@ -620,6 +620,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                           invoiceNumber, date: invDate.toLocaleDateString("fr-FR"),
                           familyName: `${civilite}${family.parentName||p.familyName}`,
                           familyEmail: family.parentEmail||"", familyAddress: adresseLines,
+                          serviceFacture: (p as any).serviceFacture || undefined,
                           items, totalHT, totalTVA: (p.totalTTC||0)-totalHT, totalTTC: p.totalTTC||0,
                           paidAmount: p.paidAmount||p.totalTTC||0,
                           paymentMode: modeLabels[p.paymentMode]||p.paymentMode||"",
