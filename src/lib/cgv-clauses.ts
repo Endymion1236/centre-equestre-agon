@@ -110,5 +110,28 @@ export const CGV_BALADES =
   `En deçà, aucun remboursement, sauf ${CERTIFICAT_MEDICAL} — ` +
   `les sommes versées sont alors intégralement remboursées.`;
 
+/**
+ * Encadre de rappel des conditions d'annulation, a coller sous un email de
+ * confirmation de stage.
+ *
+ * Ecrit ici plutot que dans chaque route d'envoi : le bloc etait recopie a la
+ * main dans le retour de paiement CAWL, et absent des deux autres chemins de
+ * confirmation (webhook, acompte encaisse au comptoir). Une famille recevait
+ * donc le rappel ou non selon la facon dont son paiement s'etait termine.
+ *
+ * Volontairement hors du gabarit modifiable depuis l'admin : la clause doit
+ * survivre a une reedition du gabarit. Ce n'est PAS ce qui rend la clause
+ * opposable — l'acceptation a la commande le fait — mais ca evite la mauvaise
+ * surprise et desamorce les litiges.
+ */
+export function encadreConditionsStage(): string {
+  return `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
+     <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
+     <div style="font-size:12px;line-height:1.6;color:#7c2d12;">
+       ${CGV_STAGES_HTML}
+     </div>
+   </div>`;
+}
+
 export const CGV_ANNULATION_CENTRE =
   `En cas d'annulation par le centre (météo, force majeure) : report proposé ou remboursement intégral.`;

@@ -922,6 +922,43 @@ test("L3 — Les factures contiennent le N° TVA", () => {
   );
 });
 
+// L5 — Le rappel des conditions d'annulation sur TOUS les chemins de
+// confirmation d'un stage. Il n'existait que sur le retour de paiement : une
+// famille dont la confirmation partait par le webhook (onglet fermé) ou dont
+// l'acompte était encaissé au comptoir ne le recevait pas.
+test("L5 — Les confirmations de stage rappellent les conditions d'annulation", () => {
+  const CHEMINS = [
+    "src/app/api/cawl/status/route.ts",
+    "src/app/api/cawl/webhook/route.ts",
+    "src/app/api/admin/stage-acompte-recu/route.ts",
+  ];
+  const manquants = CHEMINS.filter((f) => {
+    const content = readFile(f);
+    return content && !content.includes("encadreConditionsStage");
+  });
+  assert(
+    manquants.length === 0,
+    `Chemin(s) de confirmation sans rappel des conditions : ${manquants.join(", ")}`
+  );
+});
+
+// L6 — Le texte contractuel ne doit exister qu'à un seul endroit. Recopié, il
+// finit par diverger, et une famille peut se prévaloir de la version qui
+// l'arrange (c'est la raison d'être de src/lib/cgv-clauses.ts).
+test("L6 — Aucune recopie du bloc « Conditions d'annulation » hors cgv-clauses", () => {
+  const copies = [...findFiles("src", ".ts"), ...findFiles("src", ".tsx")]
+    .filter((f) => !f.endsWith("cgv-clauses.ts"))
+    .filter((f) => {
+      const content = readFile(f);
+      // Le libellé écrit en dur DANS un gabarit HTML : c'est la recopie.
+      return content && /["'`][^"'`]*Conditions d'annulation[^"'`]*<\/p>/.test(content);
+    });
+  assert(
+    copies.length === 0,
+    `Bloc recopié dans : ${copies.join(", ")} — utiliser encadreConditionsStage()`
+  );
+});
+
 test("L4 — Les factures contiennent le SIRET", () => {
   const content = readFile("src/app/api/invoice-pdf/route.ts");
   if (!content) return;

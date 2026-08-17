@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { CGV_STAGES_HTML } from "@/lib/cgv-clauses";
+import { encadreConditionsStage } from "@/lib/cgv-clauses";
 import { deciderPaiement } from "@/lib/cawl-status";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -450,15 +450,7 @@ export async function GET(req: NextRequest) {
           // la clause opposable (l'acceptation à la commande le fait), mais
           // ça évite la mauvaise surprise et désamorce les litiges.
           const estStage = items.some((i: any) => String(i.activityType || "").includes("stage"));
-          const htmlFinal = estStage
-            ? html +
-              `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
-                 <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
-                 <p style="margin:0;font-size:12px;line-height:1.6;color:#7c2d12;">
-                   ${CGV_STAGES_HTML}
-                 </p>
-               </div>`
-            : html;
+          const htmlFinal = estStage ? html + encadreConditionsStage() : html;
           fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },

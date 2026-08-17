@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paiementAbouti } from "@/lib/cawl-status";
+import { encadreConditionsStage } from "@/lib/cgv-clauses";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
@@ -324,6 +325,11 @@ export async function POST(req: NextRequest) {
               }
 
               const { subject, html } = await loadTemplate(templateKey, vars);
+              // Rappel des conditions d'annulation, comme sur le retour de
+              // paiement : le webhook est le chemin emprunté quand la famille
+              // ferme son onglet avant le retour, elle recevait donc la
+              // confirmation sans la clause.
+              const htmlFinal = hasStage ? html + encadreConditionsStage() : html;
               fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: {
@@ -335,7 +341,7 @@ export async function POST(req: NextRequest) {
                   to: parentEmail,
                   ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
                   subject,
-                  html,
+                  html: htmlFinal,
                 }),
               })
                 .then(async (res) => {
