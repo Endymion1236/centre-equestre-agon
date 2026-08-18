@@ -95,7 +95,16 @@ quelque chose. Ordre à respecter :
    false`, ou variable Vercel `EMAIL_RESTRICTED_MODE = off`) ;
 3. envoyer le mail de pré-inscription.
 
-### 4. Le verrou des réservations
+### 4. Rejouer les correctifs
+
+`/admin/tests` → cocher **Correctifs à rejouer**. La liste ne montre alors que
+les cas ajoutés après un bug rencontré en conditions réelles (acompte de stage
+sur place, encaissement groupé, impayés d'une famille homonyme, forfait à la
+quinzaine, saisie de date au clavier, apport en caisse…). Un correctif jamais
+rejoué sur la vraie base n'est qu'une intention : la liste doit être vide, ou
+au moins ses cas **critiques**.
+
+### 5. Le verrou des réservations
 
 `/admin/parametres` → interrupteur **Réservations en ligne**. Le laisser fermé
 jusqu'à ce que tout le reste soit vert, puis l'ouvrir. Fermé, il bloque les

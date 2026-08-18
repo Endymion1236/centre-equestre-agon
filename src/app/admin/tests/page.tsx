@@ -23,6 +23,12 @@ interface TestCase {
   etapes: string;
   resultat_attendu: string;
   priorite: "critique" | "haute" | "normale";
+  /**
+   * Renseigné quand le cas a été ajouté à la suite d'un bug corrigé : donne la
+   * date du correctif. Sert à retrouver, avant une mise en production, tout ce
+   * qui n'a encore jamais été rejoué en conditions réelles.
+   */
+  correctif?: string;
 }
 
 // ─── Données des tests ────────────────────────────────────────────────────────
@@ -1007,6 +1013,150 @@ const TESTS: TestCase[] = [
     resultat_attendu: "Badge impayés, fiches manquantes, échéances à venir",
     priorite: "normale",
   },
+  // ─── Correctifs du 17-18 août 2026 ────────────────────────────────────────
+  // Chaque cas ci-dessous correspond à un bug rencontré en conditions réelles
+  // et corrigé depuis. Les rejouer une fois avant l'ouverture : un correctif
+  // non revérifié sur la vraie base n'est qu'une intention.
+  {
+    id: "PA-19", module: "Paiements", sous_module: "Stage",
+    description: "Acompte de stage encaissé sur place",
+    etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",
+    resultat_attendu: "30 € au journal dans le bon mode + email « acompte reçu » avec les conditions d'annulation + solde J-7 programmé",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "PA-20", module: "Paiements", sous_module: "Stage",
+    description: "Acompte de stage par lien de paiement",
+    etapes: "Même inscription → « Envoyer le lien »",
+    resultat_attendu: "Email avec lien CAWL, aucune écriture au journal tant que la famille n'a pas payé",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "PA-21", module: "Paiements", sous_module: "Encaisser",
+    description: "Deux cavaliers inscrits ensemble, encaissés en une fois",
+    etapes: "Créneau ponctuel → inscrire 2 enfants de la même famille (57 € chacun) → « Encaisser ensemble » en CB",
+    resultat_attendu: "UN seul encaissement de 114 € au journal, pas deux de 57 €",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "PA-22", module: "Paiements", sous_module: "Impayés",
+    description: "Impayés filtrés sur la bonne famille homonyme",
+    etapes: "Créer deux familles de même nom (ex. deux Martin) avec un impayé chacune → fiche famille → « Voir les impayés »",
+    resultat_attendu: "Seule la famille cliquée apparaît (filtre par identifiant, pas par nom) + bandeau avec le total et un bouton pour retirer le filtre",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "PA-23", module: "Paiements", sous_module: "Historique",
+    description: "Recherche dans l'onglet Historique",
+    etapes: "Paiements → Historique → taper un nom, un numéro de facture, un montant",
+    resultat_attendu: "Liste filtrée, accents et majuscules indifférents",
+    priorite: "haute", correctif: "2026-08-17",
+  },
+  {
+    id: "PA-24", module: "Paiements", sous_module: "Historique",
+    description: "Suppression d'une commande ancienne (au-delà des 500 derniers encaissements)",
+    etapes: "Supprimer une commande dont les encaissements ne sont plus dans les 500 derniers du journal",
+    resultat_attendu: "Le montant déjà encaissé est relu par requête dédiée ; en cas d'échec de lecture, l'opération est refusée avec un message plutôt que de décider sur un total faux",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "FO-05", module: "Forfaits", sous_module: "Création",
+    description: "Forfait à la quinzaine facturé pour ce qu'il est",
+    etapes: "Créer un forfait : samedi semaines paires + mercredi semaines impaires",
+    resultat_attendu: "Facturé au tarif 1×/semaine (deux quinzaines = une semaine), et le cavalier n'est inscrit que sur les semaines concernées",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "FO-06", module: "Forfaits", sous_module: "Création",
+    description: "Forfait créé depuis l'admin visible côté famille",
+    etapes: "Admin → Forfaits → créer un forfait → se connecter à l'espace famille du cavalier",
+    resultat_attendu: "Forfait visible et compté dans le cumul d'heures ; une heure ajoutée part au tarif dégressif, pas au plein tarif",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "FO-07", module: "Forfaits", sous_module: "Réduction",
+    description: "Un forfait annulé ne compte plus pour la réduction fratrie",
+    etapes: "Famille de 2 enfants → annuler le forfait du 1er → inscrire le 2ème",
+    resultat_attendu: "Le 2ème enfant est traité comme 1er enfant, sans réduction fratrie",
+    priorite: "haute", correctif: "2026-08-17",
+  },
+  {
+    id: "CA-09", module: "Cavaliers", sous_module: "Création",
+    description: "Fiche famille sans adresse email refusée",
+    etapes: "Cavaliers → Nouvelle famille → laisser l'email vide → Enregistrer (rejouer aussi depuis l'inscription au comptoir)",
+    resultat_attendu: "Création refusée : sans adresse, la famille ne recevra jamais ses accès et ne pourra pas s'en apercevoir",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "CA-10", module: "Cavaliers", sous_module: "Gestion",
+    description: "Écran des comptes orphelins",
+    etapes: "Admin → Comptes orphelins",
+    resultat_attendu: "Deux sections : fiches sans adresse email, et comptes connectés sans fiche famille. La première doit être vide avant l'envoi du mail de pré-inscription",
+    priorite: "haute", correctif: "2026-08-17",
+  },
+  {
+    id: "CA-11", module: "Cavaliers", sous_module: "Famille",
+    description: "Établissement : plusieurs services, et service effaçable",
+    etapes: "Fiche d'une collectivité → renseigner structure parente + service → enregistrer → rouvrir → vider le service → enregistrer",
+    resultat_attendu: "L'intitulé se recompose (structure — service), et vider le service le retire vraiment de l'intitulé",
+    priorite: "haute", correctif: "2026-08-17",
+  },
+  {
+    id: "DV-03", module: "Devis", sous_module: "Création",
+    description: "Devis pour un établissement : choix du service",
+    etapes: "Devis → nouvelle collectivité → choisir un service dans la liste → convertir en facture",
+    resultat_attendu: "Le service choisi apparaît sur le devis et est repris tel quel sur la facture",
+    priorite: "haute", correctif: "2026-08-17",
+  },
+  {
+    id: "PL-18", module: "Planning", sous_module: "Vues",
+    description: "Saisie d'une date au clavier",
+    etapes: "Taper une date chiffre par chiffre dans le champ date — vue semaine, vue jour, puis Management → Planning",
+    resultat_attendu: "Aucun saut vers une date aberrante (« Octobre 1902 »), le champ ne se vide pas en cours de frappe, la navigation n'a lieu qu'une fois l'année complète",
+    priorite: "haute", correctif: "2026-08-17",
+  },
+  {
+    id: "PL-19", module: "Planning", sous_module: "Réservation",
+    description: "Durée de tenue d'une place selon le mode de règlement",
+    etapes: "Réserver un créneau côté famille en chèque ou espèces, puis en CB",
+    resultat_attendu: "Chèque / espèces / virement : place tenue 7 jours. CB en ligne : 30 minutes",
+    priorite: "haute", correctif: "2026-08-17",
+  },
+  {
+    id: "AC-03", module: "Activités", sous_module: "Édition",
+    description: "Report d'une modification d'activité sur les créneaux futurs",
+    etapes: "Activités → modifier titre / prix / places → accepter le report proposé",
+    resultat_attendu: "Créneaux à venir mis à jour, créneaux passés intacts, prix et places réglés à la main conservés, places jamais sous le nombre d'inscrits, forfaits actifs renommés",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "CM-03", module: "Communication", sous_module: "Envoi",
+    description: "Formulaire de contact du site public",
+    etapes: "Site vitrine → Contact → envoyer un message → Admin → Messages du site",
+    resultat_attendu: "Le message arrive à l'adresse affichée sur la page Contact, et il figure dans « Messages du site » même si l'email échoue, avec le destinataire réellement utilisé",
+    priorite: "critique", correctif: "2026-08-17",
+  },
+  {
+    id: "CO-03", module: "Comptabilité", sous_module: "Livre de caisse",
+    description: "Apport en caisse (fonds de caisse initial)",
+    etapes: "Comptabilité → Livre de caisse → Apport en caisse → 150 € → « Fonds de caisse initial »",
+    resultat_attendu: "Ligne d'entrée au livre de caisse et solde théorique à 150 €, mais CA du mois inchangé au tableau de bord",
+    priorite: "critique", correctif: "2026-08-18",
+  },
+  {
+    id: "CO-04", module: "Comptabilité", sous_module: "Clôture journalière",
+    description: "Clôture d'un jour comportant un versement en banque",
+    etapes: "Faire un versement en banque, puis ouvrir la clôture du jour",
+    resultat_attendu: "Le total Z ne compte que les recettes ; apport et versement apparaissent à part en « mouvements de trésorerie », et le Z ne devient jamais négatif",
+    priorite: "critique", correctif: "2026-08-18",
+  },
+  {
+    id: "CO-05", module: "Comptabilité", sous_module: "Fond de caisse",
+    description: "Comptage sans écart après apport",
+    etapes: "Après l'apport de CO-03, compter physiquement billets et pièces",
+    resultat_attendu: "Écart nul : le théorique inclut l'apport. Un écart constant du même montant signale un fonds de caisse jamais déclaré",
+    priorite: "haute", correctif: "2026-08-18",
+  },
 ];
 
 
@@ -1032,6 +1182,7 @@ export default function TestsPage() {
   const [filterModule, setFilterModule] = useState("Tous");
   const [filterStatus, setFilterStatus] = useState<Status | "tous">("tous");
   const [filterPriorite, setFilterPriorite] = useState<"tous" | "critique" | "haute" | "normale">("tous");
+  const [correctifsSeuls, setCorrectifsSeuls] = useState(false);
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
@@ -1107,12 +1258,19 @@ export default function TestsPage() {
   };
   const pct = Math.round((stats.ok / stats.total) * 100);
 
+  // Correctifs pas encore rejoués sur la vraie base : c'est la liste à vider
+  // en priorité avant une mise en production.
+  const correctifsARejouer = TESTS.filter(
+    t => t.correctif && (!results[t.id] || results[t.id].status === "non_teste")
+  ).length;
+
   // ── Filtrer ──
   const filtered = TESTS.filter(t => {
     if (filterModule !== "Tous" && t.module !== filterModule) return false;
     const s = results[t.id]?.status || "non_teste";
     if (filterStatus !== "tous" && s !== filterStatus) return false;
     if (filterPriorite !== "tous" && t.priorite !== filterPriorite) return false;
+    if (correctifsSeuls && !t.correctif) return false;
     return true;
   });
 
@@ -1125,10 +1283,10 @@ export default function TestsPage() {
 
   // ── Export CSV ──
   const exportCSV = () => {
-    const rows = [["ID", "Module", "Sous-module", "Description", "Statut", "Note", "Date"]];
+    const rows = [["ID", "Module", "Sous-module", "Description", "Correctif", "Statut", "Note", "Date"]];
     TESTS.forEach(t => {
       const r = results[t.id];
-      rows.push([t.id, t.module, t.sous_module || "", t.description, r?.status || "non_teste", r?.note || "", r?.updatedAt ? new Date(r.updatedAt).toLocaleDateString("fr-FR") : ""]);
+      rows.push([t.id, t.module, t.sous_module || "", t.description, t.correctif || "", r?.status || "non_teste", r?.note || "", r?.updatedAt ? new Date(r.updatedAt).toLocaleDateString("fr-FR") : ""]);
     });
     const csv = rows.map(r => r.map(c => `"${c}"`).join(";")).join("\n");
     const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8;" });
@@ -1226,6 +1384,14 @@ export default function TestsPage() {
           <option value="haute">🟠 Haute</option>
           <option value="normale">🔵 Normale</option>
         </select>
+        <label className="flex items-center gap-1.5 font-body text-xs text-slate-600 cursor-pointer select-none">
+          <input type="checkbox" checked={correctifsSeuls} onChange={e => setCorrectifsSeuls(e.target.checked)}
+            className="cursor-pointer accent-amber-500"/>
+          Correctifs à rejouer
+          {correctifsARejouer > 0 && (
+            <span className="font-body text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">{correctifsARejouer}</span>
+          )}
+        </label>
         <span className="font-body text-[10px] text-slate-400 ml-auto">{filtered.length} test{filtered.length > 1 ? "s" : ""}</span>
       </div>
 
@@ -1262,7 +1428,15 @@ export default function TestsPage() {
 
                       {/* Contenu */}
                       <div className="flex-1 min-w-0">
-                        <div className="font-body text-sm font-semibold text-blue-800 mb-0.5">{t.description}</div>
+                        <div className="font-body text-sm font-semibold text-blue-800 mb-0.5">
+                          {t.description}
+                          {t.correctif && (
+                            <span title="Cas ajouté après un bug corrigé — à rejouer une fois sur la vraie base"
+                              className="ml-1.5 font-body text-[9px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded align-middle">
+                              correctif {new Date(t.correctif).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}
+                            </span>
+                          )}
+                        </div>
                         {t.sous_module && <div className="font-body text-[10px] text-slate-500 mb-1">{t.sous_module}</div>}
                         <details className="group">
                           <summary className="font-body text-[11px] text-slate-500 cursor-pointer hover:text-blue-600 select-none">
