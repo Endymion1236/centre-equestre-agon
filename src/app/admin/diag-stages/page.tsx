@@ -69,6 +69,10 @@ export default function DiagStagesPage() {
     nb_familles: number; nb_fragmentes: number; familles: Famille[];
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  // Réunir des créneaux sous un même stage : cas d'un stage à plusieurs
+  // horaires (matin + après-midi) créé en plusieurs fois.
+  const [selection, setSelection] = useState<Set<string>>(new Set());
+  const [regroupement, setRegroupement] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async (d: string) => {
@@ -91,6 +95,30 @@ export default function DiagStagesPage() {
   }, [user]);
 
   useEffect(() => { if (isAdmin && user) load(date); }, [isAdmin, user, date, load]);
+
+  const regrouper = async () => {
+    if (!user || selection.size < 2) return;
+    if (!confirm(
+      `Réunir ${selection.size} créneaux sous un même stage ?\n\n` +
+      `Seul leur rattachement change : inscriptions, horaires et prix sont conservés.`
+    )) return;
+    setRegroupement(true);
+    try {
+      const token = await user.getIdToken(true);
+      const res = await fetch("/api/admin/diag-stages-groupes", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ creneauIds: [...selection] }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Erreur");
+      setSelection(new Set());
+      await load(date);
+    } catch (e: any) {
+      alert(e?.message || String(e));
+    }
+    setRegroupement(false);
+  };
 
   if (!isAdmin) {
     return <div className="p-6 font-body text-slate-600">Accès réservé aux administrateurs.</div>;
@@ -143,6 +171,22 @@ export default function DiagStagesPage() {
       {loading && !data && (
         <div className="mt-8 flex items-center gap-2 font-body text-slate-500">
           <Loader2 size={16} className="animate-spin" /> Analyse de la semaine…
+        </div>
+      )}
+
+      {selection.size > 0 && (
+        <div className="sticky bottom-4 z-20 mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-blue-300 bg-blue-50 px-4 py-3 shadow-lg">
+          <span className="font-body text-sm text-blue-900">
+            {selection.size} créneau(x) sélectionné(s)
+          </span>
+          <button onClick={regrouper} disabled={selection.size < 2 || regroupement}
+            className="rounded-lg bg-blue-700 px-4 py-2 font-body text-xs font-bold text-white border-none cursor-pointer hover:bg-blue-800 disabled:opacity-50">
+            {regroupement ? "…" : "Réunir sous un même stage"}
+          </button>
+          <button onClick={() => setSelection(new Set())}
+            className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:underline">
+            Annuler
+          </button>
         </div>
       )}
 
@@ -214,9 +258,17 @@ export default function DiagStagesPage() {
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {g.jours.map(j => (
-                          <div key={j.id}
-                            className="rounded-md bg-white/70 border border-current/20 px-2 py-1 font-body text-xs">
-                            <div className="font-semibold capitalize">
+                          <label key={j.id}
+                            className={`rounded-md border px-2 py-1 font-body text-xs cursor-pointer ${
+                              selection.has(j.id) ? "bg-blue-100 border-blue-400" : "bg-white/70 border-current/20"}`}>
+                            <input type="checkbox" checked={selection.has(j.id)}
+                              onChange={e => {
+                                const n = new Set(selection);
+                                e.target.checked ? n.add(j.id) : n.delete(j.id);
+                                setSelection(n);
+                              }}
+                              className="mr-1 cursor-pointer align-middle" />
+                            <div className="font-semibold capitalize inline-block align-middle">
                               {j.jourFr} {jolieDate(j.date)}
                             </div>
                             <div className="opacity-75 flex flex-col gap-0.5 mt-0.5">
@@ -234,7 +286,7 @@ export default function DiagStagesPage() {
                                 {j.allowDayBooking ? ` · jour ${j.priceTTCDay ?? 0} €` : " · pas de jour"}
                               </span>
                             </div>
-                          </div>
+                          </label>
                         ))}
                       </div>
                     </div>

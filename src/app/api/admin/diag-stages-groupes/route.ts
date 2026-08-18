@@ -188,3 +188,63 @@ export async function GET(req: NextRequest) {
     familles: resultat,
   });
 }
+
+/**
+ * POST — Réunir plusieurs créneaux sous un même stage.
+ *
+ * Un stage n'a pas toujours un seul horaire : cinq demi-journées peuvent se
+ * répartir en 10h-12h et 14h-16h. Créés en plusieurs fois, ces créneaux
+ * reçoivent des stageGroupId différents, et l'application y voit alors autant
+ * de stages distincts — une inscription « semaine complète » ne couvre que le
+ * premier. On leur pose ici un identifiant commun.
+ *
+ * Rien n'est supprimé ni déplacé : seul le champ stageGroupId change. Les
+ * inscriptions, les prix et les horaires restent intacts.
+ */
+export async function POST(req: NextRequest) {
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
+  const { creneauIds } = await req.json().catch(() => ({} as any));
+  if (!Array.isArray(creneauIds) || creneauIds.length < 2) {
+    return NextResponse.json(
+      { error: "Sélectionnez au moins deux créneaux à réunir." },
+      { status: 400 }
+    );
+  }
+
+  // Garde-fou : un stage tient en une semaine. Réunir des créneaux de semaines
+  // différentes recréerait le regroupement trop large qui a déjà provoqué une
+  // suppression en masse.
+  const docs = await Promise.all(
+    creneauIds.map((id: string) => adminDb.collection("creneaux").doc(id).get())
+  );
+  const dates = docs.filter(d => d.exists).map(d => (d.data() as any).date as string).sort();
+  if (dates.length !== creneauIds.length) {
+    return NextResponse.json({ error: "Un créneau sélectionné n'existe plus." }, { status: 404 });
+  }
+  const lundi = (iso: string) => {
+    const d = new Date(iso + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d.toISOString().split("T")[0];
+  };
+  if (new Set(dates.map(lundi)).size > 1) {
+    return NextResponse.json(
+      { error: "Ces créneaux ne sont pas dans la même semaine. Un stage ne peut pas s'étendre sur deux semaines." },
+      { status: 400 }
+    );
+  }
+
+  const nouveauGroupe = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  let modifies = 0;
+  for (const id of creneauIds) {
+    try {
+      await adminDb.collection("creneaux").doc(id).update({ stageGroupId: nouveauGroupe });
+      modifies++;
+    } catch (e) {
+      console.error("[diag-stages-groupes] regroupement", id, e);
+    }
+  }
+
+  return NextResponse.json({ ok: true, stageGroupId: nouveauGroupe, modifies });
+}
