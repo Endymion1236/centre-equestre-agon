@@ -6,6 +6,7 @@ import {
   collection, getDocs, addDoc, query, where, orderBy, Timestamp, limit, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { estRecette, estMouvementDeTresorerie } from "@/lib/caisse-mouvements";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
@@ -78,17 +79,29 @@ export default function ClotureJournaliereClient() {
     [historique, date]
   );
 
-  // Totaux par mode pour le jour
+  // Le ticket Z rend compte des RECETTES du jour. Un apport de fonds de caisse
+  // ou un versement en banque déplacent de l'argent sans qu'il y ait vente :
+  // ils sont scellés avec la journée (ils font partie du journal) mais comptés
+  // à part, sinon un versement de 500€ ferait apparaître une journée négative.
+  const recettesDuJour = useMemo(() => dayEnc.filter(estRecette), [dayEnc]);
+  const mouvementsTresorerie = useMemo(() => dayEnc.filter(estMouvementDeTresorerie), [dayEnc]);
+
+  const totalTresorerie = useMemo(
+    () => Math.round(mouvementsTresorerie.reduce((s, e) => s + Number(e.montant || 0), 0) * 100) / 100,
+    [mouvementsTresorerie]
+  );
+
+  // Totaux par mode pour le jour (recettes uniquement)
   const totauxParMode = useMemo(() => {
     const t: Record<string, number> = {};
-    for (const e of dayEnc) {
+    for (const e of recettesDuJour) {
       const mode = e.mode || "inconnu";
       t[mode] = (t[mode] || 0) + Number(e.montant || 0);
     }
     // Arrondir chaque total
     Object.keys(t).forEach(k => { t[k] = Math.round(t[k] * 100) / 100; });
     return t;
-  }, [dayEnc]);
+  }, [recettesDuJour]);
 
   const totalGeneral = useMemo(
     () => Math.round(Object.values(totauxParMode).reduce((s, v) => s + v, 0) * 100) / 100,
@@ -118,7 +131,11 @@ export default function ClotureJournaliereClient() {
     }
     if (!confirm(
       `Vous allez clôturer définitivement la journée du ${new Date(date).toLocaleDateString("fr-FR", {weekday:"long", day:"numeric", month:"long", year:"numeric"})}.\n\n` +
-      `${dayEnc.length} opération(s) — Total : ${totalGeneral.toFixed(2)}€\n\n` +
+      `${recettesDuJour.length} recette(s) — Total : ${totalGeneral.toFixed(2)}€\n` +
+      (mouvementsTresorerie.length > 0
+        ? `${mouvementsTresorerie.length} mouvement(s) de trésorerie (apport / versement) : ${totalTresorerie >= 0 ? "+" : ""}${totalTresorerie.toFixed(2)}€ — hors recettes\n`
+        : "") +
+      `\n` +
       `Cette action est IRRÉVERSIBLE. Confirmer ?`
     )) return;
 
@@ -165,7 +182,9 @@ export default function ClotureJournaliereClient() {
         numero,
         totauxParMode,
         totalGeneral,
-        nbOperations: dayEnc.length,
+        nbOperations: recettesDuJour.length,
+        nbMouvementsTresorerie: mouvementsTresorerie.length,
+        totalTresorerie,
         encaissementIds: dayEnc.map(e => e.id),
         encaissementHashes,
         hash: clotureHash,
@@ -266,12 +285,30 @@ export default function ClotureJournaliereClient() {
 
             <div className="flex items-center justify-between bg-blue-50 rounded-lg p-3 border border-blue-100">
               <div className="font-body text-sm font-semibold text-blue-800">
-                {dayEnc.length} opération{dayEnc.length > 1 ? "s" : ""}
+                {recettesDuJour.length} recette{recettesDuJour.length > 1 ? "s" : ""}
               </div>
               <div className="font-display text-xl font-bold text-blue-800">
                 Total : {totalGeneral.toFixed(2)}€
               </div>
             </div>
+
+            {mouvementsTresorerie.length > 0 && (
+              <div className="mt-2 bg-amber-50 rounded-lg p-3 border border-amber-200">
+                <div className="flex items-center justify-between">
+                  <div className="font-body text-xs font-semibold text-amber-800">
+                    {mouvementsTresorerie.length} mouvement{mouvementsTresorerie.length > 1 ? "s" : ""} de
+                    trésorerie — hors recettes
+                  </div>
+                  <div className="font-body text-sm font-bold text-amber-800">
+                    {totalTresorerie >= 0 ? "+" : ""}{totalTresorerie.toFixed(2)}€
+                  </div>
+                </div>
+                <div className="font-body text-[11px] text-amber-700 mt-1">
+                  Apport de fonds de caisse ou versement en banque : l&apos;argent se déplace, il n&apos;est
+                  pas gagné. Ces écritures sont scellées avec la journée mais ne figurent pas au total Z.
+                </div>
+              </div>
+            )}
           </>
         )}
       </Card>

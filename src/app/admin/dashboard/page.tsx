@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
 import { addDaysLocal, toLocalDateString } from "@/lib/date-local";
 import { db } from "@/lib/firebase";
+import { estMouvementDeTresorerie } from "@/lib/caisse-mouvements";
 
 type ActionItem = {
   href: string;
@@ -148,6 +149,8 @@ export default function AdminDashboard() {
         const monthlyRevenue = (encaissementsSnap?.docs || []).reduce((total, document) => {
           const payment: any = document.data();
           if (payment.mode === "avoir") return total;
+          // Un apport de fonds de caisse n'est pas une vente : il gonflerait le CA.
+          if (estMouvementDeTresorerie(payment)) return total;
           const amount = Number(payment.montant || 0);
           const date = payment.date?.seconds ? new Date(payment.date.seconds * 1000) : null;
           if (!date || amount <= 0 || date < startOfMonth || date > now) return total;

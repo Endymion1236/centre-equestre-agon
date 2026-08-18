@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where, addDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { createEncaissement } from "@/lib/compta-encaissement";
+import { refApport } from "@/lib/caisse-mouvements";
 import { Card, Badge } from "@/components/ui";
-import { Banknote, ChevronLeft, ChevronRight, Printer, ShieldCheck, Building2, X } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight, Printer, ShieldCheck, Building2, X, PiggyBank } from "lucide-react";
 import Link from "next/link";
 
 interface EncaissementEspeces {
@@ -19,6 +21,7 @@ interface EncaissementEspeces {
   modeLabel?: string;
   isReversal: boolean; // montant < 0 (contre-passation)
   isVersementBanque?: boolean; // true si versement bancaire (sortie identifiable)
+  isApportCaisse?: boolean;    // true si apport de fonds de caisse (entrée sans vente)
 }
 
 export default function LivreCaissePage() {
@@ -36,6 +39,14 @@ export default function LivreCaissePage() {
   const [versementLieu, setVersementLieu] = useState("Agon-Coutainville");
   const [versementNote, setVersementNote] = useState("");
   const [savingVersement, setSavingVersement] = useState(false);
+
+  // ── Modal apport en caisse (fonds de caisse / appoint de monnaie) ─────────
+  const [showApportModal, setShowApportModal] = useState(false);
+  const [apportDate, setApportDate] = useState(today.toISOString().slice(0, 10));
+  const [apportMontant, setApportMontant] = useState("");
+  const [apportOrigine, setApportOrigine] = useState("Fonds de caisse initial");
+  const [apportNote, setApportNote] = useState("");
+  const [savingApport, setSavingApport] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -80,6 +91,7 @@ export default function LivreCaissePage() {
             modeLabel: data.modeLabel,
             isReversal: Number(data.montant || 0) < 0,
             isVersementBanque: Boolean(data.isVersementBanque),
+            isApportCaisse: Boolean(data.isApportCaisse),
           } as EncaissementEspeces & { date: Date | null };
         })
         .filter(e => e.date !== null) as EncaissementEspeces[];
@@ -148,17 +160,18 @@ export default function LivreCaissePage() {
     setSavingVersement(true);
     try {
       const dateObj = new Date(versementDate + "T12:00:00");
-      await addDoc(collection(db, "encaissements"), {
+      // Passe par createEncaissement : l'écriture entre dans le journal signé
+      // et chaîné comme n'importe quel encaissement (NF525).
+      await createEncaissement({
         mode: "especes",
         modeLabel: "Versement banque",
         montant: -Math.abs(montant), // sortie → montant négatif
-        date: Timestamp.fromDate(dateObj),
+        explicitDate: dateObj,
         familyName: "—",
         activityTitle: "Versement en banque",
         raison: `Versement ${versementLieu}${versementNote ? " — " + versementNote : ""}`,
         ref: `VERS-${dateObj.toISOString().slice(0, 10).replace(/-/g, "")}`,
         isVersementBanque: true,
-        createdAt: serverTimestamp(),
       });
       // Reset et recharge
       setShowVersementModal(false);
@@ -170,6 +183,49 @@ export default function LivreCaissePage() {
       alert(`Erreur : ${e.message || e}`);
     } finally {
       setSavingVersement(false);
+    }
+  };
+
+  // ── Apport en caisse ──────────────────────────────────────────────────────
+  // Entrée d'espèces qui ne vient PAS d'une vente : fonds de caisse du début de
+  // saison, appoint de monnaie amené par le gérant. Sans cette écriture, le
+  // solde théorique du livre de caisse reste à 0 alors que le tiroir contient
+  // de l'argent, et le comptage du fonds de caisse affiche un écart permanent.
+  // N'entre ni dans le chiffre d'affaires ni dans le ticket Z (cf.
+  // lib/caisse-mouvements.ts).
+  const creerApportCaisse = async () => {
+    const montant = parseFloat(apportMontant.replace(",", "."));
+    if (isNaN(montant) || montant <= 0) {
+      alert("Montant invalide.");
+      return;
+    }
+    if (!apportOrigine.trim()) {
+      alert("Indique l'origine de l'apport (elle figure au livre de caisse).");
+      return;
+    }
+    setSavingApport(true);
+    try {
+      const dateObj = new Date(apportDate + "T08:00:00");
+      await createEncaissement({
+        mode: "especes",
+        modeLabel: "Apport en caisse",
+        montant: Math.abs(montant), // entrée → montant positif
+        explicitDate: dateObj,
+        familyName: "—",
+        activityTitle: "Apport en caisse",
+        raison: `${apportOrigine.trim()}${apportNote ? " — " + apportNote : ""}`,
+        ref: refApport(dateObj),
+        isApportCaisse: true,
+      });
+      setShowApportModal(false);
+      setApportMontant("");
+      setApportNote("");
+      await fetchData();
+    } catch (e: any) {
+      console.error("Erreur création apport:", e);
+      alert(`Erreur : ${e.message || e}`);
+    } finally {
+      setSavingApport(false);
     }
   };
 
@@ -228,6 +284,10 @@ export default function LivreCaissePage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
           </Link>
+          <button onClick={() => setShowApportModal(true)}
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-600 hover:bg-green-700 border-none px-3 py-2 rounded-lg cursor-pointer">
+            <PiggyBank size={14} /> Apport en caisse
+          </button>
           <button onClick={() => setShowVersementModal(true)}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 border-none px-3 py-2 rounded-lg cursor-pointer">
             <Building2 size={14} /> Versement banque
@@ -302,7 +362,7 @@ export default function LivreCaissePage() {
             ) : lignes.length === 0 ? (
               <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400 italic">Aucun mouvement d'espèces pour ce mois.</td></tr>
             ) : lignes.map((l) => (
-              <tr key={l.id} className={`border-b border-gray-100 hover:bg-slate-50/50 print:hover:bg-white ${l.isVersementBanque ? "bg-orange-50/40" : l.isReversal ? "bg-red-50/30" : ""}`}>
+              <tr key={l.id} className={`border-b border-gray-100 hover:bg-slate-50/50 print:hover:bg-white ${l.isApportCaisse ? "bg-green-50/40" : l.isVersementBanque ? "bg-orange-50/40" : l.isReversal ? "bg-red-50/30" : ""}`}>
                 <td className="px-3 py-2 text-slate-700 text-xs">
                   {l.date.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })}
                   <span className="text-slate-400"> {l.date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
@@ -313,6 +373,9 @@ export default function LivreCaissePage() {
                   {l.ref && <div className="text-[11px] text-slate-400">Réf : {l.ref}</div>}
                   {l.isVersementBanque && (
                     <Badge color="orange" className="mt-0.5 text-[9px] print:border print:border-orange-300">🏦 Versement banque</Badge>
+                  )}
+                  {l.isApportCaisse && (
+                    <Badge color="green" className="mt-0.5 text-[9px] print:border print:border-green-300">💰 Apport (hors recettes)</Badge>
                   )}
                   {l.correctionDe && !l.isVersementBanque && (
                     <Badge color="red" className="mt-0.5 text-[9px] print:border print:border-red-300">↺ Contre-passation</Badge>
@@ -370,6 +433,117 @@ export default function LivreCaissePage() {
           }
         }
       `}</style>
+
+      {/* ─── Modal apport en caisse ─── */}
+      {showApportModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center print:hidden" onClick={() => !savingApport && setShowApportModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center p-5 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-lg bg-green-50 flex items-center justify-center">
+                  <PiggyBank size={16} className="text-green-600" />
+                </div>
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">Apport en caisse</h2>
+                  <p className="font-body text-xs text-slate-500">Mise en place du fonds de caisse ou appoint de monnaie</p>
+                </div>
+              </div>
+              <button onClick={() => !savingApport && setShowApportModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="p-5">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4">
+                <div className="font-body text-xs text-green-800">
+                  L&apos;argent que tu mets toi-même dans le tiroir pour pouvoir rendre la monnaie.
+                  Il apparaît au livre de caisse pour que le solde théorique colle au comptage,
+                  mais il n&apos;est <strong>pas compté comme une recette</strong> : ni dans le chiffre
+                  d&apos;affaires, ni dans le ticket Z de la clôture.
+                </div>
+              </div>
+              {soldeCaissePhysique !== null && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                  <div className="font-body text-xs text-blue-800">
+                    Solde actuel en caisse : <strong>{soldeCaissePhysique.toFixed(2)}€</strong>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-3">
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Date de l&apos;apport</label>
+                  <input
+                    type="date"
+                    value={apportDate}
+                    onChange={e => setApportDate(e.target.value)}
+                    className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-green-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Montant apporté *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={apportMontant}
+                      onChange={e => setApportMontant(e.target.value)}
+                      placeholder="Ex : 150,00"
+                      className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 pr-8 bg-white focus:outline-none focus:border-green-400"
+                      autoFocus
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 font-body text-sm text-slate-400">€</span>
+                  </div>
+                  <div className="font-body text-[11px] text-slate-500 mt-1">
+                    Compte les billets et les pièces réellement déposés dans le tiroir.
+                  </div>
+                </div>
+
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Origine *</label>
+                  <select
+                    value={apportOrigine}
+                    onChange={e => setApportOrigine(e.target.value)}
+                    className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-green-400"
+                  >
+                    <option>Fonds de caisse initial</option>
+                    <option>Appoint de monnaie</option>
+                    <option>Retrait bancaire</option>
+                    <option>Apport du gérant</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Note (facultatif)</label>
+                  <input
+                    type="text"
+                    value={apportNote}
+                    onChange={e => setApportNote(e.target.value)}
+                    placeholder="Ex : 3 billets de 20€, 30€ de pièces, retrait DAB..."
+                    className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-green-400"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 p-4 border-t border-gray-100">
+              <button
+                onClick={() => setShowApportModal(false)}
+                disabled={savingApport}
+                className="font-body text-sm text-slate-600 bg-white border border-gray-200 rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
+                Annuler
+              </button>
+              <button
+                onClick={creerApportCaisse}
+                disabled={savingApport || !apportMontant}
+                className="font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 border-none rounded-lg px-4 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                {savingApport ? "Enregistrement..." : "Enregistrer l'apport"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Modal versement bancaire ─── */}
       {showVersementModal && (

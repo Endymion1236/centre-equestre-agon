@@ -453,8 +453,20 @@ export const MANUAL: ManualChapter[] = [
         text: `
           <p>Le <strong>livre de caisse espèces</strong> retrace, mois par mois, tous les mouvements en espèces
           (encaissements, sorties) avec le solde courant. C'est le registre légal des espèces.</p>
+          <p>Deux boutons y créent des écritures qui ne viennent pas d'une vente :</p>
+          <ul>
+            <li><strong>Apport en caisse</strong> — l'argent que tu mets toi-même dans le tiroir : fonds de caisse
+            de début de saison, appoint de monnaie, retrait au distributeur.</li>
+            <li><strong>Versement banque</strong> — les espèces que tu sors du tiroir pour les déposer.</li>
+          </ul>
+          <p>Les deux apparaissent au livre de caisse, parce que le tiroir, lui, a bel et bien changé. Aucun des
+          deux n'est compté comme une recette : ils n'entrent ni dans le chiffre d'affaires du tableau de bord,
+          ni dans le total du ticket Z de la clôture journalière.</p>
         `,
         href: "/admin/comptabilite/livre-caisse",
+        tips: [
+          "Au tout début : saisis un « Apport en caisse » du montant réellement présent dans le tiroir. Sans lui, le solde théorique reste à 0 € et chaque comptage affichera un écart permanent.",
+        ],
       },
       {
         id: "fond-caisse",
@@ -463,6 +475,9 @@ export const MANUAL: ManualChapter[] = [
           <p>La page <strong>Fond de caisse</strong> permet de compter le fond physique (billets et pièces) et de le
           rapprocher du solde théorique attendu. Utile pour vérifier qu'il n'y a pas d'écart de caisse.</p>
           <p>En cas d'écart, la page <strong>Diagnostic espèces</strong> aide à retrouver d'où vient la différence.</p>
+          <p>Un écart constant et toujours du même montant vient presque toujours d'un fonds de caisse jamais
+          déclaré : enregistre-le en <strong>Apport en caisse</strong> depuis le livre de caisse, et l'écart
+          disparaît.</p>
         `,
         href: "/admin/comptabilite/fond-caisse",
       },

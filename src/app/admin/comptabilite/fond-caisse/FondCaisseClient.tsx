@@ -185,6 +185,15 @@ export default function FondCaisseClient() {
         <Card padding="md" className="mb-4">
           <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1">Solde théorique attendu (espèces cumulées)</div>
           <div className="font-display text-3xl font-bold text-blue-800">{soldeTheorique.toFixed(2)}€</div>
+          {soldeTheorique === 0 && (
+            <div className="font-body text-xs text-slate-600 mt-2">
+              Théorique à 0€ : si le tiroir contient déjà de la monnaie, enregistre-la d&apos;abord en{" "}
+              <Link href="/admin/comptabilite/livre-caisse" className="text-blue-600 font-semibold no-underline hover:underline">
+                apport en caisse
+              </Link>{" "}
+              — sinon chaque comptage affichera un écart permanent.
+            </div>
+          )}
         </Card>
       )}
 
