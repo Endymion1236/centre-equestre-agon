@@ -1381,7 +1381,12 @@ export default function InscriptionAnnuellePage() {
                     ["cheque", "📝", "Chèque", "Réglé au club"],
                     ["especes", "💵", "Espèces", "Réglé au club"],
                   ] as const).map(([id, icon, label, sub]) => (
-                    <button key={id} onClick={() => setMoyenPaiement(id)}
+                    <button key={id} onClick={() => {
+                      setMoyenPaiement(id);
+                      // La carte débite en une fois : repartir de "1x" évite de
+                      // garder un échéancier choisi avant de basculer en CB.
+                      if (id === "cb") setPaymentPlan("1x");
+                    }}
                       className={`flex-1 py-3 px-2 rounded-xl border font-body text-sm font-medium cursor-pointer text-center transition-all
                         ${moyenPaiement === id ? "border-blue-500 bg-blue-50 text-blue-500 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
                       <span className="block text-lg mb-0.5">{icon}</span>
@@ -1395,10 +1400,24 @@ export default function InscriptionAnnuellePage() {
                     ⏳ La place est réservée provisoirement. L&apos;inscription sera confirmée par le centre dès réception de votre règlement en {moyenPaiement === "cheque" ? "chèque" : "espèces"}.
                   </p>
                 )}
+                {moyenPaiement === "cb" && mode === "annuel" && grandTotal > 100 && (
+                  <p className="font-body text-xs text-gray-500 mt-2">
+                    Le paiement par carte se fait <strong>en une seule fois</strong>. Pour régler en
+                    plusieurs fois, choisissez <strong>Chèque</strong> — les chèques sont encaissés
+                    progressivement — ou contactez le centre pour convenir d&apos;un échelonnement.
+                  </p>
+                )}
               </div>
 
-              {/* Échéancier (annual only) */}
-              {mode === "annuel" && grandTotal > 100 && (
+              {/* Échéancier — jamais en carte.
+                  Le choix 3x/10x n'était qu'une étiquette posée sur le
+                  paiement : aucune échéance n'était créée et le checkout CAWL
+                  partait avec le total de l'année. Une famille qui choisissait
+                  « 10 × 190 € » était débitée de 1 900 € d'un coup. Tant que le
+                  prélèvement échelonné n'est pas réellement implémenté, la
+                  carte ne propose que le paiement comptant. En chèque, en
+                  revanche, l'échelonnement existe pour de bon. */}
+              {mode === "annuel" && grandTotal > 100 && moyenPaiement !== "cb" && (
                 <div className="mb-5">
                   <div className="font-body text-sm font-semibold text-blue-800 mb-3">
                     {moyenPaiement === "cheque" ? "Nombre de chèques" : "Échéancier"}
@@ -1414,11 +1433,9 @@ export default function InscriptionAnnuellePage() {
                   </div>
                   {paymentPlan !== "1x" && (
                     <p className="font-body text-xs text-gray-400 mt-2">
-                      {moyenPaiement === "cb"
-                        ? "Prélèvement CB automatique. Sans frais."
-                        : moyenPaiement === "cheque"
-                          ? `${paymentPlan === "3x" ? "3 chèques" : "10 chèques"} encaissés progressivement. Sans frais.`
-                          : "Échelonnement à convenir avec le centre. Sans frais."}
+                      {moyenPaiement === "cheque"
+                        ? `${paymentPlan === "3x" ? "3 chèques" : "10 chèques"} encaissés progressivement. Sans frais.`
+                        : "Échelonnement à convenir avec le centre. Sans frais."}
                     </p>
                   )}
                 </div>
@@ -1438,7 +1455,7 @@ export default function InscriptionAnnuellePage() {
                     {submitting ? (
                       <><Loader2 size={18} className="animate-spin" /> Inscription en cours...</>
                     ) : moyenPaiement === "cb" ? (
-                      <><CreditCard size={18} /> Payer {totalAPayer.toFixed(2)}€ {paymentPlan !== "1x" && mode === "annuel" ? `en ${paymentPlan}` : ""}</>
+                      <><CreditCard size={18} /> Payer {totalAPayer.toFixed(2)}€</>
                     ) : (
                       <><Check size={18} /> Valider — règlement par {moyenPaiement === "cheque" ? "chèque" : "espèces"}</>
                     )}

@@ -344,13 +344,14 @@ const SCENARIOS: Scenario[] = [
         ],
       },
       {
-        id: "PAY-16", titre: "Inscription annuelle en 3× / 10×", priorite: "critique",
-        description: "La voie qui va servir le plus à la rentrée — et la plus exposée : ce qui est promis à l'écran doit être ce qui est débité",
+        id: "PAY-16", titre: "Inscription annuelle : paiement comptant ou échelonné", priorite: "critique",
+        description: "La voie qui va servir le plus à la rentrée. Le choix 3×/10× promettait un prélèvement échelonné et débitait l'année entière : il n'est plus proposé en carte",
         steps: [
-          { action: "Espace cavalier → Inscription annuelle → un forfait de plus de 100 € → choisir « 3 × … € » avec règlement par carte", attendu: "L'écran annonce « 3 × X € — Prélèvement CB automatique. Sans frais. »" },
-          { action: "Regarder le bouton de paiement AVANT de cliquer", attendu: "S'il annonce le total de l'année et non la première mensualité, arrête-toi là : c'est le total qui sera débité en une fois. Note KO sans payer" },
-          { action: "Si le montant est bien celui de la première échéance : payer", attendu: "Une seule échéance débitée, les suivantes visibles dans Paiements → Échéances" },
-          { action: "Refaire avec « 10 × » et avec le règlement par chèque", attendu: "En chèque, le libellé annonce des chèques encaissés progressivement : vérifier que les chèques différés sont bien créés" },
+          { action: "Espace cavalier → Inscription annuelle → un forfait de plus de 100 € → règlement par 💳 Carte bancaire", attendu: "AUCUN choix d'échéancier. Une phrase explique que la carte règle en une seule fois et renvoie vers le chèque ou vers le centre pour un échelonnement" },
+          { action: "Regarder le bouton avant de cliquer, puis payer", attendu: "Le bouton annonce le montant exact qui sera débité, sans mention « en 3x ». Un seul encaissement, du bon montant" },
+          { action: "Refaire en choisissant 📝 Chèque", attendu: "Le choix « 3 chèques » / « 10 chèques » réapparaît — là il correspond à quelque chose de réel" },
+          { action: "Valider en chèque, puis regarder la commande côté admin", attendu: "Le nombre de chèques choisi est bien porté sur la commande. Les chèques différés eux-mêmes se créent à la caisse, à la remise des chèques (Paiements → Encaisser → Chèque différé) — rien n'est créé automatiquement à l'inscription" },
+          { action: "Basculer de Chèque (10×) vers Carte sans quitter la page", attendu: "L'échéancier disparaît et repart de « en 1 fois » : impossible de partir en carte avec un échelonnement choisi juste avant" },
         ],
       },
       {
