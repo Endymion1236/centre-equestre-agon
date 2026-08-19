@@ -1074,6 +1074,20 @@ const TESTS: TestCase[] = [
     priorite: "haute", correctif: "2026-08-19",
   },
   {
+    id: "MG-11", module: "Management", sous_module: "Planning",
+    description: "Le dimanche compte dans le total, même masqué",
+    etapes: "Équipe → Planning : poser une tâche le dimanche, bouton « Dim. » éteint → comparer le total de la semaine avec Équipe → Horaires",
+    resultat_attendu: "Les deux écrans annoncent le même nombre d'heures. La ligne du salarié précise « dont Xh dim. ». Allumer « Dim. » ne change pas le total, seulement la colonne affichée",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
+    id: "MG-12", module: "Management", sous_module: "Planning",
+    description: "Dimanche : conflits, résumé et email",
+    etapes: "Avec une tâche le dimanche : vérifier la détection de chevauchement, l'onglet Résumé, et l'email envoyé à l'équipe",
+    resultat_attendu: "Un chevauchement du dimanche est détecté même colonne masquée. Le Résumé affiche la colonne dimanche et l'inclut au total. L'email au moniteur contient le dimanche et des dates de période cohérentes",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

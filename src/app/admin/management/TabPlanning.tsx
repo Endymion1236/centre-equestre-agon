@@ -879,20 +879,37 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // Cohérent avec TabHoraires : les battements courts entre tâches non-pause sont comptés.
   const [inclureDimanche, setInclureDimanche] = useState(false);
   const nbJours = inclureDimanche ? 7 : 6;
-  const joursActifs = JOURS.slice(0, nbJours) as JourSemaine[];
+
+  // Le total compte TOUJOURS les sept jours. Le bouton « Dim. » cache une
+  // colonne, il ne retire pas des heures : masquer le dimanche affichait 35 h
+  // là où l'onglet Horaires en comptait 40h30 pour le même salarié, et c'est
+  // le second chiffre qui va sur la fiche de paie. Un filtre d'affichage ne
+  // doit jamais changer un total d'heures.
   const chargeParSalarie = useMemo(() => {
     const map: Record<string, number> = {};
     const salIds = [...new Set(taches.map(t => t.salarieId))];
     for (const salId of salIds) {
       let total = 0;
-      for (const jour of joursActifs) {
+      for (const jour of JOURS) {
         const dayT = taches.filter(t => t.salarieId === salId && t.jour === jour);
         total += calcTempsTravailJour(dayT);
       }
       map[salId] = total;
     }
     return map;
-  }, [taches, joursActifs]);
+  }, [taches]);
+
+  /** Heures du dimanche non affichées : à signaler plutôt qu'à taire. */
+  const dimancheMasque = useMemo(() => {
+    if (inclureDimanche) return {} as Record<string, number>;
+    const map: Record<string, number> = {};
+    for (const salId of [...new Set(taches.map(t => t.salarieId))]) {
+      const dayT = taches.filter(t => t.salarieId === salId && t.jour === "dimanche");
+      const charge = calcTempsTravailJour(dayT);
+      if (charge > 0) map[salId] = charge;
+    }
+    return map;
+  }, [taches, inclureDimanche]);
 
   // ── Importer les cours/stages du planning dans les tâches ───────────────
   const [importing, setImporting] = useState(false);
@@ -1074,7 +1091,9 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     const result: Conflit[] = [];
     const salIds = [...new Set(taches.map(t => t.salarieId))];
     for (const salId of salIds) {
-      for (const jour of joursActifs) {
+      // Sept jours : un chevauchement du dimanche est un vrai conflit, même
+      // quand la colonne est masquée.
+      for (const jour of JOURS) {
         const jourTaches = taches
           .filter(t => t.salarieId === salId && t.jour === jour)
           .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
@@ -1123,10 +1142,14 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       }
 
       const activeSals = salaries.filter(s => s.actif);
-      const joursLabels = jourDates.slice(0, nbJours);
+      // L'email part avec le dimanche dès qu'il y a des tâches dessus : un
+      // moniteur qui travaille le dimanche doit le lire dans son planning, et
+      // le total en bas doit correspondre à ce qu'il voit.
+      const emailAvecDimanche = taches.some(t => t.jour === "dimanche");
+      const joursLabels = jourDates.slice(0, emailAvecDimanche ? 7 : nbJours);
       const semaineNum = semaine.split("-W")[1];
       const dateDebut = formatDateCourte(lundi);
-      const dateFin = formatDateCourte(new Date(lundi.getTime() + (nbJours - 1) * 86400000));
+      const dateFin = formatDateCourte(new Date(lundi.getTime() + (joursLabels.length - 1) * 86400000));
       const siteUrl = "https://centre-equestre-agon.vercel.app";
 
       let sent = 0;
@@ -1259,7 +1282,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     setIaChecking(true);
     setIaResult(null);
     try {
-      const planningResume = joursActifs.map(jour => {
+      const planningResume = JOURS.map(jour => {
         const jourTaches = taches.filter(t => t.jour === jour);
         return `${JOURS_LABELS[jour]} :\n` + (jourTaches.length === 0
           ? "  (aucune tâche)"
@@ -1351,6 +1374,10 @@ Réponds de façon concise et pratique, en français.`,
                 </div>
                 <div style={{fontFamily:"sans-serif", fontSize:9, color:"#94a3b8", marginTop:2}}>
                   {fmtDuree(chargeParSalarie[sal.id]||0)} cette sem.
+                  {dimancheMasque[sal.id] && (
+                    <span title="Le dimanche est compté dans le total mais sa colonne est masquée. Bouton « Dim. » pour l'afficher."
+                      style={{color:"#b45309"}}> · dont {fmtDuree(dimancheMasque[sal.id])} dim.</span>
+                  )}
                 </div>
               </td>
               {salariesReplies.has(sal.id) ? (
@@ -1946,6 +1973,7 @@ Réponds de façon concise et pratique, en français.`,
           <div style={{marginTop:12, padding:"10px 14px", background:"#f0f7ff", borderRadius:8, border:"1px solid #bfdbfe"}}>
             <div style={{fontFamily:"sans-serif", fontSize:13, fontWeight:800, color:"#1e3a5f"}}>
               Total semaine : {fmtDuree(chargeParSalarie[sal.id] || 0)}
+              {dimancheMasque[sal.id] ? ` (dont ${fmtDuree(dimancheMasque[sal.id])} le dimanche, colonne masquée)` : ""}
               {" · "}{taches.filter(t=>t.salarieId===sal.id&&t.done).length}/{taches.filter(t=>t.salarieId===sal.id).length} tâches validées
             </div>
           </div>

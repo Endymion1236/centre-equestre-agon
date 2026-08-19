@@ -16,7 +16,11 @@ function minToHeure(m: number) { return `${String(Math.floor(m / 60)).padStart(2
 
 export default function TabResume({ semaine, setSemaine, taches, salaries }: Props) {
   const lundi = getLundideSemaine(semaine);
-  const jourDates = JOURS.slice(0, 6).map((j, i) => {
+  // Le dimanche n'apparaît que s'il y a quelque chose dessus — mais alors il
+  // apparaît vraiment, colonne ET total. Le masquer d'office faisait disparaître
+  // des heures réellement travaillées d'un récapitulatif de charge.
+  const travailleDimanche = taches.some(t => t.jour === "dimanche");
+  const jourDates = JOURS.slice(0, travailleDimanche ? 7 : 6).map((j, i) => {
     const d = new Date(lundi); d.setDate(d.getDate() + i);
     return { jour: j as JourSemaine, date: d };
   });
