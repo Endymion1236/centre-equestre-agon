@@ -1095,6 +1095,20 @@ const TESTS: TestCase[] = [
     priorite: "critique", correctif: "2026-08-19",
   },
   {
+    id: "PL-20", module: "Planning", sous_module: "Inscription",
+    description: "Inscrire un cavalier sur toute la semaine d'un stage",
+    etapes: "Planning → vue JOUR sur le lundi d'un stage à plusieurs séances par jour → inscrire un cavalier en mode « semaine »",
+    resultat_attendu: "Le cavalier est inscrit sur TOUS les jours du stage, pas seulement ceux affichés à l'écran. La console indique le nombre de jours trouvés",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
+    id: "PL-21", module: "Planning", sous_module: "Inscription",
+    description: "Stage dont les jours ont été créés séparément",
+    etapes: "Admin → Diagnostic stages → repérer un stage dont les jours portent des identifiants de lot différents → « Réunir sous un même stage » → réinscrire un cavalier en mode semaine",
+    resultat_attendu: "Avant regroupement, seuls les jours du même lot sont inscrits. Après, toute la semaine suit",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

@@ -1610,29 +1610,37 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           const monStr = monday.toISOString().split("T")[0];
           const sunStr = sunday.toISOString().split("T")[0];
 
-          // IMPORTANT: allCreneaux ne contient que la vue courante du planning.
-          // Pour les stages en mode semaine, charger TOUS les créneaux de la semaine.
-          let stageCreneaux = allCreneaux.filter(c =>
-            sameStage(c, creneau) &&
-            (c.activityType === "stage" || c.activityType === "stage_journee") &&
-            c.date >= monStr && c.date <= sunStr
-          ).sort((a, b) => a.date.localeCompare(b.date));
+          // `allCreneaux` n'est que la vue courante du planning : en vue jour,
+          // il ne contient que le jour affiché. La semaine est donc TOUJOURS
+          // relue en base, jamais déduite de ce qui est à l'écran.
+          //
+          // Le code se contentait auparavant d'une relecture « si on n'a
+          // trouvé qu'un seul créneau ». Un stage à deux séances par jour en
+          // trouvait deux dès le lundi : le garde-fou ne se déclenchait pas et
+          // le cavalier n'était inscrit que sur la journée du lundi. Compter
+          // les résultats ne dit pas si la vue est complète.
+          const filtreStage = (liste: any[]) => liste
+            .filter(c =>
+              sameStage(c, creneau) &&
+              (c.activityType === "stage" || c.activityType === "stage_journee") &&
+              c.date >= monStr && c.date <= sunStr
+            )
+            .sort((a, b) => a.date.localeCompare(b.date));
 
-          // Si on n'a trouvé que 1 jour (vue jour), charger depuis Firestore
-          if (stageCreneaux.length <= 1) {
-            try {
-              const weekSnap = await getDocs(query(
-                collection(db, "creneaux"),
-                where("date", ">=", monStr),
-                where("date", "<=", sunStr)
-              ));
-              const weekCreneaux = weekSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-              stageCreneaux = weekCreneaux.filter(c =>
-                sameStage(c, creneau) &&
-                (c.activityType === "stage" || c.activityType === "stage_journee")
-              ).sort((a, b) => a.date.localeCompare(b.date));
-              console.log(`📋 Stage semaine : ${stageCreneaux.length} jours trouvés pour "${creneau.activityTitle}" (${monStr} → ${sunStr})`);
-            } catch (e) { console.error("Erreur chargement stage semaine:", e); }
+          let stageCreneaux = filtreStage(allCreneaux);
+          try {
+            const weekSnap = await getDocs(query(
+              collection(db, "creneaux"),
+              where("date", ">=", monStr),
+              where("date", "<=", sunStr)
+            ));
+            const depuisBase = filtreStage(weekSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[]);
+            // La base fait foi. On ne garde la liste locale que si la requête
+            // n'a rien ramené — mieux vaut inscrire le jour affiché que rien.
+            if (depuisBase.length > 0) stageCreneaux = depuisBase;
+            console.log(`📋 Stage semaine : ${stageCreneaux.length} jour(s) pour "${creneau.activityTitle}" (${monStr} → ${sunStr})`);
+          } catch (e) {
+            console.error("Erreur chargement stage semaine:", e);
           }
 
           creneauxAInscrire = stageCreneaux.length > 0 ? stageCreneaux : [creneau];
