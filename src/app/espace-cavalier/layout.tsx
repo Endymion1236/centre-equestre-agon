@@ -15,6 +15,7 @@ import {
   MoreHorizontal,
   Receipt,
   Star,
+  TestTube,
   TrendingUp,
   Users,
   X,
@@ -50,6 +51,37 @@ const FOLLOW_UP_NAV: NavItem[] = [
 const HELP_NAV: NavItem[] = [
   { href: "/espace-cavalier/satisfaction", icon: Star, label: "Donner mon avis" },
 ];
+
+/**
+ * Protocole de test de l'espace famille.
+ *
+ * La page existe mais n'apparaît que pour les comptes du club : une vraie
+ * famille n'a rien à faire dans un écran de recette, et le lien devait rester
+ * introuvable après l'ouverture. Elle reste évidemment accessible par son URL
+ * directe pour un compte de test créé à la volée.
+ */
+const COMPTES_TESTEURS = ["ceagon@orange.fr", "ceagon50@gmail.com"];
+
+/**
+ * Comptes de test supplémentaires, sans passer par un déploiement de code :
+ * variable Vercel NEXT_PUBLIC_COMPTES_TESTEURS, adresses séparées par des
+ * virgules. Utile pour les faux comptes famille créés le temps d'une recette.
+ */
+function comptesTesteurs(): string[] {
+  const extra = (process.env.NEXT_PUBLIC_COMPTES_TESTEURS || "")
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return [...COMPTES_TESTEURS, ...extra];
+}
+
+const TEST_NAV: NavItem[] = [
+  { href: "/espace-cavalier/test-protocol", icon: TestTube, label: "Protocole de test", shortLabel: "Tests" },
+];
+
+function navDeTest(email?: string | null): NavItem[] {
+  return email && comptesTesteurs().includes(email.trim().toLowerCase()) ? TEST_NAV : [];
+}
 
 function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -243,7 +275,8 @@ function SidebarLink({ item, pathname }: { item: NavItem; pathname: string }) {
 }
 
 function CavalierSidebar({ pathname }: { pathname: string }) {
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const testNav = navDeTest(user?.email);
 
   return (
     <aside className="hidden md:flex w-[240px] min-h-screen bg-blue-900 flex-col sticky top-0 self-start h-screen">
@@ -271,6 +304,15 @@ function CavalierSidebar({ pathname }: { pathname: string }) {
         <div className="flex flex-col gap-1">
           {HELP_NAV.map((item) => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
         </div>
+
+        {testNav.length > 0 && (
+          <>
+            <div className="font-body text-[11px] font-bold uppercase tracking-wider text-white/30 px-3 mt-6 mb-2">Recette</div>
+            <div className="flex flex-col gap-1">
+              {testNav.map((item) => <SidebarLink key={item.href} item={item} pathname={pathname} />)}
+            </div>
+          </>
+        )}
       </nav>
 
       <div className="px-3 py-4 border-t border-white/10 flex flex-col gap-1">
@@ -389,10 +431,11 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
 
   if (!user) return <LoginScreen />;
 
+  const testNav = navDeTest(user.email);
   const mobileNav: NavItem[] = PRIMARY_NAV.slice(0, 4);
-  const moreItems: NavItem[] = [PRIMARY_NAV[4], ...FOLLOW_UP_NAV, ...HELP_NAV];
+  const moreItems: NavItem[] = [PRIMARY_NAV[4], ...FOLLOW_UP_NAV, ...HELP_NAV, ...testNav];
   const activeMore = moreItems.some((item) => isActivePath(pathname, item.href));
-  const currentPage = [...PRIMARY_NAV, ...FOLLOW_UP_NAV, ...HELP_NAV].find((item) => isActivePath(pathname, item.href));
+  const currentPage = [...PRIMARY_NAV, ...FOLLOW_UP_NAV, ...HELP_NAV, ...testNav].find((item) => isActivePath(pathname, item.href));
 
   return (
     <div className="min-h-screen bg-cream flex">
