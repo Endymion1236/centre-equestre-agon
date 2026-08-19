@@ -630,6 +630,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [stageMode, setStageMode] = useState<"semaine" | "jour">("semaine");
   const [stageDaysCount, setStageDaysCount] = useState<number>(0);
+  // Créneaux de la semaine portant le MÊME TITRE mais appartenant à un autre
+  // lot de création : ils ressemblent à ce stage sans en faire partie.
+  const [stageJoursAutreLot, setStageJoursAutreLot] = useState<string[]>([]);
   const [stagePayChoice, setStagePayChoice] = useState<"acompte" | "total">("total");
   // Acompte : par lien de paiement (la famille règle en ligne) ou encaissé au
   // comptoir tout de suite. Dans le second cas l'écriture comptable est faite
@@ -660,13 +663,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
     getDocs(query(collection(db, "creneaux"), where("date", ">=", monStr), where("date", "<=", sunStr)))
       .then(snap => {
-        const days = snap.docs.filter(d => {
-          const data = d.data();
-          return data.activityTitle === creneau.activityTitle &&
-            (data.activityType === "stage" || data.activityType === "stage_journee");
-        }).length;
-        setStageDaysCount(days || 1);
-        console.log(`📋 Stage "${creneau.activityTitle}" : ${days} jour(s) cette semaine`);
+        const semaine = snap.docs
+          .map(d => ({ id: d.id, ...(d.data() as any) }))
+          .filter(c => c.activityType === "stage" || c.activityType === "stage_journee");
+
+        // Le compte doit reposer sur la MÊME règle que l'inscription.
+        // Il comptait auparavant tous les créneaux du même titre, alors que
+        // l'inscription n'en retient que ceux du même lot : le panneau
+        // annonçait « 5 jours », en inscrivait 2, et facturait 5. Deux
+        // définitions du même stage dans le même écran.
+        const duStage = semaine.filter(c => sameStage(c, creneau));
+        // Ceux qui portent le même titre sans appartenir au lot : ce sont eux
+        // qui manquent à l'appel, et c'est à l'admin de trancher.
+        const memeTitreAutreLot = semaine
+          .filter(c => c.activityTitle === creneau.activityTitle && !sameStage(c, creneau))
+          .map(c => c.date)
+          .sort();
+
+        setStageDaysCount(duStage.length || 1);
+        setStageJoursAutreLot(memeTitreAutreLot);
+        console.log(
+          `📋 Stage "${creneau.activityTitle}" : ${duStage.length} jour(s) dans ce lot` +
+          (memeTitreAutreLot.length > 0 ? ` · ${memeTitreAutreLot.length} jour(s) de même titre dans un AUTRE lot (${memeTitreAutreLot.join(", ")})` : "")
+        );
       })
       .catch(() => setStageDaysCount(1));
   }, [isStage, creneau.date, creneau.activityTitle]);
@@ -3500,6 +3519,25 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <div className="font-body text-xs font-semibold text-green-700 uppercase tracking-wider">Récapitulatif stage</div>
                       <Badge color="blue">{stageMode === "semaine" ? `${nbJours} jour${nbJours > 1 ? "s" : ""}` : "1 jour"}</Badge>
                     </div>
+
+                    {/* Des jours du même titre existent mais hors de ce lot :
+                        ils ne seront NI inscrits NI facturés. Le dire ici, avant
+                        d'inscrire, plutôt que de le découvrir sur le planning. */}
+                    {stageJoursAutreLot.length > 0 && (
+                      <div className="rounded-lg border border-orange-300 bg-orange-50 px-3 py-2">
+                        <div className="font-body text-[11px] text-orange-900 leading-relaxed">
+                          <strong>{stageJoursAutreLot.length} autre(s) jour(s) « {creneau.activityTitle} » cette
+                          semaine n&apos;appartiennent pas à ce stage</strong> ({stageJoursAutreLot
+                            .map(d => new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" }))
+                            .join(", ")}). Ils ont été créés séparément : l&apos;inscription « semaine complète »
+                          ne les prendra pas, et ils ne seront pas facturés.
+                        </div>
+                        <a href="/admin/diag-stages" target="_blank" rel="noopener noreferrer"
+                          className="inline-block mt-1.5 font-body text-[11px] font-semibold text-orange-800 underline">
+                          Les réunir sous un même stage →
+                        </a>
+                      </div>
+                    )}
                     {/* Choix semaine ou jour */}
                     {nbJours > 1 && (
                       <div className="flex gap-2">

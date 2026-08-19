@@ -1104,9 +1104,9 @@ const TESTS: TestCase[] = [
   {
     id: "PL-21", module: "Planning", sous_module: "Inscription",
     description: "Stage dont les jours ont été créés séparément",
-    etapes: "Admin → Diagnostic stages → repérer un stage dont les jours portent des identifiants de lot différents → « Réunir sous un même stage » → réinscrire un cavalier en mode semaine",
-    resultat_attendu: "Avant regroupement, seuls les jours du même lot sont inscrits. Après, toute la semaine suit",
-    priorite: "haute", correctif: "2026-08-19",
+    etapes: "Ouvrir le panneau d'inscription sur un stage dont les jours portent des identifiants de lot différents",
+    resultat_attendu: "Le badge annonce le nombre de jours RÉELLEMENT inscrits, et un encadré orange nomme les jours de même titre qui n'appartiennent pas au lot, avec le lien vers Diagnostic stages. Après « Réunir sous un même stage », le badge et l'inscription couvrent toute la semaine",
+    priorite: "critique", correctif: "2026-08-19",
   },
   {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
