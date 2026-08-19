@@ -93,6 +93,8 @@ type WeekSummary = {
   enCours: boolean;     // semaine commencée mais pas terminée
   horsContrat: boolean; // salarié pas en poste cette semaine-là
   aCheval: boolean;     // semaine à cheval sur le mois précédent ou suivant
+  horsMois: number;     // minutes de la semaine tombant dans le mois voisin
+  moisVoisin: string;   // nom de ce mois voisin ("juillet", "septembre"…)
   lissee: boolean;      // semaine neutralisée par le lissage d'été
 };
 
@@ -436,14 +438,24 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const surplusRetenu = lissee ? 0 : surplus; // un surplus déjà fait est acquis
       const contribution = aVenir || lissee ? 0 : (mode === "recup" ? surplusRetenu : 0) - deficitRetenu;
       const supPayee = aVenir || lissee ? 0 : (mode === "paye" ? surplusRetenu : 0);
-      // Semaine qui déborde du mois affiché : ses heures viennent en partie
-      // d'un autre mois, on le signale plutôt que de laisser croire à un écart.
+      // Semaine qui déborde du mois affiché. Elle n'est PAS découpée : une
+      // semaine se compte entière, du lundi au dimanche, et n'appartient qu'à
+      // un seul décompte. On montre en revanche la part qui vient du mois
+      // voisin, sinon l'écart avec le « Total du mois » — qui, lui, s'arrête au
+      // calendrier — reste inexplicable.
       const aCheval = lundiW.getMonth() !== mois || dimancheW.getMonth() !== mois;
+      const joursHorsMois = aCheval
+        ? joursDeLaSemaine(w).filter(d => d.getMonth() !== mois)
+        : [];
+      const horsMois = joursHorsMois.reduce((sum, d) => sum + journeeDe(salTaches, d).duree, 0);
+      const moisVoisin = joursHorsMois.length > 0
+        ? joursHorsMois[0].toLocaleDateString("fr-FR", { month: "long" })
+        : "";
       return {
         isoWeek: w, travaille, absMin, cible,
         surplus: surplusRetenu,
         deficit: deficitRetenu,
-        mode, clos, contribution, supPayee, aVenir, enCours, aCheval, lissee, horsContrat,
+        mode, clos, contribution, supPayee, aVenir, enCours, aCheval, horsMois, moisVoisin, lissee, horsContrat,
       };
     });
 
@@ -925,7 +937,11 @@ function PanneauRH({
               ) : (
                 <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}{w.absMin > 0 ? <span className="text-sky-600"> · {fmtDuree(w.absMin)} congé</span> : null}</span>
               )}
-              {w.aCheval && <span className="text-slate-400 italic">semaine à cheval</span>}
+              {w.aCheval && (
+                <span className="text-slate-400 italic" title="Une semaine se compte entière, du lundi au dimanche. Elle n'est jamais coupée en deux : elle apparaît identique dans les deux mois et n'est comptée qu'une fois.">
+                  semaine entière{w.horsMois > 0 ? ` · dont ${fmtDuree(w.horsMois)} en ${w.moisVoisin}` : ` · à cheval sur ${w.moisVoisin}`}
+                </span>
+              )}
               {w.horsContrat && w.travaille === 0 ? (
                 <span className="text-slate-400 italic">pas en poste</span>
               ) : w.lissee ? (
@@ -967,6 +983,15 @@ function PanneauRH({
               ) : null}
             </div>
           ))}
+        </div>
+      )}
+
+      {weekSummaries.some(w => w.aCheval) && (
+        <div className="font-body text-[11px] text-slate-500 leading-relaxed">
+          <strong>Semaine à cheval :</strong> une semaine se compte entière, du lundi au dimanche, et
+          n&apos;est jamais coupée entre deux mois. Elle apparaît donc à l&apos;identique dans les deux, et
+          n&apos;est clôturée qu&apos;une fois. Le « Total du mois » de la fiche imprimée, lui, s&apos;arrête au
+          calendrier : c&apos;est ce qui explique la différence.
         </div>
       )}
 
