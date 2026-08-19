@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 import { CheckCircle2, XCircle, AlertCircle, Clock, ChevronDown, ChevronRight, RotateCcw } from "lucide-react";
 import { Card } from "@/components/ui";
@@ -546,27 +545,46 @@ export default function TestProtocolPage() {
   const [noteEditing, setNoteEditing] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState("");
   const [saving, setSaving] = useState(false);
+  const [erreur, setErreur] = useState("");
   const [filterStatus, setFilterStatus] = useState<Status | "tous">("tous");
 
-  const storageKey = `testProtocol_${user?.uid || "anon"}`;
-
-  // Load from Firestore
+  // Lecture par la route serveur : les règles Firestore réservent settings/
+  // aux administrateurs, et la recette se fait depuis un compte famille.
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const snap = await getDoc(doc(db, "settings", `testProtocol_${user.uid}`));
-      if (snap.exists()) setResults(snap.data().results || {});
+      try {
+        const res = await authFetch("/api/test-protocol");
+        const d = await res.json();
+        if (!res.ok) throw new Error(d?.error || "Erreur de chargement");
+        setResults(d.results || {});
+      } catch (e: any) {
+        setErreur(e?.message || String(e));
+      }
     })();
   }, [user]);
 
   const save = async (newResults: typeof results) => {
     if (!user) return;
     setSaving(true);
+    setErreur("");
     try {
-      await setDoc(doc(db, "settings", `testProtocol_${user.uid}`), {
-        results: newResults, updatedAt: serverTimestamp(),
-      }, { merge: true });
-    } finally { setSaving(false); }
+      const res = await authFetch("/api/test-protocol", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ results: newResults }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({} as any));
+        throw new Error(d?.error || `Erreur ${res.status}`);
+      }
+    } catch (e: any) {
+      // Un échec muet est pire que pas de sauvegarde du tout : on coche
+      // pendant une heure et on perd tout au rechargement.
+      setErreur(e?.message || String(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const setStatus = (testId: string, status: Status) => {
@@ -619,9 +637,19 @@ export default function TestProtocolPage() {
       <div className="mb-5">
         <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Protocole de tests</h1>
         <p className="font-body text-xs text-slate-500">
-          Guide de validation de l'espace famille — {allTests.length} tests · {saving ? "Sauvegarde..." : "Auto-sauvegardé"}
+          Guide de validation de l&apos;espace famille — {allTests.length} tests ·{" "}
+          {saving ? "Sauvegarde..." : erreur ? "non sauvegardé" : "Auto-sauvegardé"}
         </p>
       </div>
+
+      {erreur && (
+        <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">
+          <strong>Vos réponses ne sont pas enregistrées</strong> — {erreur}
+          <div className="text-xs mt-1">
+            Ne continuez pas à cocher : tout serait perdu au rechargement.
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-2 mb-4">
