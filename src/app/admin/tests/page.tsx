@@ -1116,6 +1116,20 @@ const TESTS: TestCase[] = [
     priorite: "haute", correctif: "2026-08-19",
   },
   {
+    id: "MG-15", module: "Management", sous_module: "Horaires",
+    description: "Le trou du midi n'est plus payé",
+    etapes: "Planifier une journée 9h–12h puis 14h–17h SANS saisir de tâche « pause » → Équipe → Horaires, puis Équipe → Planning et onglet Résumé",
+    resultat_attendu: "6 h partout, et non 8 h. La fiche imprimée coupe la journée à 12h/14h. Les trois écrans annoncent le même chiffre",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
+    id: "MG-16", module: "Management", sous_module: "Horaires",
+    description: "Un battement court reste du travail",
+    etapes: "Deux tâches séparées de 10 minutes, puis deux tâches séparées de 45 minutes",
+    resultat_attendu: "Le battement de 10 minutes est compté en travail, celui de 45 minutes ne l'est pas. Une pause saisie est déduite même si elle dure moins de 30 minutes",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

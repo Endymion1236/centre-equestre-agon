@@ -1,3 +1,4 @@
+import { minutesTravaillees } from "@/lib/temps-travail";
 export type JourSemaine = "lundi" | "mardi" | "mercredi" | "jeudi" | "vendredi" | "samedi" | "dimanche";
 export const JOURS: JourSemaine[] = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
 export const JOURS_LABELS: Record<JourSemaine, string> = {
@@ -205,38 +206,21 @@ function _heureToMin(h: string): number {
 }
 
 /**
- * Temps de travail effectif d'un ensemble de tâches **du même jour** :
+ * Temps de travail effectif d'un ensemble de tâches **du même jour**.
  *
- *   amplitude (fin de la dernière tâche non-pause − début de la première)
- *     − somme des durées des tâches de catégorie "pause"
- *
- * Cohérent avec la logique d'affichage de TabHoraires : les pauses sont
- * marquées **explicitement** par l'admin (catégorie `"pause"`). Les battements
- * courts entre deux tâches non-pause sont comptés en travail (puisqu'ils sont
- * dans l'amplitude et pas déduits).
+ * La règle vit dans lib/temps-travail.ts, source unique de tous les écrans qui
+ * comptent des heures : périodes réellement travaillées, battements de moins
+ * de 30 minutes comptés en travail, pauses saisies déduites, chevauchements
+ * fusionnés. Elle a remplacé le 19/08/2026 un calcul en amplitude qui payait
+ * les coupures du midi non saisies.
  *
  * ⚠️ Pour un cumul semaine, sommer le résultat sur chaque jour. NE PAS appeler
- * avec toutes les tâches de la semaine : l'amplitude couvrirait plusieurs
- * jours et donnerait un résultat erroné.
+ * avec toutes les tâches de la semaine : les jours se recouvriraient.
  */
 export function calcTempsTravailJour(
   tachesDuJour: { heureDebut: string; dureeMinutes: number; categorie: string }[]
 ): number {
-  const travail = tachesDuJour.filter(t => t.categorie !== "pause");
-  if (travail.length === 0) return 0;
-  const debutMin = Math.min(...travail.map(t => _heureToMin(t.heureDebut)));
-  const finMin = Math.max(...travail.map(t => _heureToMin(t.heureDebut) + t.dureeMinutes));
-  const amplitude = finMin - debutMin;
-  // On ne déduit que la portion d'une pause qui tombe DANS l'amplitude travaillée.
-  // Une pause avant le 1er créneau ou après le dernier ne réduit pas le travail.
-  const pauseMin = tachesDuJour
-    .filter(t => t.categorie === "pause")
-    .reduce((s, t) => {
-      const ps = _heureToMin(t.heureDebut);
-      const pe = ps + t.dureeMinutes;
-      return s + Math.max(0, Math.min(pe, finMin) - Math.max(ps, debutMin));
-    }, 0);
-  return Math.max(0, amplitude - pauseMin);
+  return minutesTravaillees(tachesDuJour);
 }
 
 /**

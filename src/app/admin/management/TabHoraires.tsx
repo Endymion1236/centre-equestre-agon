@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Printer, Plus, Trash2, Calendar, Wallet } fr
 import type { TachePlanifiee, Salarie, JourSemaine, Absence, BilanHebdo, TypeAbsence } from "./types";
 import { JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, fmtDuree, LIBELLE_ABSENCE } from "./types";
 import { MOIS_LISSES, MOIS_DECOMPTE_LISSAGE, soldeLissage, etatSemaine, lundiDansPeriodeLissee, type SoldeLissage } from "@/lib/lissage-ete";
+import { calculerJournee, minutesEnHeure } from "@/lib/temps-travail";
 
 interface Props {
   semaine: string;
@@ -270,7 +271,9 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
   };
 
   /**
-   * La journée d'un salarié : amplitude travaillée, pauses internes déduites.
+   * La journée d'un salarié, calculée par la règle commune
+   * (lib/temps-travail.ts) : périodes travaillées, battements courts comptés,
+   * pauses saisies déduites.
    *
    * Source unique du tableau mensuel ET du total de la période lissée. Celle-ci
    * déborde du mois affiché : deux calculs séparés auraient fini par diverger,
@@ -280,30 +283,9 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     const dow = (date.getDay() + 6) % 7;
     const jour = JOURS[dow] as JourSemaine;
     const isoWeek = getISOWeek(date);
-    const dayTaches = salTaches.filter(t => t.semaine === isoWeek && t.jour === jour)
-      .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-    const pauses = dayTaches.filter(t => t.categorie === "pause");
-    const travail = dayTaches.filter(t => t.categorie !== "pause");
-    if (travail.length === 0) {
-      return { jour, isoWeek, dow, travaille: false as const, debutMinJour: 0, finMinJour: 0, pausesInternes: [] as TachePlanifiee[], pauseMin: 0, duree: 0 };
-    }
-    const debutMinJour = Math.min(...travail.map(t => heureToMin(t.heureDebut)));
-    const finMinJour = Math.max(...travail.map(t => heureToMin(t.heureDebut) + t.dureeMinutes));
-    // Seules les pauses situées DANS l'amplitude travaillée comptent : une pause
-    // avant le 1er créneau ou après le dernier ne réduit pas le travail.
-    const pausesInternes = pauses.filter(pz => {
-      const ps = heureToMin(pz.heureDebut); const pe = ps + pz.dureeMinutes;
-      return Math.min(pe, finMinJour) - Math.max(ps, debutMinJour) > 0;
-    });
-    const pauseMin = pausesInternes.reduce((sum, pz) => {
-      const ps = heureToMin(pz.heureDebut); const pe = ps + pz.dureeMinutes;
-      return sum + Math.max(0, Math.min(pe, finMinJour) - Math.max(ps, debutMinJour));
-    }, 0);
-    return {
-      jour, isoWeek, dow, travaille: true as const,
-      debutMinJour, finMinJour, pausesInternes, pauseMin,
-      duree: Math.max(0, (finMinJour - debutMinJour) - pauseMin),
-    };
+    const dayTaches = salTaches.filter(t => t.semaine === isoWeek && t.jour === jour);
+    const calc = calculerJournee(dayTaches);
+    return { jour, isoWeek, dow, calc, duree: calc.dureeMin };
   };
 
   /**
@@ -374,29 +356,35 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const absX = abs ? { absenceLabel: LIBELLE_ABSENCE[abs.type], absenceMin: abs.dureeMinutes } : {};
       const base = { date, jour: j.jour, isSamedi: j.dow === 5, isoWeek: j.isoWeek, ...absX };
 
-      if (!j.travaille) {
+      if (!j.calc.travaille) {
         rows.push({ ...base, debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0, duree: 0 });
         return;
       }
-
-      const debut = minToHeure(j.debutMinJour);
-      const fin = minToHeure(j.finMinJour);
       totalMois += j.duree;
 
-      if (j.pausesInternes.length > 0) {
-        // On coupe l'affichage matin/aprem autour de la PREMIÈRE pause interne
-        const premierePause = j.pausesInternes[0];
+      // La coupure la plus longue sépare matin et après-midi sur la fiche
+      // imprimée — qu'elle ait été saisie en pause ou qu'elle soit un simple
+      // trou entre deux tâches. Avant, seule une pause saisie coupait la
+      // journée : une vraie coupure du midi passait pour du travail continu.
+      if (j.calc.coupure) {
         rows.push({
           ...base,
-          debut, fin: premierePause.heureDebut,
-          debutAprem: minToHeure(heureToMin(premierePause.heureDebut) + premierePause.dureeMinutes),
-          finAprem: fin,
-          pauseMin: j.pauseMin,
+          debut: minutesEnHeure(j.calc.debutMin),
+          fin: minutesEnHeure(j.calc.coupure.debut),
+          debutAprem: minutesEnHeure(j.calc.coupure.fin),
+          finAprem: minutesEnHeure(j.calc.finMin),
+          pauseMin: (j.calc.coupure.fin - j.calc.coupure.debut) + j.calc.pauseDeduiteMin,
           duree: j.duree,
         });
       } else {
-        // Aucune pause explicite : journée continue
-        rows.push({ ...base, debut, fin, debutAprem: "", finAprem: "", pauseMin: 0, duree: j.duree });
+        rows.push({
+          ...base,
+          debut: minutesEnHeure(j.calc.debutMin),
+          fin: minutesEnHeure(j.calc.finMin),
+          debutAprem: "", finAprem: "",
+          pauseMin: j.calc.pauseDeduiteMin,
+          duree: j.duree,
+        });
       }
     });
 
