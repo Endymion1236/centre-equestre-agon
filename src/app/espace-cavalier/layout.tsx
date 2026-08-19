@@ -60,7 +60,11 @@ const HELP_NAV: NavItem[] = [
  * introuvable après l'ouverture. Elle reste évidemment accessible par son URL
  * directe pour un compte de test créé à la volée.
  */
-const COMPTES_TESTEURS = ["ceagon@orange.fr", "ceagon50@gmail.com"];
+const COMPTES_TESTEURS = [
+  "ceagon@orange.fr",
+  "ceagon50@gmail.com",
+  "laserbayagon@gmail.com", // compte famille de recette
+];
 
 /**
  * Comptes de test supplémentaires, sans passer par un déploiement de code :
