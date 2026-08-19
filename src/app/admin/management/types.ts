@@ -88,6 +88,14 @@ export interface BilanHebdo {
   surplusMode: "paye" | "recup";
   /** Semaine clôturée : sa contribution a déjà été intégrée au compteur du salarié. */
   clos?: boolean;
+  /**
+   * Semaine hors contrat : le salarié n'était pas en poste (saisonnier pas
+   * encore arrivé, contrat déjà terminé). Aucun contrat n'est dû cette
+   * semaine-là — ni déficit, ni contribution au contrat de la période lissée.
+   * Les heures éventuellement travaillées, elles, restent comptées : on ne
+   * perd jamais des heures faites.
+   */
+  horsContrat?: boolean;
   /** Minutes effectivement ajoutées au compteur lors de la clôture (à retrancher si on rouvre). */
   contributionAppliquee?: number;
   updatedAt?: any;

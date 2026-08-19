@@ -91,6 +91,7 @@ type WeekSummary = {
   supPayee: number;     // heures sup payées de la semaine
   aVenir: boolean;      // semaine entièrement future (non comptée au compteur)
   enCours: boolean;     // semaine commencée mais pas terminée
+  horsContrat: boolean; // salarié pas en poste cette semaine-là
   aCheval: boolean;     // semaine à cheval sur le mois précédent ou suivant
   lissee: boolean;      // semaine neutralisée par le lissage d'été
 };
@@ -180,6 +181,25 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
   const supprimerAbsence = async (absId: string) => {
     await deleteDoc(doc(db, "absences-management", absId));
     setAllAbsences(prev => prev.filter(a => a.id !== absId));
+  };
+
+  /**
+   * Semaine travaillée ou non. Les saisonniers n'arrivent pas le 1er juillet :
+   * sans ce marqueur, chaque semaine précédant leur prise de poste comptait un
+   * contrat plein en déficit, et gonflait le contrat de la période lissée.
+   */
+  const setHorsContrat = async (salId: string, semaine: string, horsContrat: boolean) => {
+    const id = `${salId}_${semaine}`;
+    const existing = allBilans.find(b => b.id === id);
+    const payload: BilanHebdo = {
+      id, salarieId: salId, semaine,
+      surplusMode: existing?.surplusMode ?? "paye",
+      clos: existing?.clos ?? false,
+      horsContrat,
+      updatedAt: serverTimestamp(),
+    };
+    await setDoc(doc(db, "bilans-heures", id), payload, { merge: true });
+    setAllBilans(prev => { const o = prev.filter(b => b.id !== id); return [...o, payload]; });
   };
 
   const setMode = async (salId: string, semaine: string, surplusMode: "paye" | "recup") => {
@@ -292,23 +312,30 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       .filter(dansPeriodeLissee)
       .filter(w => etatSemaine(getLundideSemaine(w), debutAujourdhui) === "terminee");
 
+    // Les semaines hors contrat sortent du CONTRAT de la période — un saisonnier
+    // arrivé mi-juillet ne doit pas les deux premières semaines du mois — mais
+    // leurs heures, s'il y en a, restent comptées.
+    const semainesDues = semainesComptees.filter(
+      w => !allBilans.find(b => b.id === `${sal.id}_${w}`)?.horsContrat,
+    );
+
     const travaille = semainesComptees.reduce(
       (sum, w) => sum + joursDeLaSemaine(w).reduce((s2, d) => s2 + journeeDe(salTaches, d).duree, 0),
       0,
     );
 
     const absMin = allAbsences
-      .filter(a => a.salarieId === sal.id && a.type !== "sans_solde" && semainesComptees.includes(a.semaine))
+      .filter(a => a.salarieId === sal.id && a.type !== "sans_solde" && semainesDues.includes(a.semaine))
       .reduce((sum, a) => sum + (a.dureeMinutes || 0), 0);
 
     const solde = soldeLissage({
       contratMin: contrat,
-      semaines: semainesComptees.length,
+      semaines: semainesDues.length,
       travailleMin: travaille,
       absMin,
     });
 
-    return { semaines: semainesComptees.length, travaille, absMin, ...solde };
+    return { semaines: semainesDues.length, travaille, absMin, ...solde };
   };
 
   const buildSalData = (sal: Salarie) => {
@@ -378,15 +405,20 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const absMin = allAbsences
         .filter(a => a.salarieId === salId && a.semaine === w && a.type !== "sans_solde")
         .reduce((s, a) => s + (a.dureeMinutes || 0), 0);
-      const cible = Math.max(0, contrat - absMin);
-      // Déficit : mesuré sur la cible réduite -> un congé protège du déficit.
-      // Surplus : mesuré sur le CONTRAT PLEIN à partir des heures réellement
-      // travaillées -> un congé ne fabrique jamais d'heures sup.
-      const surplus = Math.max(0, travaille - contrat);
-      const deficit = Math.max(0, cible - travaille);
       const bilan = allBilans.find(b => b.id === `${salId}_${w}`);
       const mode = bilan?.surplusMode ?? "paye";
       const clos = !!bilan?.clos;
+      // Semaine hors contrat : le salarié n'était pas en poste. Aucun contrat
+      // n'est dû, donc aucun déficit possible — mais les heures éventuellement
+      // faites restent acquises, elles ne s'évaporent pas.
+      const horsContrat = !!bilan?.horsContrat;
+      const contratSemaine = horsContrat ? 0 : contrat;
+      const cible = Math.max(0, contratSemaine - absMin);
+      // Déficit : mesuré sur la cible réduite -> un congé protège du déficit.
+      // Surplus : mesuré sur le CONTRAT PLEIN à partir des heures réellement
+      // travaillées -> un congé ne fabrique jamais d'heures sup.
+      const surplus = Math.max(0, travaille - contratSemaine);
+      const deficit = Math.max(0, cible - travaille);
       // Semaine entièrement future (son lundi est après aujourd'hui) : pas encore
       // travaillée, on ne la compte pas en déficit ni au compteur.
       const lundiW = getLundideSemaine(w);
@@ -411,7 +443,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
         isoWeek: w, travaille, absMin, cible,
         surplus: surplusRetenu,
         deficit: deficitRetenu,
-        mode, clos, contribution, supPayee, aVenir, enCours, aCheval, lissee,
+        mode, clos, contribution, supPayee, aVenir, enCours, aCheval, lissee, horsContrat,
       };
     });
 
@@ -498,6 +530,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                 onAjouterAbsence={ajouterAbsence}
                 onSupprimerAbsence={supprimerAbsence}
                 onSetMode={setMode}
+                onSetHorsContrat={setHorsContrat}
                 onAppliquerSemaine={appliquerSemaine}
                 onDecloturer={decloturerSemaine}
                 onAjusterCompteur={ajusterCompteur}
@@ -758,7 +791,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 // ─────────────────────────────────────────────────────────────────────────────
 function PanneauRH({
   sal, mois, lisse, lissage, weekSummaries, compteurStocke, previsionMois, compteurPrev, absences,
-  onMajSalarie, onAjouterAbsence, onSupprimerAbsence, onSetMode, onAppliquerSemaine, onDecloturer, onAjusterCompteur,
+  onMajSalarie, onAjouterAbsence, onSupprimerAbsence, onSetMode, onSetHorsContrat, onAppliquerSemaine, onDecloturer, onAjusterCompteur,
 }: {
   sal: Salarie;
   mois: number;
@@ -772,6 +805,7 @@ function PanneauRH({
   onAjouterAbsence: (sal: Salarie, date: string, type: TypeAbsence, dureeMin: number) => void;
   onSupprimerAbsence: (absId: string) => void;
   onSetMode: (salId: string, semaine: string, mode: "paye" | "recup") => void;
+  onSetHorsContrat: (salId: string, semaine: string, horsContrat: boolean) => void;
   onAppliquerSemaine: (sal: Salarie, semaine: string, contributionMin: number) => void;
   onDecloturer: (sal: Salarie, semaine: string) => void;
   onAjusterCompteur: (sal: Salarie, deltaMin: number) => void;
@@ -843,11 +877,14 @@ function PanneauRH({
               sera établi sur le mois d&apos;août — ouvre août pour le voir.
             </div>
           ) : lissage && lissage.semaines === 0 ? (
-            <div className="font-body text-[11px] text-amber-800">Aucune semaine écoulée sur la période pour l&apos;instant.</div>
+            <div className="font-body text-[11px] text-amber-800">
+              Aucune semaine due sur la période pour l&apos;instant — soit aucune n&apos;est terminée,
+              soit toutes sont marquées hors contrat.
+            </div>
           ) : lissage ? (
             <>
               <div className="font-body text-[11px] text-amber-800">
-                {lissage.semaines} semaine(s) écoulée(s) · travaillé <strong>{fmtDuree(lissage.travaille)}</strong> pour
+                {lissage.semaines} semaine(s) due(s) · travaillé <strong>{fmtDuree(lissage.travaille)}</strong> pour
                 un contrat de <strong>{fmtDuree(lissage.contratPeriode)}</strong>
                 {lissage.absMin > 0 && <span className="text-sky-700"> · dont {fmtDuree(lissage.absMin)} de congés</span>}
               </div>
@@ -873,9 +910,25 @@ function PanneauRH({
           {weekSummaries.map(w => (
             <div key={w.isoWeek} className="flex flex-wrap items-center gap-2 text-xs font-body">
               <span className="font-semibold text-slate-700 w-16 shrink-0">Sem. {w.isoWeek.split("-W")[1]}</span>
-              <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}{w.absMin > 0 ? <span className="text-sky-600"> · {fmtDuree(w.absMin)} congé</span> : null}</span>
+              <label
+                title="Décoche si le salarié n'était pas en poste cette semaine-là : aucun contrat n'est alors dû."
+                className={`flex items-center gap-1 shrink-0 ${w.clos ? "opacity-50" : "cursor-pointer"}`}>
+                <input type="checkbox" checked={!w.horsContrat} disabled={w.clos}
+                  onChange={e => onSetHorsContrat(sal.id, w.isoWeek, !e.target.checked)}
+                  className="cursor-pointer accent-blue-500 disabled:cursor-default" />
+                <span className="text-slate-500">travaillée</span>
+              </label>
+              {w.horsContrat ? (
+                <span className="text-slate-500">
+                  hors contrat{w.travaille > 0 && <span className="text-red-600 font-semibold"> · {fmtDuree(w.travaille)} pourtant travaillées</span>}
+                </span>
+              ) : (
+                <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}{w.absMin > 0 ? <span className="text-sky-600"> · {fmtDuree(w.absMin)} congé</span> : null}</span>
+              )}
               {w.aCheval && <span className="text-slate-400 italic">semaine à cheval</span>}
-              {w.lissee ? (
+              {w.horsContrat && w.travaille === 0 ? (
+                <span className="text-slate-400 italic">pas en poste</span>
+              ) : w.lissee ? (
                 <span className="text-amber-700 italic">lissée — comptée sur juillet–août</span>
               ) : w.aVenir ? (
                 <span className="text-slate-400 italic">à venir</span>

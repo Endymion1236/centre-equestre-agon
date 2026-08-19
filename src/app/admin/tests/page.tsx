@@ -1060,6 +1060,20 @@ const TESTS: TestCase[] = [
     priorite: "critique", correctif: "2026-08-19",
   },
   {
+    id: "MG-09", module: "Management", sous_module: "Horaires",
+    description: "Semaine hors contrat (saisonnier pas encore arrivé)",
+    etapes: "Équipe → Horaires → sur un saisonnier, décocher « travaillée » sur les deux premières semaines de juillet",
+    resultat_attendu: "Ces semaines passent « hors contrat / pas en poste » : aucun déficit, aucune clôture. En août, le contrat de la période lissée ne les compte plus — le nombre de semaines dues diminue d'autant",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
+    id: "MG-10", module: "Management", sous_module: "Horaires",
+    description: "Des heures dans une semaine marquée hors contrat",
+    etapes: "Décocher « travaillée » sur une semaine où des tâches sont pourtant planifiées",
+    resultat_attendu: "Les heures ne disparaissent pas : la ligne signale « X pourtant travaillées » en rouge, et elles restent comptées comme travail. Aucune heure faite ne doit s'évaporer",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",
