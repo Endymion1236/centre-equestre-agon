@@ -1130,6 +1130,13 @@ const TESTS: TestCase[] = [
     priorite: "haute", correctif: "2026-08-19",
   },
   {
+    id: "MG-17", module: "Management", sous_module: "Horaires",
+    description: "Lissage : prévision fin août avec les semaines à venir",
+    etapes: "Salarié lissé dont le dépassement est planifié sur une semaine future (cas d'Anne) → Équipe → Horaires, vue d'août",
+    resultat_attendu: "L'encadré distingue deux chiffres : le solde des semaines TERMINÉES, et la « Prévision fin août » qui inclut le planning déjà posé. Les 5 h à venir apparaissent dans la prévision, pas dans le solde arrêté",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

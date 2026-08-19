@@ -85,6 +85,15 @@ type BilanLissage = SoldeLissage & {
    * aucune heure sup — parce que sept semaines vides pesaient sur la période.
    */
   semainesVides: string[];
+  /**
+   * Projection FIN AOÛT : toutes les semaines dues de la période, y compris
+   * celles à venir dont le planning est déjà posé. C'est le chiffre qu'on
+   * obtient en comptant l'été à la main — le solde arrêté, lui, ne juge que
+   * les semaines terminées. Sans cette ligne, l'écran affichait 0 heure sup
+   * le 19 août à quelqu'un dont les 5 h de dépassement étaient sur la
+   * dernière semaine du mois, déjà planifiée.
+   */
+  prevision: SoldeLissage & { semaines: number; travaille: number };
 };
 
 type WeekSummary = {
@@ -337,7 +346,30 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       absMin,
     });
 
-    return { semaines: semainesDues.length, travaille, absMin, semainesVides, ...solde };
+    // Projection fin août : mêmes règles, mais sur TOUTES les semaines dues de
+    // la période — terminées, en cours ou à venir — avec les heures planifiées.
+    const toutesSemaines = Array.from(new Set(weeksPeriodeLissee)).filter(dansPeriodeLissee);
+    const semainesDuesTotal = toutesSemaines.filter(
+      w => !allBilans.find(b => b.id === `${sal.id}_${w}`)?.horsContrat,
+    );
+    const travaillePrev = toutesSemaines.reduce(
+      (sum, w) => sum + joursDeLaSemaine(w).reduce((s2, d) => s2 + journeeDe(salTaches, d).duree, 0),
+      0,
+    );
+    const absPrev = allAbsences
+      .filter(a => a.salarieId === sal.id && a.type !== "sans_solde" && semainesDuesTotal.includes(a.semaine))
+      .reduce((sum, a) => sum + (a.dureeMinutes || 0), 0);
+    const soldePrev = soldeLissage({
+      contratMin: contrat,
+      semaines: semainesDuesTotal.length,
+      travailleMin: travaillePrev,
+      absMin: absPrev,
+    });
+
+    return {
+      semaines: semainesDues.length, travaille, absMin, semainesVides, ...solde,
+      prevision: { semaines: semainesDuesTotal.length, travaille: travaillePrev, ...soldePrev },
+    };
   };
 
   const buildSalData = (sal: Salarie) => {
@@ -943,13 +975,28 @@ function PanneauRH({
               {lissage.surplus > 0 ? (
                 <div className="font-body text-xs font-bold text-red-600">
                   + {fmtDuree(lissage.surplus)} d&apos;heures sup. payées sur la période
+                  <span className="font-normal text-amber-700"> (semaines terminées uniquement)</span>
                 </div>
               ) : lissage.deficit > 0 ? (
                 <div className="font-body text-xs font-semibold text-emerald-700">
-                  Aucune heure sup. Le déficit de {fmtDuree(lissage.deficit)} n&apos;est pas dû : il est absorbé par le lissage.
+                  Aucune heure sup pour l&apos;instant. Le déficit de {fmtDuree(lissage.deficit)} n&apos;est pas dû : il est absorbé par le lissage.
                 </div>
               ) : (
-                <div className="font-body text-xs font-semibold text-emerald-700">À l&apos;équilibre sur la période.</div>
+                <div className="font-body text-xs font-semibold text-emerald-700">À l&apos;équilibre sur les semaines terminées.</div>
+              )}
+              {lissage.prevision.semaines > lissage.semaines && (
+                <div className="font-body text-[11px] text-amber-900 border-t border-amber-200 pt-1.5 mt-0.5">
+                  <strong>Prévision fin août</strong>, planning déjà posé compris ({lissage.prevision.semaines} semaines,
+                  {" "}{fmtDuree(lissage.prevision.travaille)} pour {fmtDuree(lissage.prevision.contratPeriode)}) :{" "}
+                  {lissage.prevision.surplus > 0 ? (
+                    <strong className="text-red-600">+{fmtDuree(lissage.prevision.surplus)} d&apos;heures sup.</strong>
+                  ) : lissage.prevision.deficit > 0 ? (
+                    <span>déficit de {fmtDuree(lissage.prevision.deficit)}, non dû.</span>
+                  ) : (
+                    <span>à l&apos;équilibre.</span>
+                  )}{" "}
+                  Le solde définitif sera arrêté une fois la dernière semaine terminée.
+                </div>
               )}
             </>
           ) : null}
