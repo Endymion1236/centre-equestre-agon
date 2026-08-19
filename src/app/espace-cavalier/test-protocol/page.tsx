@@ -173,6 +173,225 @@ const SCENARIOS: Scenario[] = [
       },
     ],
   },
+  // ─── Protocole « toutes les voies de paiement en ligne » ───────────────────
+  // Écrit le 19 août 2026, à l'ouverture des inscriptions. Le principe : des
+  // créneaux à 3 € pour que chaque essai coûte trois euros et pas cinquante-sept.
+  // Trois réserves à garder en tête tout du long :
+  //   1. en CAWL_ENV=production ces paiements sont RÉELS, et aucun
+  //      remboursement automatique n'existe — il se fait à la main dans le
+  //      back-office Worldline ;
+  //   2. l'acompte de stage est plafonné au total du panier (min(30 €, total)),
+  //      donc un stage à 3 € ne laisse AUCUN solde : le prélèvement automatique
+  //      ne se teste qu'avec un stage à plus de 30 € ;
+  //   3. tout ce qui est encaissé ici disparaîtra au reset de la base — à
+  //      condition de le faire avant le 1er septembre, date à laquelle l'outil
+  //      de reset se verrouille définitivement.
+  {
+    id: "paiements_en_ligne",
+    titre: "Paiements en ligne — protocole à 3 €",
+    emoji: "💳",
+    description: "Chaque voie de paiement offerte à une famille, de bout en bout, pour trois euros l'essai",
+    tests: [
+      {
+        id: "PAY-00", titre: "Préparation du terrain", priorite: "critique",
+        description: "Trois créneaux jetables et trois variables Vercel — sans ça, la moitié des tests ne veut rien dire",
+        steps: [
+          { action: "Admin → Activités : créer « ZZ Test — cours » à 3 € (type cours) et « ZZ Test — stage » à 3 € (type stage), datés dans plus de 10 jours", attendu: "Les deux apparaissent au catalogue. Le préfixe ZZ sert à les retrouver et les supprimer en fin de protocole" },
+          { action: "Créer aussi « ZZ Test — acompte » à 35 €", attendu: "C'est le seul qui laissera un solde (35 − 30 = 5 €) : sans lui, le circuit acompte + prélèvement automatique ne peut pas être testé du tout" },
+          { action: "Vercel → variables : CAWL_ENV = production, CAWL_MIT_ENABLED = true", attendu: "Les deux présentes. Sans MIT_ENABLED, le solde n'est jamais prélevé : une relance par email part à la place" },
+          { action: "Vercel : regarder si CAWL_PRICING_ENFORCE vaut « true »", attendu: "Si non, l'audit de prix côté serveur tourne en mode silencieux : il journalise une anomalie de montant mais ne bloque pas le paiement. Bon à savoir avant d'interpréter un test" },
+          { action: "Admin → Paramètres : réservations ouvertes ; mode email restreint levé, ou l'adresse de test en liste blanche", attendu: "Sinon les emails de confirmation ne partiront pas et tu conclueras à tort qu'ils sont cassés" },
+          { action: "Ouvrir dans un second onglet : Admin → Paiements → Journal", attendu: "Chaque test se vérifie là, ligne par ligne" },
+        ],
+      },
+      {
+        id: "PAY-01", titre: "Carte bancaire — montant plein (cours 3 €)", priorite: "critique",
+        description: "La voie la plus empruntée : un cours réglé en une fois",
+        steps: [
+          { action: "Espace cavalier → Réserver → « ZZ Test — cours » → panier → 💳 Carte bancaire", attendu: "Bouton VERT « Payer 3.00 € » — vert = montant plein, orange = acompte" },
+          { action: "Payer avec une vraie carte", attendu: "Redirection vers la page CAWL de production. 3 € réellement débités" },
+          { action: "Au retour", attendu: "Mes réservations, bandeau vert, place devenue définitive (elle n'est plus « tenue »)" },
+          { action: "Mes paiements", attendu: "Facture « Payé », mode « CB en ligne »" },
+          { action: "Admin → Paiements → Journal", attendu: "Une ligne de 3 €, mode CB en ligne, bonne famille" },
+          { action: "Boîte mail de la famille", attendu: "Email de confirmation avec le montant et l'activité" },
+        ],
+      },
+      {
+        id: "PAY-02", titre: "Carte bancaire — stage à 3 € : l'acompte plafonné", priorite: "critique",
+        description: "Le cas piège : l'acompte de 30 € est plus élevé que le stage lui-même",
+        steps: [
+          { action: "Mettre « ZZ Test — stage » (3 €) au panier → 💳 Carte bancaire", attendu: "L'encadré bleu affiche « Montant réglé aujourd'hui : 3,00 € — rien d'autre à prévoir », et l'encart ambre sur l'empreinte de carte n'apparaît PAS" },
+          { action: "Cocher les conditions d'annulation, puis payer", attendu: "Bouton orange « Payer 3.00 € » : l'acompte est ramené au total, il n'est pas de 30 €" },
+          { action: "Mes paiements", attendu: "Facture soldée, aucun reste dû, aucun solde programmé — et aucune empreinte de carte prise, puisqu'il n'y a rien à prélever plus tard" },
+        ],
+      },
+      {
+        id: "PAY-03", titre: "Carte bancaire — stage à 35 € : acompte + empreinte", priorite: "critique",
+        description: "Le vrai circuit stage : 30 € maintenant, 5 € prélevés tout seuls avant le stage",
+        steps: [
+          { action: "Mettre « ZZ Test — acompte » (35 €) au panier → 💳 Carte bancaire", attendu: "Encadré bleu : « 1 enfant × 30 € = 30,00 € maintenant · solde 5,00 € prélevé automatiquement ~1 semaine avant le stage »" },
+          { action: "Lire l'encart ambre", attendu: "Il demande de cocher « Enregistrer mes données de paiement » sur la page de paiement, en annonçant le solde de 5,00 €" },
+          { action: "Sur la page CAWL : COCHER la case d'enregistrement, puis payer les 30 €", attendu: "Sans cette case, le solde devra être réglé à la main. C'est le point de rupture le plus fréquent de tout le circuit" },
+          { action: "Mes paiements", attendu: "Acompte de 30 € encaissé, 5 € restant dus, et le bandeau « le solde sera prélevé automatiquement sur votre carte enregistrée vers le … »" },
+        ],
+      },
+      {
+        id: "PAY-04", titre: "L'empreinte de carte est-elle exploitable ? (sans attendre J-7)", priorite: "critique",
+        description: "Sept jours d'attente pour découvrir que le jeton manquait, c'est sept jours perdus",
+        steps: [
+          { action: "Admin → /admin/test-mit → identifiant du paiement de PAY-03 → « Simuler » (dry-run, ne débite rien)", attendu: "Le diagnostic complet s'affiche sans toucher à l'argent" },
+          { action: "Lire les six voyants", attendu: "soldeRestant 5 €, aUnToken ✓, aIdentifiantAcompte ✓, schemeReferenceTrouvee ✓, mitActive ✓, cawlEnv « production »" },
+          { action: "Si un seul est ✗", attendu: "Le solde ne sera PAS prélevé le jour venu. aUnToken ✗ = la case n'a pas été cochée ; mitActive ✗ = CAWL_MIT_ENABLED absent ; schemeReference ✗ = à voir avec CAWL (Card On File sur le PSPID de production)" },
+        ],
+      },
+      {
+        id: "PAY-05", titre: "Prélèvement du solde déclenché à la main", priorite: "critique",
+        description: "Le cron accepte une date forcée : le circuit J-7 se teste aujourd'hui",
+        steps: [
+          { action: "Appeler /api/cron/charge-stage-balances?date=AAAA-MM-JJ&secret=<CRON_SECRET> avec la date de début du stage de PAY-03", attendu: "Réponse JSON avec autoCharged: 1" },
+          { action: "Admin → Journal", attendu: "Un second encaissement de 5 €, rattaché à la même facture" },
+          { action: "Mes paiements + boîte mail", attendu: "Facture entièrement payée, détaillant acompte et solde avec leurs dates ; email « Solde stage prélevé »" },
+          { action: "Si autoCharged reste à 0 et qu'un email de relance part à la place", attendu: "Ce n'est pas une panne : c'est le garde-fou. CAWL_MIT_ENABLED n'est pas à « true », et le système refuse de débiter sans autorisation confirmée" },
+        ],
+      },
+      {
+        id: "PAY-06", titre: "Solde réglé par la famille elle-même", priorite: "critique",
+        description: "L'autre issue du stage : la famille n'a pas enregistré sa carte et paie le solde à la main",
+        steps: [
+          { action: "Sur un stage dont l'acompte est payé sans empreinte de carte : Espace cavalier → Mes paiements → « Payer par CB »", attendu: "Page CAWL au montant du reste dû exactement, sans nouvelle prise d'empreinte" },
+          { action: "Payer", attendu: "Facture soldée, second encaissement au journal, numéro de facture attribué" },
+        ],
+      },
+      {
+        id: "PAY-07", titre: "Panier mixte : un stage et un cours ensemble", priorite: "haute",
+        description: "Le plafond de l'acompte se calcule sur le panier entier, pas sur les seules lignes de stage",
+        steps: [
+          { action: "Mettre au panier « ZZ Test — stage » (3 €) ET « ZZ Test — cours » (3 €) → 💳 Carte bancaire", attendu: "Total 6 €, acompte annoncé 6 € (min(30, 6)) — rien à prélever plus tard" },
+          { action: "Recommencer avec le stage à 3 € et un cours à 40 € si tu en as un", attendu: "À surveiller : l'acompte de 30 € est calculé sur le total du panier, il porte donc en partie sur le cours, qui n'aurait pas dû être payé en acompte. Note-le en remarque si le montant te semble faux" },
+        ],
+      },
+      {
+        id: "PAY-08", titre: "Chèque", priorite: "critique",
+        description: "Réservation ferme sans un centime encaissé — et la place tenue une semaine",
+        steps: [
+          { action: "Panier → 📝 Chèque → « Déclarer mon paiement par chèque »", attendu: "Message « Déclaration envoyée », place tenue (pas encore acquise)" },
+          { action: "Admin → Planning, sur le créneau", attendu: "Place tenue 7 JOURS — et non 30 minutes, qui est le délai des paiements CB" },
+          { action: "Boîte mail de l'admin", attendu: "Notification « Paiement chèque à confirmer » avec le nom de la famille et le montant" },
+          { action: "Admin → Paiements → Déclarations → Confirmer réception", attendu: "Facture « Payé », place définitive, email à la famille, encaissement au journal en mode Chèque" },
+        ],
+      },
+      {
+        id: "PAY-09", titre: "Espèces", priorite: "haute",
+        description: "Même circuit que le chèque, autre mode au journal — et une conséquence en caisse",
+        steps: [
+          { action: "Panier → 💵 Espèces → Déclarer", attendu: "Déclaration envoyée, place tenue 7 jours" },
+          { action: "Admin → Déclarations → Confirmer", attendu: "Encaissement en mode Espèces au journal" },
+          { action: "Admin → Comptabilité → Livre de caisse", attendu: "La ligne y figure aussi et fait monter le solde théorique de la caisse" },
+        ],
+      },
+      {
+        id: "PAY-10", titre: "Virement", priorite: "haute",
+        description: "Troisième déclaration — à ne confirmer qu'une fois l'argent vu sur le compte",
+        steps: [
+          { action: "Panier → 🏦 Virement → Déclarer", attendu: "Déclaration envoyée, place tenue 7 jours. Rien n'est encaissé en ligne : c'est une déclaration, pas un virement automatique" },
+          { action: "Admin → Déclarations → Confirmer", attendu: "Encaissement en mode Virement" },
+          { action: "Admin → Comptabilité → Rapprochement bancaire", attendu: "La ligne est pointable contre le relevé une fois le virement réellement arrivé" },
+        ],
+      },
+      {
+        id: "PAY-11", titre: "Avoir couvrant la totalité", priorite: "critique",
+        description: "Un avoir paie une réservation sans passer par la banque",
+        steps: [
+          { action: "Créer un avoir de 10 € pour la famille de test (annulation d'une facture, ou Admin → Avoirs)", attendu: "Le bouton « 💜 Utiliser mon avoir (10,00 € disponible) » apparaît dans le panier" },
+          { action: "Panier avec le stage à 3 € → Utiliser mon avoir", attendu: "Bouton « Payer avec mon avoir (3,00 €) » puis « Avoir utilisé ! Votre avoir a couvert la totalité »" },
+          { action: "Admin → Journal et Avoirs", attendu: "Écriture en mode Avoir — un crédit, pas une recette — et solde de l'avoir descendu à 7 €" },
+        ],
+      },
+      {
+        id: "PAY-12", titre: "Avoir partiel", priorite: "haute",
+        description: "L'avoir ne couvre pas tout : ce qui reste doit être annoncé, et rien ne s'enchaîne tout seul",
+        steps: [
+          { action: "Avec un avoir de 1 € et le stage à 3 € au panier → Utiliser mon avoir", attendu: "Bandeau orange : « Votre avoir (1,00 €) ne couvre pas la totalité (3,00 €). Le reste (2,00 €) sera à régler séparément »" },
+          { action: "Valider", attendu: "Bouton « Utiliser 1,00 € d'avoir », puis « Le centre équestre vous contactera pour le complément » — aucun enchaînement automatique vers la carte" },
+          { action: "Admin → Impayés", attendu: "La facture apparaît avec 2 € restant dus" },
+        ],
+      },
+      {
+        id: "PAY-13", titre: "Points de fidélité convertis en avoir", priorite: "normale",
+        description: "Les points ne paient jamais une commande directement : ils deviennent un avoir, qui lui paie",
+        steps: [
+          { action: "Admin → Paramètres → vérifier que la fidélité est activée", attendu: "Désactivée par défaut tant que le réglage n'existe pas — sans ça, aucun point n'est jamais attribué" },
+          { action: "Espace cavalier → Mes paiements → « Convertir mes points en avoir »", attendu: "Refus tant que le seuil de points n'est pas atteint (500 par défaut) ; sinon création d'un avoir au taux configuré (50 pts = 1 € par défaut)" },
+          { action: "Utiliser cet avoir sur une réservation", attendu: "Il se comporte comme n'importe quel avoir (cf. PAY-11)" },
+        ],
+      },
+      {
+        id: "PAY-14", titre: "Bon cadeau", priorite: "haute",
+        description: "Le bon ne s'utilise pas au panier mais sur une facture déjà émise",
+        steps: [
+          { action: "Site public → Offrir un bon → acheter un bon de 10 € par CB (10 € est le minimum imposé : un bon à 3 € est refusé)", attendu: "Page de remerciement, code BON-XXXX reçu par email, et encaissement au journal en « CB en ligne (bon cadeau) »" },
+          { action: "Espace cavalier → Mes paiements → sur une facture due, bouton « Bon cadeau » → saisir le code", attendu: "Montant déduit en mode Avoir / libellé « Bon cadeau », solde du bon décrémenté" },
+          { action: "Ressaisir le même code une fois le bon épuisé", attendu: "Refus explicite — un bon ne se consomme pas deux fois" },
+        ],
+      },
+      {
+        id: "PAY-15", titre: "Lien de paiement envoyé depuis l'admin", priorite: "haute",
+        description: "La voie de rattrapage : c'est le centre qui envoie le lien, pas la famille qui vient",
+        steps: [
+          { action: "Admin → Paiements → Impayés → sur la facture de PAY-12 → « 💳 Envoyer lien de paiement »", attendu: "Montant pré-rempli au reste dû ; email parti avec le lien, un QR CAWL et un QR de virement SEPA" },
+          { action: "Ouvrir le lien depuis la boîte de la famille et payer", attendu: "Page CAWL au montant restant dû exactement" },
+          { action: "Admin → Journal", attendu: "Encaissement du complément, facture soldée, disparition de la liste des impayés" },
+        ],
+      },
+      {
+        id: "PAY-16", titre: "Inscription annuelle en 3× / 10×", priorite: "critique",
+        description: "La voie qui va servir le plus à la rentrée — et la plus exposée : ce qui est promis à l'écran doit être ce qui est débité",
+        steps: [
+          { action: "Espace cavalier → Inscription annuelle → un forfait de plus de 100 € → choisir « 3 × … € » avec règlement par carte", attendu: "L'écran annonce « 3 × X € — Prélèvement CB automatique. Sans frais. »" },
+          { action: "Regarder le bouton de paiement AVANT de cliquer", attendu: "S'il annonce le total de l'année et non la première mensualité, arrête-toi là : c'est le total qui sera débité en une fois. Note KO sans payer" },
+          { action: "Si le montant est bien celui de la première échéance : payer", attendu: "Une seule échéance débitée, les suivantes visibles dans Paiements → Échéances" },
+          { action: "Refaire avec « 10 × » et avec le règlement par chèque", attendu: "En chèque, le libellé annonce des chèques encaissés progressivement : vérifier que les chèques différés sont bien créés" },
+        ],
+      },
+      {
+        id: "PAY-17", titre: "Paiement abandonné en cours de route", priorite: "haute",
+        description: "Le cas le plus fréquent en vrai : la famille ferme la page de paiement",
+        steps: [
+          { action: "Lancer un paiement CB puis fermer l'onglet CAWL sans payer", attendu: "Aucun encaissement au journal, facture en attente" },
+          { action: "Admin → Planning, sur le créneau", attendu: "Place TENUE 30 minutes (mode CB), pas acquise" },
+          { action: "Attendre la purge (cron toutes les 15 minutes)", attendu: "La place est rendue automatiquement — sinon un créneau se remplit de réservations fantômes" },
+        ],
+      },
+      {
+        id: "PAY-18", titre: "Deux inscriptions, un seul paiement", priorite: "haute",
+        description: "Le panier doit fusionner, pas multiplier les factures",
+        steps: [
+          { action: "Réserver « ZZ Test — stage » pour deux enfants, en passant par « Continuer mes réservations » entre les deux", attendu: "Deux lignes au panier, total 6 €" },
+          { action: "Payer par CB", attendu: "UNE seule page CAWL au total global" },
+          { action: "Mes paiements et Admin → Journal", attendu: "UNE facture et UN encaissement de 6 € — pas deux de 3 €" },
+        ],
+      },
+      {
+        id: "PAY-19", titre: "Les garde-fous", priorite: "haute",
+        description: "Ce qui doit refuser de se laisser faire",
+        steps: [
+          { action: "Stage au panier, conditions d'annulation NON cochées", attendu: "Bouton de paiement grisé : une clause d'annulation n'est opposable que si elle a été acceptée avant de payer" },
+          { action: "Admin → Paramètres → fermer les réservations, puis retenter un paiement côté famille", attendu: "Message de fermeture, aucune inscription créée, aucun débit" },
+          { action: "Réserver un créneau déjà complet", attendu: "Refus côté serveur (« créneau complet »), même si l'écran affichait encore une place" },
+        ],
+      },
+      {
+        id: "PAY-20", titre: "Nettoyage — à prévoir avant le premier essai, pas après", priorite: "critique",
+        description: "Ces paiements sont réels : leur sort se décide au départ",
+        steps: [
+          { action: "Supprimer les trois créneaux « ZZ Test — … »", attendu: "Ils disparaissent du planning et du catalogue" },
+          { action: "Faire le reset de la base APRÈS ce protocole et AVANT le 1er septembre", attendu: "Tous ces encaissements de test disparaissent avec lui. L'outil de reset se verrouille tout seul au 1er septembre 2026 : passé cette date, plus de rattrapage possible" },
+          { action: "Si le reset a déjà eu lieu : rembourser chaque paiement CB à la main dans le back-office Worldline", attendu: "Puis une contre-passation au journal (Paiements → Journal → Corriger). Rien ne s'efface : c'est une écriture en sens inverse, et c'est la façon normale de corriger" },
+          { action: "Le bon cadeau de PAY-14", attendu: "Il vit dans une collection que le reset n'efface pas : le supprimer depuis la console Firebase, ou le laisser dormir épuisé" },
+        ],
+      },
+    ],
+  },
   {
     id: "suivi",
     titre: "Suivi des inscriptions",
@@ -322,7 +541,7 @@ export default function TestProtocolPage() {
   const { user } = useAuth();
   const [results, setResults] = useState<Record<string, { status: Status; note: string; updatedAt?: string }>>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [expandedScenario, setExpandedScenario] = useState<Set<string>>(new Set(["connexion", "planning", "reservation"]));
+  const [expandedScenario, setExpandedScenario] = useState<Set<string>>(new Set(["paiements_en_ligne"]));
   const [noteEditing, setNoteEditing] = useState<string | null>(null);
   const [noteInput, setNoteInput] = useState("");
   const [saving, setSaving] = useState(false);
