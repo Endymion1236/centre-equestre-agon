@@ -5,7 +5,7 @@ import { db } from "@/lib/firebase";
 import { ChevronLeft, ChevronRight, Printer, Plus, Trash2, Calendar, Wallet } from "lucide-react";
 import type { TachePlanifiee, Salarie, JourSemaine, Absence, BilanHebdo, TypeAbsence } from "./types";
 import { JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, fmtDuree, LIBELLE_ABSENCE } from "./types";
-import { MOIS_LISSES, MOIS_DECOMPTE_LISSAGE, soldeLissage, type SoldeLissage } from "@/lib/lissage-ete";
+import { MOIS_LISSES, MOIS_DECOMPTE_LISSAGE, soldeLissage, etatSemaine, lundiDansPeriodeLissee, type SoldeLissage } from "@/lib/lissage-ete";
 
 interface Props {
   semaine: string;
@@ -90,6 +90,8 @@ type WeekSummary = {
   contribution: number; // ce qui irait au compteur : (recup? surplus:0) − deficit
   supPayee: number;     // heures sup payées de la semaine
   aVenir: boolean;      // semaine entièrement future (non comptée au compteur)
+  enCours: boolean;     // semaine commencée mais pas terminée
+  aCheval: boolean;     // semaine à cheval sur le mois précédent ou suivant
   lissee: boolean;      // semaine neutralisée par le lissage d'été
 };
 
@@ -216,6 +218,27 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
   };
 
   /**
+   * Une semaine appartient à la période lissée si son LUNDI tombe en juillet
+   * ou en août. Le critère porte sur la semaine entière, jamais sur le mois
+   * affiché : la semaine du 31 août au 6 septembre est comptée en entier, celle
+   * du 29 juin au 5 juillet reste dans le décompte de juin. Sans quoi une
+   * semaine à cheval serait facturée à contrat plein pour deux ou trois jours
+   * de travail regardés.
+   */
+  const dansPeriodeLissee = (isoWeek: string): boolean =>
+    lundiDansPeriodeLissee(getLundideSemaine(isoWeek), annee);
+
+  /** Les sept jours d'une semaine ISO, du lundi au dimanche. */
+  const joursDeLaSemaine = (isoWeek: string): Date[] => {
+    const lundi = getLundideSemaine(isoWeek);
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(lundi);
+      d.setDate(lundi.getDate() + i);
+      return d;
+    });
+  };
+
+  /**
    * La journée d'un salarié : amplitude travaillée, pauses internes déduites.
    *
    * Source unique du tableau mensuel ET du total de la période lissée. Celle-ci
@@ -253,26 +276,26 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
   };
 
   /**
-   * Solde de la période lissée (juillet + août), calculé sur les deux mois
-   * entiers — pas seulement sur le mois affiché. Les semaines à venir sont
-   * exclues : on ne compte pas des heures qui n'ont pas été faites.
+   * Solde de la période lissée (juillet + août).
+   *
+   * Ne comptent que les semaines TERMINÉES : une semaine en cours apporterait
+   * un contrat plein pour quelques jours travaillés, donc un déficit qui
+   * n'existe pas. Chaque semaine retenue est comptée sur ses sept jours, même
+   * quand ils débordent sur juin ou septembre.
    */
   const bilanLissage = (sal: Salarie): BilanLissage => {
     const contrat = contratMinDe(sal);
     const salTaches = allTaches.filter(t => t.salarieId === sal.id);
     const debutAujourdhui = new Date(); debutAujourdhui.setHours(0, 0, 0, 0);
 
-    const semainesComptees = weeksPeriodeLissee
-      .filter(w => getLundideSemaine(w).getTime() <= debutAujourdhui.getTime());
+    const semainesComptees = Array.from(new Set(weeksPeriodeLissee))
+      .filter(dansPeriodeLissee)
+      .filter(w => etatSemaine(getLundideSemaine(w), debutAujourdhui) === "terminee");
 
-    let travaille = 0;
-    for (const m of MOIS_LISSES) {
-      const d = new Date(annee, m, 1);
-      while (d.getMonth() === m) {
-        if (semainesComptees.includes(getISOWeek(d))) travaille += journeeDe(salTaches, d).duree;
-        d.setDate(d.getDate() + 1);
-      }
-    }
+    const travaille = semainesComptees.reduce(
+      (sum, w) => sum + joursDeLaSemaine(w).reduce((s2, d) => s2 + journeeDe(salTaches, d).duree, 0),
+      0,
+    );
 
     const absMin = allAbsences
       .filter(a => a.salarieId === sal.id && a.type !== "sans_solde" && semainesComptees.includes(a.semaine))
@@ -330,13 +353,25 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       }
     });
 
-    // Heures par semaine
+    // Heures par semaine, comptées sur les SEPT jours de la semaine — pas sur
+    // sa seule portion visible dans le mois affiché.
+    //
+    // Cas vécu (Alice, août 2026) : la semaine 31 court du 27 juillet au
+    // 2 août. Vue depuis août, elle n'affichait que les 1er et 2, soit « 0 min
+    // travaillé » — face à une cible de 25 h, cela fabriquait 25 h de déficit
+    // pour une semaine réellement travaillée. Les tâches des jours de juillet
+    // sont déjà chargées (la requête porte sur la semaine entière) : il
+    // suffisait de les regarder.
     const weekMap: Record<string, number> = {};
-    rows.forEach(r => { weekMap[r.isoWeek] = (weekMap[r.isoWeek] || 0) + r.duree; });
+    weeksOfMonth.forEach(w => {
+      weekMap[w] = joursDeLaSemaine(w).reduce((sum, d) => sum + journeeDe(salTaches, d).duree, 0);
+    });
 
     const debutAujourdhui = new Date(); debutAujourdhui.setHours(0, 0, 0, 0);
-    // Salarié en horaires lissés, sur un mois de la période : plus aucune
-    // semaine ne produit d'heure sup ni de déficit prise isolément.
+    // Salarié en horaires lissés, sur un mois de la période : c'est ce qui
+    // décide d'afficher l'encadré de période. La neutralisation, elle, se juge
+    // semaine par semaine — une semaine de juillet dont le lundi est en juin
+    // appartient au décompte de juin, pas à la période.
     const lisse = !!sal.lissageEte && MOIS_LISSES.includes(mois);
     const weekSummaries: WeekSummary[] = weeksOfMonth.map(w => {
       const travaille = weekMap[w] || 0;
@@ -354,14 +389,29 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const clos = !!bilan?.clos;
       // Semaine entièrement future (son lundi est après aujourd'hui) : pas encore
       // travaillée, on ne la compte pas en déficit ni au compteur.
-      const aVenir = getLundideSemaine(w).getTime() > debutAujourdhui.getTime();
-      const contribution = aVenir || lisse ? 0 : (mode === "recup" ? surplus : 0) - deficit;
-      const supPayee = aVenir || lisse ? 0 : (mode === "paye" ? surplus : 0);
+      const lundiW = getLundideSemaine(w);
+      const dimancheW = new Date(lundiW); dimancheW.setDate(lundiW.getDate() + 6);
+      const etat = etatSemaine(lundiW, debutAujourdhui);
+      const aVenir = etat === "a_venir";
+      // Semaine commencée mais pas finie : les jours restants ne sont pas un
+      // déficit. Sans ce garde-fou, le mercredi d'une semaine à 25 h affichait
+      // « −10h30 de déficit » et proposait de le figer au compteur — alors
+      // qu'il restait quatre jours pour les faire.
+      const enCours = etat === "en_cours";
+      const lissee = !!sal.lissageEte && dansPeriodeLissee(w);
+      const neutralisee = aVenir || enCours || lissee;
+      const deficitRetenu = neutralisee ? 0 : deficit;
+      const surplusRetenu = lissee ? 0 : surplus; // un surplus déjà fait est acquis
+      const contribution = aVenir || lissee ? 0 : (mode === "recup" ? surplusRetenu : 0) - deficitRetenu;
+      const supPayee = aVenir || lissee ? 0 : (mode === "paye" ? surplusRetenu : 0);
+      // Semaine qui déborde du mois affiché : ses heures viennent en partie
+      // d'un autre mois, on le signale plutôt que de laisser croire à un écart.
+      const aCheval = lundiW.getMonth() !== mois || dimancheW.getMonth() !== mois;
       return {
         isoWeek: w, travaille, absMin, cible,
-        surplus: lisse ? 0 : surplus,
-        deficit: lisse ? 0 : deficit,
-        mode, clos, contribution, supPayee, aVenir, lissee: lisse,
+        surplus: surplusRetenu,
+        deficit: deficitRetenu,
+        mode, clos, contribution, supPayee, aVenir, enCours, aCheval, lissee,
       };
     });
 
@@ -371,9 +421,12 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     // données sont chargés. Le demander en juillet donnerait un total amputé
     // d'août — juste, mais faux, et il finirait par s'afficher quelque part.
     const lissage = lisse && mois === MOIS_DECOMPTE_LISSAGE ? bilanLissage(sal) : null;
-    const totalSupPayee = lisse
-      ? (mois === MOIS_DECOMPTE_LISSAGE ? (lissage?.surplus ?? 0) : 0)
-      : weekSummaries.reduce((s, w) => s + w.supPayee, 0);
+    // Les semaines lissées ne rapportent rien à la semaine (supPayee = 0) :
+    // leur solde arrive en un bloc, en août. Les semaines du mois qui ne sont
+    // PAS dans la période — celle à cheval sur juin, par exemple — gardent
+    // leur décompte hebdomadaire habituel et s'y ajoutent.
+    const totalSupPayee = weekSummaries.reduce((s, w) => s + w.supPayee, 0)
+      + (mois === MOIS_DECOMPTE_LISSAGE ? (lissage?.surplus ?? 0) : 0);
     // Compteur : valeur stockée (déjà augmentée des semaines closes) + prévision des
     // semaines non closes et non futures.
     const compteurStocke = sal.compteurMinutes ?? 0;
@@ -821,10 +874,16 @@ function PanneauRH({
             <div key={w.isoWeek} className="flex flex-wrap items-center gap-2 text-xs font-body">
               <span className="font-semibold text-slate-700 w-16 shrink-0">Sem. {w.isoWeek.split("-W")[1]}</span>
               <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}{w.absMin > 0 ? <span className="text-sky-600"> · {fmtDuree(w.absMin)} congé</span> : null}</span>
+              {w.aCheval && <span className="text-slate-400 italic">semaine à cheval</span>}
               {w.lissee ? (
                 <span className="text-amber-700 italic">lissée — comptée sur juillet–août</span>
               ) : w.aVenir ? (
                 <span className="text-slate-400 italic">à venir</span>
+              ) : w.enCours ? (
+                <>
+                  <span className="text-blue-600 italic">en cours</span>
+                  {w.surplus > 0 && <span className="text-red-600 font-semibold">+{fmtDuree(w.surplus)} déjà au-delà du contrat</span>}
+                </>
               ) : w.surplus === 0 && w.deficit === 0 ? (
                 <span className="text-emerald-600">à l'équilibre</span>
               ) : (
@@ -847,7 +906,7 @@ function PanneauRH({
                   <button onClick={() => onDecloturer(sal, w.isoWeek)}
                     className="px-2 py-1 rounded bg-gray-100 text-slate-600 font-semibold hover:bg-gray-200">Rouvrir</button>
                 </span>
-              ) : w.lissee ? null : !w.aVenir ? (
+              ) : w.lissee || w.enCours ? null : !w.aVenir ? (
                 <button onClick={() => onAppliquerSemaine(sal, w.isoWeek, w.contribution)}
                   className="ml-auto px-2 py-1 rounded bg-blue-600 text-white font-semibold">
                   Clôturer ({fmtSigne(w.contribution)})

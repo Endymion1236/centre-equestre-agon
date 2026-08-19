@@ -56,3 +56,35 @@ export function soldeLissage(e: EntreeLissage): SoldeLissage {
     deficit: Math.max(0, Math.max(0, contratPeriode - absMin) - travaille),
   };
 }
+
+/**
+ * État d'une semaine vis-à-vis du décompte.
+ *
+ * Une semaine COMMENCÉE n'est pas une semaine finie : les jours restants ne
+ * sont pas un déficit. Un mercredi affichait « −10h30 de déficit » sur une
+ * semaine à 25 h et proposait de le figer au compteur, alors qu'il restait
+ * quatre jours pour les faire.
+ */
+export type EtatSemaine = "a_venir" | "en_cours" | "terminee";
+
+export function etatSemaine(lundi: Date, aujourdhui: Date): EtatSemaine {
+  const jour = new Date(aujourdhui); jour.setHours(0, 0, 0, 0);
+  const debut = new Date(lundi); debut.setHours(0, 0, 0, 0);
+  if (debut.getTime() > jour.getTime()) return "a_venir";
+  const dimanche = new Date(debut); dimanche.setDate(debut.getDate() + 6);
+  return dimanche.getTime() >= jour.getTime() ? "en_cours" : "terminee";
+}
+
+/**
+ * Une semaine appartient à la période lissée si son LUNDI tombe en juillet ou
+ * en août. Le critère porte sur la semaine entière, jamais sur le mois
+ * affiché : la semaine du 31 août au 6 septembre est comptée en entier, celle
+ * du 29 juin au 5 juillet reste dans le décompte de juin.
+ *
+ * C'est le même piège qui, dans la vue mensuelle, faisait apparaître 25 h de
+ * déficit sur une semaine à cheval : on comparait le travail de deux jours
+ * regardés au contrat de sept.
+ */
+export function lundiDansPeriodeLissee(lundi: Date, annee: number): boolean {
+  return lundi.getFullYear() === annee && MOIS_LISSES.includes(lundi.getMonth());
+}

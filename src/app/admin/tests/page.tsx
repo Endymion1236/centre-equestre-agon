@@ -1046,6 +1046,20 @@ const TESTS: TestCase[] = [
     priorite: "critique", correctif: "2026-08-19",
   },
   {
+    id: "MG-07", module: "Management", sous_module: "Horaires",
+    description: "Semaine à cheval sur deux mois",
+    etapes: "Équipe → Horaires → ouvrir un mois dont la première semaine commence le mois précédent (ex. août 2026, semaine 31 du 27 juillet au 2 août)",
+    resultat_attendu: "La semaine affiche les heures des SEPT jours, pas seulement des jours du mois affiché. Mention « semaine à cheval ». Aucun déficit fantôme du montant du contrat",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
+    id: "MG-08", module: "Management", sous_module: "Horaires",
+    description: "Semaine en cours : pas de déficit avant la fin",
+    etapes: "Équipe → Horaires → regarder la semaine du jour, en milieu de semaine",
+    resultat_attendu: "Mention « en cours », aucun déficit, aucun bouton Clôturer. Un dépassement déjà réalisé reste affiché. Le bouton revient le lundi suivant",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

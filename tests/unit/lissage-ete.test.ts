@@ -12,7 +12,9 @@
  * lissage corrige, et c'est lui qui doit rester vert.
  */
 
-import { soldeLissage, MOIS_LISSES, MOIS_DECOMPTE_LISSAGE } from "../../src/lib/lissage-ete";
+import {
+  soldeLissage, etatSemaine, lundiDansPeriodeLissee, MOIS_LISSES, MOIS_DECOMPTE_LISSAGE,
+} from "../../src/lib/lissage-ete";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -102,6 +104,51 @@ console.log("\n✓ Les mois concernés :");
   assert("le solde tombe en août", MOIS_DECOMPTE_LISSAGE === 7);
   assert("juin n'est pas lissé", !MOIS_LISSES.includes(5));
   assert("septembre non plus", !MOIS_LISSES.includes(8));
+}
+
+// ─── Le cas Alice, 19 août 2026 ───────────────────────────────────────
+// Compteur affiché : −35h30 pour une salariée à l'équilibre. Deux semaines
+// mal jugées suffisaient. Ce sont ces deux règles-là qui suivent.
+
+console.log("\n✓ Une semaine commencée n'est pas une semaine finie :");
+{
+  const mercredi19 = new Date(2026, 7, 19);   // on est mercredi
+  const lundi17 = new Date(2026, 7, 17);      // semaine 34 : 17 → 23 août
+  assert("la semaine en cours n'est pas terminée", etatSemaine(lundi17, mercredi19) === "en_cours");
+  // C'est elle qui affichait « −10h30 de déficit » avec un bouton pour le figer.
+
+  const lundi10 = new Date(2026, 7, 10);      // semaine 33 : 10 → 16 août
+  assert("la semaine précédente est terminée", etatSemaine(lundi10, mercredi19) === "terminee");
+
+  const lundi24 = new Date(2026, 7, 24);      // semaine 35
+  assert("la suivante est à venir", etatSemaine(lundi24, mercredi19) === "a_venir");
+
+  const dimanche23 = new Date(2026, 7, 23);
+  assert("le dimanche même, la semaine court encore", etatSemaine(lundi17, dimanche23) === "en_cours");
+  const lundi24Suivant = new Date(2026, 7, 24);
+  assert("elle n'est close que le lundi suivant", etatSemaine(lundi17, lundi24Suivant) === "terminee");
+  assert("le lundi de sa propre semaine, elle est en cours", etatSemaine(lundi17, lundi17) === "en_cours");
+}
+
+console.log("\n✓ Une semaine à cheval appartient à un seul décompte :");
+{
+  // Semaine 31 : lundi 27 juillet → dimanche 2 août. Vue depuis août, elle
+  // n'affichait que deux jours travaillés face à un contrat de sept.
+  const lundi27juillet = new Date(2026, 6, 27);
+  assert("son lundi est en juillet : elle est dans la période", lundiDansPeriodeLissee(lundi27juillet, 2026));
+
+  // Semaine du 29 juin au 5 juillet : elle reste au décompte de juin.
+  const lundi29juin = new Date(2026, 5, 29);
+  assert("un lundi de juin reste hors période", !lundiDansPeriodeLissee(lundi29juin, 2026));
+
+  // Semaine du 31 août au 6 septembre : elle est comptée en entier dans la période.
+  const lundi31aout = new Date(2026, 7, 31);
+  assert("un lundi du 31 août est dans la période", lundiDansPeriodeLissee(lundi31aout, 2026));
+
+  const lundi7septembre = new Date(2026, 8, 7);
+  assert("septembre est hors période", !lundiDansPeriodeLissee(lundi7septembre, 2026));
+
+  assert("l'année compte aussi", !lundiDansPeriodeLissee(new Date(2025, 6, 28), 2026));
 }
 
 console.log("\n══════════════════════════════════════════════════════════════");
