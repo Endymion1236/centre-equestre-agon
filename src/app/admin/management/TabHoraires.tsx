@@ -73,9 +73,17 @@ function paquetsDe10<T>(arr: T[]): T[][] {
 
 /** Bilan de la période lissée, tel qu'affiché en août. */
 type BilanLissage = SoldeLissage & {
-  semaines: number;  // semaines écoulées comptées sur juillet + août
-  travaille: number; // minutes réellement travaillées
-  absMin: number;    // absences payées de la période (pour information)
+  semaines: number;         // semaines dues, comptées au contrat de la période
+  travaille: number;        // minutes réellement travaillées
+  absMin: number;           // absences payées de la période (pour information)
+  /**
+   * Semaines comptées au contrat alors qu'elles ne contiennent NI heure NI
+   * congé. Chacune ajoute un contrat hebdomadaire au dénominateur et efface
+   * d'autant les heures sup des autres semaines. C'est le piège d'Eva :
+   * présente une seule semaine en août, 28 h faites pour 25 h de contrat, et
+   * aucune heure sup — parce que sept semaines vides pesaient sur la période.
+   */
+  semainesVides: string[];
 };
 
 type WeekSummary = {
@@ -330,6 +338,15 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       .filter(a => a.salarieId === sal.id && a.type !== "sans_solde" && semainesDues.includes(a.semaine))
       .reduce((sum, a) => sum + (a.dureeMinutes || 0), 0);
 
+    // Semaines dues sans la moindre heure ni le moindre congé : soit le salarié
+    // n'était pas en poste, soit le planning n'a jamais été saisi. Dans les deux
+    // cas elles alourdissent le contrat de la période sans rien y apporter.
+    const semainesVides = semainesDues.filter(w => {
+      const heures = joursDeLaSemaine(w).reduce((s2, d) => s2 + journeeDe(salTaches, d).duree, 0);
+      if (heures > 0) return false;
+      return !allAbsences.some(a => a.salarieId === sal.id && a.semaine === w);
+    });
+
     const solde = soldeLissage({
       contratMin: contrat,
       semaines: semainesDues.length,
@@ -337,7 +354,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       absMin,
     });
 
-    return { semaines: semainesDues.length, travaille, absMin, ...solde };
+    return { semaines: semainesDues.length, travaille, absMin, semainesVides, ...solde };
   };
 
   const buildSalData = (sal: Salarie) => {
@@ -900,6 +917,27 @@ function PanneauRH({
                 un contrat de <strong>{fmtDuree(lissage.contratPeriode)}</strong>
                 {lissage.absMin > 0 && <span className="text-sky-700"> · dont {fmtDuree(lissage.absMin)} de congés</span>}
               </div>
+              {lissage.semainesVides.length > 0 && (
+                <div className="rounded-md border border-amber-300 bg-white px-2.5 py-2 mt-1">
+                  <div className="font-body text-[11px] text-amber-900 leading-relaxed">
+                    <strong>{lissage.semainesVides.length} semaine(s) comptée(s) au contrat sans une seule heure
+                    ni congé</strong> ({lissage.semainesVides.map(w => "S" + w.split("-W")[1]).join(", ")}).
+                    Chacune ajoute {fmtDuree(contratMinDe(sal))} au contrat de la période et efface d&apos;autant
+                    les heures sup des autres semaines. Si le salarié n&apos;était pas en poste, sors-les du contrat.
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!confirm(
+                        `Marquer ${lissage.semainesVides.length} semaine(s) hors contrat pour ${sal.nom} ?\n\n` +
+                        `Elles ne compteront plus au contrat de la période. Les heures éventuellement saisies plus tard y resteront comptées.`
+                      )) return;
+                      lissage.semainesVides.forEach(w => onSetHorsContrat(sal.id, w, true));
+                    }}
+                    className="mt-2 px-2.5 py-1 rounded-md bg-amber-600 text-white font-body text-[11px] font-semibold border-none cursor-pointer hover:bg-amber-700">
+                    Marquer ces {lissage.semainesVides.length} semaine(s) hors contrat
+                  </button>
+                </div>
+              )}
               {lissage.surplus > 0 ? (
                 <div className="font-body text-xs font-bold text-red-600">
                   + {fmtDuree(lissage.surplus)} d&apos;heures sup. payées sur la période

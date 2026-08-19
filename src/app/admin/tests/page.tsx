@@ -1088,6 +1088,13 @@ const TESTS: TestCase[] = [
     priorite: "haute", correctif: "2026-08-19",
   },
   {
+    id: "MG-13", module: "Management", sous_module: "Horaires",
+    description: "Saisonnier présent une seule semaine, en horaires lissés",
+    etapes: "Salarié lissé, contrat 25 h, une seule semaine travaillée en août à 28 h → ouvrir août",
+    resultat_attendu: "L'encadré de période signale les semaines comptées au contrat sans aucune heure ni congé, les nomme, et propose de les marquer hors contrat en un clic. Une fois fait : contrat 25 h, 28 h travaillées, 3 h d'heures sup",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",
