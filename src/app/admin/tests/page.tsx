@@ -1018,6 +1018,20 @@ const TESTS: TestCase[] = [
   // et corrigé depuis. Les rejouer une fois avant l'ouverture : un correctif
   // non revérifié sur la vraie base n'est qu'une intention.
   {
+    id: "MG-03", module: "Management", sous_module: "Planning",
+    description: "Répercuter la modification d'une tâche sur la semaine",
+    etapes: "Équipe → Planning → poser la même tâche sur plusieurs jours à la même heure pour une personne → ouvrir un jour → changer l'horaire → cocher « L'horaire et la durée, sur les N jour(s) » → Enregistrer",
+    resultat_attendu: "Tous les jours qui étaient à l'ancienne heure suivent. Un jour volontairement décalé garde le sien, et le message annonce le nombre exact de jours modifiés",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
+    id: "MG-04", module: "Management", sous_module: "Planning",
+    description: "Les deux répercussions ne se confondent pas",
+    etapes: "Même écran : ne cocher que « La note, sur les N autres jours » puis enregistrer",
+    resultat_attendu: "Seule la note se propage, les horaires des autres jours restent intacts. Un rappel signale que sans la seconde case, seul le jour ouvert change d'horaire",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

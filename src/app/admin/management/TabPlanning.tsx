@@ -113,6 +113,11 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // « Caramel boite jusqu'a vendredi » vaut pour chaque jour, alors qu'un
   // changement d'horaire ne concerne que la tache ouverte.
   const [editNoteSemaine, setEditNoteSemaine] = useState(false);
+  // Diffuser le nouvel HORAIRE sur les autres jours de la semaine. Une tâche
+  // posée tous les jours à la même heure se déplace en bloc : sans cette
+  // option, il fallait rouvrir chaque jour un par un — et la case « note »
+  // laissait croire que l'horaire suivait aussi.
+  const [editHoraireSemaine, setEditHoraireSemaine] = useState(false);
   // Une "tache a 2 personnes" = 2 documents distincts (un salarieId chacun).
   // Cette option repercute le changement d'horaire sur les jumelles.
   const [editAppliquerTous, setEditAppliquerTous] = useState(true);
@@ -304,6 +309,8 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     }
     setEditingTache(t);
     setEditNoteSemaine(false);
+    setEditHoraireSemaine(false);
+    setEditAppliquerTous(true);
     setEditForm({
       salarieId: t.salarieId || "",
       tacheTypeId: t.tacheTypeId,
@@ -364,6 +371,30 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           toast(`Modifications répercutées sur ${jumelles.length} autre(s) personne(s)`, "success");
         }
       }
+      // Horaire appliqué aux autres jours de la semaine, pour la même personne
+      // et la même tâche. On ne touche QUE les jours qui étaient à la même
+      // heure que celle d'origine : un jour volontairement décalé garde son
+      // horaire au lieu d'être aligné de force sur les autres.
+      if (editHoraireSemaine) {
+        const memeHeure = taches.filter((t: any) =>
+          t.id !== editingTache.id
+          && t.semaine === editingTache.semaine
+          && t.tacheTypeId === editingTache.tacheTypeId
+          && t.salarieId === nouveauSal
+          && t.heureDebut === editingTache.heureDebut
+        );
+        await Promise.all(memeHeure.map((t: any) =>
+          updateDoc(doc(db, "taches-planifiees", t.id), {
+            heureDebut: editForm.heureDebut,
+            dureeMinutes: editForm.dureeMinutes,
+            updatedAt: serverTimestamp(),
+          })
+        ));
+        if (memeHeure.length > 0) {
+          toast(`Horaire appliqué à ${memeHeure.length} autre(s) jour(s) de la semaine`, "success");
+        }
+      }
+
       // Note appliquée à toute la semaine : on ne touche QUE le champ notes,
       // jamais les horaires — chaque jour peut avoir les siens.
       if (editNoteSemaine) {
@@ -386,6 +417,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
 
       setEditingTache(null);
       setEditNoteSemaine(false);
+      setEditHoraireSemaine(false);
       onRefresh();
       toast(`"${tt.label}" mise à jour`, "success");
     } catch (e: any) {
@@ -2514,21 +2546,75 @@ Réponds de façon concise et pratique, en français.`,
 
             {(() => {
               // Mêmes tâches, même personne, ailleurs dans la semaine.
-              const nbJours = taches.filter((t: any) =>
+              const memeSalarie = (editForm.salarieId || editingTache.salarieId);
+              const autresJours = taches.filter((t: any) =>
                 t.id !== editingTache.id
                 && t.semaine === editingTache.semaine
                 && t.tacheTypeId === editingTache.tacheTypeId
-                && t.salarieId === (editForm.salarieId || editingTache.salarieId)
-              ).length;
-              if (nbJours === 0) return null;
+                && t.salarieId === memeSalarie
+              );
+              if (autresJours.length === 0) return null;
+              // L'horaire ne se diffuse qu'aux jours qui partagent l'heure de
+              // départ : un jour volontairement décalé n'est pas réaligné.
+              const memeHeure = autresJours.filter((t: any) => t.heureDebut === editingTache.heureDebut);
+              const horaireChange = editForm.heureDebut !== editingTache.heureDebut
+                || editForm.dureeMinutes !== editingTache.dureeMinutes;
               return (
-                <label style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:16, padding:"8px 10px", background:"#fefce8", border:"1px solid #fde68a", borderRadius:8, cursor:"pointer"}}>
-                  <input type="checkbox" checked={editNoteSemaine}
-                    onChange={e => setEditNoteSemaine(e.target.checked)}
+                <div style={{marginBottom:16, padding:"8px 10px", background:"#fefce8", border:"1px solid #fde68a", borderRadius:8}}>
+                  <div style={{fontFamily:"sans-serif", fontSize:10, fontWeight:700, color:"#92400e", textTransform:"uppercase", letterSpacing:0.4, marginBottom:6}}>
+                    Répercuter sur la semaine
+                  </div>
+                  <label style={{display:"flex", alignItems:"flex-start", gap:8, cursor:"pointer"}}>
+                    <input type="checkbox" checked={editNoteSemaine}
+                      onChange={e => setEditNoteSemaine(e.target.checked)}
+                      style={{marginTop:2, cursor:"pointer"}} />
+                    <span style={{fontFamily:"sans-serif", fontSize:11, color:"#92400e", lineHeight:1.5}}>
+                      La <strong>note</strong>, sur les <strong>{autresJours.length} autre(s) jour(s)</strong> de la semaine.
+                    </span>
+                  </label>
+                  {memeHeure.length > 0 && (
+                    <label style={{display:"flex", alignItems:"flex-start", gap:8, cursor:"pointer", marginTop:6}}>
+                      <input type="checkbox" checked={editHoraireSemaine}
+                        onChange={e => setEditHoraireSemaine(e.target.checked)}
+                        style={{marginTop:2, cursor:"pointer"}} />
+                      <span style={{fontFamily:"sans-serif", fontSize:11, color:"#92400e", lineHeight:1.5}}>
+                        L&apos;<strong>horaire et la durée</strong>, sur les <strong>{memeHeure.length} jour(s)</strong> qui
+                        étaient aussi à {editingTache.heureDebut}.
+                        {memeHeure.length < autresJours.length && (
+                          <> Les {autresJours.length - memeHeure.length} jour(s) à un autre horaire ne bougent pas.</>
+                        )}
+                      </span>
+                    </label>
+                  )}
+                  {horaireChange && memeHeure.length > 0 && !editHoraireSemaine && (
+                    <div style={{fontFamily:"sans-serif", fontSize:10, color:"#b45309", marginTop:6, lineHeight:1.5}}>
+                      Sans cette seconde case, seul le jour ouvert change d&apos;horaire.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {(() => {
+              // Personnes sur la MÊME tâche, même jour, même horaire. Le filtre
+              // reprend celui de l'enregistrement — sinon le nombre annoncé
+              // n'était pas celui des tâches réellement modifiées.
+              const nbJumelles = taches.filter((t: any) =>
+                t.id !== editingTache.id
+                && t.jour === editingTache.jour
+                && t.semaine === editingTache.semaine
+                && t.tacheTypeId === editingTache.tacheTypeId
+                && t.heureDebut === editingTache.heureDebut
+                && t.salarieId !== (editForm.salarieId || editingTache.salarieId)
+              ).length;
+              if (nbJumelles === 0) return null;
+              return (
+                <label style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:12, padding:"8px 10px", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:8, cursor:"pointer"}}>
+                  <input type="checkbox" checked={editAppliquerTous}
+                    onChange={e => setEditAppliquerTous(e.target.checked)}
                     style={{marginTop:2, cursor:"pointer"}} />
-                  <span style={{fontFamily:"sans-serif", fontSize:11, color:"#92400e", lineHeight:1.5}}>
-                    Appliquer cette note aux <strong>{nbJours} autre(s) jour(s)</strong> de la semaine
-                    sur cette tâche. Les horaires de chaque jour ne sont pas modifiés.
+                  <span style={{fontFamily:"sans-serif", fontSize:11, color:"#1e40af", lineHeight:1.5}}>
+                    Appliquer le nouvel horaire aux <strong>{nbJumelles} autre(s) personne(s)</strong> sur cette même tâche, ce jour-là.
                   </span>
                 </label>
               );
@@ -2536,27 +2622,6 @@ Réponds de façon concise et pratique, en français.`,
 
             {/* Boutons */}
             <div style={{display:"flex", gap:8}}>
-              {(() => {
-                // Nombre de personnes sur la MÊME tâche, même jour, même horaire.
-                const nbJumelles = taches.filter((t: any) =>
-                  t.id !== editingTache.id
-                  && t.jour === editingTache.jour
-                  && t.semaine === editingTache.semaine
-                  && t.tacheTypeId === editingTache.tacheTypeId
-                  && t.heureDebut === editingTache.heureDebut
-                ).length;
-                if (nbJumelles === 0) return null;
-                return (
-                  <label style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:12, padding:"8px 10px", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:8, cursor:"pointer"}}>
-                    <input type="checkbox" checked={editAppliquerTous}
-                      onChange={e => setEditAppliquerTous(e.target.checked)}
-                      style={{marginTop:2, cursor:"pointer"}} />
-                    <span style={{fontFamily:"sans-serif", fontSize:11, color:"#1e40af", lineHeight:1.5}}>
-                      Appliquer le nouvel horaire aux <strong>{nbJumelles} autre(s) personne(s)</strong> sur cette même tâche.
-                    </span>
-                  </label>
-                );
-              })()}
               <button onClick={saveEditTache} disabled={saving || !editForm.tacheTypeId}
                 style={{flex:1, padding:"10px 16px", background:"#3b82f6", color:"white", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:600, cursor:"pointer", opacity: (saving || !editForm.tacheTypeId) ? 0.5 : 1}}>
                 {saving ? "Enregistrement…" : "Enregistrer"}
