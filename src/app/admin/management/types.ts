@@ -46,6 +46,13 @@ export interface Salarie {
   joursTravailles?: number;
   /** Compteur d'heures cumulé (banque d'heures), en MINUTES. + = à récupérer, − = doit des heures. */
   compteurMinutes?: number;
+  /**
+   * Horaires lissés sur juillet + août : sur ces deux mois, aucune semaine ne
+   * produit d'heures sup ni de déficit prise isolément. Le décompte se fait une
+   * seule fois, fin août, sur le total des deux mois. Un creux de juillet est
+   * donc absorbé par une pointe d'août, et inversement.
+   */
+  lissageEte?: boolean;
   createdAt?: any;
 }
 

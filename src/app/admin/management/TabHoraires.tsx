@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import { ChevronLeft, ChevronRight, Printer, Plus, Trash2, Calendar, Wallet } from "lucide-react";
 import type { TachePlanifiee, Salarie, JourSemaine, Absence, BilanHebdo, TypeAbsence } from "./types";
 import { JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, fmtDuree, LIBELLE_ABSENCE } from "./types";
+import { MOIS_LISSES, MOIS_DECOMPTE_LISSAGE, soldeLissage, type SoldeLissage } from "@/lib/lissage-ete";
 
 interface Props {
   semaine: string;
@@ -63,6 +64,20 @@ type RowData = {
   absenceLabel?: string; // ex. "Congé payé" si une absence couvre ce jour
   absenceMin?: number;   // durée de l'absence (minutes)
 };
+/** Découpe pour les requêtes Firestore `in`, limitées à 10 valeurs. */
+function paquetsDe10<T>(arr: T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += 10) out.push(arr.slice(i, i + 10));
+  return out;
+}
+
+/** Bilan de la période lissée, tel qu'affiché en août. */
+type BilanLissage = SoldeLissage & {
+  semaines: number;  // semaines écoulées comptées sur juillet + août
+  travaille: number; // minutes réellement travaillées
+  absMin: number;    // absences payées de la période (pour information)
+};
+
 type WeekSummary = {
   isoWeek: string;
   travaille: number;   // minutes réellement travaillées
@@ -75,6 +90,7 @@ type WeekSummary = {
   contribution: number; // ce qui irait au compteur : (recup? surplus:0) − deficit
   supPayee: number;     // heures sup payées de la semaine
   aVenir: boolean;      // semaine entièrement future (non comptée au compteur)
+  lissee: boolean;      // semaine neutralisée par le lissage d'été
 };
 
 export default function TabHoraires({ semaine, setSemaine, taches, salaries }: Props) {
@@ -93,25 +109,45 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 
   const activeSals = salaries.filter(s => s.actif);
   const weeksOfMonth = useMemo(() => getWeeksOfMonth(annee, mois), [annee, mois]);
+  // Les semaines de la période lissée (juillet + août). En août, le solde se
+  // calcule sur les deux mois : il faut donc charger juillet en plus.
+  const weeksPeriodeLissee = useMemo(
+    () => (MOIS_LISSES.includes(mois)
+      ? [...getWeeksOfMonth(annee, 6), ...getWeeksOfMonth(annee, 7)]
+      : []),
+    [annee, mois],
+  );
+  const weeksAcharger = useMemo(() => {
+    const vues = mois === MOIS_DECOMPTE_LISSAGE ? [...weeksPeriodeLissee, ...weeksOfMonth] : weeksOfMonth;
+    return Array.from(new Set(vues));
+  }, [mois, weeksPeriodeLissee, weeksOfMonth]);
   const moisLabel = new Date(annee, mois, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [snaps, absSnap, bilSnap] = await Promise.all([
-        Promise.all(weeksOfMonth.map(w => getDocs(query(collection(db, "taches-planifiees"), where("semaine", "==", w))))),
-        getDocs(query(collection(db, "absences-management"), where("semaine", "in", weeksOfMonth.slice(0, 10)))),
-        getDocs(query(collection(db, "bilans-heures"), where("semaine", "in", weeksOfMonth.slice(0, 10)))),
+      // `in` est plafonné à 10 valeurs : la période lissée en dépasse, d'où le
+      // découpage. Sans lui, les dernières semaines seraient silencieusement
+      // absentes — et un congé d'août aurait disparu du calcul.
+      const paquets = paquetsDe10(weeksAcharger);
+      const [snaps, absSnaps, bilSnaps] = await Promise.all([
+        Promise.all(weeksAcharger.map(w => getDocs(query(collection(db, "taches-planifiees"), where("semaine", "==", w))))),
+        Promise.all(paquets.map(p => getDocs(query(collection(db, "absences-management"), where("semaine", "in", p))))),
+        Promise.all(paquets.map(p => getDocs(query(collection(db, "bilans-heures"), where("semaine", "in", p))))),
       ]);
       const all: TachePlanifiee[] = [];
       snaps.forEach(snap => snap.docs.forEach(d => all.push({ id: d.id, ...d.data() } as TachePlanifiee)));
       setAllTaches(all);
-      setAllAbsences(absSnap.docs.map(d => ({ id: d.id, ...d.data() } as Absence)));
-      setAllBilans(bilSnap.docs.map(d => ({ id: d.id, ...d.data() } as BilanHebdo)));
+      const abs: Absence[] = [];
+      absSnaps.forEach(snap => snap.docs.forEach(d => abs.push({ id: d.id, ...d.data() } as Absence)));
+      setAllAbsences(abs);
+      const bil: BilanHebdo[] = [];
+      bilSnaps.forEach(snap => snap.docs.forEach(d => bil.push({ id: d.id, ...d.data() } as BilanHebdo)));
+      setAllBilans(bil);
       setLoading(false);
     };
     load();
-  }, [weeksOfMonth]);
+  }, [weeksAcharger]);
 
   const prevMonth = () => { if (mois === 0) { setMois(11); setAnnee(a => a - 1); } else setMois(m => m - 1); };
   const nextMonth = () => { if (mois === 11) { setMois(0); setAnnee(a => a + 1); } else setMois(m => m + 1); };
@@ -179,6 +215,79 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     await majSalarie(sal.id, { compteurMinutes: courant + deltaMin });
   };
 
+  /**
+   * La journée d'un salarié : amplitude travaillée, pauses internes déduites.
+   *
+   * Source unique du tableau mensuel ET du total de la période lissée. Celle-ci
+   * déborde du mois affiché : deux calculs séparés auraient fini par diverger,
+   * et le total imprimé n'aurait plus expliqué les heures sup annoncées.
+   */
+  const journeeDe = (salTaches: TachePlanifiee[], date: Date) => {
+    const dow = (date.getDay() + 6) % 7;
+    const jour = JOURS[dow] as JourSemaine;
+    const isoWeek = getISOWeek(date);
+    const dayTaches = salTaches.filter(t => t.semaine === isoWeek && t.jour === jour)
+      .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
+    const pauses = dayTaches.filter(t => t.categorie === "pause");
+    const travail = dayTaches.filter(t => t.categorie !== "pause");
+    if (travail.length === 0) {
+      return { jour, isoWeek, dow, travaille: false as const, debutMinJour: 0, finMinJour: 0, pausesInternes: [] as TachePlanifiee[], pauseMin: 0, duree: 0 };
+    }
+    const debutMinJour = Math.min(...travail.map(t => heureToMin(t.heureDebut)));
+    const finMinJour = Math.max(...travail.map(t => heureToMin(t.heureDebut) + t.dureeMinutes));
+    // Seules les pauses situées DANS l'amplitude travaillée comptent : une pause
+    // avant le 1er créneau ou après le dernier ne réduit pas le travail.
+    const pausesInternes = pauses.filter(pz => {
+      const ps = heureToMin(pz.heureDebut); const pe = ps + pz.dureeMinutes;
+      return Math.min(pe, finMinJour) - Math.max(ps, debutMinJour) > 0;
+    });
+    const pauseMin = pausesInternes.reduce((sum, pz) => {
+      const ps = heureToMin(pz.heureDebut); const pe = ps + pz.dureeMinutes;
+      return sum + Math.max(0, Math.min(pe, finMinJour) - Math.max(ps, debutMinJour));
+    }, 0);
+    return {
+      jour, isoWeek, dow, travaille: true as const,
+      debutMinJour, finMinJour, pausesInternes, pauseMin,
+      duree: Math.max(0, (finMinJour - debutMinJour) - pauseMin),
+    };
+  };
+
+  /**
+   * Solde de la période lissée (juillet + août), calculé sur les deux mois
+   * entiers — pas seulement sur le mois affiché. Les semaines à venir sont
+   * exclues : on ne compte pas des heures qui n'ont pas été faites.
+   */
+  const bilanLissage = (sal: Salarie): BilanLissage => {
+    const contrat = contratMinDe(sal);
+    const salTaches = allTaches.filter(t => t.salarieId === sal.id);
+    const debutAujourdhui = new Date(); debutAujourdhui.setHours(0, 0, 0, 0);
+
+    const semainesComptees = weeksPeriodeLissee
+      .filter(w => getLundideSemaine(w).getTime() <= debutAujourdhui.getTime());
+
+    let travaille = 0;
+    for (const m of MOIS_LISSES) {
+      const d = new Date(annee, m, 1);
+      while (d.getMonth() === m) {
+        if (semainesComptees.includes(getISOWeek(d))) travaille += journeeDe(salTaches, d).duree;
+        d.setDate(d.getDate() + 1);
+      }
+    }
+
+    const absMin = allAbsences
+      .filter(a => a.salarieId === sal.id && a.type !== "sans_solde" && semainesComptees.includes(a.semaine))
+      .reduce((sum, a) => sum + (a.dureeMinutes || 0), 0);
+
+    const solde = soldeLissage({
+      contratMin: contrat,
+      semaines: semainesComptees.length,
+      travailleMin: travaille,
+      absMin,
+    });
+
+    return { semaines: semainesComptees.length, travaille, absMin, ...solde };
+  };
+
   const buildSalData = (sal: Salarie) => {
     const salId = sal.id;
     const contrat = contratMinDe(sal);
@@ -187,74 +296,37 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 
     const rows: RowData[] = [];
     joursduMois.forEach(date => {
-      const dow = (date.getDay() + 6) % 7;
-      if (dow > 6) return; // skip invalid
-      const jour = JOURS[dow] as JourSemaine;
-      const isoWeek = getISOWeek(date);
-
-      // Toutes les tâches du jour, triées par heure de début
-      const dayTaches = salTaches.filter(t => t.semaine === isoWeek && t.jour === jour)
-        .sort((a, b) => a.heureDebut.localeCompare(b.heureDebut));
-
-      // Sépare pauses explicites (catégorie "pause") du travail
-      const pauses = dayTaches.filter(t => t.categorie === "pause");
-      const travail = dayTaches.filter(t => t.categorie !== "pause");
+      const j = journeeDe(salTaches, date);
+      if (j.dow > 6) return; // skip invalid
 
       // Absence éventuelle couvrant ce jour (congé payé, récup, maladie…)
       const abs = allAbsences.find(a => a.salarieId === salId && a.date === dateISO(date));
       const absX = abs ? { absenceLabel: LIBELLE_ABSENCE[abs.type], absenceMin: abs.dureeMinutes } : {};
+      const base = { date, jour: j.jour, isSamedi: j.dow === 5, isoWeek: j.isoWeek, ...absX };
 
-      if (travail.length === 0) {
-        rows.push({ date, jour, debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0, duree: 0, isSamedi: dow === 5, isoWeek, ...absX });
+      if (!j.travaille) {
+        rows.push({ ...base, debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0, duree: 0 });
         return;
       }
 
-      // Amplitude = première tâche de travail → fin de la dernière tâche de travail
-      const debutMinJour = Math.min(...travail.map(t => heureToMin(t.heureDebut)));
-      const finMinJour = Math.max(...travail.map(t => heureToMin(t.heureDebut) + t.dureeMinutes));
-      const debut = minToHeure(debutMinJour);
-      const fin = minToHeure(finMinJour);
-      const amplitudeMin = finMinJour - debutMinJour;
+      const debut = minToHeure(j.debutMinJour);
+      const fin = minToHeure(j.finMinJour);
+      totalMois += j.duree;
 
-      // Seules les pauses situées DANS l'amplitude travaillée comptent : une pause
-      // avant le 1er créneau ou après le dernier ne réduit pas le travail.
-      const pausesInternes = pauses.filter(p => {
-        const ps = heureToMin(p.heureDebut); const pe = ps + p.dureeMinutes;
-        return Math.min(pe, finMinJour) - Math.max(ps, debutMinJour) > 0;
-      });
-      const pauseMin = pausesInternes.reduce((s, p) => {
-        const ps = heureToMin(p.heureDebut); const pe = ps + p.dureeMinutes;
-        return s + Math.max(0, Math.min(pe, finMinJour) - Math.max(ps, debutMinJour));
-      }, 0);
-
-      // Durée travaillée = amplitude − pauses internes
-      // (les battements courts entre tâches de travail sont comptés en travail)
-      const duree = Math.max(0, amplitudeMin - pauseMin);
-      totalMois += duree;
-
-      if (pausesInternes.length > 0) {
+      if (j.pausesInternes.length > 0) {
         // On coupe l'affichage matin/aprem autour de la PREMIÈRE pause interne
-        const premierePause = pausesInternes[0];
-        const finMatin = premierePause.heureDebut;
-        const debutAprem = minToHeure(heureToMin(premierePause.heureDebut) + premierePause.dureeMinutes);
+        const premierePause = j.pausesInternes[0];
         rows.push({
-          date, jour, isSamedi: dow === 5, isoWeek,
-          debut, fin: finMatin,
-          debutAprem, finAprem: fin,
-          pauseMin,
-          duree,
-          ...absX,
+          ...base,
+          debut, fin: premierePause.heureDebut,
+          debutAprem: minToHeure(heureToMin(premierePause.heureDebut) + premierePause.dureeMinutes),
+          finAprem: fin,
+          pauseMin: j.pauseMin,
+          duree: j.duree,
         });
       } else {
         // Aucune pause explicite : journée continue
-        rows.push({
-          date, jour, isSamedi: dow === 5, isoWeek,
-          debut, fin,
-          debutAprem: "", finAprem: "",
-          pauseMin: 0,
-          duree,
-          ...absX,
-        });
+        rows.push({ ...base, debut, fin, debutAprem: "", finAprem: "", pauseMin: 0, duree: j.duree });
       }
     });
 
@@ -263,6 +335,9 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     rows.forEach(r => { weekMap[r.isoWeek] = (weekMap[r.isoWeek] || 0) + r.duree; });
 
     const debutAujourdhui = new Date(); debutAujourdhui.setHours(0, 0, 0, 0);
+    // Salarié en horaires lissés, sur un mois de la période : plus aucune
+    // semaine ne produit d'heure sup ni de déficit prise isolément.
+    const lisse = !!sal.lissageEte && MOIS_LISSES.includes(mois);
     const weekSummaries: WeekSummary[] = weeksOfMonth.map(w => {
       const travaille = weekMap[w] || 0;
       const absMin = allAbsences
@@ -280,19 +355,32 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       // Semaine entièrement future (son lundi est après aujourd'hui) : pas encore
       // travaillée, on ne la compte pas en déficit ni au compteur.
       const aVenir = getLundideSemaine(w).getTime() > debutAujourdhui.getTime();
-      const contribution = aVenir ? 0 : (mode === "recup" ? surplus : 0) - deficit;
-      const supPayee = aVenir ? 0 : (mode === "paye" ? surplus : 0);
-      return { isoWeek: w, travaille, absMin, cible, surplus, deficit, mode, clos, contribution, supPayee, aVenir };
+      const contribution = aVenir || lisse ? 0 : (mode === "recup" ? surplus : 0) - deficit;
+      const supPayee = aVenir || lisse ? 0 : (mode === "paye" ? surplus : 0);
+      return {
+        isoWeek: w, travaille, absMin, cible,
+        surplus: lisse ? 0 : surplus,
+        deficit: lisse ? 0 : deficit,
+        mode, clos, contribution, supPayee, aVenir, lissee: lisse,
+      };
     });
 
-    const totalSupPayee = weekSummaries.reduce((s, w) => s + w.supPayee, 0);
+    // En période lissée, le solde ne tombe qu'en août — et il remplace la somme
+    // des semaines, il ne s'y ajoute pas.
+    // Calculé en août seulement : c'est le seul mois où les deux mois de
+    // données sont chargés. Le demander en juillet donnerait un total amputé
+    // d'août — juste, mais faux, et il finirait par s'afficher quelque part.
+    const lissage = lisse && mois === MOIS_DECOMPTE_LISSAGE ? bilanLissage(sal) : null;
+    const totalSupPayee = lisse
+      ? (mois === MOIS_DECOMPTE_LISSAGE ? (lissage?.surplus ?? 0) : 0)
+      : weekSummaries.reduce((s, w) => s + w.supPayee, 0);
     // Compteur : valeur stockée (déjà augmentée des semaines closes) + prévision des
     // semaines non closes et non futures.
     const compteurStocke = sal.compteurMinutes ?? 0;
     const previsionMois = weekSummaries.filter(w => !w.clos && !w.aVenir).reduce((s, w) => s + w.contribution, 0);
     const compteurPrev = compteurStocke + previsionMois;
 
-    return { rows, totalMois, weekSummaries, totalSupPayee, compteurStocke, previsionMois, compteurPrev, contrat };
+    return { rows, totalMois, weekSummaries, totalSupPayee, compteurStocke, previsionMois, compteurPrev, contrat, lisse, lissage };
   };
 
   return (
@@ -337,13 +425,16 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       ) : (
         (selectedSalId ? activeSals.filter(s => s.id === selectedSalId) : activeSals).map(salRaw => {
           const sal = salFusion(salRaw);
-          const { rows, totalMois, weekSummaries, totalSupPayee, compteurStocke, previsionMois, compteurPrev, contrat } = buildSalData(sal);
+          const { rows, totalMois, weekSummaries, totalSupPayee, compteurStocke, previsionMois, compteurPrev, contrat, lisse, lissage } = buildSalData(sal);
           let lastWeek = "";
           return (
             <div key={sal.id} className="bg-white rounded-xl border border-gray-100 p-4 print-page">
               {/* Panneau RH (non imprimé) : contrat, absences, compteur, mode hebdo */}
               <PanneauRH
                 sal={sal}
+                mois={mois}
+                lisse={lisse}
+                lissage={lissage}
                 weekSummaries={weekSummaries}
                 weeksOfMonth={weeksOfMonth}
                 compteurStocke={compteurStocke}
@@ -366,6 +457,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                   </div>
                   <div style={{ fontFamily: "sans-serif", fontSize: 11, color: "#64748b", textTransform: "capitalize" }}>
                     {moisLabel} · contrat {fmtDuree(contrat)}/sem.
+                    {lisse && <span style={{ textTransform: "none" }}> · horaires lissés sur juillet–août</span>}
                   </div>
                 </div>
                 <div style={{ textAlign: "right" }}>
@@ -375,7 +467,14 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                   </div>
                   {totalSupPayee > 0 && (
                     <div style={{ fontFamily: "sans-serif", fontSize: 11, fontWeight: 700, color: "#dc2626", marginTop: 1 }}>
-                      dont {fmtDuree(totalSupPayee)} heures sup. payées
+                      {lisse
+                        ? `dont ${fmtDuree(totalSupPayee)} heures sup. payées sur juillet–août`
+                        : `dont ${fmtDuree(totalSupPayee)} heures sup. payées`}
+                    </div>
+                  )}
+                  {lisse && mois !== MOIS_DECOMPTE_LISSAGE && (
+                    <div style={{ fontFamily: "sans-serif", fontSize: 10, color: "#64748b", marginTop: 1 }}>
+                      Heures sup. décomptées fin août sur les deux mois
                     </div>
                   )}
                   <div style={{ fontFamily: "sans-serif", fontSize: 10, fontWeight: 700, color: compteurPrev < 0 ? "#dc2626" : "#0f766e", marginTop: 1 }}>
@@ -605,10 +704,13 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 // Panneau RH (non imprimé) : contrat, compteur de récupération, modes hebdo, absences
 // ─────────────────────────────────────────────────────────────────────────────
 function PanneauRH({
-  sal, weekSummaries, compteurStocke, previsionMois, compteurPrev, absences,
+  sal, mois, lisse, lissage, weekSummaries, compteurStocke, previsionMois, compteurPrev, absences,
   onMajSalarie, onAjouterAbsence, onSupprimerAbsence, onSetMode, onAppliquerSemaine, onDecloturer, onAjusterCompteur,
 }: {
   sal: Salarie;
+  mois: number;
+  lisse: boolean;
+  lissage: BilanLissage | null;
   weekSummaries: WeekSummary[];
   weeksOfMonth: string[];
   compteurStocke: number; previsionMois: number; compteurPrev: number;
@@ -645,8 +747,21 @@ function PanneauRH({
             onBlur={e => onMajSalarie(sal.id, { joursTravailles: parseInt(e.target.value) || 5 })}
             className={`${inp} w-16`} />
         </label>
-        <span className="font-body text-[11px] text-slate-400">1 jour d'absence ≈ {fmtDuree(jourDefautMin)}</span>
+        <span className="font-body text-[11px] text-slate-400">1 jour d&apos;absence ≈ {fmtDuree(jourDefautMin)}</span>
       </div>
+
+      {/* Lissage d'été */}
+      <label className="flex items-start gap-2 rounded-lg bg-white border border-gray-100 px-3 py-2 cursor-pointer">
+        <input type="checkbox" defaultChecked={!!sal.lissageEte}
+          onChange={e => onMajSalarie(sal.id, { lissageEte: e.target.checked })}
+          className="mt-0.5 cursor-pointer accent-blue-500" />
+        <span className="font-body text-xs text-slate-600 leading-relaxed">
+          <strong>Horaires lissés sur juillet et août.</strong> Sur ces deux mois, aucune semaine
+          ne compte seule : un creux de juillet est absorbé par une pointe d&apos;août. Le solde est
+          établi une fois, fin août, sur le total des deux mois. Un déficit de période n&apos;est pas dû ;
+          seul un surplus est retenu, en heures sup. payées.
+        </span>
+      </label>
 
       {/* Compteur */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg bg-white border border-gray-100 px-3 py-2">
@@ -663,6 +778,42 @@ function PanneauRH({
         </span>
       </div>
 
+      {/* Solde de la période lissée */}
+      {lisse && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 flex flex-col gap-1">
+          <div className="font-body text-xs font-bold text-amber-900">
+            Période lissée juillet – août
+          </div>
+          {mois !== MOIS_DECOMPTE_LISSAGE ? (
+            <div className="font-body text-[11px] text-amber-800 leading-relaxed">
+              Les semaines de juillet ne produisent ni heure sup ni déficit. Le solde des deux mois
+              sera établi sur le mois d&apos;août — ouvre août pour le voir.
+            </div>
+          ) : lissage && lissage.semaines === 0 ? (
+            <div className="font-body text-[11px] text-amber-800">Aucune semaine écoulée sur la période pour l&apos;instant.</div>
+          ) : lissage ? (
+            <>
+              <div className="font-body text-[11px] text-amber-800">
+                {lissage.semaines} semaine(s) écoulée(s) · travaillé <strong>{fmtDuree(lissage.travaille)}</strong> pour
+                un contrat de <strong>{fmtDuree(lissage.contratPeriode)}</strong>
+                {lissage.absMin > 0 && <span className="text-sky-700"> · dont {fmtDuree(lissage.absMin)} de congés</span>}
+              </div>
+              {lissage.surplus > 0 ? (
+                <div className="font-body text-xs font-bold text-red-600">
+                  + {fmtDuree(lissage.surplus)} d&apos;heures sup. payées sur la période
+                </div>
+              ) : lissage.deficit > 0 ? (
+                <div className="font-body text-xs font-semibold text-emerald-700">
+                  Aucune heure sup. Le déficit de {fmtDuree(lissage.deficit)} n&apos;est pas dû : il est absorbé par le lissage.
+                </div>
+              ) : (
+                <div className="font-body text-xs font-semibold text-emerald-700">À l&apos;équilibre sur la période.</div>
+              )}
+            </>
+          ) : null}
+        </div>
+      )}
+
       {/* Semaines du mois */}
       {weekSummaries.length > 0 && (
         <div className="flex flex-col gap-1.5">
@@ -670,7 +821,9 @@ function PanneauRH({
             <div key={w.isoWeek} className="flex flex-wrap items-center gap-2 text-xs font-body">
               <span className="font-semibold text-slate-700 w-16 shrink-0">Sem. {w.isoWeek.split("-W")[1]}</span>
               <span className="text-slate-500">{fmtDuree(w.travaille)} / cible {fmtDuree(w.cible)}{w.absMin > 0 ? <span className="text-sky-600"> · {fmtDuree(w.absMin)} congé</span> : null}</span>
-              {w.aVenir ? (
+              {w.lissee ? (
+                <span className="text-amber-700 italic">lissée — comptée sur juillet–août</span>
+              ) : w.aVenir ? (
                 <span className="text-slate-400 italic">à venir</span>
               ) : w.surplus === 0 && w.deficit === 0 ? (
                 <span className="text-emerald-600">à l'équilibre</span>
@@ -694,7 +847,7 @@ function PanneauRH({
                   <button onClick={() => onDecloturer(sal, w.isoWeek)}
                     className="px-2 py-1 rounded bg-gray-100 text-slate-600 font-semibold hover:bg-gray-200">Rouvrir</button>
                 </span>
-              ) : !w.aVenir ? (
+              ) : w.lissee ? null : !w.aVenir ? (
                 <button onClick={() => onAppliquerSemaine(sal, w.isoWeek, w.contribution)}
                   className="ml-auto px-2 py-1 rounded bg-blue-600 text-white font-semibold">
                   Clôturer ({fmtSigne(w.contribution)})

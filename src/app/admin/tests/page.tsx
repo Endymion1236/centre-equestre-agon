@@ -1032,6 +1032,20 @@ const TESTS: TestCase[] = [
     priorite: "haute", correctif: "2026-08-19",
   },
   {
+    id: "MG-05", module: "Management", sous_module: "Horaires",
+    description: "Lissage des horaires sur juillet + août",
+    etapes: "Équipe → Horaires → cocher « Horaires lissés sur juillet et août » sur un salarié → ouvrir juillet, puis août",
+    resultat_attendu: "En juillet : chaque semaine affichée « lissée », aucun bouton Clôturer, aucune heure sup. En août : un encadré donne le total des deux mois face au contrat de la période, et les heures sup éventuelles",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
+    id: "MG-06", module: "Management", sous_module: "Horaires",
+    description: "Un creux d'été n'est pas dû, une pointe reste payée",
+    etapes: "Sur un salarié lissé : semaines creuses en juillet puis semaines chargées en août",
+    resultat_attendu: "Si le total reste sous le contrat, aucune heure sup et le compteur ne bouge pas. S'il dépasse, la différence apparaît en heures sup payées sur août — pas la somme des dépassements semaine par semaine",
+    priorite: "critique", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",
