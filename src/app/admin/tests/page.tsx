@@ -1109,6 +1109,13 @@ const TESTS: TestCase[] = [
     priorite: "critique", correctif: "2026-08-19",
   },
   {
+    id: "MG-14", module: "Management", sous_module: "Horaires",
+    description: "Dépassement déjà planifié sur une semaine à venir",
+    etapes: "Planifier 28 h sur une semaine future pour un salarié à 25 h de contrat → Équipe → Horaires",
+    resultat_attendu: "La ligne affiche « à venir · +3h prévues » et l'entête « + 3h prévues (semaines à venir) ». Ces heures n'entrent NI au compteur NI aux heures sup payées tant que la semaine n'est pas faite",
+    priorite: "haute", correctif: "2026-08-19",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

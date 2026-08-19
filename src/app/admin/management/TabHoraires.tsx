@@ -99,6 +99,7 @@ type WeekSummary = {
   supPayee: number;     // heures sup payées de la semaine
   aVenir: boolean;      // semaine entièrement future (non comptée au compteur)
   enCours: boolean;     // semaine commencée mais pas terminée
+  surplusPrevu: number; // dépassement d'une semaine À VENIR, déjà planifié
   horsContrat: boolean; // salarié pas en poste cette semaine-là
   aCheval: boolean;     // semaine à cheval sur le mois précédent ou suivant
   horsMois: number;     // minutes de la semaine tombant dans le mois voisin
@@ -455,6 +456,11 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       const surplusRetenu = lissee ? 0 : surplus; // un surplus déjà fait est acquis
       const contribution = aVenir || lissee ? 0 : (mode === "recup" ? surplusRetenu : 0) - deficitRetenu;
       const supPayee = aVenir || lissee ? 0 : (mode === "paye" ? surplusRetenu : 0);
+      // Une semaine à venir ne PAIE pas d'heures sup — les heures ne sont pas
+      // faites, et le planning peut encore changer. Mais elle n'a aucune raison
+      // de les cacher : le planning est déjà posé, et c'est justement pour
+      // décider qu'on le regarde à l'avance. On les affiche comme prévision.
+      const surplusPrevu = aVenir && !lissee ? surplus : 0;
       // Semaine qui déborde du mois affiché. Elle n'est PAS découpée : une
       // semaine se compte entière, du lundi au dimanche, et n'appartient qu'à
       // un seul décompte. On montre en revanche la part qui vient du mois
@@ -472,7 +478,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
         isoWeek: w, travaille, absMin, cible,
         surplus: surplusRetenu,
         deficit: deficitRetenu,
-        mode, clos, contribution, supPayee, aVenir, enCours, aCheval, horsMois, moisVoisin, lissee, horsContrat,
+        mode, clos, contribution, supPayee, aVenir, enCours, surplusPrevu, aCheval, horsMois, moisVoisin, lissee, horsContrat,
       };
     });
 
@@ -488,13 +494,16 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     // leur décompte hebdomadaire habituel et s'y ajoutent.
     const totalSupPayee = weekSummaries.reduce((s, w) => s + w.supPayee, 0)
       + (mois === MOIS_DECOMPTE_LISSAGE ? (lissage?.surplus ?? 0) : 0);
+    // Dépassements déjà planifiés sur les semaines à venir : annoncés à part,
+    // jamais mélangés aux heures sup acquises.
+    const totalSupPrevue = weekSummaries.reduce((s, w) => s + w.surplusPrevu, 0);
     // Compteur : valeur stockée (déjà augmentée des semaines closes) + prévision des
     // semaines non closes et non futures.
     const compteurStocke = sal.compteurMinutes ?? 0;
     const previsionMois = weekSummaries.filter(w => !w.clos && !w.aVenir).reduce((s, w) => s + w.contribution, 0);
     const compteurPrev = compteurStocke + previsionMois;
 
-    return { rows, totalMois, weekSummaries, totalSupPayee, compteurStocke, previsionMois, compteurPrev, contrat, lisse, lissage };
+    return { rows, totalMois, weekSummaries, totalSupPayee, totalSupPrevue, compteurStocke, previsionMois, compteurPrev, contrat, lisse, lissage };
   };
 
   return (
@@ -539,7 +548,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       ) : (
         (selectedSalId ? activeSals.filter(s => s.id === selectedSalId) : activeSals).map(salRaw => {
           const sal = salFusion(salRaw);
-          const { rows, totalMois, weekSummaries, totalSupPayee, compteurStocke, previsionMois, compteurPrev, contrat, lisse, lissage } = buildSalData(sal);
+          const { rows, totalMois, weekSummaries, totalSupPayee, totalSupPrevue, compteurStocke, previsionMois, compteurPrev, contrat, lisse, lissage } = buildSalData(sal);
           let lastWeek = "";
           return (
             <div key={sal.id} className="bg-white rounded-xl border border-gray-100 p-4 print-page">
@@ -585,6 +594,11 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                       {lisse
                         ? `dont ${fmtDuree(totalSupPayee)} heures sup. payées sur juillet–août`
                         : `dont ${fmtDuree(totalSupPayee)} heures sup. payées`}
+                    </div>
+                  )}
+                  {totalSupPrevue > 0 && (
+                    <div style={{ fontFamily: "sans-serif", fontSize: 10, color: "#ef4444", marginTop: 1 }}>
+                      + {fmtDuree(totalSupPrevue)} prévues (semaines à venir)
                     </div>
                   )}
                   {lisse && mois !== MOIS_DECOMPTE_LISSAGE && (
@@ -966,7 +980,7 @@ function PanneauRH({
                 <input type="checkbox" checked={!w.horsContrat} disabled={w.clos}
                   onChange={e => onSetHorsContrat(sal.id, w.isoWeek, !e.target.checked)}
                   className="cursor-pointer accent-blue-500 disabled:cursor-default" />
-                <span className="text-slate-500">travaillée</span>
+                <span className={w.horsContrat ? "text-slate-400 line-through" : "text-slate-500"}>travaillée</span>
               </label>
               {w.horsContrat ? (
                 <span className="text-slate-500">
@@ -985,7 +999,15 @@ function PanneauRH({
               ) : w.lissee ? (
                 <span className="text-amber-700 italic">lissée — comptée sur juillet–août</span>
               ) : w.aVenir ? (
-                <span className="text-slate-400 italic">à venir</span>
+                <>
+                  <span className="text-slate-400 italic">à venir</span>
+                  {w.surplusPrevu > 0 && (
+                    <span className="text-red-500 font-semibold"
+                      title="Heures déjà planifiées au-delà du contrat. Elles ne seront payées qu'une fois la semaine faite.">
+                      +{fmtDuree(w.surplusPrevu)} prévues
+                    </span>
+                  )}
+                </>
               ) : w.enCours ? (
                 <>
                   <span className="text-blue-600 italic">en cours</span>
