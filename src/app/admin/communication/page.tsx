@@ -455,6 +455,33 @@ export default function CommunicationPage() {
                 >
                   🐴 Relance « non-réinscrits »
                 </button>
+                {/* Mise en service du nouvel espace : beaucoup de familles ont
+                    été inscrites cet été sans jamais recevoir d'email. Ce
+                    message les accueille ET leur fait vérifier leurs
+                    informations — c'est la partie qui fait gagner du temps. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSubject("Votre espace famille est ouvert 🐴");
+                    setBody(
+                      "Bonjour [prenom_parent],\n\n" +
+                      "Le centre équestre change d'outil de gestion cette saison, et vous disposez désormais d'un espace en ligne personnel.\n\n" +
+                      "Vous y trouverez :\n" +
+                      "• le planning et vos réservations\n" +
+                      "• vos factures, à consulter et télécharger\n" +
+                      "• la progression et les galops de votre cavalier\n" +
+                      "• la réservation des stages et des balades\n\n" +
+                      "Une chose nous rendrait grand service : connectez-vous et vérifiez vos informations — vos coordonnées, et surtout la liste des cavaliers de votre famille avec leur date de naissance. Nous avons repris les données de l'ancien logiciel, et quelques erreurs ont pu s'y glisser.\n\n" +
+                      "Si quelque chose ne va pas ou vous semble manquer, répondez simplement à ce message, nous corrigerons.\n\n" +
+                      "[lien_reservation]\n\n" +
+                      "À très bientôt au club,\nNicolas et toute l'équipe du Centre Équestre d'Agon-Coutainville"
+                    );
+                    if (!selectedAudience) setSelectedAudience("with-children");
+                  }}
+                  className="font-body text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg px-3 py-1.5 cursor-pointer"
+                >
+                  ✨ Bienvenue sur le nouvel espace
+                </button>
               </div>
               <div>
                 <label className="mb-1.5 block font-body text-xs font-bold text-blue-900">Objet de l’email</label>
