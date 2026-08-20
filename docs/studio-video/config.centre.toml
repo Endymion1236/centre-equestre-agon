@@ -1,0 +1,35 @@
+# =============================================================================
+# MoneyPrinterTurbo — configuration Centre Équestre d'Agon-Coutainville
+#
+# À copier sous le nom `config.toml` À LA RACINE du dossier MoneyPrinterTurbo
+# (à côté de docker-compose.yml), puis remplacer COLLE_TA_CLE_ANTHROPIC_ICI.
+# Ne jamais publier ce fichier une fois la clé dedans.
+# =============================================================================
+
+log_level = "INFO"
+listen_host = "0.0.0.0"
+listen_port = 8080
+
+[app]
+
+# ── Source des vidéos : TES rushs, pas les banques d'images ─────────────────
+# Les fichiers se déposent dans  ./storage/local_videos/  (le dossier est créé
+# au premier lancement ; l'interface permet aussi de les téléverser).
+video_source = "local"
+
+# ── Écriture du script : la clé Anthropic déjà utilisée par la plateforme ───
+# Anthropic expose une API compatible OpenAI : on passe par le fournisseur
+# "openai" avec leur URL. Claude Haiku suffit largement pour un texte de Reel
+# (quelques centimes par vidéo).
+llm_provider = "openai"
+openai_api_key = "COLLE_TA_CLE_ANTHROPIC_ICI"
+openai_base_url = "https://api.anthropic.com/v1/"
+openai_model_name = "claude-haiku-4-5"
+
+# ── Sous-titres : calés sur la voix de synthèse, gratuits, sans téléchargement
+# ("whisper" est plus précis mais télécharge un modèle de 3 Go et rame sans
+# carte graphique — inutile ici puisque la voix est générée par l'outil.)
+subtitle_provider = "edge"
+
+# Vérification TLS standard.
+tls_verify = true
