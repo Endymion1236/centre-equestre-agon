@@ -5,6 +5,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, isEmailRestricted, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { adminDb } from "@/lib/firebase-admin";
 import { REPLY_TO } from "@/lib/email-reply-to";
+import { estMarketing, estDesabonne, piedDesabonnement } from "@/lib/desabonnement";
 
 // Emails du personnel (moniteurs / salariés) : TOUJOURS autorisés, même en mode
 // restreint — plus besoin de les ajouter à la main dans EMAIL_ALLOWLIST.
@@ -151,6 +152,23 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+    // Désabonnement : ne s'applique QU'aux emails de communication. Les
+    // confirmations, factures et rappels d'échéance restent envoyés — ce sont
+    // des messages transactionnels attendus par la famille.
+    let htmlFinal = html;
+    if (estMarketing(context) && familyId) {
+      if (await estDesabonne(familyId)) {
+        await logEmail({
+          to: Array.isArray(to) ? to.join(", ") : String(to),
+          subject, status: "blocked", context: logContext,
+          error: "Famille désabonnée des emails de communication",
+        } as any).catch(() => {});
+        return NextResponse.json({ ok: true, skipped: "desabonne" });
+      }
+      const base = process.env.NEXT_PUBLIC_SITE_URL || "https://centre-equestre-agon.vercel.app";
+      htmlFinal = html + piedDesabonnement(familyId, base);
+    }
+
     const finalTo = TEST_MODE ? [TEST_EMAIL] : allowedRecipients;
     const finalSubject = TEST_MODE
       ? `[TEST → ${allowedRecipients.join(", ")}] ${subject}`
@@ -164,8 +182,8 @@ export async function POST(request: NextRequest) {
       html: TEST_MODE
         ? `<div style="background:#fff3cd;padding:10px;border:1px solid #ffc107;border-radius:6px;margin-bottom:12px;font-family:sans-serif;font-size:12px;color:#856404;">
             <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${allowedRecipients.join(", ")}</strong>
-          </div>${html}`
-        : html,
+          </div>${htmlFinal}`
+        : htmlFinal,
       replyTo: replyTo || REPLY_TO,
       ...(safeAttachments.length > 0 ? { attachments: safeAttachments } : {}),
     });

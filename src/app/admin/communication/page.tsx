@@ -157,7 +157,11 @@ export default function CommunicationPage() {
     let ok = 0;
     let fail = 0;
 
-    for (const family of recipients) {
+    // Les familles désabonnées sont écartées ici, en plus du contrôle serveur :
+    // le compteur affiché doit refléter les envois réels.
+    const envoyables = recipients.filter((f: any) => f.desabonneEmails !== true);
+    const nbDesabonnes = recipients.length - envoyables.length;
+    for (const family of envoyables) {
       try {
         const personalSubject = replaceVariables(subject, family);
         const personalBody = replaceVariables(body, family);
@@ -188,9 +192,10 @@ export default function CommunicationPage() {
       subject,
       body,
       audience: selectedAudience,
-      recipientCount: recipients.length,
+      recipientCount: envoyables.length,
       sentOk: ok,
       sentFail: fail,
+      desabonnesExclus: nbDesabonnes,
       sentAt: serverTimestamp(),
     });
 
