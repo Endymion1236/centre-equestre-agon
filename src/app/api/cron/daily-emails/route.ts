@@ -50,6 +50,10 @@ export async function GET(req: NextRequest) {
     { name: "daily-notifications", path: "/api/cron/daily-notifications?target=tomorrow" },
     // Solde stage J-7 : calcule J-7 depuis la date des stages, pas depuis aujourd'hui → pas de décalage
     { name: "charge-stage-balances", path: "/api/cron/charge-stage-balances" },
+    // Balades collectives sous le minimum de participants à J-2 : propose aux
+    // familles supplément petit comité / report / avoir. Idempotent
+    // (marqueur petitGroupePropose sur le créneau).
+    { name: "balades-petit-groupe", path: "/api/cron/balades-petit-groupe" },
   ];
 
   const results: Record<string, any> = {};
@@ -150,7 +154,9 @@ export async function GET(req: NextRequest) {
     ok: true,
     resume: {
       dureeMs: Date.now() - startTime,
-      modules: results.map((r: any) => ({ nom: r.name, ok: r.ok !== false })),
+      // `results` est un Record (nom → résultat), pas un tableau : l'ancien
+      // results.map(...) levait un TypeError et la trace n'était jamais écrite.
+      modules: Object.entries(results).map(([nom, r]: [string, any]) => ({ nom, ok: r.ok !== false })),
       cleanedLogs, waitlistSupprimees,
     },
   });

@@ -111,6 +111,21 @@ export const CGV_BALADES =
   `les sommes versées sont alors intégralement remboursées.`;
 
 /**
+ * Balades collectives sous le minimum de participants.
+ * Le seuil et le montant du supplément sont propres à chaque balade et
+ * annoncés au moment de la réservation — la clause reste donc générique.
+ */
+export const BALADE_DELAI_PETIT_GROUPE = "2 jours";
+
+export const CGV_BALADES_PETIT_GROUPE =
+  `Certaines balades collectives requièrent un nombre minimum de participants, indiqué au moment ` +
+  `de la réservation. Si ce minimum n'est pas atteint ${BALADE_DELAI_PETIT_GROUPE} avant le départ, ` +
+  `le centre propose à chaque inscrit, au choix : le maintien de la balade en petit comité moyennant ` +
+  `un supplément par cavalier (montant annoncé à la réservation), le report à une autre date, ` +
+  `ou l'annulation avec remise d'un avoir du montant payé. Si le minimum est atteint entre-temps, ` +
+  `la balade est maintenue sans supplément.`;
+
+/**
  * Encadre de rappel des conditions d'annulation, a coller sous un email de
  * confirmation de stage.
  *

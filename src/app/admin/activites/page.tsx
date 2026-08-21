@@ -311,6 +311,27 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
           </div>
         </div>
 
+        {/* Seuil de rentabilité pour les balades collectives */}
+        {form.type === "balade" && (
+          <div>
+            <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Seuil de rentabilité (balades collectives)</label>
+            <div className="flex gap-2 flex-wrap">
+              <div className="flex-1 min-w-[140px]">
+                <label className="font-body text-[10px] text-slate-500 block mb-1">Participants minimum</label>
+                <input type="number" min={2} value={form.minParticipants || ""} onChange={e => update("minParticipants", e.target.value ? parseInt(e.target.value) : null)} className={inp} placeholder="Aucun" />
+              </div>
+              <div className="flex-1 min-w-[140px]">
+                <label className="font-body text-[10px] text-slate-500 block mb-1">Supplément petit comité (€/cavalier)</label>
+                <input type="number" step="0.01" min={0} value={form.supplementPetitGroupe || ""} onChange={e => update("supplementPetitGroupe", e.target.value ? parseFloat(e.target.value) : null)} className={inp} placeholder="Aucun" />
+              </div>
+            </div>
+            <p className="font-body text-[10px] text-slate-400 mt-1">
+              Si la balade compte moins d'inscrits que le minimum 2 jours avant le départ, les familles reçoivent
+              automatiquement un email leur proposant : maintien avec ce supplément, report à une autre date, ou avoir.
+            </p>
+          </div>
+        )}
+
         {/* Tarifs multi-jours pour stages */}
         {(form.type === "stage" || form.type === "stage_journee") && (
           <div>

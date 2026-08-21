@@ -65,6 +65,11 @@ export interface Activity {
   priceTTC: number; // Prix annoncé au client (TTC)
   tvaTaux: number; // 5.5 pour 5.5%
   maxPlaces: number;
+  // ── Balades collectives : seuil de rentabilité ──
+  // En dessous de minParticipants inscrits à J-2, les familles se voient
+  // proposer : maintien avec supplément « petit comité », report, ou avoir.
+  minParticipants?: number | null; // null/absent = pas de minimum
+  supplementPetitGroupe?: number | null; // € TTC par cavalier, null = pas de supplément proposé
   schedule: string; // ex: "Lun-Ven · 10h-12h"
   seasonPeriod: string; // ex: "Toutes vacances", "Avr-Oct"
   active: boolean;

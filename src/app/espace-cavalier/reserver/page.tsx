@@ -1599,6 +1599,23 @@ export default function ReserverPage() {
                             </div>
                           </div>
 
+                          {/* Balades collectives : minimum de participants annoncé AVANT la
+                              réservation — c'est ce qui rend le supplément petit comité
+                              opposable (cf. CGV_BALADES_PETIT_GROUPE). */}
+                          {c.activityType === "balade" && (() => {
+                            const act = activities.find((a: any) => a.id === c.activityId);
+                            const min = act?.minParticipants;
+                            if (typeof min !== "number" || min < 2) return null;
+                            const sup = typeof act?.supplementPetitGroupe === "number" && act.supplementPetitGroupe > 0
+                              ? act.supplementPetitGroupe : 0;
+                            return (
+                              <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 font-body text-[11px] text-amber-800 leading-relaxed">
+                                Balade maintenue à partir de <strong>{min} participants</strong>. En dessous, nous
+                                proposons au choix : maintien en petit comité{sup > 0 ? ` (supplément de ${sup}€/cavalier)` : ""}, report ou avoir.
+                              </div>
+                            );
+                          })()}
+
                           {/* Créneau disponible — sélection enfant */}
                           {isSelected && spots > 0 && (
                             <div className="mt-3 pt-3 border-t border-blue-100">

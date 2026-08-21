@@ -56,7 +56,7 @@ export function TarifsContent() {
           <div className="flex flex-col overflow-hidden rounded-[28px] border border-blue-500/[0.08] bg-cream shadow-[0_18px_50px_rgba(12,26,46,0.06)]">
             <div className="border-b border-blue-500/[0.07] p-5 sm:p-6">
               <div className="font-body text-xs font-bold uppercase tracking-[0.16em] text-gold-500">Tarifs des promenades</div>
-              <p className="mt-2 font-body text-sm leading-relaxed text-slate-500">Toutes les formules durent deux heures. Les disponibilités dépendent de la saison et de la météo.</p>
+              <p className="mt-2 font-body text-sm leading-relaxed text-slate-500">Toutes les formules durent deux heures. Les disponibilités dépendent de la saison et de la météo. Les balades collectives sont assurées à partir de 3 cavaliers inscrits — en dessous, nous vous proposons 2 jours avant le départ un maintien en petit comité avec un léger supplément, un report ou un avoir.</p>
             </div>
             <div className="flex-1 divide-y divide-blue-500/[0.07]">
               {tariffs.balades.map((item, index) => (
