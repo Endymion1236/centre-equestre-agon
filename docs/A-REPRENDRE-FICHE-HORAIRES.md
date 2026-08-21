@@ -30,20 +30,29 @@
   probablement 5 : une journée à plus d'une interruption est mal représentée,
   et la colonne pause peut agréger des choses hétérogènes.
 
-## ⚠️ Décision à re-poser AVANT de coder — le point 4
+## ✅ Décision prise (Nicolas, 20/08/2026) — le point 4
 
-Le point 4 est en TENSION avec la règle choisie la veille (battements ≥ 30 min
-non comptés). Tel que formulé — « un salarié qui attend entre deux cours
-travaille » — il peut vouloir dire :
-  a) relever le seuil de 30 min (à combien ?) ;
-  b) compter TOUS les trous entre tâches d'une même journée (retour de fait à
-     l'amplitude, sauf pauses saisies) — auquel cas la coupure du midi doit
-     être SAISIE en pause pour ne pas être payée ;
-  c) distinguer « trou entre deux cours » (travail : on ressangle, on prépare)
-     et « coupure déjeuner » (pas travail) autrement que par la durée.
-Poser la question avec des exemples chiffrés (9h–12h / 14h–17h vs cours à
-10h–11h / 11h45–12h45) avant toute modification. La réponse change la paie de
-tout le monde : elle appartient à Nicolas, pas au code.
+« Tant qu'une tâche pause n'existe pas, les trous entre deux tâches sont du
+temps de travail. »
+
+Règle à implémenter dans `src/lib/temps-travail.ts` :
+
+- temps du jour = AMPLITUDE (début de la première tâche → fin de la dernière)
+  − les pauses SAISIES (part tombant dans l'amplitude) ;
+- le seuil de 30 minutes (`SEUIL_BATTEMENT_MIN`) disparaît : un trou n'est
+  jamais déduit de lui-même, quelle que soit sa durée ;
+- une pause saisie reste déduite intégralement, même courte ;
+- les chevauchements restent fusionnés (deux tâches superposées ≠ double) ;
+- la coupure matin / après-midi de la fiche imprimée se cale désormais sur la
+  plus longue PAUSE SAISIE (plus sur le plus long trou, qui est du travail).
+
+Conséquence assumée, à rappeler à l'écran : une coupure déjeuner NON saisie en
+pause est payée. La discipline de saisie remplace le seuil. Prévoir un signal
+doux côté fiche (ex. « journée de plus de X h sans pause saisie ») pour
+attraper les oublis avant la paie, sans rien déduire tout seul.
+
+Réécrire les tests de `tests/unit/temps-travail.test.ts` avec cette règle
+(le cas « 9h–12h / 14h–17h sans pause = 6 h » devient « = 8 h », c'est voulu).
 
 ## Ordre d'attaque suggéré
 
@@ -52,5 +61,6 @@ tout le monde : elle appartient à Nicolas, pas au code.
 2. Points 1+2+3 ensemble : refondre le rendu de la journée de la fiche pour
    afficher N segments et N pauses avec LEURS horaires (le modèle de
    `calculerJournee` expose déjà segments et coupures).
-3. Point 4 : seulement après la décision ci-dessus, dans lib/temps-travail.ts,
-   avec ses tests.
+3. Point 4 : décision prise (voir ci-dessus) — appliquer la règle d'amplitude
+   dans lib/temps-travail.ts, réécrire ses tests, ajouter le signal « journée
+   sans pause saisie ».
