@@ -1137,6 +1137,13 @@ const TESTS: TestCase[] = [
     priorite: "critique", correctif: "2026-08-19",
   },
   {
+    id: "CA-12", module: "Cavaliers", sous_module: "Gestion",
+    description: "Rattacher les adresses depuis l'export CSV de l'ancien logiciel",
+    etapes: "Comptes orphelins → « Retrouver les adresses » → téléverser l'export Liste cavaliers → cliquer Rattacher sur une proposition nette",
+    resultat_attendu: "L'adresse est posée sur la fiche et la fiche sort de la liste « sans adresse ». Une fiche à plusieurs adresses candidates est signalée ambiguë, jamais tranchée seule. Une fiche ayant déjà une adresse valide n'est jamais écrasée (message explicite)",
+    priorite: "critique", correctif: "2026-08-21",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

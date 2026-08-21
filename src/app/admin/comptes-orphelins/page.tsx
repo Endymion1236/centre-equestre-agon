@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
-import { UserX, Mail, Baby, Loader2, RefreshCw, AlertTriangle, Check, Phone } from "lucide-react";
+import { UserX, Mail, Baby, Loader2, RefreshCw, AlertTriangle, Check, Phone, FileUp, X } from "lucide-react";
 
 /**
  * Comptes orphelins — écran de rattrapage.
@@ -47,6 +47,21 @@ interface SansAdresse {
   accountType: string;
 }
 
+interface CandidatEmail {
+  email: string;
+  source: string;
+  fiabilite: "enfant" | "parent";
+}
+
+interface Proposition {
+  familyId: string;
+  parentName: string;
+  parentPhone: string;
+  enfants: string[];
+  candidats: CandidatEmail[];
+  ambigu: boolean;
+}
+
 const dateFr = (iso: string | null) =>
   !iso ? "—" : new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
 
@@ -57,6 +72,56 @@ export default function ComptesOrphelinsPage() {
   const [nbComptes, setNbComptes] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // ── Rapprochement par l'export CSV de l'ancien logiciel ──
+  const [propositions, setPropositions] = useState<Proposition[] | null>(null);
+  const [csvStats, setCsvStats] = useState("");
+  const [csvLoading, setCsvLoading] = useState(false);
+  const [rattachees, setRattachees] = useState<Record<string, string>>({}); // familyId → email posé
+  const [rattachEnCours, setRattachEnCours] = useState<string | null>(null);
+
+  const proposerDepuisCsv = async (fichier: File) => {
+    if (!user) return;
+    setCsvLoading(true); setError("");
+    try {
+      const csv = await fichier.text();
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/rattacher-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "proposer", csv }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      setPropositions(d.propositions || []);
+      setCsvStats(`${d.nbLignesCsv} cavaliers dans le fichier · ${d.trouvees} fiche(s) sur ${d.nbSansAdresse} avec au moins une adresse trouvée`);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setCsvLoading(false);
+    }
+  };
+
+  const rattacher = async (familyId: string, email: string) => {
+    if (!user || rattachEnCours) return;
+    setRattachEnCours(familyId);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/rattacher-emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "appliquer", familyId, email }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      setRattachees(prev => ({ ...prev, [familyId]: email }));
+      setSansAdresse(prev => prev.filter(f => f.id !== familyId));
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setRattachEnCours(null);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -120,11 +185,90 @@ export default function ComptesOrphelinsPage() {
               fabriquera un compte orphelin à la première connexion de la famille.
               À compléter <strong>avant</strong> d&apos;envoyer le mail de pré-inscription.
             </p>
+            {/* ── Croiser avec l'export CSV de l'ancien logiciel ── */}
+            {sansAdresse.length > 0 && (
+              <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">
+                <div className="font-body text-sm font-semibold text-blue-900 flex items-center gap-2 mb-1">
+                  <FileUp size={15} /> Retrouver les adresses dans l&apos;export de l&apos;ancien logiciel
+                </div>
+                <p className="font-body text-xs text-slate-600 mb-2">
+                  Téléverse l&apos;export « Liste cavaliers » (CSV, colonnes Nom / Prénom / E-mail /
+                  E-mail tuteur) : chaque fiche sans adresse est croisée avec le fichier, par le nom
+                  des cavaliers d&apos;abord. Rien n&apos;est écrit sans un clic de ta part, et une
+                  adresse déjà en place n&apos;est jamais écrasée.
+                </p>
+                <label className="inline-flex items-center gap-2 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-lg cursor-pointer">
+                  {csvLoading ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
+                  {csvLoading ? "Croisement en cours…" : "Choisir le fichier CSV"}
+                  <input type="file" accept=".csv,text/csv" className="hidden" disabled={csvLoading}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) proposerDepuisCsv(f); e.target.value = ""; }} />
+                </label>
+                {csvStats && <span className="ml-3 font-body text-xs text-slate-500">{csvStats}</span>}
+              </div>
+            )}
+
+            {propositions && propositions.length > 0 && (
+              <div className="mb-5 flex flex-col gap-2">
+                {propositions.map(p => {
+                  const posee = rattachees[p.familyId];
+                  return (
+                    <div key={p.familyId}
+                      className={`rounded-xl border px-4 py-3 ${posee ? "border-green-200 bg-green-50/60" : p.candidats.length === 0 ? "border-gray-200 bg-gray-50/60" : "border-blue-200 bg-white"}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-body font-semibold text-slate-800 truncate">{p.parentName || "— sans nom —"}</div>
+                          <div className="font-body text-xs text-slate-500 mt-0.5">
+                            {p.enfants.join(", ")}
+                            {p.parentPhone && <span> · {p.parentPhone}</span>}
+                          </div>
+                        </div>
+                        <Link href={`/admin/cavaliers?id=${p.familyId}`}
+                          className="shrink-0 font-body text-[11px] text-blue-600 no-underline hover:underline">
+                          ouvrir
+                        </Link>
+                      </div>
+
+                      {posee ? (
+                        <div className="mt-2 font-body text-sm text-green-700 flex items-center gap-1.5">
+                          <Check size={14} /> Adresse rattachée : <strong>{posee}</strong>
+                        </div>
+                      ) : p.candidats.length === 0 ? (
+                        <div className="mt-2 font-body text-xs text-slate-500 flex items-center gap-1.5">
+                          <X size={13} /> Aucune adresse trouvée dans le fichier — à récupérer par téléphone.
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          {p.ambigu && (
+                            <div className="font-body text-[11px] text-amber-700">
+                              Plusieurs adresses possibles — vérifie avant de choisir :
+                            </div>
+                          )}
+                          {p.candidats.map(c => (
+                            <div key={c.email} className="flex items-center justify-between gap-3 bg-sand rounded-lg px-3 py-2">
+                              <div className="font-body text-sm text-slate-700 min-w-0 truncate">
+                                <span className="font-semibold">{c.email}</span>
+                                <span className="text-slate-500 text-xs"> · via {c.source}</span>
+                              </div>
+                              <button onClick={() => rattacher(p.familyId, c.email)}
+                                disabled={rattachEnCours === p.familyId}
+                                className="shrink-0 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                                {rattachEnCours === p.familyId ? "…" : "Rattacher"}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {sansAdresse.length === 0 ? (
               <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-body text-sm text-green-700 flex items-center gap-2">
                 <Check size={16} /> Toutes les fiches avec cavaliers ont une adresse email.
               </div>
-            ) : (
+            ) : propositions ? null : (
               <div className="flex flex-col gap-2">
                 {sansAdresse.map(f => (
                   <div key={f.id} className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50/50 px-4 py-2.5">
