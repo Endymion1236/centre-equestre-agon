@@ -17,7 +17,8 @@ import { Users, Loader2, RefreshCw, FileUp, Check, Pencil, Trash2, Plus } from "
  * autres années ? ».
  */
 
-interface Ligne { id: string; mois: string; salarie: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; source: string; }
+interface Ligne { id: string; type: "salaire" | "charge"; mois: string; salarie: string; libelle: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; montant: number | null; source: string; }
+interface PropositionCharge { mois: string; libelle: string; montant: number; partPatronale: number; reductionPatronale: number; partOuvriere: number | null; totalAPayer: number | null; fichier: string; }
 interface Proposition { salarie: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; }
 
 // L'EXERCICE COMPTABLE du centre court du 1er juillet au 30 juin — c'est lui
@@ -52,6 +53,8 @@ export default function MasseSalarialePage() {
   // son brut et on le SIGNALE : un total silencieusement incomplet serait pire.
   const [mode, setMode] = useState<"brut" | "cout">("brut");
   const [propositions, setPropositions] = useState<Proposition[]>([]);
+  const [propositionsCharge, setPropositionsCharge] = useState<PropositionCharge[]>([]);
+  const [formCharge, setFormCharge] = useState<{ libelle: string; montant: string } | null>(null);
   const [lecture, setLecture] = useState(0); // nb de PDF en cours de lecture
   const [saving, setSaving] = useState(false);
   // Saisie / correction manuelle d'une ligne
@@ -79,21 +82,28 @@ export default function MasseSalarialePage() {
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
+  const salaires = useMemo(() => lignes.filter(l => l.type !== "charge"), [lignes]);
+  const charges = useMemo(() => lignes.filter(l => l.type === "charge"), [lignes]);
+
+  // En mode coût : salaires (coût employeur, sinon brut) + charges versées à
+  // part (MSA/TESA des saisonniers). En mode brut : les salaires seuls — une
+  // charge patronale n'est pas du brut.
   const valeurDe = useCallback(
     (l: Ligne) => (mode === "cout" ? (l.coutEmployeur ?? l.brut) : l.brut),
     [mode],
   );
   const totalParMois = useMemo(() => {
     const m = new Map<string, number>();
-    lignes.forEach(l => m.set(l.mois, (m.get(l.mois) || 0) + valeurDe(l)));
+    salaires.forEach(l => m.set(l.mois, (m.get(l.mois) || 0) + valeurDe(l)));
+    if (mode === "cout") charges.forEach(c => m.set(c.mois, (m.get(c.mois) || 0) + (c.montant || 0)));
     return m;
-  }, [lignes, valeurDe]);
+  }, [salaires, charges, valeurDe, mode]);
   // Mois dont le coût est partiellement estimé (lignes sans coût employeur).
   const moisPartiels = useMemo(() => {
     const m = new Set<string>();
-    if (mode === "cout") lignes.forEach(l => { if (l.coutEmployeur == null) m.add(l.mois); });
+    if (mode === "cout") salaires.forEach(l => { if (l.coutEmployeur == null) m.add(l.mois); });
     return m;
-  }, [lignes, mode]);
+  }, [salaires, mode]);
   const saisons = useMemo(() => {
     const s = new Set(lignes.map(l => saisonDe(l.mois)));
     s.add(saisonDe(moisCourant()));
@@ -102,8 +112,12 @@ export default function MasseSalarialePage() {
   const saisonCourante = saisons[saisons.length - 1];
   const saisonPrec = saisons[saisons.length - 2];
   const lignesDuMois = useMemo(
-    () => lignes.filter(l => l.mois === moisDetail).sort((a, b) => a.salarie.localeCompare(b.salarie, "fr")),
-    [lignes, moisDetail],
+    () => salaires.filter(l => l.mois === moisDetail).sort((a, b) => a.salarie.localeCompare(b.salarie, "fr")),
+    [salaires, moisDetail],
+  );
+  const chargesDuMois = useMemo(
+    () => charges.filter(c => c.mois === moisDetail).sort((a, b) => a.libelle.localeCompare(b.libelle, "fr")),
+    [charges, moisDetail],
   );
 
   // ── Dépôt de fiches de paie ──
@@ -114,7 +128,8 @@ export default function MasseSalarialePage() {
       try {
         const b64 = btoa(new Uint8Array(await f.arrayBuffer()).reduce((s, b) => s + String.fromCharCode(b), ""));
         const d = await api({ action: "extraire", pdfBase64: b64, filename: f.name });
-        setPropositions(prev => [...prev, { ...d.proposition, etat: "ok" }]);
+        if (d.propositionCharge) setPropositionsCharge(prev => [...prev, d.propositionCharge]);
+        else setPropositions(prev => [...prev, { ...d.proposition, etat: "ok" }]);
       } catch (e: any) {
         setPropositions(prev => [...prev, { salarie: "", mois: "", brut: null, net: null, coutEmployeur: null, heures: null, fichier: f.name, etat: "erreur", message: e?.message || String(e) }]);
       } finally {
@@ -133,6 +148,35 @@ export default function MasseSalarialePage() {
       await load();
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }
+  };
+
+  const enregistrerPropositionCharge = async (p: PropositionCharge, idx: number) => {
+    if (saving) return;
+    setSaving(true); setError("");
+    try {
+      await api({ action: "enregistrer-charge", mois: p.mois, libelle: p.libelle, montant: p.montant, source: "fiche-paie" });
+      setPropositionsCharge(prev => prev.filter((_, i) => i !== idx));
+      if (p.mois) setMoisDetail(p.mois);
+      await load();
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setSaving(false); }
+  };
+
+  const enregistrerFormCharge = async () => {
+    if (!formCharge || saving) return;
+    setSaving(true); setError("");
+    try {
+      await api({ action: "enregistrer-charge", mois: moisDetail, libelle: formCharge.libelle, montant: formCharge.montant });
+      setFormCharge(null);
+      await load();
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setSaving(false); }
+  };
+
+  const supprimerCharge = async (c: Ligne) => {
+    if (!confirm(`Retirer « ${c.libelle} » de ${NOMS_MOIS[c.mois.slice(5)]} ?`)) return;
+    try { await api({ action: "supprimer-charge", mois: c.mois, libelle: c.libelle }); await load(); }
+    catch (e: any) { setError(e?.message || String(e)); }
   };
 
   const enregistrerForm = async () => {
@@ -227,6 +271,39 @@ export default function MasseSalarialePage() {
               onChange={e => { if (e.target.files?.length) lireFiches(e.target.files); e.target.value = ""; }} />
           </label>
         </div>
+
+        {propositionsCharge.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {propositionsCharge.map((p, idx) => (
+              <div key={idx} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
+                <div className="font-body text-[11px] text-amber-900 mb-1.5">
+                  <strong>{p.fichier}</strong> — récapitulatif de cotisations reconnu.
+                  Part patronale {eur(p.partPatronale)}{p.reductionPatronale > 0 ? ` − réductions ${eur(p.reductionPatronale)}` : ""}
+                  {p.partOuvriere != null ? ` · part ouvrière ${eur(p.partOuvriere)} (déjà dans les bruts, non comptée)` : ""}
+                  {p.totalAPayer != null ? ` · à payer ${eur(p.totalAPayer)}` : ""}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 font-body text-xs">
+                  <input value={p.libelle} onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, libelle: e.target.value } : x))}
+                    className="font-semibold border border-gray-200 rounded px-2 py-1 w-56" placeholder="Libellé" />
+                  <input value={p.mois} onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, mois: e.target.value } : x))}
+                    className="border border-gray-200 rounded px-2 py-1 w-20" placeholder="AAAA-MM" />
+                  <label className="flex items-center gap-1 text-slate-600">Coût employeur retenu
+                    <input value={p.montant} inputMode="decimal"
+                      onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, montant: Number(e.target.value.replace(",", ".")) || 0 } : x))}
+                      className="border border-gray-200 rounded px-2 py-1 w-24 text-right font-semibold" />
+                  </label>
+                  <button onClick={() => enregistrerPropositionCharge(p, idx)}
+                    disabled={saving || !p.libelle || !/^\d{4}-\d{2}$/.test(p.mois)}
+                    className="ml-auto font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                    Enregistrer la charge
+                  </button>
+                  <button onClick={() => setPropositionsCharge(prev => prev.filter((_, i) => i !== idx))}
+                    className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {propositions.length > 0 && (
           <div className="mt-3 flex flex-col gap-2">
@@ -437,14 +514,61 @@ export default function MasseSalarialePage() {
                 </tbody>
               </table>
             )}
-            {lignesDuMois.length > 0 && (
+            {/* ── Charges patronales versées à part (MSA/TESA des saisonniers) ── */}
+            <div className="mt-4 pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                <div className="font-body text-xs font-semibold text-amber-800 uppercase tracking-wider">
+                  Charges patronales versées à part (saisonniers TESA, MSA…)
+                </div>
+                <button onClick={() => setFormCharge({ libelle: "Charges MSA (TESA saisonniers)", montant: "" })}
+                  className="flex items-center gap-1 font-body text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-amber-100">
+                  <Plus size={11} /> Ajouter une charge
+                </button>
+              </div>
+              {formCharge && (
+                <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 flex flex-wrap items-center gap-2 font-body text-xs">
+                  <input autoFocus value={formCharge.libelle} onChange={e => setFormCharge({ ...formCharge, libelle: e.target.value })}
+                    className="font-semibold border border-gray-200 rounded px-2 py-1 w-64" placeholder="Libellé (organisme…)" />
+                  <input value={formCharge.montant} inputMode="decimal" onChange={e => setFormCharge({ ...formCharge, montant: e.target.value })}
+                    className="border border-gray-200 rounded px-2 py-1 w-24 text-right" placeholder="Montant" />
+                  <button onClick={enregistrerFormCharge} disabled={saving || !formCharge.libelle || !formCharge.montant}
+                    className="ml-auto font-semibold text-white bg-amber-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">Enregistrer</button>
+                  <button onClick={() => setFormCharge(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
+                </div>
+              )}
+              {chargesDuMois.length === 0 ? (
+                <p className="font-body text-xs text-slate-400 italic mb-1">
+                  Aucune — dépose le récapitulatif de cotisations (MSA/DSN) dans la zone du haut, il sera reconnu.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1 mb-1">
+                  {chargesDuMois.map(c => (
+                    <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-amber-50/60 border border-amber-100 px-3 py-1.5 font-body text-sm">
+                      <span className="text-slate-700">{c.libelle}{c.source === "fiche-paie" && <span className="ml-1.5 text-[10px] text-amber-600">📄</span>}</span>
+                      <span className="flex items-center gap-1">
+                        <strong className="text-amber-900">{eur(c.montant || 0)}</strong>
+                        <button onClick={() => setFormCharge({ libelle: c.libelle, montant: String(c.montant ?? "") })}
+                          title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={12} /></button>
+                        <button onClick={() => supprimerCharge(c)} title="Retirer"
+                          className="text-slate-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={12} /></button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {(lignesDuMois.length > 0 || chargesDuMois.length > 0) && (
               <div className="mt-3 rounded-lg bg-purple-100/60 border border-purple-200 px-3 py-2 flex items-center justify-between font-body text-sm">
                 <span className="font-semibold text-purple-900">Coût total entreprise du mois</span>
                 <span className="font-bold text-purple-900">
-                  {eur(lignesDuMois.reduce((s, l) => s + (l.coutEmployeur ?? l.brut), 0))}
+                  {eur(
+                    lignesDuMois.reduce((s, l) => s + (l.coutEmployeur ?? l.brut), 0)
+                    + chargesDuMois.reduce((s, c) => s + (c.montant || 0), 0)
+                  )}
                   {lignesDuMois.some(l => l.coutEmployeur == null) && (
                     <span className="font-body text-[11px] font-normal text-amber-700 ml-2">
-                      ({lignesDuMois.filter(l => l.coutEmployeur == null).length} ligne(s) comptée(s) au brut, coût absent du bulletin)
+                      ({lignesDuMois.filter(l => l.coutEmployeur == null).length} salaire(s) compté(s) au brut, coût absent du bulletin)
                     </span>
                   )}
                 </span>
@@ -453,6 +577,9 @@ export default function MasseSalarialePage() {
             <p className="font-body text-[11px] text-slate-400 mt-3">
               Le <strong>brut</strong> figure sur tous les bulletins ; le <strong>coût entreprise</strong> (brut +
               charges patronales) seulement sur certains — d&apos;où le repli signalé quand il manque.
+              Pour les saisonniers TESA, les charges arrivent à part via le récapitulatif MSA : seule la
+              <strong> part patronale nette des réductions</strong> est proposée — la part ouvrière est déjà
+              dans les bruts, la compter ici la compterait deux fois.
               Outil de pilotage : les lignes se corrigent librement, aucune fiche de paie n&apos;est conservée.
             </p>
           </Card>

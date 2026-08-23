@@ -50,15 +50,18 @@ export async function GET(req: NextRequest) {
       const r = d.data() as any;
       return {
         id: d.id,
+        type: r.type === "charge" ? "charge" : "salaire",
         mois: r.mois || "",
         salarie: r.salarie || "",
+        libelle: r.libelle || "",
+        montant: r.montant != null ? Number(r.montant) : null,
         brut: Number(r.brut || 0),
         net: r.net != null ? Number(r.net) : null,
         coutEmployeur: r.coutEmployeur != null ? Number(r.coutEmployeur) : null,
         heures: r.heures != null ? Number(r.heures) : null,
         source: r.source || "saisie",
       };
-    }).filter((l) => MOIS_RE.test(l.mois) && l.salarie);
+    }).filter((l) => MOIS_RE.test(l.mois) && (l.type === "charge" ? l.libelle : l.salarie));
     return NextResponse.json({ lignes });
   } catch (e) {
     console.error("[masse-salariale] lecture", e);
@@ -95,9 +98,10 @@ export async function POST(req: NextRequest) {
             {
               type: "text",
               text:
-                "Ce document est une fiche de paie française. Extrais UNIQUEMENT ces informations et réponds par un objet JSON seul, sans autre texte :\n" +
-                '{ "salarie": "Prénom Nom", "mois": "AAAA-MM (période de paie)", "brut": nombre, "net": nombre (net à payer avant impôt si distinct, sinon net payé), "coutEmployeur": nombre ou null (total « coût employeur » / « coût global » / brut + charges patronales, seulement s\'il figure sur le bulletin), "heures": nombre ou null (heures travaillées ou payées du mois) }\n' +
-                "Les montants en euros, sans séparateur de milliers, point décimal. Si une valeur est introuvable, mets null. Si le document n'est PAS une fiche de paie, réponds {\"erreur\": \"pas une fiche de paie\"}.",
+                "Ce document est soit une FICHE DE PAIE française, soit un RÉCAPITULATIF DE COTISATIONS sociales (DSN, TESA, MSA, URSSAF). Identifie lequel et réponds par un objet JSON seul, sans autre texte.\n" +
+                'Fiche de paie → { "typeDoc": "fiche", "salarie": "Prénom Nom", "mois": "AAAA-MM (période de paie)", "brut": nombre, "net": nombre (net à payer avant impôt si distinct, sinon net payé), "coutEmployeur": nombre ou null (total « coût employeur » / brut + charges patronales, seulement s\'il figure), "heures": nombre ou null }\n' +
+                'Récapitulatif de cotisations → { "typeDoc": "cotisations", "mois": "AAAA-MM (période concernée)", "organisme": "MSA/URSSAF/TESA…", "partPatronale": nombre, "reductionPatronale": nombre ou 0 (exonérations et réductions sur la part patronale), "partOuvriere": nombre ou null, "totalAPayer": nombre ou null }\n' +
+                "Montants en euros, point décimal, sans séparateur de milliers ; null si introuvable. Si le document n'est ni l'un ni l'autre, réponds {\"erreur\": \"document non reconnu\"}.",
             },
           ],
         }],
@@ -111,6 +115,29 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Lecture du bulletin impossible" }, { status: 422 });
       }
       if (data.erreur) return NextResponse.json({ error: String(data.erreur) }, { status: 422 });
+
+      const nb = (v: unknown) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : null);
+
+      // Récapitulatif de cotisations (charges patronales versées à part —
+      // typiquement les saisonniers TESA/MSA). Le montant proposé est la part
+      // patronale NETTE des réductions : la part ouvrière est déjà comprise
+      // dans les bruts des salariés, la compter ici la compterait deux fois.
+      if (data.typeDoc === "cotisations") {
+        const pp = nb(data.partPatronale) ?? 0;
+        const red = nb(data.reductionPatronale) ?? 0;
+        return NextResponse.json({
+          propositionCharge: {
+            mois: MOIS_RE.test(String(data.mois)) ? String(data.mois) : "",
+            libelle: `Charges ${String(data.organisme || "cotisations").trim()}`.slice(0, 80),
+            montant: Math.max(0, Math.round((pp - red) * 100) / 100),
+            partPatronale: pp,
+            reductionPatronale: red,
+            partOuvriere: nb(data.partOuvriere),
+            totalAPayer: nb(data.totalAPayer),
+            fichier: String(body.filename || ""),
+          },
+        });
+      }
 
       // Proposition brute — c'est l'admin qui valide. Aucune écriture ici.
       return NextResponse.json({
@@ -146,6 +173,32 @@ export async function POST(req: NextRequest) {
         source: body.source === "fiche-paie" ? "fiche-paie" : "saisie",
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "enregistrer-charge") {
+      const mois = String(body.mois || "");
+      const libelle = String(body.libelle || "").trim();
+      const montant = Number(String(body.montant ?? "").toString().replace(",", "."));
+      if (!MOIS_RE.test(mois) || !libelle || !Number.isFinite(montant) || montant < 0) {
+        return NextResponse.json({ error: "Mois, libellé ou montant invalide" }, { status: 400 });
+      }
+      await adminDb.collection("masse-salariale").doc(`${mois}__charge-${cleSalarie(libelle)}`).set({
+        type: "charge", mois, libelle,
+        montant: Math.round(montant * 100) / 100,
+        source: body.source === "fiche-paie" ? "fiche-paie" : "saisie",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "supprimer-charge") {
+      const mois = String(body.mois || "");
+      const libelle = String(body.libelle || "").trim();
+      if (!MOIS_RE.test(mois) || !libelle) {
+        return NextResponse.json({ error: "Mois ou libellé invalide" }, { status: 400 });
+      }
+      await adminDb.collection("masse-salariale").doc(`${mois}__charge-${cleSalarie(libelle)}`).delete();
       return NextResponse.json({ ok: true });
     }
 

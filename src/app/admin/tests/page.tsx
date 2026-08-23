@@ -1165,6 +1165,13 @@ const TESTS: TestCase[] = [
     priorite: "normale", correctif: "2026-08-21",
   },
   {
+    id: "CO-08", module: "Comptabilité", sous_module: "Masse salariale",
+    description: "Récapitulatif MSA/TESA : charges des saisonniers à part",
+    etapes: "Masse salariale → déposer le récapitulatif de cotisations DSN (PDF MSA) → vérifier la proposition → Enregistrer la charge",
+    resultat_attendu: "Le document est reconnu comme cotisations (pas comme fiche de paie). Le montant proposé est la part patronale NETTE des réductions — la part ouvrière, déjà dans les bruts, n'est pas comptée. La charge apparaît dans la section dédiée du mois et entre au coût total entreprise (mode Coût), jamais au brut",
+    priorite: "haute", correctif: "2026-08-21",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",
