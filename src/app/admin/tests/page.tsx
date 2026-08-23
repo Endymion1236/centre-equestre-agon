@@ -1151,6 +1151,20 @@ const TESTS: TestCase[] = [
     priorite: "normale", correctif: "2026-08-21",
   },
   {
+    id: "CO-07", module: "Comptabilité", sous_module: "Masse salariale",
+    description: "Lire une fiche de paie et l'enregistrer",
+    etapes: "Comptabilité → Masse salariale → déposer un bulletin PDF → vérifier les chiffres proposés → Enregistrer",
+    resultat_attendu: "Salarié, mois, brut, net, coût, heures pré-remplis et corrigeables avant validation. La ligne apparaît au mois, la matrice et le graphique se mettent à jour. Le PDF n'est stocké nulle part",
+    priorite: "haute", correctif: "2026-08-21",
+  },
+  {
+    id: "MG-17", module: "Management", sous_module: "Équipe",
+    description: "Registre unique du personnel",
+    etapes: "Équipe → Équipe → bouton registre d'un salarié → remplir contrat, dates, heures → Registre du personnel → Imprimer",
+    resultat_attendu: "Le registre liste les salariés dans l'ordre d'embauche, signale les fiches incomplètes, garde les sortis, et s'imprime en paysage avec l'en-tête légal",
+    priorite: "normale", correctif: "2026-08-21",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",

@@ -36,9 +36,24 @@ export interface TacheType {
   createdAt?: any;
 }
 
+export type TypeContrat = "CDI" | "CDD" | "Apprentissage" | "Saisonnier" | "Stage" | "Autre";
+
+export const TYPES_CONTRAT: TypeContrat[] = ["CDI", "CDD", "Apprentissage", "Saisonnier", "Stage", "Autre"];
+
 export interface Salarie {
   id: string;
   nom: string;
+  // ── Registre unique du personnel ──────────────────────────────────────
+  // Le registre est une obligation légale (art. L1221-13 du Code du travail).
+  // Ces champs se remplissent dans Équipe → Équipe, et s'impriment depuis le
+  // registre. `nom` reste le nom d'affichage du planning ; prenom/nomFamille
+  // portent l'état civil quand il en diffère.
+  prenom?: string;
+  nomFamille?: string;
+  dateEntree?: string;   // "AAAA-MM-JJ"
+  dateSortie?: string;   // "AAAA-MM-JJ" — vide tant que la personne est en poste
+  typeContrat?: TypeContrat;
+  emploi?: string;       // intitulé du poste (moniteur, palefrenier, apprenti…)
   couleur: string;    // couleur d'affichage
   actif: boolean;
   /** Heures contractuelles par semaine (défaut 35). Pour temps partiel. */

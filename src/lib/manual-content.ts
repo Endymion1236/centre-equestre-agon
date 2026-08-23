@@ -465,6 +465,22 @@ export const MANUAL: ManualChapter[] = [
         ],
       },
       {
+        id: "masse-salariale",
+        title: "Masse salariale & registre du personnel",
+        text: `
+          <p><strong>Masse salariale</strong> : le brut mensuel par salarié, présenté par saison comme la
+          trésorerie. Le plus simple : <strong>déposer les fiches de paie PDF</strong> — chaque bulletin est
+          lu, les chiffres extraits (brut, net, coût employeur, heures) te sont proposés, tu valides.
+          <strong>Le fichier n'est jamais conservé</strong> : seuls les agrégats entrent au tableau, le
+          bulletin reste dans le classeur du personnel.</p>
+          <p><strong>Registre unique du personnel</strong> (obligation légale, art. L1221-13) : les fiches se
+          remplissent dans Équipe → Équipe (bouton registre : prénom, nom, emploi, contrat, dates d'entrée
+          et de sortie, heures), et le registre s'imprime dans l'ordre d'embauche. Un salarié sorti reste
+          inscrit — c'est le rôle du registre.</p>
+        `,
+        href: "/admin/comptabilite/masse-salariale",
+      },
+      {
         id: "livre-caisse",
         title: "Livre de caisse espèces",
         text: `
