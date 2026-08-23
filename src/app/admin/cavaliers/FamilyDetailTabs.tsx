@@ -387,6 +387,8 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 {child.licenceNumber && (
                   <Badge color={child.licencePayee ? "green" : "gray"}>Licence {child.licenceNumber}{child.licencePayee ? "" : " (non payée)"}</Badge>
                 )}
+                {child.droitImage === true && <Badge color="green">📷 Droit à l&apos;image OK</Badge>}
+                {child.droitImage === false && <Badge color="red">📷 Image : refusé</Badge>}
               </div>
             </div>
             {/* Actions */}

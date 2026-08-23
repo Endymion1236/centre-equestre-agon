@@ -462,7 +462,23 @@ export const MANUAL: ManualChapter[] = [
         href: "/admin/comptabilite/tresorerie",
         tips: [
           "Le réflexe de fin de mois : relever le solde du compte au dernier jour et le poser dans la case — trente secondes, et la courbe de saison reste vivante.",
+          "Le bouton « Comptes » règle la liste des comptes bancaires suivis ; en bas de l'écran, l'échéancier des annuités d'emprunts (issu du bilan) montre ce qui sort chaque année en remboursements — et sa décrue programmée à partir de 2026-27.",
         ],
+      },
+      {
+        id: "resultat",
+        title: "Résultat en continu",
+        text: `
+          <p>Le chaînon entre la caisse et le bilan : chaque mois de l'exercice (juillet → juin),
+          <strong>CA encaissé − masse salariale − dépenses = ce qui reste</strong>. Le CA vient tout seul
+          de la caisse (avoirs, apports et versements exclus, remboursements déduits) — aucune saisie ;
+          la masse salariale et les dépenses reprennent leurs écrans respectifs.</p>
+          <p>Les repères du bilan 2024-25 sont affichés en face (CA 277 163 €, personnel 39 % du CA,
+          EBE 35 990 €). Attention aux unités : le CA de la caisse est <strong>TTC et encaissé</strong>,
+          le bilan parle HT et facturé — c'est un indicateur de tendance, pas un compte de résultat
+          comptable. Il suffit largement à voir un mois qui décroche.</p>
+        `,
+        href: "/admin/comptabilite/resultat",
       },
       {
         id: "masse-salariale",

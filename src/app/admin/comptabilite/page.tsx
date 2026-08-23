@@ -1952,6 +1952,10 @@ export default function ComptabilitePage() {
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded-lg no-underline">
             🏦 Trésorerie
           </Link>
+          <Link href="/admin/comptabilite/resultat"
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-2 rounded-lg no-underline">
+            📈 Résultat
+          </Link>
           <Link href="/admin/comptabilite/depenses"
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-orange-700 bg-orange-50 border border-orange-200 hover:bg-orange-100 px-3 py-2 rounded-lg no-underline">
             🧾 Dépenses

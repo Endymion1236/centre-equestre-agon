@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
-import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil } from "lucide-react";
+import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil, Settings2 } from "lucide-react";
 
 /**
  * Trésorerie — le classeur Excel du gérant, intégré.
@@ -41,6 +41,19 @@ function moisDe(saison: string, mm: string): string {
 const eur = (v: number) =>
   v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 
+// ── Échéancier des emprunts — « Simulation des charges 5 ans » du bilan clos
+// le 30/06/2025 (cabinet Pignolet). Annuités = capital + intérêts des 15
+// emprunts EXISTANT à cette date : un nouvel emprunt s'y ajouterait. C'est le
+// poids qui pèse sur le compte chaque mois — et sa décrue programmée.
+const ECHEANCIER_EMPRUNTS: { exercice: string; annuite: number }[] = [
+  { exercice: "2024-25", annuite: 36864 },
+  { exercice: "2025-26", annuite: 29916 },
+  { exercice: "2026-27", annuite: 20413 },
+  { exercice: "2027-28", annuite: 14073 },
+  { exercice: "2028-29", annuite: 12970 },
+];
+const EMPRUNTS_RESTE_APRES = 38187; // au-delà de 06/2029, jusqu'à fin 2033
+
 export default function TresoreriePage() {
   const { isAdmin, user } = useAuth();
   const [comptes, setComptes] = useState<string[]>([]);
@@ -53,6 +66,8 @@ export default function TresoreriePage() {
   const [edit, setEdit] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
   const [saving, setSaving] = useState(false);
+  // Réglage de la liste des comptes bancaires suivis (un par ligne).
+  const [comptesEdit, setComptesEdit] = useState<string | null>(null);
 
   const api = useCallback(async (init?: RequestInit) => {
     const token = await user!.getIdToken();
@@ -106,6 +121,20 @@ export default function TresoreriePage() {
       const mois = moisDe(saison, mm);
       await api({ method: "POST", body: JSON.stringify({ action: "saisir", compte, mois, montant: editVal.trim() === "" ? null : editVal }) });
       setEdit(null);
+      await load();
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setSaving(false); }
+  };
+
+  const enregistrerComptes = async () => {
+    if (comptesEdit === null || saving) return;
+    const liste = comptesEdit.split("\n").map(c => c.trim()).filter(Boolean);
+    if (liste.length === 0) { setError("Au moins un compte"); return; }
+    setSaving(true); setError("");
+    try {
+      await api({ method: "POST", body: JSON.stringify({ action: "comptes", comptes: liste }) });
+      setComptesEdit(null);
+      setInfo("Liste des comptes enregistrée.");
       await load();
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }
@@ -167,6 +196,11 @@ export default function TresoreriePage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
           </Link>
+          <button onClick={() => setComptesEdit(comptesEdit === null ? comptes.join("\n") : null)}
+            title="Régler la liste des comptes bancaires suivis"
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50">
+            <Settings2 size={14} /> Comptes
+          </button>
           <label className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 px-3 py-2 rounded-lg cursor-pointer">
             {importing ? <Loader2 size={14} className="animate-spin" /> : <FileUp size={14} />}
             Reprendre l&apos;historique (JSON)
@@ -182,6 +216,27 @@ export default function TresoreriePage() {
 
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">{error}</div>}
       {info && <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-body text-sm text-green-700 flex items-center gap-2"><Check size={15} />{info}</div>}
+
+      {comptesEdit !== null && (
+        <Card padding="md" className="mb-4">
+          <div className="font-body text-sm font-semibold text-slate-800 mb-1">Comptes bancaires suivis</div>
+          <p className="font-body text-xs text-slate-500 mb-2">
+            Un compte par ligne (ex. « Crédit Agricole — courant », « Excédent Pro »). Le tableau
+            additionne tous les comptes ; la saisie au clic remplit le premier de la liste.
+            Renommer un compte ne déplace pas ses relevés déjà saisis — garde le même nom si possible.
+          </p>
+          <textarea value={comptesEdit} onChange={e => setComptesEdit(e.target.value)} rows={Math.max(3, comptesEdit.split("\n").length + 1)}
+            className="w-full max-w-md font-body text-sm border border-gray-200 rounded-lg px-3 py-2" />
+          <div className="flex gap-2 mt-2">
+            <button onClick={enregistrerComptes} disabled={saving}
+              className="font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
+              Enregistrer
+            </button>
+            <button onClick={() => setComptesEdit(null)}
+              className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Annuler</button>
+          </div>
+        </Card>
+      )}
 
       {loading ? (
         <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
@@ -288,6 +343,41 @@ export default function TresoreriePage() {
             Un relevé de trésorerie n&apos;est pas une écriture comptable : il se corrige librement,
             comme dans le classeur. Un import d&apos;historique ne remplace jamais une valeur saisie à la main.
           </p>
+
+          {/* ── Le poids des emprunts sur le compte — et sa décrue programmée ── */}
+          <Card padding="md" className="mt-4">
+            <div className="font-body text-sm font-semibold text-slate-800 mb-1">
+              Annuités d&apos;emprunts — échéancier du bilan 2024-25
+            </div>
+            <p className="font-body text-xs text-slate-500 mb-3">
+              Capital + intérêts des 15 emprunts en cours au 30/06/2025 (simulation du cabinet).
+              C&apos;est ce qui sort du compte chaque année en remboursements — et la décrue est déjà
+              écrite : <strong>l&apos;étau se desserre nettement à partir de l&apos;exercice 2026-27</strong>,
+              sauf nouvel emprunt d&apos;ici là.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {ECHEANCIER_EMPRUNTS.map((e, i) => {
+                const estCourant = e.exercice === "2025-26";
+                const premier = ECHEANCIER_EMPRUNTS[0].annuite;
+                return (
+                  <div key={e.exercice}
+                    className={`rounded-lg border px-3 py-2 ${estCourant ? "border-blue-300 bg-blue-50" : "border-gray-100 bg-slate-50/60"}`}>
+                    <div className={`font-body text-[11px] font-semibold ${estCourant ? "text-blue-700" : "text-slate-500"}`}>
+                      {e.exercice}{estCourant ? " (en cours)" : i === 0 ? " (clos)" : ""}
+                    </div>
+                    <div className={`font-display text-lg font-bold ${estCourant ? "text-blue-800" : "text-slate-700"}`}>{eur(e.annuite)}</div>
+                    <div className="font-body text-[11px] text-slate-400">
+                      ≈ {eur(Math.round(e.annuite / 12))}/mois{i > 0 ? ` · −${Math.round((1 - e.annuite / premier) * 100)} % vs 24-25` : ""}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="font-body text-[11px] text-slate-400 mt-2">
+              Au-delà de juin 2029, il ne reste que {eur(EMPRUNTS_RESTE_APRES)} à étaler jusqu&apos;à fin 2033
+              (les deux emprunts de décembre 2023). Chiffres à rafraîchir au prochain bilan.
+            </p>
+          </Card>
         </>
       )}
     </div>

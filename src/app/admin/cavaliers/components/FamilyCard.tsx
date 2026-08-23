@@ -222,7 +222,10 @@ export default function FamilyCard({
 
   // ── Édition enfant ─────────────────────────────────────────────────────────
   const [editingChild, setEditingChild] = useState<string | null>(null); // childId
-  const [editChildForm, setEditChildForm] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—", licenceNumber: "", licencePayee: false });
+  // droitImage est TRI-ÉTAT : true (accordé), false (refusé), undefined (jamais
+  // demandé) — un refus explicite n'est pas la même chose qu'une absence de
+  // réponse, et le studio vidéo a besoin de la distinction.
+  const [editChildForm, setEditChildForm] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—", licenceNumber: "", licencePayee: false, droitImage: "" as "" | "oui" | "non" });
   const [editingSanitary, setEditingSanitary] = useState<string | null>(null); // childId
   const [sanitaryForm, setSanitaryForm] = useState({ allergies: "", medicalNotes: "", emergencyContactName: "", emergencyContactPhone: "", authorization: true });
   const [editingGalop, setEditingGalop] = useState<string | null>(null); // childId
@@ -248,7 +251,7 @@ export default function FamilyCard({
     setEditingChild(child.id);
     const bd = child.birthDate;
     const dateStr = bd ? (typeof bd === "string" ? bd.split("T")[0] : bd?.seconds ? new Date(bd.seconds * 1000).toISOString().split("T")[0] : bd instanceof Date ? bd.toISOString().split("T")[0] : "") : "";
-    setEditChildForm({ firstName: child.firstName || "", lastName: child.lastName || "", birthDate: dateStr, galopLevel: child.galopLevel || "—", licenceNumber: child.licenceNumber || "", licencePayee: !!child.licencePayee });
+    setEditChildForm({ firstName: child.firstName || "", lastName: child.lastName || "", birthDate: dateStr, galopLevel: child.galopLevel || "—", licenceNumber: child.licenceNumber || "", licencePayee: !!child.licencePayee, droitImage: child.droitImage === true ? "oui" : child.droitImage === false ? "non" : "" });
   };
 
   const handleSaveChild = async (childId: string) => {
@@ -267,6 +270,7 @@ export default function FamilyCard({
         galopLevel: editChildForm.galopLevel,
         licenceNumber: editChildForm.licenceNumber?.trim() || "",
         licencePayee: !!editChildForm.licencePayee,
+        droitImage: editChildForm.droitImage === "oui" ? true : editChildForm.droitImage === "non" ? false : null,
       } : c
     );
     try {
@@ -822,6 +826,15 @@ export default function FamilyCard({
                     <label className="flex items-center gap-1.5 font-body text-xs text-slate-600 whitespace-nowrap">
                       <input type="checkbox" checked={editChildForm.licencePayee} onChange={e => setEditChildForm(f => ({ ...f, licencePayee: e.target.checked }))} className="accent-green-500 w-4 h-4"/>
                       Licence payée
+                    </label>
+                    <label className="flex items-center gap-1.5 font-body text-xs text-slate-600 whitespace-nowrap" title="Autorisation d'utiliser des photos/vidéos du cavalier (site, réseaux sociaux, vidéos du club)">
+                      📷 Droit à l&apos;image
+                      <select value={editChildForm.droitImage} onChange={e => setEditChildForm(f => ({ ...f, droitImage: e.target.value as "" | "oui" | "non" }))}
+                        className="border border-gray-200 rounded-lg px-2 py-1 bg-white font-body text-xs">
+                        <option value="">non demandé</option>
+                        <option value="oui">accordé</option>
+                        <option value="non">refusé</option>
+                      </select>
                     </label>
                   </div>
                   <div className="flex gap-2 mt-2">

@@ -38,6 +38,12 @@ export interface Child {
   birthDate: Date;
   galopLevel: string; // "—", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4"
   sanitaryForm: SanitaryForm | null;
+  /**
+   * Droit à l'image — tri-état : true accordé, false REFUSÉ explicitement,
+   * null/undefined jamais demandé. Le refus doit rester distinct du silence :
+   * photos et vidéos du club ne peuvent montrer que les `true`.
+   */
+  droitImage?: boolean | null;
 }
 
 export interface SanitaryForm {
