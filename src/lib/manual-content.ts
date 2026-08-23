@@ -479,6 +479,27 @@ export const MANUAL: ManualChapter[] = [
           inscrit — c'est le rôle du registre.</p>
         `,
         href: "/admin/comptabilite/masse-salariale",
+        tips: [
+          "La colonne et la courbe « Réf. bilan 24-25 » sont le dernier exercice validé par le cabinet (109 330 € de charges de personnel, réparties selon le journal de paie) : durablement au-dessus sans chiffre d'affaires en face, c'est le signal.",
+        ],
+      },
+      {
+        id: "depenses",
+        title: "Dépenses par poste",
+        text: `
+          <p>Le pendant « charges » de la trésorerie : une matrice <strong>postes × mois</strong> sur
+          l'exercice comptable (juillet → juin), où chaque poste (aliments, maréchalerie, vétérinaire,
+          entretien, assurances…) se saisit au fil de l'eau et se compare au <strong>dernier bilan validé
+          par le cabinet</strong>.</p>
+          <p>La colonne <strong>Attendu</strong> proratise la référence annuelle sur les mois écoulés :
+          un cumul à plus de 110 % de l'attendu s'affiche en rouge — le dérapage se voit en octobre,
+          pas dans le bilan de l'année suivante. Clique une case pour saisir (montant HT du mois),
+          vide-la pour effacer. Outil de pilotage librement corrigible, pas une écriture comptable.</p>
+        `,
+        href: "/admin/comptabilite/depenses",
+        tips: [
+          "Le réflexe : une fois par mois, reporter les 4-5 factures marquantes du mois par poste — cinq minutes, et les postes qui ont doublé en 2024-25 (entretien, fournitures, véto) restent sous surveillance.",
+        ],
       },
       {
         id: "livre-caisse",

@@ -31,6 +31,20 @@ const NOMS_MOIS: Record<string, string> = {
   "01": "Janvier", "02": "Février", "03": "Mars", "04": "Avril",
   "05": "Mai", "06": "Juin", "07": "Juillet", "08": "Août",
 };
+// ── Référence : exercice 2024-25, le dernier validé par le cabinet ──
+// Le journal de paie mensuel du bilan donne le PROFIL saisonnier, et les
+// 109 330 € de charges de personnel du compte de résultat donnent le NIVEAU
+// (le journal seul omet la rémunération du gérant et une partie des
+// cotisations) : chaque mois du journal est donc mis à l'échelle pour que
+// l'année retombe exactement sur le total du bilan.
+const REF_JOURNAL_PAIE: Record<string, number> = {
+  "07": 6363.70, "08": 5795.39, "09": 5015.90, "10": 5267.13, "11": 5150.41, "12": 2746.30,
+  "01": 2375.88, "02": 4239.69, "03": 2641.46, "04": 3160.75, "05": 4381.50, "06": 5358.43,
+};
+const REF_CHARGES_PERSONNEL_AN = 109330.29;
+const REF_JOURNAL_TOTAL = Object.values(REF_JOURNAL_PAIE).reduce((s, v) => s + v, 0);
+const refBilanMois = (mm: string) => (REF_JOURNAL_PAIE[mm] / REF_JOURNAL_TOTAL) * REF_CHARGES_PERSONNEL_AN;
+
 function saisonDe(mois: string): string {
   const [a, m] = mois.split("-").map(Number);
   return m >= 7 ? `${a}-${a + 1}` : `${a - 1}-${a}`;
@@ -201,7 +215,7 @@ export default function MasseSalarialePage() {
 
   // ── Graphique — emphase : saison courante en couleur, le reste en contexte ──
   const graphe = useMemo(() => {
-    const vals = [...totalParMois.values()];
+    const vals = [...totalParMois.values(), ...MOIS_SAISON.map(refBilanMois)];
     if (vals.length === 0) return null;
     const W = 640, H = 220, PAD = { l: 54, r: 76, t: 14, b: 22 };
     const maxV = Math.max(...vals) * 1.08;
@@ -361,6 +375,10 @@ export default function MasseSalarialePage() {
                 <span className="flex items-center gap-1.5"><span className="inline-block w-4 rounded bg-purple-600" style={{ height: 3 }} /> <strong className="text-slate-700">{saisonCourante}</strong></span>
                 {saisonPrec && <span className="flex items-center gap-1.5 text-slate-500"><span className="inline-block w-4 rounded bg-slate-500" style={{ height: 2 }} /> {saisonPrec}</span>}
                 <span className="flex items-center gap-1.5 text-slate-400"><span className="inline-block w-4 rounded bg-slate-300" style={{ height: 2 }} /> exercices précédents</span>
+                <span className="flex items-center gap-1.5 text-amber-700">
+                  <svg width="16" height="4" aria-hidden="true"><line x1="0" y1="2" x2="16" y2="2" stroke="#d97706" strokeWidth="2" strokeDasharray="4 3" /></svg>
+                  réf. bilan 2024-25
+                </span>
               </div>
               <svg viewBox={`0 0 ${graphe.W} ${graphe.H}`} className="w-full" role="img"
                 aria-label={mode === "cout" ? "Coût total entreprise mensuel par exercice" : "Masse salariale brute mensuelle par exercice"}>
@@ -373,6 +391,17 @@ export default function MasseSalarialePage() {
                 {MOIS_SAISON.map((mm, i) => (
                   <text key={mm} x={graphe.x(i)} y={graphe.H - 6} textAnchor="middle" fontSize="8.5" fill="#94a3b8" fontFamily="sans-serif">{NOMS_MOIS[mm].slice(0, 3)}</text>
                 ))}
+                {(() => {
+                  const d = MOIS_SAISON.map((mm, i) => `${i === 0 ? "M" : "L"}${graphe.x(i).toFixed(1)},${graphe.y(refBilanMois(mm)).toFixed(1)}`).join(" ");
+                  return (
+                    <g>
+                      <path d={d} fill="none" stroke="#d97706" strokeWidth="1.5" strokeDasharray="5 4" strokeLinejoin="round" opacity="0.85">
+                        <title>Référence bilan 2024-25 : 109 330 € de charges de personnel, répartis selon le journal de paie</title>
+                      </path>
+                      <text x={graphe.x(11) + 7} y={graphe.y(refBilanMois("06")) + 3} fontSize="9" fontWeight="600" fill="#b45309" fontFamily="sans-serif">réf. 24-25</text>
+                    </g>
+                  );
+                })()}
                 {saisons.map(s => {
                   const pts = graphe.ligne(s);
                   if (pts.length < 2) return null;
@@ -424,6 +453,10 @@ export default function MasseSalarialePage() {
                   <th className="px-3 py-2.5 text-left font-semibold text-[11px] uppercase tracking-wider text-slate-600">
                     Mois ({mode === "cout" ? "coût entreprise" : "brut"} total)
                   </th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-[11px] tracking-wider text-amber-700"
+                    title="Charges de personnel du bilan 2024-25 (109 330 €), réparties selon le journal de paie">
+                    Réf. bilan 24-25
+                  </th>
                   {saisons.map(s => (
                     <th key={s} className={`px-3 py-2.5 text-right font-semibold text-[11px] tracking-wider ${s === saisonCourante ? "text-purple-700" : "text-slate-600"}`}>{s}</th>
                   ))}
@@ -433,6 +466,7 @@ export default function MasseSalarialePage() {
                 {MOIS_SAISON.map(mm => (
                   <tr key={mm} className="border-b border-gray-100 hover:bg-slate-50/50">
                     <td className="px-3 py-2 text-slate-700 font-medium">{NOMS_MOIS[mm]}</td>
+                    <td className="px-3 py-2 text-right text-amber-700/80 italic">{eur(refBilanMois(mm))}</td>
                     {saisons.map(s => {
                       const mois = moisDe(s, mm);
                       const total = totalParMois.get(mois);
@@ -448,6 +482,12 @@ export default function MasseSalarialePage() {
                 ))}
               </tbody>
             </table>
+            <p className="font-body text-[11px] text-slate-400 px-3 py-2">
+              La colonne <span className="text-amber-700">Réf. bilan 24-25</span> est le dernier exercice
+              validé par le cabinet : 109 330 € de charges de personnel (rémunération du gérant comprise),
+              répartis sur l&apos;année selon le profil du journal de paie. À comparer à la vue
+              « coût total entreprise » — durablement au-dessus sans chiffre d&apos;affaires en face, c&apos;est le signal.
+            </p>
           </Card>
 
           {/* ── Détail du mois sélectionné ── */}
