@@ -20,7 +20,11 @@ import { Users, Loader2, RefreshCw, FileUp, Check, Pencil, Trash2, Plus } from "
 interface Ligne { id: string; mois: string; salarie: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; source: string; }
 interface Proposition { salarie: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; }
 
-const MOIS_SAISON = ["09", "10", "11", "12", "01", "02", "03", "04", "05", "06", "07", "08"] as const;
+// L'EXERCICE COMPTABLE du centre court du 1er juillet au 30 juin — c'est lui
+// qui structure la lecture, pas la saison scolaire : la masse salariale se
+// compare au bilan. (La trésorerie, elle, reste en septembre → août, comme le
+// classeur historique du gérant.)
+const MOIS_SAISON = ["07", "08", "09", "10", "11", "12", "01", "02", "03", "04", "05", "06"] as const;
 const NOMS_MOIS: Record<string, string> = {
   "09": "Septembre", "10": "Octobre", "11": "Novembre", "12": "Décembre",
   "01": "Janvier", "02": "Février", "03": "Mars", "04": "Avril",
@@ -28,11 +32,11 @@ const NOMS_MOIS: Record<string, string> = {
 };
 function saisonDe(mois: string): string {
   const [a, m] = mois.split("-").map(Number);
-  return m >= 9 ? `${a}-${a + 1}` : `${a - 1}-${a}`;
+  return m >= 7 ? `${a}-${a + 1}` : `${a - 1}-${a}`;
 }
 function moisDe(saison: string, mm: string): string {
   const [a1, a2] = saison.split("-");
-  return `${Number(mm) >= 9 ? a1 : a2}-${mm}`;
+  return `${Number(mm) >= 7 ? a1 : a2}-${mm}`;
 }
 const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 const moisCourant = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
@@ -43,6 +47,10 @@ export default function MasseSalarialePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [moisDetail, setMoisDetail] = useState(moisCourant());
+  // Lecture en brut, ou en coût total entreprise (brut + charges patronales).
+  // Quand une ligne n'a pas de coût employeur sur son bulletin, on retombe sur
+  // son brut et on le SIGNALE : un total silencieusement incomplet serait pire.
+  const [mode, setMode] = useState<"brut" | "cout">("brut");
   const [propositions, setPropositions] = useState<Proposition[]>([]);
   const [lecture, setLecture] = useState(0); // nb de PDF en cours de lecture
   const [saving, setSaving] = useState(false);
@@ -71,11 +79,21 @@ export default function MasseSalarialePage() {
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
+  const valeurDe = useCallback(
+    (l: Ligne) => (mode === "cout" ? (l.coutEmployeur ?? l.brut) : l.brut),
+    [mode],
+  );
   const totalParMois = useMemo(() => {
     const m = new Map<string, number>();
-    lignes.forEach(l => m.set(l.mois, (m.get(l.mois) || 0) + l.brut));
+    lignes.forEach(l => m.set(l.mois, (m.get(l.mois) || 0) + valeurDe(l)));
     return m;
-  }, [lignes]);
+  }, [lignes, valeurDe]);
+  // Mois dont le coût est partiellement estimé (lignes sans coût employeur).
+  const moisPartiels = useMemo(() => {
+    const m = new Set<string>();
+    if (mode === "cout") lignes.forEach(l => { if (l.coutEmployeur == null) m.add(l.mois); });
+    return m;
+  }, [lignes, mode]);
   const saisons = useMemo(() => {
     const s = new Set(lignes.map(l => saisonDe(l.mois)));
     s.add(saisonDe(moisCourant()));
@@ -167,7 +185,8 @@ export default function MasseSalarialePage() {
           <div>
             <h1 className="font-display text-2xl font-bold text-blue-800">Masse salariale</h1>
             <p className="font-body text-sm text-slate-500">
-              Brut mensuel par salarié, saison par saison — dépose les fiches de paie, valide, c&apos;est tout.
+              Brut et coût entreprise par salarié, exercice par exercice (juillet → juin, comme le bilan) —
+              dépose les fiches de paie, valide, c&apos;est tout.
             </p>
           </div>
         </div>
@@ -255,9 +274,10 @@ export default function MasseSalarialePage() {
               <div className="flex items-center gap-4 mb-2 font-body text-xs">
                 <span className="flex items-center gap-1.5"><span className="inline-block w-4 rounded bg-purple-600" style={{ height: 3 }} /> <strong className="text-slate-700">{saisonCourante}</strong></span>
                 {saisonPrec && <span className="flex items-center gap-1.5 text-slate-500"><span className="inline-block w-4 rounded bg-slate-500" style={{ height: 2 }} /> {saisonPrec}</span>}
-                <span className="flex items-center gap-1.5 text-slate-400"><span className="inline-block w-4 rounded bg-slate-300" style={{ height: 2 }} /> saisons précédentes</span>
+                <span className="flex items-center gap-1.5 text-slate-400"><span className="inline-block w-4 rounded bg-slate-300" style={{ height: 2 }} /> exercices précédents</span>
               </div>
-              <svg viewBox={`0 0 ${graphe.W} ${graphe.H}`} className="w-full" role="img" aria-label="Masse salariale brute mensuelle par saison">
+              <svg viewBox={`0 0 ${graphe.W} ${graphe.H}`} className="w-full" role="img"
+                aria-label={mode === "cout" ? "Coût total entreprise mensuel par exercice" : "Masse salariale brute mensuelle par exercice"}>
                 {graphe.grads.map(v => (
                   <g key={v}>
                     <line x1={graphe.PAD.l} x2={graphe.W - graphe.PAD.r} y1={graphe.y(v)} y2={graphe.y(v)} stroke="#e2e8f0" strokeWidth="1" />
@@ -281,7 +301,7 @@ export default function MasseSalarialePage() {
                         <>
                           {pts.map(p => (
                             <circle key={p.i} cx={graphe.x(p.i)} cy={graphe.y(p.v)} r={estC ? 3 : 2.2} fill={estC ? "#9333ea" : "#64748b"}>
-                              <title>{`${NOMS_MOIS[MOIS_SAISON[p.i]]} ${s} : ${eur(p.v)} brut`}</title>
+                              <title>{`${NOMS_MOIS[MOIS_SAISON[p.i]]} ${s} : ${eur(p.v)} ${mode === "cout" ? "coût entreprise" : "brut"}`}</title>
                             </circle>
                           ))}
                           <text x={graphe.x(fin.i) + 7} y={graphe.y(fin.v) + 3} fontSize="9.5" fontWeight="700"
@@ -295,12 +315,29 @@ export default function MasseSalarialePage() {
             </Card>
           )}
 
-          {/* ── Matrice mois × saisons (brut total) ── */}
+          {/* ── Bascule Brut / Coût entreprise ── */}
+          <div className="flex items-center gap-2 mb-2">
+            {([["brut", "Brut"], ["cout", "Coût total entreprise"]] as const).map(([id, lab]) => (
+              <button key={id} onClick={() => setMode(id)}
+                className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer ${mode === id ? "bg-purple-600 text-white border-purple-600" : "bg-white text-slate-600 border-gray-200 hover:bg-purple-50"}`}>
+                {lab}
+              </button>
+            ))}
+            {mode === "cout" && moisPartiels.size > 0 && (
+              <span className="font-body text-[11px] text-amber-700">
+                * mois incomplets : des bulletins sans coût employeur comptent leur brut
+              </span>
+            )}
+          </div>
+
+          {/* ── Matrice mois × saisons ── */}
           <Card padding="sm" className="overflow-x-auto !p-0 mb-4">
             <table className="w-full border-collapse font-body text-sm">
               <thead>
                 <tr className="bg-slate-50 border-b-2 border-slate-200">
-                  <th className="px-3 py-2.5 text-left font-semibold text-[11px] uppercase tracking-wider text-slate-600">Mois (brut total)</th>
+                  <th className="px-3 py-2.5 text-left font-semibold text-[11px] uppercase tracking-wider text-slate-600">
+                    Mois ({mode === "cout" ? "coût entreprise" : "brut"} total)
+                  </th>
                   {saisons.map(s => (
                     <th key={s} className={`px-3 py-2.5 text-right font-semibold text-[11px] tracking-wider ${s === saisonCourante ? "text-purple-700" : "text-slate-600"}`}>{s}</th>
                   ))}
@@ -317,7 +354,7 @@ export default function MasseSalarialePage() {
                         <td key={s} onClick={() => setMoisDetail(mois)}
                           title="Voir le détail du mois"
                           className={`px-3 py-2 text-right cursor-pointer ${mois === moisDetail ? "bg-purple-50 rounded" : ""} ${s === saisonCourante ? "font-semibold text-purple-800" : "text-slate-600"}`}>
-                          {total !== undefined ? eur(total) : <span className="text-slate-300">—</span>}
+                          {total !== undefined ? <>{eur(total)}{moisPartiels.has(mois) ? "*" : ""}</> : <span className="text-slate-300">—</span>}
                         </td>
                       );
                     })}
@@ -400,8 +437,22 @@ export default function MasseSalarialePage() {
                 </tbody>
               </table>
             )}
+            {lignesDuMois.length > 0 && (
+              <div className="mt-3 rounded-lg bg-purple-100/60 border border-purple-200 px-3 py-2 flex items-center justify-between font-body text-sm">
+                <span className="font-semibold text-purple-900">Coût total entreprise du mois</span>
+                <span className="font-bold text-purple-900">
+                  {eur(lignesDuMois.reduce((s, l) => s + (l.coutEmployeur ?? l.brut), 0))}
+                  {lignesDuMois.some(l => l.coutEmployeur == null) && (
+                    <span className="font-body text-[11px] font-normal text-amber-700 ml-2">
+                      ({lignesDuMois.filter(l => l.coutEmployeur == null).length} ligne(s) comptée(s) au brut, coût absent du bulletin)
+                    </span>
+                  )}
+                </span>
+              </div>
+            )}
             <p className="font-body text-[11px] text-slate-400 mt-3">
-              La matrice et le graphique portent sur le <strong>brut</strong>, toujours présent sur les bulletins.
+              Le <strong>brut</strong> figure sur tous les bulletins ; le <strong>coût entreprise</strong> (brut +
+              charges patronales) seulement sur certains — d&apos;où le repli signalé quand il manque.
               Outil de pilotage : les lignes se corrigent librement, aucune fiche de paie n&apos;est conservée.
             </p>
           </Card>
