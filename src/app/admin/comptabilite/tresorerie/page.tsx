@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
-import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil, Settings2 } from "lucide-react";
+import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil, Settings2, FileText } from "lucide-react";
+import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
 
 /**
  * Trésorerie — le classeur Excel du gérant, intégré.
@@ -20,6 +21,16 @@ import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil, Settings2 } from "
  */
 
 interface Releve { id: string; mois: string; compte: string; montant: number; note: string; source: string; }
+
+// Un débit lu sur le relevé PDF, avec le poste de dépense proposé.
+interface OperationProposee { date: string; mois: string; libelle: string; montant: number; poste: string; garder: boolean; }
+interface PropositionReleve {
+  banque: string; compte: string; mois: string;
+  soldeFin: number | null; soldeDebut: number | null; dateSoldeFin: string;
+  operations: OperationProposee[];
+  fichier: string;
+  compteChoisi: string; soldeEdit: string; soldeEnregistre: boolean;
+}
 
 const MOIS_SAISON = ["09", "10", "11", "12", "01", "02", "03", "04", "05", "06", "07", "08"] as const;
 const NOMS_MOIS: Record<string, string> = {
@@ -68,6 +79,9 @@ export default function TresoreriePage() {
   const [saving, setSaving] = useState(false);
   // Réglage de la liste des comptes bancaires suivis (un par ligne).
   const [comptesEdit, setComptesEdit] = useState<string | null>(null);
+  // Relevés PDF déposés, en cours de lecture / de validation.
+  const [lectureReleve, setLectureReleve] = useState(0);
+  const [propositions, setPropositions] = useState<PropositionReleve[]>([]);
 
   const api = useCallback(async (init?: RequestInit) => {
     const token = await user!.getIdToken();
@@ -140,6 +154,68 @@ export default function TresoreriePage() {
     finally { setSaving(false); }
   };
 
+  // ── Dépôt d'un relevé de compte PDF ──
+  const lireReleve = async (fichiers: FileList) => {
+    setError("");
+    for (const f of Array.from(fichiers)) {
+      setLectureReleve(n => n + 1);
+      try {
+        const b64 = btoa(new Uint8Array(await f.arrayBuffer()).reduce((s, o) => s + String.fromCharCode(o), ""));
+        const d = await api({ method: "POST", body: JSON.stringify({ action: "extraire", pdfBase64: b64, filename: f.name }) });
+        const p = d.propositionReleve;
+        // Pré-choix du compte : celui dont le nom recoupe le libellé lu, sinon le premier.
+        const libelle = `${p.banque} ${p.compte}`.toLowerCase();
+        const compteChoisi = comptes.find(c => c.toLowerCase().split(/\s+/).some((mot: string) => mot.length > 3 && libelle.includes(mot))) || comptes[0] || "Compte courant";
+        setPropositions(prev => [...prev, {
+          ...p,
+          operations: (p.operations || []).map((o: any) => ({ ...o, garder: o.poste !== POSTE_HORS_DEPENSES })),
+          compteChoisi,
+          soldeEdit: p.soldeFin != null ? String(p.soldeFin) : "",
+          soldeEnregistre: false,
+        }]);
+      } catch (e: any) {
+        setError(`${f.name} : ${e?.message || String(e)}`);
+      } finally {
+        setLectureReleve(n => n - 1);
+      }
+    }
+  };
+
+  const enregistrerSoldeReleve = async (idx: number) => {
+    const p = propositions[idx];
+    if (!p || saving || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)) return;
+    setSaving(true); setError("");
+    try {
+      await api({ method: "POST", body: JSON.stringify({ action: "saisir", compte: p.compteChoisi, mois: p.mois, montant: p.soldeEdit }) });
+      setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, soldeEnregistre: true } : x));
+      await load();
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setSaving(false); }
+  };
+
+  const ajouterDepensesReleve = async (idx: number) => {
+    const p = propositions[idx];
+    const gardees = (p?.operations || []).filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES && /^\d{4}-\d{2}$/.test(o.mois));
+    if (!p || saving || gardees.length === 0) return;
+    setSaving(true); setError(""); setInfo("");
+    try {
+      const token = await user!.getIdToken();
+      const res = await fetch("/api/admin/depenses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: "ajouter-lot",
+          factures: gardees.map(o => ({ mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, note: `Relevé ${p.fichier}` })),
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      setInfo(`${d.ajoutees} dépense(s) ajoutée(s) à l'écran Dépenses par poste.`);
+      setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: [] } : x));
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setSaving(false); }
+  };
+
   const importer = async (fichier: File) => {
     setImporting(true); setError(""); setInfo("");
     try {
@@ -196,6 +272,13 @@ export default function TresoreriePage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
           </Link>
+          <label className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-lg cursor-pointer"
+            title="Le solde de fin de mois est lu sur le relevé et proposé ; les débits sont catégorisés en dépenses. Le PDF n'est pas conservé.">
+            {lectureReleve > 0 ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+            {lectureReleve > 0 ? `Lecture (${lectureReleve})…` : "Déposer le relevé (PDF)"}
+            <input type="file" accept=".pdf,application/pdf" multiple className="hidden"
+              onChange={e => { if (e.target.files?.length) lireReleve(e.target.files); e.target.value = ""; }} />
+          </label>
           <button onClick={() => setComptesEdit(comptesEdit === null ? comptes.join("\n") : null)}
             title="Régler la liste des comptes bancaires suivis"
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50">
@@ -216,6 +299,100 @@ export default function TresoreriePage() {
 
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">{error}</div>}
       {info && <div className="mb-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-body text-sm text-green-700 flex items-center gap-2"><Check size={15} />{info}</div>}
+
+      {/* ── Relevés lus, en attente de validation ── */}
+      {propositions.map((p, idx) => (
+        <Card key={`${p.fichier}-${idx}`} padding="md" className="mb-4 border-blue-200">
+          <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+            <div className="font-body text-sm font-semibold text-blue-900 flex items-center gap-2">
+              <FileText size={15} /> {p.fichier}
+              <span className="font-normal text-slate-500 text-xs">
+                {p.banque}{p.compte ? ` — ${p.compte}` : ""}
+                {p.soldeDebut != null ? ` · ancien solde ${eur(p.soldeDebut)}` : ""}
+                {p.dateSoldeFin ? ` · arrêté au ${p.dateSoldeFin.split("-").reverse().join("/")}` : ""}
+              </span>
+            </div>
+            <button onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
+              className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-2 py-1 rounded-lg cursor-pointer">✕ retirer</button>
+          </div>
+
+          {/* Le solde de fin de mois → trésorerie */}
+          <div className="flex flex-wrap items-center gap-2 font-body text-xs rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2 mb-2">
+            <span className="font-semibold text-blue-900">Solde de fin de mois</span>
+            <select value={p.compteChoisi} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, compteChoisi: e.target.value } : x))}
+              className="border border-gray-200 rounded px-2 py-1 bg-white">
+              {(comptes.length ? comptes : ["Compte courant"]).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <input value={p.mois} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, mois: e.target.value } : x))}
+              className="border border-gray-200 rounded px-2 py-1 w-20" placeholder="AAAA-MM" />
+            <input value={p.soldeEdit} inputMode="decimal"
+              onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, soldeEdit: e.target.value } : x))}
+              className="border border-gray-200 rounded px-2 py-1 w-28 text-right font-semibold" />
+            {p.soldeEnregistre ? (
+              <span className="flex items-center gap-1 text-green-700 font-semibold"><Check size={13} /> enregistré</span>
+            ) : (
+              <button onClick={() => enregistrerSoldeReleve(idx)}
+                disabled={saving || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)}
+                className="font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                Enregistrer le solde
+              </button>
+            )}
+          </div>
+
+          {/* Les débits catégorisés → dépenses par poste */}
+          {p.operations.length > 0 && (() => {
+            const gardees = p.operations.filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES);
+            return (
+              <div className="rounded-lg border border-orange-200 bg-orange-50/40 px-3 py-2">
+                <div className="font-body text-xs font-semibold text-orange-900 mb-1.5">
+                  Débits lus sur le relevé — coche ceux à ajouter aux Dépenses par poste
+                  <span className="font-normal text-slate-500"> (décoche ce que tu as déjà saisi à la main : sinon il compterait deux fois)</span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse font-body text-xs">
+                    <tbody>
+                      {p.operations.map((o, oi) => (
+                        <tr key={oi} className={`border-b border-orange-100/60 ${o.poste === POSTE_HORS_DEPENSES ? "opacity-50" : ""}`}>
+                          <td className="py-1 pr-2 w-6">
+                            <input type="checkbox" checked={o.garder && o.poste !== POSTE_HORS_DEPENSES}
+                              disabled={o.poste === POSTE_HORS_DEPENSES}
+                              onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: x.operations.map((y, yi) => yi === oi ? { ...y, garder: e.target.checked } : y) } : x))}
+                              className="accent-orange-600 w-3.5 h-3.5" />
+                          </td>
+                          <td className="py-1 pr-2 text-slate-400 whitespace-nowrap">{o.date ? o.date.slice(8, 10) + "/" + o.date.slice(5, 7) : "?"}</td>
+                          <td className="py-1 pr-2">
+                            <input value={o.libelle}
+                              onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: x.operations.map((y, yi) => yi === oi ? { ...y, libelle: e.target.value } : y) } : x))}
+                              className="w-full min-w-40 border border-transparent hover:border-gray-200 focus:border-orange-300 rounded px-1 py-0.5 bg-transparent" />
+                          </td>
+                          <td className="py-1 pr-2 text-right font-semibold text-slate-700 whitespace-nowrap">{eur(o.montant)}</td>
+                          <td className="py-1">
+                            <select value={o.poste}
+                              onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: x.operations.map((y, yi) => yi === oi ? { ...y, poste: e.target.value, garder: e.target.value !== POSTE_HORS_DEPENSES ? y.garder || true : y.garder } : y) } : x))}
+                              className="border border-gray-200 rounded px-1.5 py-0.5 bg-white max-w-56">
+                              {POSTES_DEPENSES.map(ps => <option key={ps.nom} value={ps.nom}>{ps.nom}</option>)}
+                              <option value={POSTE_HORS_DEPENSES}>Hors dépenses (emprunt, MSA, salaire, TVA…)</option>
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center justify-between flex-wrap gap-2 mt-2">
+                  <span className="font-body text-[11px] text-slate-500">
+                    {gardees.length} cochée(s) — {eur(gardees.reduce((s, o) => s + o.montant, 0))} · montants TTC du relevé
+                  </span>
+                  <button onClick={() => ajouterDepensesReleve(idx)} disabled={saving || gardees.length === 0}
+                    className="font-body text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                    Ajouter {gardees.length} dépense(s)
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+        </Card>
+      ))}
 
       {comptesEdit !== null && (
         <Card padding="md" className="mb-4">

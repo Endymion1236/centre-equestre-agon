@@ -458,6 +458,11 @@ export const MANUAL: ManualChapter[] = [
           pas de journal, pas de scellement — l'outil se corrige librement, comme le classeur qu'il
           remplace. L'historique Excel se reprend par le bouton d'import, sans jamais écraser une
           valeur saisie à la main.</p>
+          <p><strong>Le relevé de compte PDF fait tout le travail</strong> : dépose-le (bouton bleu),
+          le solde de fin de mois est lu et proposé — plus de faute de frappe — et chaque débit est
+          catégorisé en dépense (fournisseur + poste proposés) : tu coches, tu valides, ça part dans
+          l'écran Dépenses par poste. Décoche ce que tu as déjà saisi à la main pour ne pas compter
+          deux fois. Le PDF n'est jamais conservé.</p>
         `,
         href: "/admin/comptabilite/tresorerie",
         tips: [

@@ -21,8 +21,10 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
+import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -94,6 +96,85 @@ export async function POST(req: NextRequest) {
         { comptes, updatedAt: FieldValue.serverTimestamp() }, { merge: true },
       );
       return NextResponse.json({ ok: true, comptes });
+    }
+
+    // ── Lecture d'un relevé de compte PDF ──
+    // Le réflexe de fin de mois, version sûre : au lieu de recopier le solde à
+    // la main (avec le risque de faute de frappe), on dépose le relevé — le
+    // solde de fin de mois est extrait et PROPOSÉ, l'admin valide. Le PDF
+    // n'est jamais conservé, comme pour les fiches de paie.
+    if (body.action === "extraire") {
+      const pdfBase64 = String(body.pdfBase64 || "");
+      if (!pdfBase64 || pdfBase64.length > 6_000_000) {
+        return NextResponse.json({ error: "PDF manquant ou trop lourd (4 Mo max)" }, { status: 400 });
+      }
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return NextResponse.json({ error: "Clé d'analyse absente (ANTHROPIC_API_KEY)" }, { status: 500 });
+
+      const nomsPostes = POSTES_DEPENSES.map((p) => p.nom);
+      const anthropic = new Anthropic({ apiKey });
+      const rep = await anthropic.messages.create({
+        model: "claude-haiku-4-5",
+        max_tokens: 6000,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } },
+            {
+              type: "text",
+              text:
+                "Ce document est un RELEVÉ DE COMPTE bancaire français d'un centre équestre. Réponds par un objet JSON seul, sans autre texte :\n" +
+                '{ "typeDoc": "releve", "banque": "nom de la banque", "compte": "libellé ou intitulé du compte (et fin de numéro le cas échéant)", "mois": "AAAA-MM du solde de clôture (le mois de la date d\'arrêté du NOUVEAU solde)", "soldeFin": nombre (le NOUVEAU solde / solde en fin de période, NÉGATIF si le compte est débiteur), "soldeDebut": nombre ou null (ancien solde), "dateSoldeFin": "AAAA-MM-JJ" ou null,\n' +
+                '  "operations": [ { "date": "AAAA-MM-JJ", "libelle": "libellé de l\'opération, nom du fournisseur mis en avant", "montant": nombre positif, "poste": "…" } ] }\n' +
+                "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
+                nomsPostes.map((n) => `- "${n}"`).join("\n") + "\n" +
+                `- "${POSTE_HORS_DEPENSES}" pour tout débit qui n'est PAS une dépense de fonctionnement à suivre : échéance ou remboursement d'emprunt, salaire ou virement à un salarié, cotisations MSA/URSSAF/DGFiP/TESA, TVA et impôts, virement interne entre comptes du centre, retrait d'espèces, remboursement à un client.\n` +
+                "Montants en euros, point décimal, sans séparateur de milliers. Si ce n'est pas un relevé de compte, réponds {\"erreur\": \"document non reconnu\"}.",
+            },
+          ],
+        }],
+      });
+
+      const texte = rep.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+      const m = texte.match(/\{[\s\S]*\}/);
+      if (!m) return NextResponse.json({ error: "Lecture du relevé impossible" }, { status: 422 });
+      let data: any;
+      try { data = JSON.parse(m[0]); } catch {
+        return NextResponse.json({ error: "Lecture du relevé impossible" }, { status: 422 });
+      }
+      if (data.erreur) return NextResponse.json({ error: String(data.erreur) }, { status: 422 });
+
+      const nb = (v: unknown) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : null);
+      const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+      // Chaque débit lu devient une dépense PROPOSÉE : poste ramené à la liste
+      // connue (sinon « hors dépenses », l'admin re-catégorise), mois tiré de
+      // la date de l'opération (pas de celle du relevé — un relevé à cheval
+      // sur deux mois range chaque débit dans le sien).
+      const operations = (Array.isArray(data.operations) ? data.operations : [])
+        .slice(0, 200)
+        .map((o: any) => {
+          const montant = nb(o?.montant);
+          const date = DATE_RE.test(String(o?.date)) ? String(o.date) : "";
+          const poste = nomsPostes.includes(String(o?.poste)) ? String(o.poste) : POSTE_HORS_DEPENSES;
+          return montant !== null && montant > 0
+            ? { date, mois: date.slice(0, 7), libelle: String(o?.libelle || "").trim().slice(0, 80), montant, poste }
+            : null;
+        })
+        .filter(Boolean);
+
+      // Proposition seulement — c'est l'admin qui valide, aucune écriture ici.
+      return NextResponse.json({
+        propositionReleve: {
+          banque: String(data.banque || "").trim().slice(0, 60),
+          compte: String(data.compte || "").trim().slice(0, 80),
+          mois: MOIS_RE.test(String(data.mois)) ? String(data.mois) : "",
+          soldeFin: nb(data.soldeFin),
+          soldeDebut: nb(data.soldeDebut),
+          dateSoldeFin: String(data.dateSoldeFin || ""),
+          operations,
+          fichier: String(body.filename || ""),
+        },
+      });
     }
 
     if (body.action === "saisir") {

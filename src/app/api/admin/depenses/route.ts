@@ -84,6 +84,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, id: ref.id });
     }
 
+    // Lot de factures d'un coup — typiquement les débits catégorisés d'un
+    // relevé de compte validés depuis l'écran Trésorerie.
+    if (body.action === "ajouter-lot") {
+      const lignes = Array.isArray(body.factures) ? body.factures : [];
+      if (lignes.length === 0 || lignes.length > 200) {
+        return NextResponse.json({ error: "Entre 1 et 200 factures" }, { status: 400 });
+      }
+      let ajoutees = 0, invalides = 0;
+      for (const l of lignes) {
+        const poste = String(l?.poste || "").trim().slice(0, 80);
+        const mois = String(l?.mois || "");
+        const montant = nbMontant(l?.montant);
+        if (!MOIS_RE.test(mois) || !poste || montant === null) { invalides++; continue; }
+        await adminDb.collection("depenses").add({
+          mois, poste, montant,
+          fournisseur: String(l?.fournisseur || "").trim().slice(0, 80),
+          note: String(l?.note || "").slice(0, 500),
+          source: "releve-bancaire",
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+        ajoutees++;
+      }
+      return NextResponse.json({ ok: true, ajoutees, invalides });
+    }
+
     if (body.action === "modifier") {
       const id = String(body.id || "");
       if (!id) return NextResponse.json({ error: "Id manquant" }, { status: 400 });

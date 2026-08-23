@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Receipt, Loader2, RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
+import { POSTES_DEPENSES as POSTES_DEFAUT } from "@/lib/postes-depenses";
 
 /**
  * Dépenses par poste — le pendant « charges » de la trésorerie.
@@ -19,23 +20,6 @@ import { Receipt, Loader2, RefreshCw, Plus, Pencil, Trash2 } from "lucide-react"
  */
 
 interface Depense { id: string; mois: string; poste: string; fournisseur: string; montant: number; note: string; }
-
-// Référence : compte de résultat détaillé de l'exercice clos le 30/06/2025.
-// Chaque poste regroupe les comptes 60x/61x/62x correspondants du bilan.
-const POSTES_DEFAUT: { nom: string; ref: number | null }[] = [
-  { nom: "Aliments, litières, paille", ref: 24723 },
-  { nom: "Maréchalerie & travail des chevaux", ref: 7597 },
-  { nom: "Vétérinaire & santé des chevaux", ref: 7877 },
-  { nom: "Eau & électricité", ref: 7227 },
-  { nom: "Carburants", ref: 3391 },
-  { nom: "Fournitures & petit équipement (dont sellerie)", ref: 18470 },
-  { nom: "Entretien (bâtiments, matériel, véhicules)", ref: 10546 },
-  { nom: "Locations & loyers", ref: 21357 },
-  { nom: "Assurances", ref: 9992 },
-  { nom: "Honoraires & gestion (compta, juridique, GHN)", ref: 5321 },
-  { nom: "Publicité & communication", ref: 2024 },
-  { nom: "Autres dépenses", ref: null },
-];
 
 // Même exercice comptable que la masse salariale : juillet → juin, comme le bilan.
 const MOIS_EXERCICE = ["07", "08", "09", "10", "11", "12", "01", "02", "03", "04", "05", "06"] as const;
