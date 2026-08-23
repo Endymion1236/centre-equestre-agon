@@ -40,6 +40,9 @@ function moisDe(saison: string, mm: string): string {
   return `${Number(mm) >= 7 ? a1 : a2}-${mm}`;
 }
 const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
+// Les heures s'additionnent en flottants (152.92 + …) : sans arrondi, le total
+// affiche des queues du genre « 891.5099999999999 h ».
+const hrs = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " h";
 const moisCourant = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 
 export default function MasseSalarialePage() {
@@ -500,7 +503,7 @@ export default function MasseSalarialePage() {
                       <td className="px-2 py-1.5 text-right font-semibold text-slate-800">{eur(l.brut)}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.net != null ? eur(l.net) : "—"}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.coutEmployeur != null ? eur(l.coutEmployeur) : "—"}</td>
-                      <td className="px-2 py-1.5 text-right text-slate-600">{l.heures != null ? `${l.heures} h` : "—"}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-600">{l.heures != null ? hrs(l.heures) : "—"}</td>
                       <td className="px-2 py-1.5 text-right">
                         <button onClick={() => setForm({ salarie: l.salarie, brut: String(l.brut), net: l.net != null ? String(l.net) : "", coutEmployeur: l.coutEmployeur != null ? String(l.coutEmployeur) : "", heures: l.heures != null ? String(l.heures) : "" })}
                           title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={13} /></button>
@@ -514,7 +517,7 @@ export default function MasseSalarialePage() {
                     <td className="px-2 py-2 text-right">{eur(lignesDuMois.reduce((s, l) => s + l.brut, 0))}</td>
                     <td className="px-2 py-2 text-right">{lignesDuMois.some(l => l.net != null) ? eur(lignesDuMois.reduce((s, l) => s + (l.net || 0), 0)) : "—"}</td>
                     <td className="px-2 py-2 text-right">{lignesDuMois.some(l => l.coutEmployeur != null) ? eur(lignesDuMois.reduce((s, l) => s + (l.coutEmployeur || 0), 0)) : "—"}</td>
-                    <td className="px-2 py-2 text-right">{lignesDuMois.some(l => l.heures != null) ? `${lignesDuMois.reduce((s, l) => s + (l.heures || 0), 0)} h` : "—"}</td>
+                    <td className="px-2 py-2 text-right">{lignesDuMois.some(l => l.heures != null) ? hrs(lignesDuMois.reduce((s, l) => s + (l.heures || 0), 0)) : "—"}</td>
                     <td></td>
                   </tr>
                 </tbody>

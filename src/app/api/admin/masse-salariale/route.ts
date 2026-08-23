@@ -58,7 +58,11 @@ export async function GET(req: NextRequest) {
         decaissement: r.decaissement != null ? Number(r.decaissement) : null,
         brut: Number(r.brut || 0),
         net: r.net != null ? Number(r.net) : null,
-        coutEmployeur: r.coutEmployeur != null ? Number(r.coutEmployeur) : null,
+        // Un coût employeur ne peut pas être inférieur au brut : « 0 » est une
+        // saisie de remplissage (typique des TESA, dont les charges arrivent à
+        // part), pas une donnée — on le traite comme absent, pour que les
+        // totaux retombent sur le brut au lieu de compter le salarié à 0 €.
+        coutEmployeur: r.coutEmployeur != null && Number(r.coutEmployeur) > 0 ? Number(r.coutEmployeur) : null,
         heures: r.heures != null ? Number(r.heures) : null,
         source: r.source || "saisie",
       };
