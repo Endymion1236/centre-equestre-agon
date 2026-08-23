@@ -72,6 +72,7 @@ export async function GET(req: NextRequest) {
         mois: r.mois || "",
         compte: r.compte || COMPTE_DEFAUT,
         montant: Number(r.montant || 0),
+        creditsClients: r.creditsClients != null ? Number(r.creditsClients) : null,
         note: r.note || "",
         source: r.source || "saisie",
       };
@@ -137,6 +138,7 @@ export async function POST(req: NextRequest) {
               text:
                 "Ce document est un RELEVÉ DE COMPTE bancaire français d'un centre équestre. Réponds par un objet JSON seul, sans autre texte :\n" +
                 '{ "typeDoc": "releve", "banque": "nom de la banque", "compte": "libellé ou intitulé du compte (et fin de numéro le cas échéant)", "mois": "AAAA-MM du solde de clôture (le mois de la date d\'arrêté du NOUVEAU solde)", "soldeFin": nombre (le NOUVEAU solde / solde en fin de période, NÉGATIF si le compte est débiteur), "soldeDebut": nombre ou null (ancien solde), "dateSoldeFin": "AAAA-MM-JJ" ou null,\n' +
+                '  "creditsClients": nombre ou null (la SOMME des CRÉDITS qui sont des encaissements clients : remises de cartes bancaires, remises de chèques, versements d\'espèces, virements Stripe/CAWL/SumUp ou virements de clients — en EXCLUANT les virements internes entre comptes du centre, les remboursements MSA/impôts/assurances et les déblocages d\'emprunt),\n' +
                 '  "operations": [ { "date": "AAAA-MM-JJ", "libelle": "libellé de l\'opération, nom du fournisseur mis en avant", "montant": nombre positif, "poste": "…" } ] }\n' +
                 "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. \"libelle\" : le nom du fournisseur/bénéficiaire en 2 à 5 mots, sans les codes ni numéros. Réponds en JSON COMPACT (une opération par ligne, pas d'indentation). Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
                 nomsPostes.map((n) => `- "${n}"`).join("\n") + "\n" +
@@ -206,6 +208,7 @@ export async function POST(req: NextRequest) {
           soldeFin: nb(data.soldeFin),
           soldeDebut: nb(data.soldeDebut),
           dateSoldeFin: String(data.dateSoldeFin || ""),
+          creditsClients: nb(data.creditsClients),
           operations,
           lectureIncomplete,
           fichier: String(body.filename || ""),
@@ -228,9 +231,15 @@ export async function POST(req: NextRequest) {
       if (!Number.isFinite(montant)) {
         return NextResponse.json({ error: "Montant invalide" }, { status: 400 });
       }
+      // creditsClients : les encaissements clients lus sur le relevé du mois
+      // (remises CB/chèques, Stripe…) — sert au rapprochement banque ↔ caisse
+      // de l'écran « Boucler le mois ». Optionnel, jamais effacé s'il est absent.
+      const creditsClients = Number(String(body.creditsClients ?? "").replace(",", "."));
       await ref.set({
         mois, compte,
         montant: Math.round(montant * 100) / 100,
+        ...(Number.isFinite(creditsClients) && String(body.creditsClients ?? "").trim() !== ""
+          ? { creditsClients: Math.round(creditsClients * 100) / 100 } : {}),
         note: String(body.note || "").slice(0, 500),
         source: "saisie",
         updatedAt: FieldValue.serverTimestamp(),

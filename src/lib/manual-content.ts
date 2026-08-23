@@ -486,6 +486,24 @@ export const MANUAL: ManualChapter[] = [
         href: "/admin/comptabilite/resultat",
       },
       {
+        id: "cloture-mois",
+        title: "Boucler le mois",
+        text: `
+          <p>La checklist qui réunit tous les rituels de fin de mois sur une page : soldes bancaires
+          saisis (tous les comptes comptés), fiches de paie déposées, charges MSA/TESA, dépenses du
+          mois, et le <strong>rapprochement banque ↔ caisse</strong> — les encaissements clients lus sur
+          le relevé (remises CB, chèques, Stripe) comparés au CA de la caisse. Tout vert = mois bouclé.</p>
+          <p>Un <strong>email de rappel part automatiquement le 2 de chaque mois</strong> avec l'état de la
+          liste du mois écoulé, et signale les postes de dépenses qui dépassent 110 % de leur référence
+          bilan. Les mois sans encaissement en caisse (période Céleris) affichent un rapprochement
+          « sans objet », pas un faux écart.</p>
+        `,
+        href: "/admin/comptabilite/cloture-mois",
+        tips: [
+          "Le rituel tient en un geste : dépose les relevés PDF du mois — solde, dépenses et rapprochement se remplissent — puis les fiches de paie, et regarde la page passer au vert.",
+        ],
+      },
+      {
         id: "masse-salariale",
         title: "Masse salariale & registre du personnel",
         text: `

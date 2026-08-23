@@ -20,13 +20,14 @@ import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
  * autres années à la même époque ? ».
  */
 
-interface Releve { id: string; mois: string; compte: string; montant: number; note: string; source: string; }
+interface Releve { id: string; mois: string; compte: string; montant: number; creditsClients?: number | null; note: string; source: string; }
 
 // Un débit lu sur le relevé PDF, avec le poste de dépense proposé.
 interface OperationProposee { date: string; mois: string; libelle: string; montant: number; poste: string; garder: boolean; }
 interface PropositionReleve {
   banque: string; compte: string; mois: string;
   soldeFin: number | null; soldeDebut: number | null; dateSoldeFin: string;
+  creditsClients: number | null;
   operations: OperationProposee[];
   lectureIncomplete?: boolean;
   fichier: string;
@@ -232,7 +233,7 @@ export default function TresoreriePage() {
     if (!p || saving || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)) return;
     setSaving(true); setError("");
     try {
-      await api({ method: "POST", body: JSON.stringify({ action: "saisir", compte: p.compteChoisi, mois: p.mois, montant: p.soldeEdit }) });
+      await api({ method: "POST", body: JSON.stringify({ action: "saisir", compte: p.compteChoisi, mois: p.mois, montant: p.soldeEdit, ...(p.creditsClients != null ? { creditsClients: p.creditsClients } : {}) }) });
       setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, soldeEnregistre: true } : x));
       await load();
     } catch (e: any) { setError(e?.message || String(e)); }
@@ -356,6 +357,7 @@ export default function TresoreriePage() {
                 {p.banque}{p.compte ? ` — ${p.compte}` : ""}
                 {p.soldeDebut != null ? ` · ancien solde ${eur(p.soldeDebut)}` : ""}
                 {p.dateSoldeFin ? ` · arrêté au ${p.dateSoldeFin.split("-").reverse().join("/")}` : ""}
+                {p.creditsClients != null ? ` · encaissements clients lus : ${eur(p.creditsClients)} (enregistrés avec le solde, pour le rapprochement)` : ""}
               </span>
             </div>
             <button onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
