@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
         salarie: r.salarie || "",
         libelle: r.libelle || "",
         montant: r.montant != null ? Number(r.montant) : null,
+        decaissement: r.decaissement != null ? Number(r.decaissement) : null,
         brut: Number(r.brut || 0),
         net: r.net != null ? Number(r.net) : null,
         coutEmployeur: r.coutEmployeur != null ? Number(r.coutEmployeur) : null,
@@ -123,13 +124,18 @@ export async function POST(req: NextRequest) {
       // patronale NETTE des réductions : la part ouvrière est déjà comprise
       // dans les bruts des salariés, la compter ici la compterait deux fois.
       if (data.typeDoc === "cotisations") {
-        const pp = nb(data.partPatronale) ?? 0;
+        const pp = nb(data.partPatronale);
         const red = nb(data.reductionPatronale) ?? 0;
+        // Coût employeur = part patronale nette. Quand le document ne sépare
+        // pas les parts (DSN détaillée du cabinet), on ne devine pas : le
+        // champ reste vide et l'admin tranche — le décaissement, lui, est sûr.
+        const cout = pp != null ? Math.max(0, Math.round((pp - red) * 100) / 100) : null;
         return NextResponse.json({
           propositionCharge: {
             mois: MOIS_RE.test(String(data.mois)) ? String(data.mois) : "",
             libelle: `Charges ${String(data.organisme || "cotisations").trim()}`.slice(0, 80),
-            montant: Math.max(0, Math.round((pp - red) * 100) / 100),
+            montant: cout,
+            decaissement: nb(data.totalAPayer),
             partPatronale: pp,
             reductionPatronale: red,
             partOuvriere: nb(data.partOuvriere),
@@ -179,13 +185,19 @@ export async function POST(req: NextRequest) {
     if (body.action === "enregistrer-charge") {
       const mois = String(body.mois || "");
       const libelle = String(body.libelle || "").trim();
-      const montant = Number(String(body.montant ?? "").toString().replace(",", "."));
-      if (!MOIS_RE.test(mois) || !libelle || !Number.isFinite(montant) || montant < 0) {
-        return NextResponse.json({ error: "Mois, libellé ou montant invalide" }, { status: 400 });
+      const num = (v: unknown) => {
+        const n = Number(String(v ?? "").toString().replace(",", "."));
+        return Number.isFinite(n) && String(v ?? "").trim() !== "" && n >= 0
+          ? Math.round(n * 100) / 100 : null;
+      };
+      const montant = num(body.montant);          // coût employeur (PP nette)
+      const decaissement = num(body.decaissement); // payé à l'organisme (sort du compte)
+      if (!MOIS_RE.test(mois) || !libelle || (montant == null && decaissement == null)) {
+        return NextResponse.json({ error: "Mois, libellé, et au moins un montant" }, { status: 400 });
       }
       await adminDb.collection("masse-salariale").doc(`${mois}__charge-${cleSalarie(libelle)}`).set({
         type: "charge", mois, libelle,
-        montant: Math.round(montant * 100) / 100,
+        montant, decaissement,
         source: body.source === "fiche-paie" ? "fiche-paie" : "saisie",
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });

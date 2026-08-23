@@ -17,8 +17,8 @@ import { Users, Loader2, RefreshCw, FileUp, Check, Pencil, Trash2, Plus } from "
  * autres années ? ».
  */
 
-interface Ligne { id: string; type: "salaire" | "charge"; mois: string; salarie: string; libelle: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; montant: number | null; source: string; }
-interface PropositionCharge { mois: string; libelle: string; montant: number; partPatronale: number; reductionPatronale: number; partOuvriere: number | null; totalAPayer: number | null; fichier: string; }
+interface Ligne { id: string; type: "salaire" | "charge"; mois: string; salarie: string; libelle: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; montant: number | null; decaissement: number | null; source: string; }
+interface PropositionCharge { mois: string; libelle: string; montant: number | null; decaissement: number | null; partPatronale: number | null; reductionPatronale: number; partOuvriere: number | null; totalAPayer: number | null; fichier: string; }
 interface Proposition { salarie: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; }
 
 // L'EXERCICE COMPTABLE du centre court du 1er juillet au 30 juin — c'est lui
@@ -54,7 +54,7 @@ export default function MasseSalarialePage() {
   const [mode, setMode] = useState<"brut" | "cout">("brut");
   const [propositions, setPropositions] = useState<Proposition[]>([]);
   const [propositionsCharge, setPropositionsCharge] = useState<PropositionCharge[]>([]);
-  const [formCharge, setFormCharge] = useState<{ libelle: string; montant: string } | null>(null);
+  const [formCharge, setFormCharge] = useState<{ libelle: string; montant: string; decaissement: string } | null>(null);
   const [lecture, setLecture] = useState(0); // nb de PDF en cours de lecture
   const [saving, setSaving] = useState(false);
   // Saisie / correction manuelle d'une ligne
@@ -154,7 +154,7 @@ export default function MasseSalarialePage() {
     if (saving) return;
     setSaving(true); setError("");
     try {
-      await api({ action: "enregistrer-charge", mois: p.mois, libelle: p.libelle, montant: p.montant, source: "fiche-paie" });
+      await api({ action: "enregistrer-charge", mois: p.mois, libelle: p.libelle, montant: p.montant, decaissement: p.decaissement, source: "fiche-paie" });
       setPropositionsCharge(prev => prev.filter((_, i) => i !== idx));
       if (p.mois) setMoisDetail(p.mois);
       await load();
@@ -166,7 +166,7 @@ export default function MasseSalarialePage() {
     if (!formCharge || saving) return;
     setSaving(true); setError("");
     try {
-      await api({ action: "enregistrer-charge", mois: moisDetail, libelle: formCharge.libelle, montant: formCharge.montant });
+      await api({ action: "enregistrer-charge", mois: moisDetail, libelle: formCharge.libelle, montant: formCharge.montant || null, decaissement: formCharge.decaissement || null });
       setFormCharge(null);
       await load();
     } catch (e: any) { setError(e?.message || String(e)); }
@@ -278,7 +278,8 @@ export default function MasseSalarialePage() {
               <div key={idx} className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2">
                 <div className="font-body text-[11px] text-amber-900 mb-1.5">
                   <strong>{p.fichier}</strong> — récapitulatif de cotisations reconnu.
-                  Part patronale {eur(p.partPatronale)}{p.reductionPatronale > 0 ? ` − réductions ${eur(p.reductionPatronale)}` : ""}
+                  {p.partPatronale != null ? ` Part patronale ${eur(p.partPatronale)}` : " Le document ne sépare pas part patronale et part ouvrière"}
+                  {p.reductionPatronale > 0 ? ` − réductions ${eur(p.reductionPatronale)}` : ""}
                   {p.partOuvriere != null ? ` · part ouvrière ${eur(p.partOuvriere)} (déjà dans les bruts, non comptée)` : ""}
                   {p.totalAPayer != null ? ` · à payer ${eur(p.totalAPayer)}` : ""}
                 </div>
@@ -287,13 +288,18 @@ export default function MasseSalarialePage() {
                     className="font-semibold border border-gray-200 rounded px-2 py-1 w-56" placeholder="Libellé" />
                   <input value={p.mois} onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, mois: e.target.value } : x))}
                     className="border border-gray-200 rounded px-2 py-1 w-20" placeholder="AAAA-MM" />
-                  <label className="flex items-center gap-1 text-slate-600">Coût employeur retenu
-                    <input value={p.montant} inputMode="decimal"
-                      onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, montant: Number(e.target.value.replace(",", ".")) || 0 } : x))}
+                  <label className="flex items-center gap-1 text-slate-600" title="Part patronale nette des réductions — ce que la charge coûte vraiment à l'entreprise">Coût employeur
+                    <input value={p.montant ?? ""} inputMode="decimal"
+                      onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, montant: e.target.value === "" ? null : Number(e.target.value.replace(",", ".")) || 0 } : x))}
+                      className="border border-gray-200 rounded px-2 py-1 w-24 text-right font-semibold" />
+                  </label>
+                  <label className="flex items-center gap-1 text-slate-600" title="Le virement réellement fait à l'organisme (« à payer » du document) — c'est lui qui sort du compte">Payé à l&apos;organisme
+                    <input value={p.decaissement ?? ""} inputMode="decimal"
+                      onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, decaissement: e.target.value === "" ? null : Number(e.target.value.replace(",", ".")) || 0 } : x))}
                       className="border border-gray-200 rounded px-2 py-1 w-24 text-right font-semibold" />
                   </label>
                   <button onClick={() => enregistrerPropositionCharge(p, idx)}
-                    disabled={saving || !p.libelle || !/^\d{4}-\d{2}$/.test(p.mois)}
+                    disabled={saving || !p.libelle || !/^\d{4}-\d{2}$/.test(p.mois) || (p.montant == null && p.decaissement == null)}
                     className="ml-auto font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     Enregistrer la charge
                   </button>
@@ -520,7 +526,7 @@ export default function MasseSalarialePage() {
                 <div className="font-body text-xs font-semibold text-amber-800 uppercase tracking-wider">
                   Charges patronales versées à part (saisonniers TESA, MSA…)
                 </div>
-                <button onClick={() => setFormCharge({ libelle: "Charges MSA (TESA saisonniers)", montant: "" })}
+                <button onClick={() => setFormCharge({ libelle: "Charges MSA (TESA saisonniers)", montant: "", decaissement: "" })}
                   className="flex items-center gap-1 font-body text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-amber-100">
                   <Plus size={11} /> Ajouter une charge
                 </button>
@@ -529,9 +535,15 @@ export default function MasseSalarialePage() {
                 <div className="mb-2 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 flex flex-wrap items-center gap-2 font-body text-xs">
                   <input autoFocus value={formCharge.libelle} onChange={e => setFormCharge({ ...formCharge, libelle: e.target.value })}
                     className="font-semibold border border-gray-200 rounded px-2 py-1 w-64" placeholder="Libellé (organisme…)" />
-                  <input value={formCharge.montant} inputMode="decimal" onChange={e => setFormCharge({ ...formCharge, montant: e.target.value })}
-                    className="border border-gray-200 rounded px-2 py-1 w-24 text-right" placeholder="Montant" />
-                  <button onClick={enregistrerFormCharge} disabled={saving || !formCharge.libelle || !formCharge.montant}
+                  <label className="flex items-center gap-1 text-slate-500" title="Part patronale nette des réductions — le coût réel pour l'entreprise">Coût empl.
+                    <input value={formCharge.montant} inputMode="decimal" onChange={e => setFormCharge({ ...formCharge, montant: e.target.value })}
+                      className="border border-gray-200 rounded px-2 py-1 w-24 text-right" />
+                  </label>
+                  <label className="flex items-center gap-1 text-slate-500" title="Le virement réellement fait à l'organisme — ce qui sort du compte">Payé
+                    <input value={formCharge.decaissement} inputMode="decimal" onChange={e => setFormCharge({ ...formCharge, decaissement: e.target.value })}
+                      className="border border-gray-200 rounded px-2 py-1 w-24 text-right" />
+                  </label>
+                  <button onClick={enregistrerFormCharge} disabled={saving || !formCharge.libelle || (!formCharge.montant && !formCharge.decaissement)}
                     className="ml-auto font-semibold text-white bg-amber-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">Enregistrer</button>
                   <button onClick={() => setFormCharge(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
                 </div>
@@ -544,10 +556,13 @@ export default function MasseSalarialePage() {
                 <div className="flex flex-col gap-1 mb-1">
                   {chargesDuMois.map(c => (
                     <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg bg-amber-50/60 border border-amber-100 px-3 py-1.5 font-body text-sm">
-                      <span className="text-slate-700">{c.libelle}{c.source === "fiche-paie" && <span className="ml-1.5 text-[10px] text-amber-600">📄</span>}</span>
+                      <span className="text-slate-700">{c.libelle}{c.source === "fiche-paie" && <span title="Issu d'un récapitulatif de cotisations" className="ml-1.5 text-[10px] text-amber-600">📄</span>}</span>
                       <span className="flex items-center gap-1">
-                        <strong className="text-amber-900">{eur(c.montant || 0)}</strong>
-                        <button onClick={() => setFormCharge({ libelle: c.libelle, montant: String(c.montant ?? "") })}
+                        <strong className="text-amber-900">{c.montant != null ? eur(c.montant) : "coût ?"}</strong>
+                        {c.decaissement != null && (
+                          <span className="font-body text-[11px] text-slate-500" title="Le virement fait à l'organisme ce mois-là">· payé {eur(c.decaissement)}</span>
+                        )}
+                        <button onClick={() => setFormCharge({ libelle: c.libelle, montant: c.montant != null ? String(c.montant) : "", decaissement: c.decaissement != null ? String(c.decaissement) : "" })}
                           title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={12} /></button>
                         <button onClick={() => supprimerCharge(c)} title="Retirer"
                           className="text-slate-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={12} /></button>
@@ -558,28 +573,68 @@ export default function MasseSalarialePage() {
               )}
             </div>
 
-            {(lignesDuMois.length > 0 || chargesDuMois.length > 0) && (
-              <div className="mt-3 rounded-lg bg-purple-100/60 border border-purple-200 px-3 py-2 flex items-center justify-between font-body text-sm">
-                <span className="font-semibold text-purple-900">Coût total entreprise du mois</span>
-                <span className="font-bold text-purple-900">
-                  {eur(
-                    lignesDuMois.reduce((s, l) => s + (l.coutEmployeur ?? l.brut), 0)
-                    + chargesDuMois.reduce((s, c) => s + (c.montant || 0), 0)
-                  )}
-                  {lignesDuMois.some(l => l.coutEmployeur == null) && (
-                    <span className="font-body text-[11px] font-normal text-amber-700 ml-2">
-                      ({lignesDuMois.filter(l => l.coutEmployeur == null).length} salaire(s) compté(s) au brut, coût absent du bulletin)
+            {(lignesDuMois.length > 0 || chargesDuMois.length > 0) && (() => {
+              // « Combien d'argent je sors sur un mois » : les virements de
+              // salaire (nets) + les virements aux organismes (décaissement des
+              // charges — repli sur le coût quand il n'a pas été saisi). C'est
+              // du CASH, distinct du coût entreprise comptable juste en dessous.
+              const netsAbsents = lignesDuMois.filter(l => l.net == null);
+              const sortiSalaires = lignesDuMois.reduce((s, l) => s + (l.net || 0), 0);
+              const chargesRepli = chargesDuMois.filter(c => c.decaissement == null);
+              const sortiCharges = chargesDuMois.reduce((s, c) => s + (c.decaissement ?? c.montant ?? 0), 0);
+              return (
+                <>
+                  <div className="mt-4 rounded-xl bg-emerald-600 text-white px-4 py-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div>
+                        <div className="font-body text-[11px] uppercase tracking-wider opacity-90">
+                          💸 Sorti du compte ce mois — masse salariale
+                        </div>
+                        <div className="font-body text-xs opacity-90 mt-0.5">
+                          {eur(sortiSalaires)} de salaires nets versés + {eur(sortiCharges)} payés aux organismes
+                        </div>
+                      </div>
+                      <div className="font-display text-3xl font-bold">{eur(sortiSalaires + sortiCharges)}</div>
+                    </div>
+                    {(netsAbsents.length > 0 || chargesRepli.length > 0) && (
+                      <div className="font-body text-[11px] bg-emerald-700/60 rounded-lg px-2.5 py-1.5 mt-2">
+                        ⚠ Total incomplet :
+                        {netsAbsents.length > 0 && <> {netsAbsents.length} salaire(s) sans net ({netsAbsents.map(l => l.salarie).join(", ")}) — non compté(s), corrige la ligne pour l&apos;ajouter.</>}
+                        {chargesRepli.length > 0 && <> {chargesRepli.length} charge(s) sans « payé à l&apos;organisme » — comptée(s) à leur coût employeur, saisis le montant réellement viré pour être exact.</>}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-2 rounded-lg bg-purple-100/60 border border-purple-200 px-3 py-2 flex items-center justify-between font-body text-sm">
+                    <span className="font-semibold text-purple-900">Coût total entreprise du mois</span>
+                    <span className="font-bold text-purple-900">
+                      {eur(
+                        lignesDuMois.reduce((s, l) => s + (l.coutEmployeur ?? l.brut), 0)
+                        + chargesDuMois.reduce((s, c) => s + (c.montant || 0), 0)
+                      )}
+                      {lignesDuMois.some(l => l.coutEmployeur == null) && (
+                        <span className="font-body text-[11px] font-normal text-amber-700 ml-2">
+                          ({lignesDuMois.filter(l => l.coutEmployeur == null).length} salaire(s) compté(s) au brut, coût absent du bulletin)
+                        </span>
+                      )}
+                      {chargesDuMois.some(c => c.montant == null) && (
+                        <span className="font-body text-[11px] font-normal text-amber-700 ml-2">
+                          ({chargesDuMois.filter(c => c.montant == null).length} charge(s) sans coût employeur connu, non comptée(s) ici)
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-              </div>
-            )}
+                  </div>
+                </>
+              );
+            })()}
             <p className="font-body text-[11px] text-slate-400 mt-3">
               Le <strong>brut</strong> figure sur tous les bulletins ; le <strong>coût entreprise</strong> (brut +
               charges patronales) seulement sur certains — d&apos;où le repli signalé quand il manque.
               Pour les saisonniers TESA, les charges arrivent à part via le récapitulatif MSA : seule la
               <strong> part patronale nette des réductions</strong> est proposée — la part ouvrière est déjà
               dans les bruts, la compter ici la compterait deux fois.
+              L&apos;encart vert, lui, parle <strong>cash</strong> : les nets virés aux salariés + les
+              virements réellement faits aux organismes (le « à payer » des récapitulatifs) — c&apos;est
+              ce qui sort du compte, pas le coût comptable.
               Outil de pilotage : les lignes se corrigent librement, aucune fiche de paie n&apos;est conservée.
             </p>
           </Card>
