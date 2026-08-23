@@ -44,10 +44,16 @@ function cleCompte(nom: string): string {
 
 const COMPTE_DEFAUT = "Compte courant";
 
-async function listeComptes(): Promise<string[]> {
+// `horsTotal` : les comptes qui existent mais ne comptent PAS dans la
+// trésorerie affichée — typiquement l'épargne bloquée « en cas de coup dur »
+// (le compte de dépôt fiscal à 30 000 €) : c'est une réserve, pas du
+// disponible, et la mélanger au courant fausserait la lecture des saisons.
+async function listeComptes(): Promise<{ comptes: string[]; horsTotal: string[] }> {
   const snap = await adminDb.collection("settings").doc("tresorerie").get();
-  const liste = snap.exists ? (snap.data() as any)?.comptes : null;
-  return Array.isArray(liste) && liste.length > 0 ? liste.map(String) : [COMPTE_DEFAUT];
+  const d = snap.exists ? (snap.data() as any) : null;
+  const comptes = Array.isArray(d?.comptes) && d.comptes.length > 0 ? d.comptes.map(String) : [COMPTE_DEFAUT];
+  const horsTotal = (Array.isArray(d?.horsTotal) ? d.horsTotal.map(String) : []).filter((c: string) => comptes.includes(c));
+  return { comptes, horsTotal };
 }
 
 export async function GET(req: NextRequest) {
@@ -55,7 +61,7 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const [comptes, relSnap] = await Promise.all([
+    const [{ comptes, horsTotal }, relSnap] = await Promise.all([
       listeComptes(),
       adminDb.collection("tresorerie-releves").get(),
     ]);
@@ -70,7 +76,7 @@ export async function GET(req: NextRequest) {
         source: r.source || "saisie",
       };
     }).filter((r) => MOIS_RE.test(r.mois));
-    return NextResponse.json({ comptes, releves });
+    return NextResponse.json({ comptes, horsTotal, releves });
   } catch (e) {
     console.error("[tresorerie] lecture", e);
     return NextResponse.json({ error: "Erreur de lecture des relevés" }, { status: 500 });
@@ -92,10 +98,16 @@ export async function POST(req: NextRequest) {
       if (comptes.length === 0) {
         return NextResponse.json({ error: "Au moins un compte" }, { status: 400 });
       }
+      const horsTotal = (Array.isArray(body.horsTotal) ? body.horsTotal : [])
+        .map((c: unknown) => String(c || "").trim())
+        .filter((c: string) => comptes.includes(c));
+      if (horsTotal.length >= comptes.length) {
+        return NextResponse.json({ error: "Au moins un compte doit compter dans le total" }, { status: 400 });
+      }
       await adminDb.collection("settings").doc("tresorerie").set(
-        { comptes, updatedAt: FieldValue.serverTimestamp() }, { merge: true },
+        { comptes, horsTotal, updatedAt: FieldValue.serverTimestamp() }, { merge: true },
       );
-      return NextResponse.json({ ok: true, comptes });
+      return NextResponse.json({ ok: true, comptes, horsTotal });
     }
 
     // ── Lecture d'un relevé de compte PDF ──

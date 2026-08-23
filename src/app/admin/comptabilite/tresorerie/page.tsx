@@ -68,6 +68,8 @@ const EMPRUNTS_RESTE_APRES = 38187; // au-delà de 06/2029, jusqu'à fin 2033
 export default function TresoreriePage() {
   const { isAdmin, user } = useAuth();
   const [comptes, setComptes] = useState<string[]>([]);
+  // Comptes suivis mais NON comptés dans le total (épargne bloquée « coup dur »).
+  const [horsTotal, setHorsTotal] = useState<string[]>([]);
   const [releves, setReleves] = useState<Releve[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -77,8 +79,11 @@ export default function TresoreriePage() {
   const [edit, setEdit] = useState<string | null>(null);
   const [editVal, setEditVal] = useState("");
   const [saving, setSaving] = useState(false);
-  // Réglage de la liste des comptes bancaires suivis (un par ligne).
-  const [comptesEdit, setComptesEdit] = useState<string | null>(null);
+  // Réglage des comptes bancaires suivis : nom + compte-t-il dans le total ?
+  const [comptesEdit, setComptesEdit] = useState<{ nom: string; compte: boolean }[] | null>(null);
+  // Saisie d'un mois quand il y a PLUSIEURS comptes : un panneau, un champ par compte.
+  const [cellEdit, setCellEdit] = useState<{ saison: string; mm: string } | null>(null);
+  const [cellVals, setCellVals] = useState<Record<string, string>>({});
   // Relevés PDF déposés, en cours de lecture / de validation.
   const [lectureReleve, setLectureReleve] = useState(0);
   const [propositions, setPropositions] = useState<PropositionReleve[]>([]);
@@ -100,6 +105,7 @@ export default function TresoreriePage() {
     try {
       const d = await api();
       setComptes(d.comptes || []);
+      setHorsTotal(d.horsTotal || []);
       setReleves(d.releves || []);
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setLoading(false); }
@@ -113,11 +119,13 @@ export default function TresoreriePage() {
     releves.forEach(r => m.set(`${r.mois}|${r.compte}`, r));
     return m;
   }, [releves]);
+  // Total par mois = les comptes qui COMPTENT. L'épargne bloquée est suivie
+  // à part : la mélanger ferait croire à 30 000 € de disponible qui n'en est pas.
   const totalParMois = useMemo(() => {
     const m = new Map<string, number>();
-    releves.forEach(r => m.set(r.mois, (m.get(r.mois) || 0) + r.montant));
+    releves.forEach(r => { if (!horsTotal.includes(r.compte)) m.set(r.mois, (m.get(r.mois) || 0) + r.montant); });
     return m;
-  }, [releves]);
+  }, [releves, horsTotal]);
 
   const saisons = useMemo(() => {
     const s = new Set(releves.map(r => saisonDe(r.mois)));
@@ -142,13 +150,50 @@ export default function TresoreriePage() {
 
   const enregistrerComptes = async () => {
     if (comptesEdit === null || saving) return;
-    const liste = comptesEdit.split("\n").map(c => c.trim()).filter(Boolean);
-    if (liste.length === 0) { setError("Au moins un compte"); return; }
+    const lignes = comptesEdit.map(c => ({ ...c, nom: c.nom.trim() })).filter(c => c.nom);
+    if (lignes.length === 0) { setError("Au moins un compte"); return; }
+    if (!lignes.some(c => c.compte)) { setError("Au moins un compte doit compter dans le total"); return; }
     setSaving(true); setError("");
     try {
-      await api({ method: "POST", body: JSON.stringify({ action: "comptes", comptes: liste }) });
+      await api({ method: "POST", body: JSON.stringify({
+        action: "comptes",
+        comptes: lignes.map(c => c.nom),
+        horsTotal: lignes.filter(c => !c.compte).map(c => c.nom),
+      }) });
       setComptesEdit(null);
       setInfo("Liste des comptes enregistrée.");
+      await load();
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setSaving(false); }
+  };
+
+  // ── Saisie multi-comptes d'un mois (panneau) ──
+  const ouvrirCellule = (saison: string, mm: string) => {
+    const mois = moisDe(saison, mm);
+    const vals: Record<string, string> = {};
+    comptes.forEach(c => {
+      const r = parMoisCompte.get(`${mois}|${c}`);
+      vals[c] = r ? String(r.montant) : "";
+    });
+    setCellVals(vals);
+    setCellEdit({ saison, mm });
+  };
+
+  const enregistrerCellule = async () => {
+    if (!cellEdit || saving) return;
+    setSaving(true); setError("");
+    try {
+      const mois = moisDe(cellEdit.saison, cellEdit.mm);
+      for (const c of comptes) {
+        const brut = (cellVals[c] ?? "").trim();
+        const existant = parMoisCompte.get(`${mois}|${c}`);
+        // On n'écrit que ce qui change : un champ resté vide sans relevé
+        // existant n'a rien à dire, un champ vidé efface le relevé.
+        if (brut === "" && !existant) continue;
+        if (existant && brut === String(existant.montant)) continue;
+        await api({ method: "POST", body: JSON.stringify({ action: "saisir", compte: c, mois, montant: brut === "" ? null : brut }) });
+      }
+      setCellEdit(null);
       await load();
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }
@@ -279,7 +324,7 @@ export default function TresoreriePage() {
             <input type="file" accept=".pdf,application/pdf" multiple className="hidden"
               onChange={e => { if (e.target.files?.length) lireReleve(e.target.files); e.target.value = ""; }} />
           </label>
-          <button onClick={() => setComptesEdit(comptesEdit === null ? comptes.join("\n") : null)}
+          <button onClick={() => setComptesEdit(comptesEdit === null ? comptes.map(c => ({ nom: c, compte: !horsTotal.includes(c) })) : null)}
             title="Régler la liste des comptes bancaires suivis"
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50">
             <Settings2 size={14} /> Comptes
@@ -398,13 +443,33 @@ export default function TresoreriePage() {
         <Card padding="md" className="mb-4">
           <div className="font-body text-sm font-semibold text-slate-800 mb-1">Comptes bancaires suivis</div>
           <p className="font-body text-xs text-slate-500 mb-2">
-            Un compte par ligne (ex. « Crédit Agricole — courant », « Excédent Pro »). Le tableau
-            additionne tous les comptes ; la saisie au clic remplit le premier de la liste.
+            Décoche « compté » pour un compte d&apos;épargne bloquée (coup dur) : il reste suivi,
+            mais n&apos;entre ni dans le total du tableau ni dans la courbe — ce n&apos;est pas du disponible.
             Renommer un compte ne déplace pas ses relevés déjà saisis — garde le même nom si possible.
           </p>
-          <textarea value={comptesEdit} onChange={e => setComptesEdit(e.target.value)} rows={Math.max(3, comptesEdit.split("\n").length + 1)}
-            className="w-full max-w-md font-body text-sm border border-gray-200 rounded-lg px-3 py-2" />
+          <div className="flex flex-col gap-1.5 max-w-lg">
+            {comptesEdit.map((c, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input value={c.nom} onChange={e => setComptesEdit(prev => prev!.map((x, xi) => xi === i ? { ...x, nom: e.target.value } : x))}
+                  placeholder="Nom du compte (ex. Compte courant CA)"
+                  className="flex-1 font-body text-sm border border-gray-200 rounded-lg px-3 py-1.5" />
+                <label className="flex items-center gap-1.5 font-body text-xs text-slate-600 whitespace-nowrap">
+                  <input type="checkbox" checked={c.compte}
+                    onChange={e => setComptesEdit(prev => prev!.map((x, xi) => xi === i ? { ...x, compte: e.target.checked } : x))}
+                    className="accent-blue-500 w-4 h-4" />
+                  compté dans le total
+                </label>
+                <button onClick={() => setComptesEdit(prev => prev!.filter((_, xi) => xi !== i))}
+                  title="Retirer de la liste (les relevés déjà saisis restent en base)"
+                  className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer px-1">✕</button>
+              </div>
+            ))}
+          </div>
           <div className="flex gap-2 mt-2">
+            <button onClick={() => setComptesEdit(prev => [...(prev || []), { nom: "", compte: true }])}
+              className="font-body text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-blue-100">
+              + Ajouter un compte
+            </button>
             <button onClick={enregistrerComptes} disabled={saving}
               className="font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
               Enregistrer
@@ -470,6 +535,35 @@ export default function TresoreriePage() {
             </Card>
           )}
 
+          {/* ── Saisie d'un mois, un champ par compte ── */}
+          {cellEdit && (
+            <Card padding="md" className="mb-4 border-blue-200">
+              <div className="font-body text-sm font-semibold text-blue-900 mb-2">
+                Soldes de fin {NOMS_MOIS[cellEdit.mm].toLowerCase()} {moisDe(cellEdit.saison, cellEdit.mm).slice(0, 4)}
+              </div>
+              <div className="flex flex-col gap-1.5 max-w-md">
+                {comptes.map(c => (
+                  <label key={c} className="flex items-center justify-between gap-2 font-body text-xs text-slate-600">
+                    <span>{c}{horsTotal.includes(c) && <span className="ml-1.5 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">hors total</span>}</span>
+                    <input value={cellVals[c] ?? ""} inputMode="decimal"
+                      onChange={e => setCellVals(prev => ({ ...prev, [c]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === "Enter") enregistrerCellule(); if (e.key === "Escape") setCellEdit(null); }}
+                      className="w-32 font-body text-sm text-right border border-gray-200 rounded-lg px-2 py-1.5" />
+                  </label>
+                ))}
+              </div>
+              <div className="flex gap-2 mt-2 items-center">
+                <button onClick={enregistrerCellule} disabled={saving}
+                  className="font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                  {saving ? "…" : "Enregistrer"}
+                </button>
+                <button onClick={() => setCellEdit(null)}
+                  className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Annuler</button>
+                <span className="font-body text-[11px] text-slate-400">Un champ vidé efface le relevé du compte.</span>
+              </div>
+            </Card>
+          )}
+
           {/* ── Matrice mois × saisons, comme le classeur ── */}
           <Card padding="sm" className="overflow-x-auto !p-0">
             <table className="w-full border-collapse font-body text-sm">
@@ -491,7 +585,7 @@ export default function TresoreriePage() {
                       const compteEdit = comptes[0] || "Compte courant";
                       const k = `${s}|${mm}|${compteEdit}`;
                       const releve = parMoisCompte.get(`${mois}|${compteEdit}`);
-                      if (edit === k) {
+                      if (comptes.length <= 1 && edit === k) {
                         return (
                           <td key={s} className="px-2 py-1 text-right">
                             <input autoFocus value={editVal} inputMode="decimal"
@@ -502,10 +596,17 @@ export default function TresoreriePage() {
                           </td>
                         );
                       }
+                      // Info-bulle : le détail compte par compte, épargne bloquée signalée.
+                      const detail = comptes.map(c => {
+                        const r = parMoisCompte.get(`${mois}|${c}`);
+                        return `${c} : ${r ? eur(r.montant) : "—"}${horsTotal.includes(c) ? " (hors total)" : ""}`;
+                      }).join("\n");
+                      const estCellEdit = cellEdit && cellEdit.saison === s && cellEdit.mm === mm;
                       return (
-                        <td key={s} onClick={() => { setEdit(k); setEditVal(releve ? String(releve.montant) : ""); }}
-                          title={comptes.length > 1 && total !== undefined ? "Total des comptes — clique pour modifier le premier compte" : "Cliquer pour saisir"}
-                          className={`px-3 py-2 text-right cursor-pointer ${s === saisonCourante ? "font-semibold text-blue-800" : "text-slate-600"}`}>
+                        <td key={s}
+                          onClick={() => comptes.length > 1 ? ouvrirCellule(s, mm) : (setEdit(k), setEditVal(releve ? String(releve.montant) : ""))}
+                          title={comptes.length > 1 ? `${detail}\nCliquer pour saisir les soldes du mois` : "Cliquer pour saisir"}
+                          className={`px-3 py-2 text-right cursor-pointer ${estCellEdit ? "bg-blue-100/70 rounded" : ""} ${s === saisonCourante ? "font-semibold text-blue-800" : "text-slate-600"}`}>
                           {total !== undefined ? eur(total) : <Pencil size={11} className="inline text-slate-300" />}
                         </td>
                       );
@@ -516,6 +617,19 @@ export default function TresoreriePage() {
             </table>
           </Card>
 
+          {horsTotal.length > 0 && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 font-body text-xs text-amber-800">
+              <strong>Non compté dans le total</strong> (épargne bloquée, réserve coup dur) :{" "}
+              {horsTotal.map((c, i) => {
+                const dernier = releves.filter(r => r.compte === c).sort((a, b) => b.mois.localeCompare(a.mois))[0];
+                return (
+                  <span key={c}>
+                    {i > 0 ? " · " : ""}{c} — {dernier ? `${eur(dernier.montant)} (${dernier.mois.split("-").reverse().join("/")})` : "aucun relevé saisi"}
+                  </span>
+                );
+              })}
+            </div>
+          )}
           <p className="font-body text-[11px] text-slate-400 mt-3">
             Un relevé de trésorerie n&apos;est pas une écriture comptable : il se corrige librement,
             comme dans le classeur. Un import d&apos;historique ne remplace jamais une valeur saisie à la main.
