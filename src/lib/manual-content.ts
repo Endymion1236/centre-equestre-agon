@@ -448,6 +448,23 @@ export const MANUAL: ManualChapter[] = [
         ],
       },
       {
+        id: "tresorerie",
+        title: "Trésorerie (suivi mensuel)",
+        text: `
+          <p>Le classeur de trésorerie, intégré : un chiffre par mois — le <strong>solde bancaire en fin
+          de mois</strong> — présenté par <strong>saison</strong> (septembre → août) pour comparer d'une
+          année sur l'autre, avec le graphique des saisons.</p>
+          <p>Clique une case du tableau pour saisir ou corriger. Ce n'est pas une écriture comptable :
+          pas de journal, pas de scellement — l'outil se corrige librement, comme le classeur qu'il
+          remplace. L'historique Excel se reprend par le bouton d'import, sans jamais écraser une
+          valeur saisie à la main.</p>
+        `,
+        href: "/admin/comptabilite/tresorerie",
+        tips: [
+          "Le réflexe de fin de mois : relever le solde du compte au dernier jour et le poser dans la case — trente secondes, et la courbe de saison reste vivante.",
+        ],
+      },
+      {
         id: "livre-caisse",
         title: "Livre de caisse espèces",
         text: `

@@ -1,0 +1,156 @@
+/**
+ * GET  /api/admin/tresorerie — comptes suivis + tous les relevés de fin de mois.
+ * POST /api/admin/tresorerie
+ *   { action: "saisir", compte, mois: "AAAA-MM", montant: number | null }
+ *       → pose (ou efface si null) le solde de fin de mois d'un compte.
+ *   { action: "comptes", comptes: string[] }
+ *       → la liste des comptes bancaires suivis (settings/tresorerie).
+ *   { action: "importer", compte, releves: [{ mois, montant }] }
+ *       → reprise d'historique (le classeur Excel 2018→2026). N'écrase JAMAIS
+ *         un relevé déjà saisi : l'import complète, la saisie manuelle prime.
+ *
+ * Pourquoi côté serveur : même parti pris que messages-contact — la collection
+ * est écrite et lue par adminDb, aucune règle Firestore à publier pour que
+ * l'écran fonctionne. Un relevé de trésorerie n'est PAS une écriture comptable
+ * (pas de journal NF525, pas de hash) : c'est un outil de pilotage, corrigible
+ * à tout moment, comme l'était le classeur.
+ *
+ * Un document par (mois, compte) : `tresorerie-releves/{AAAA-MM}_{cléCompte}`.
+ * Auth admin obligatoire.
+ */
+
+import { NextRequest, NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/api-auth";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** "Crédit Agricole — courant" → "credit-agricole-courant" (id de document stable). */
+function cleCompte(nom: string): string {
+  return nom
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+const COMPTE_DEFAUT = "Compte courant";
+
+async function listeComptes(): Promise<string[]> {
+  const snap = await adminDb.collection("settings").doc("tresorerie").get();
+  const liste = snap.exists ? (snap.data() as any)?.comptes : null;
+  return Array.isArray(liste) && liste.length > 0 ? liste.map(String) : [COMPTE_DEFAUT];
+}
+
+export async function GET(req: NextRequest) {
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const [comptes, relSnap] = await Promise.all([
+      listeComptes(),
+      adminDb.collection("tresorerie-releves").get(),
+    ]);
+    const releves = relSnap.docs.map((d) => {
+      const r = d.data() as any;
+      return {
+        id: d.id,
+        mois: r.mois || "",
+        compte: r.compte || COMPTE_DEFAUT,
+        montant: Number(r.montant || 0),
+        note: r.note || "",
+        source: r.source || "saisie",
+      };
+    }).filter((r) => MOIS_RE.test(r.mois));
+    return NextResponse.json({ comptes, releves });
+  } catch (e) {
+    console.error("[tresorerie] lecture", e);
+    return NextResponse.json({ error: "Erreur de lecture des relevés" }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  const auth = await verifyAuth(req, { adminOnly: true });
+  if (auth instanceof NextResponse) return auth;
+
+  try {
+    const body = await req.json();
+
+    if (body.action === "comptes") {
+      const comptes = (Array.isArray(body.comptes) ? body.comptes : [])
+        .map((c: unknown) => String(c || "").trim())
+        .filter(Boolean)
+        .slice(0, 10);
+      if (comptes.length === 0) {
+        return NextResponse.json({ error: "Au moins un compte" }, { status: 400 });
+      }
+      await adminDb.collection("settings").doc("tresorerie").set(
+        { comptes, updatedAt: FieldValue.serverTimestamp() }, { merge: true },
+      );
+      return NextResponse.json({ ok: true, comptes });
+    }
+
+    if (body.action === "saisir") {
+      const compte = String(body.compte || COMPTE_DEFAUT).trim();
+      const mois = String(body.mois || "");
+      if (!MOIS_RE.test(mois) || !compte) {
+        return NextResponse.json({ error: "Mois ou compte invalide" }, { status: 400 });
+      }
+      const ref = adminDb.collection("tresorerie-releves").doc(`${mois}_${cleCompte(compte)}`);
+      if (body.montant === null || body.montant === "") {
+        await ref.delete();
+        return NextResponse.json({ ok: true, efface: true });
+      }
+      const montant = Number(String(body.montant).replace(",", "."));
+      if (!Number.isFinite(montant)) {
+        return NextResponse.json({ error: "Montant invalide" }, { status: 400 });
+      }
+      await ref.set({
+        mois, compte,
+        montant: Math.round(montant * 100) / 100,
+        note: String(body.note || "").slice(0, 500),
+        source: "saisie",
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "importer") {
+      const compte = String(body.compte || COMPTE_DEFAUT).trim();
+      const lignes = Array.isArray(body.releves) ? body.releves : [];
+      if (lignes.length === 0 || lignes.length > 500) {
+        return NextResponse.json({ error: "Entre 1 et 500 relevés" }, { status: 400 });
+      }
+      let importes = 0, ignores = 0, invalides = 0;
+      for (const l of lignes) {
+        const mois = String(l?.mois || "");
+        const montant = Number(l?.montant);
+        if (!MOIS_RE.test(mois) || !Number.isFinite(montant)) { invalides++; continue; }
+        const ref = adminDb.collection("tresorerie-releves").doc(`${mois}_${cleCompte(compte)}`);
+        const existant = await ref.get();
+        // Une saisie manuelle prime toujours sur le classeur repris.
+        if (existant.exists && (existant.data() as any)?.source === "saisie") { ignores++; continue; }
+        await ref.set({
+          mois, compte,
+          montant: Math.round(montant * 100) / 100,
+          note: "",
+          source: "import-excel",
+          updatedAt: FieldValue.serverTimestamp(),
+        }, { merge: true });
+        importes++;
+      }
+      return NextResponse.json({ ok: true, importes, ignores, invalides });
+    }
+
+    return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
+  } catch (e) {
+    console.error("[tresorerie] écriture", e);
+    return NextResponse.json({ error: "Erreur d'enregistrement" }, { status: 500 });
+  }
+}

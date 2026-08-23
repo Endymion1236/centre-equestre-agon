@@ -28,7 +28,7 @@ const COLLECTIONS = [
   "cloturesJournalieres", "communications", "comptabilite", "creneaux",
   "databases", "devis", "doc_templates", "documents_equide", "echeances-sepa",
   "email-templates", "emailsReprise", "emailsSent", "cheques-differes",
-  "encaissements", "equides", "families", "fidelite", "fondsDeCaisse",
+  "encaissements", "equides", "families", "fidelite", "fondsDeCaisse", "tresorerie-releves",
   "forfaits", "galerie_photos", "indisponibilites", "invoice_audit",
   "management", "mandats-sepa", "marees", "modeles", "modeles-planning",
   "modeles_stages", "moniteurs", "mouvements_registre", "notes-seance",

@@ -1144,6 +1144,13 @@ const TESTS: TestCase[] = [
     priorite: "critique", correctif: "2026-08-21",
   },
   {
+    id: "CO-06", module: "Comptabilité", sous_module: "Trésorerie",
+    description: "Suivi de trésorerie mensuel",
+    etapes: "Comptabilité → Trésorerie → reprendre l'historique (JSON du classeur) → cliquer la case du mois courant → saisir le solde",
+    resultat_attendu: "La matrice mois × saisons affiche l'historique, le graphique met la saison en cours en évidence, la saisie s'enregistre au clic et l'import ne remplace jamais une valeur saisie à la main",
+    priorite: "normale", correctif: "2026-08-21",
+  },
+  {
     id: "PA-19", module: "Paiements", sous_module: "Stage",
     description: "Acompte de stage encaissé sur place",
     etapes: "Planning → stage → Inscrire → mode « Acompte 30 € + solde J-7 » → « Encaisser maintenant » → choisir CB terminal (puis rejouer en espèces, chèque, chèques-vacances)",
