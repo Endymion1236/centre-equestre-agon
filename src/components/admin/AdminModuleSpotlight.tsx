@@ -61,7 +61,7 @@ const MODULES: Record<string, ModuleConfig> = {
     actions: [
       { label: "Avoirs", href: "/admin/avoirs", icon: FileText },
       { label: "SEPA", href: "/admin/sepa", icon: ShieldCheck },
-      { label: "Factures", href: "/admin/factures", icon: Receipt },
+      { label: "Devis", href: "/admin/devis", icon: Receipt },
     ],
   },
   cavaliers: {
@@ -86,7 +86,7 @@ const MODULES: Record<string, ModuleConfig> = {
     note: "Les tableaux conservent toute leur précision, mais gagnent en respiration.",
     actions: [
       { label: "Paiements", href: "/admin/paiements", icon: CreditCard },
-      { label: "Factures", href: "/admin/factures", icon: FileText },
+      { label: "Comptabilité", href: "/admin/comptabilite", icon: FileText },
       { label: "Statistiques", href: "/admin/statistiques", icon: BarChart3 },
     ],
   },

@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
       const anthropic = new Anthropic({ apiKey });
       const rep = await anthropic.messages.create({
         model: "claude-haiku-4-5",
-        max_tokens: 6000,
+        max_tokens: 8000,
         messages: [{
           role: "user",
           content: [
@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
                 "Ce document est un RELEVÉ DE COMPTE bancaire français d'un centre équestre. Réponds par un objet JSON seul, sans autre texte :\n" +
                 '{ "typeDoc": "releve", "banque": "nom de la banque", "compte": "libellé ou intitulé du compte (et fin de numéro le cas échéant)", "mois": "AAAA-MM du solde de clôture (le mois de la date d\'arrêté du NOUVEAU solde)", "soldeFin": nombre (le NOUVEAU solde / solde en fin de période, NÉGATIF si le compte est débiteur), "soldeDebut": nombre ou null (ancien solde), "dateSoldeFin": "AAAA-MM-JJ" ou null,\n' +
                 '  "operations": [ { "date": "AAAA-MM-JJ", "libelle": "libellé de l\'opération, nom du fournisseur mis en avant", "montant": nombre positif, "poste": "…" } ] }\n' +
-                "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
+                "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. \"libelle\" : le nom du fournisseur/bénéficiaire en 2 à 5 mots, sans les codes ni numéros. Réponds en JSON COMPACT (une opération par ligne, pas d'indentation). Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
                 nomsPostes.map((n) => `- "${n}"`).join("\n") + "\n" +
                 `- "${POSTE_HORS_DEPENSES}" pour tout débit qui n'est PAS une dépense de fonctionnement à suivre : échéance ou remboursement d'emprunt, salaire ou virement à un salarié, cotisations MSA/URSSAF/DGFiP/TESA, TVA et impôts, virement interne entre comptes du centre, retrait d'espèces, remboursement à un client.\n` +
                 "Montants en euros, point décimal, sans séparateur de milliers. Si ce n'est pas un relevé de compte, réponds {\"erreur\": \"document non reconnu\"}.",
@@ -148,11 +148,33 @@ export async function POST(req: NextRequest) {
       });
 
       const texte = rep.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
-      const m = texte.match(/\{[\s\S]*\}/);
-      if (!m) return NextResponse.json({ error: "Lecture du relevé impossible" }, { status: 422 });
-      let data: any;
-      try { data = JSON.parse(m[0]); } catch {
-        return NextResponse.json({ error: "Lecture du relevé impossible" }, { status: 422 });
+      // Un mois chargé peut faire déborder la réponse du plafond de tokens :
+      // le JSON arrive alors TRONQUÉ en plein milieu du tableau operations.
+      // Le solde, lui, est en tête — on répare en reculant jusqu'à la dernière
+      // opération complète et en refermant les crochets, plutôt que de tout
+      // jeter. `lectureIncomplete` prévient l'admin que la fin manque.
+      const reparerJsonTronque = (brut: string): any => {
+        let fin = brut.lastIndexOf("}");
+        for (let n = 0; fin > 0 && n < 300; n++, fin = brut.lastIndexOf("}", fin - 1)) {
+          for (const suffixe of ["", "]}", "}"]) {
+            try { return JSON.parse(brut.slice(0, fin + 1) + suffixe); } catch { /* on recule */ }
+          }
+        }
+        return null;
+      };
+
+      const debut = texte.indexOf("{");
+      if (debut < 0) return NextResponse.json({ error: "Lecture du relevé impossible (réponse sans données)" }, { status: 422 });
+      const brut = texte.slice(debut);
+      let data: any = null;
+      let lectureIncomplete = false;
+      try { data = JSON.parse(brut); } catch {
+        data = reparerJsonTronque(brut);
+        lectureIncomplete = data != null;
+      }
+      if (rep.stop_reason === "max_tokens") lectureIncomplete = true;
+      if (!data) {
+        return NextResponse.json({ error: "Relevé trop long ou illisible — réessaie avec le relevé d'un seul mois" }, { status: 422 });
       }
       if (data.erreur) return NextResponse.json({ error: String(data.erreur) }, { status: 422 });
 
@@ -184,6 +206,7 @@ export async function POST(req: NextRequest) {
           soldeDebut: nb(data.soldeDebut),
           dateSoldeFin: String(data.dateSoldeFin || ""),
           operations,
+          lectureIncomplete,
           fichier: String(body.filename || ""),
         },
       });

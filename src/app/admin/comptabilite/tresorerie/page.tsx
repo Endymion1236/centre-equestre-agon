@@ -28,6 +28,7 @@ interface PropositionReleve {
   banque: string; compte: string; mois: string;
   soldeFin: number | null; soldeDebut: number | null; dateSoldeFin: string;
   operations: OperationProposee[];
+  lectureIncomplete?: boolean;
   fichier: string;
   compteChoisi: string; soldeEdit: string; soldeEnregistre: boolean;
 }
@@ -360,6 +361,13 @@ export default function TresoreriePage() {
             <button onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
               className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-2 py-1 rounded-lg cursor-pointer">✕ retirer</button>
           </div>
+          {p.lectureIncomplete && (
+            <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-body text-[11px] text-amber-800">
+              ⚠ Relevé long : la lecture s&apos;est arrêtée avant la fin — les derniers débits du mois
+              peuvent manquer dans la liste ci-dessous. Le solde, lui, est fiable. Vérifie la fin du
+              relevé et ajoute à la main ce qui manque.
+            </div>
+          )}
 
           {/* Le solde de fin de mois → trésorerie */}
           <div className="flex flex-wrap items-center gap-2 font-body text-xs rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2 mb-2">
