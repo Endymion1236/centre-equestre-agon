@@ -19,32 +19,66 @@ import type { Salarie } from "../types";
  * Les salariés SORTIS restent au registre : c'est précisément son rôle. Seule
  * la suppression pure d'une fiche l'en retire — à éviter pour quelqu'un qui a
  * réellement travaillé ici.
+ *
+ * Un saisonnier qui revient chaque année a UNE LIGNE PAR EMBAUCHE : ses
+ * périodes archivées (periodesPrecedentes) s'impriment chacune comme une
+ * entrée à part entière, dans l'ordre chronologique — on n'écrase jamais une
+ * ancienne période avec les nouvelles dates.
  */
 
 const dateFr = (iso?: string) =>
   iso ? new Date(iso + "T12:00:00").toLocaleDateString("fr-FR") : "";
 
+// Une ligne du registre = une PÉRIODE d'emploi (pas une personne).
+interface LigneRegistre {
+  cle: string;
+  nomFamille: string; prenom: string; emploi: string;
+  typeContrat?: string | null; heures?: number | null;
+  dateEntree?: string; dateSortie?: string;
+  incomplete: boolean;
+}
+
 export default function RegistrePersonnelPage() {
   const { isAdmin } = useAuth();
-  const [salaries, setSalaries] = useState<Salarie[]>([]);
+  const [lignes, setLignes] = useState<LigneRegistre[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!isAdmin) return;
     getDocs(query(collection(db, "salaries-management"), orderBy("nom")))
       .then(snap => {
-        const liste = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Salarie));
+        const liste: LigneRegistre[] = [];
+        snap.docs.forEach(d => {
+          const s = { id: d.id, ...(d.data() as any) } as Salarie;
+          const base = { nomFamille: s.nomFamille || s.nom, prenom: s.prenom || "" };
+          // Les embauches passées d'abord (saisonnier revenu), puis la période en cours.
+          (s.periodesPrecedentes || []).forEach((p, i) => {
+            liste.push({
+              cle: `${s.id}-p${i}`, ...base,
+              emploi: p.emploi || s.emploi || "", typeContrat: p.typeContrat || undefined,
+              heures: null, dateEntree: p.dateEntree, dateSortie: p.dateSortie,
+              incomplete: !p.dateEntree || !p.typeContrat,
+            });
+          });
+          liste.push({
+            cle: s.id, ...base,
+            emploi: s.emploi || "", typeContrat: s.typeContrat,
+            heures: s.heuresContratSemaine ?? null,
+            dateEntree: s.dateEntree, dateSortie: s.dateSortie,
+            incomplete: !s.dateEntree || !s.typeContrat,
+          });
+        });
         // Ordre du registre : l'ordre d'EMBAUCHE, pas l'alphabet. Les fiches
         // sans date d'entrée passent en fin, signalées incomplètes.
         liste.sort((a, b) => (a.dateEntree || "9999").localeCompare(b.dateEntree || "9999"));
-        setSalaries(liste);
+        setLignes(liste);
       })
       .finally(() => setLoading(false));
   }, [isAdmin]);
 
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
 
-  const incompletes = salaries.filter(s => !s.dateEntree || !s.typeContrat).length;
+  const incompletes = lignes.filter(l => l.incomplete).length;
 
   return (
     <div className="px-4 sm:px-6 py-6 max-w-4xl mx-auto print:p-0 print:max-w-none">
@@ -103,18 +137,18 @@ export default function RegistrePersonnelPage() {
               </tr>
             </thead>
             <tbody>
-              {salaries.map(s => (
-                <tr key={s.id} className={`border-b border-gray-100 ${s.dateSortie ? "text-slate-400" : "text-slate-700"}`}>
-                  <td className="px-3 py-2 font-semibold uppercase">{s.nomFamille || s.nom}</td>
-                  <td className="px-3 py-2">{s.prenom || ""}</td>
-                  <td className="px-3 py-2">{s.emploi || ""}</td>
-                  <td className="px-3 py-2">{s.typeContrat || <span className="text-amber-600 print:text-black">à compléter</span>}</td>
-                  <td className="px-3 py-2">{s.heuresContratSemaine != null ? `${s.heuresContratSemaine} h` : ""}</td>
-                  <td className="px-3 py-2">{dateFr(s.dateEntree) || <span className="text-amber-600 print:text-black">à compléter</span>}</td>
-                  <td className="px-3 py-2">{dateFr(s.dateSortie)}</td>
+              {lignes.map(l => (
+                <tr key={l.cle} className={`border-b border-gray-100 ${l.dateSortie ? "text-slate-400" : "text-slate-700"}`}>
+                  <td className="px-3 py-2 font-semibold uppercase">{l.nomFamille}</td>
+                  <td className="px-3 py-2">{l.prenom}</td>
+                  <td className="px-3 py-2">{l.emploi}</td>
+                  <td className="px-3 py-2">{l.typeContrat || <span className="text-amber-600 print:text-black">à compléter</span>}</td>
+                  <td className="px-3 py-2">{l.heures != null ? `${l.heures} h` : ""}</td>
+                  <td className="px-3 py-2">{dateFr(l.dateEntree) || <span className="text-amber-600 print:text-black">à compléter</span>}</td>
+                  <td className="px-3 py-2">{dateFr(l.dateSortie)}</td>
                 </tr>
               ))}
-              {salaries.length === 0 && (
+              {lignes.length === 0 && (
                 <tr><td colSpan={7} className="px-3 py-8 text-center text-slate-400 italic">Aucun salarié.</td></tr>
               )}
             </tbody>
@@ -124,6 +158,7 @@ export default function RegistrePersonnelPage() {
 
       <p className="font-body text-[11px] text-slate-400 mt-3 print:text-gray-600">
         Registre conservé 5 ans à compter du départ de chaque salarié. Un salarié sorti reste inscrit.
+        Un saisonnier réembauché a une ligne par période d&apos;emploi (bouton « Nouvelle période » de sa fiche).
       </p>
 
       <style jsx global>{`

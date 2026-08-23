@@ -54,6 +54,13 @@ export interface Salarie {
   dateSortie?: string;   // "AAAA-MM-JJ" — vide tant que la personne est en poste
   typeContrat?: TypeContrat;
   emploi?: string;       // intitulé du poste (moniteur, palefrenier, apprenti…)
+  /**
+   * Périodes d'emploi ANTÉRIEURES (saisonnier qui revient chaque année) : le
+   * registre exige une ligne PAR EMBAUCHE, jamais d'écrasement des dates. La
+   * période en cours reste portée par dateEntree/dateSortie ; le bouton
+   * « Nouvelle période » archive l'ancienne ici avant de rouvrir les dates.
+   */
+  periodesPrecedentes?: { dateEntree: string; dateSortie: string; typeContrat?: TypeContrat | null; emploi?: string }[];
   couleur: string;    // couleur d'affichage
   actif: boolean;
   /** Heures contractuelles par semaine (défaut 35). Pour temps partiel. */

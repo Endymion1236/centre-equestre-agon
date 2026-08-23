@@ -477,6 +477,10 @@ export const MANUAL: ManualChapter[] = [
           remplissent dans Équipe → Équipe (bouton registre : prénom, nom, emploi, contrat, dates d'entrée
           et de sortie, heures), et le registre s'imprime dans l'ordre d'embauche. Un salarié sorti reste
           inscrit — c'est le rôle du registre.</p>
+          <p><strong>Saisonnier qui revient chaque année</strong> : ne modifie jamais ses anciennes dates.
+          Sur sa fiche registre, le bouton <strong>« Nouvelle période (réembauche) »</strong> archive la
+          période terminée, puis tu saisis les nouvelles dates d'entrée et de sortie — le registre imprime
+          une ligne par embauche, comme la loi l'exige.</p>
         `,
         href: "/admin/comptabilite/masse-salariale",
         tips: [
@@ -491,10 +495,12 @@ export const MANUAL: ManualChapter[] = [
           l'exercice comptable (juillet → juin), où chaque poste (aliments, maréchalerie, vétérinaire,
           entretien, assurances…) se saisit au fil de l'eau et se compare au <strong>dernier bilan validé
           par le cabinet</strong>.</p>
-          <p>La colonne <strong>Attendu</strong> proratise la référence annuelle sur les mois écoulés :
-          un cumul à plus de 110 % de l'attendu s'affiche en rouge — le dérapage se voit en octobre,
-          pas dans le bilan de l'année suivante. Clique une case pour saisir (montant HT du mois),
-          vide-la pour effacer. Outil de pilotage librement corrigible, pas une écriture comptable.</p>
+          <p>Clique une case : le détail du mois s'ouvre et tu ajoutes les factures <strong>une par une,
+          avec le fournisseur</strong> — la case affiche la somme (et le nombre de factures). La colonne
+          <strong> Attendu</strong> proratise la référence annuelle sur les mois écoulés : un cumul à plus
+          de 110 % de l'attendu s'affiche en rouge — le dérapage se voit en octobre, pas dans le bilan de
+          l'année suivante. Montants HT de préférence. Outil de pilotage librement corrigible, pas une
+          écriture comptable.</p>
         `,
         href: "/admin/comptabilite/depenses",
         tips: [

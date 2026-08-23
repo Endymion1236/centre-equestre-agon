@@ -56,6 +56,34 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
     }
   };
 
+  // Réembauche d'un saisonnier : le registre exige une ligne PAR embauche —
+  // on n'écrase jamais les anciennes dates. La période terminée est archivée
+  // dans periodesPrecedentes, puis les dates repartent vierges pour la
+  // nouvelle saison (contrat et emploi sont gardés, c'est souvent les mêmes).
+  const nouvellePeriode = async (s: Salarie) => {
+    if (!s.dateEntree || !s.dateSortie) return;
+    if (!confirm(`${s.nom} revient ? La période ${new Date(s.dateEntree + "T12:00:00").toLocaleDateString("fr-FR")} → ${new Date(s.dateSortie + "T12:00:00").toLocaleDateString("fr-FR")} sera archivée au registre, et tu saisiras les dates de la nouvelle.`)) return;
+    if (regSaving) return;
+    setRegSaving(true);
+    try {
+      await updateDoc(doc(db, "salaries-management", s.id), {
+        periodesPrecedentes: [
+          ...(s.periodesPrecedentes || []),
+          { dateEntree: s.dateEntree, dateSortie: s.dateSortie, typeContrat: s.typeContrat || null, emploi: s.emploi || "" },
+        ],
+        dateEntree: "", dateSortie: "",
+        updatedAt: serverTimestamp(),
+      });
+      toast("Période archivée — saisis les dates de la nouvelle", "success");
+      setReg(r => ({ ...r, dateEntree: "", dateSortie: "" }));
+      onRefresh();
+    } catch (e: any) {
+      toast(`Erreur : ${e.message}`, "error");
+    } finally {
+      setRegSaving(false);
+    }
+  };
+
   const saveCouleur = async (id: string) => {
     await updateDoc(doc(db, "salaries-management", id), { couleur, updatedAt: serverTimestamp() });
     toast("Couleur modifiée", "success");
@@ -161,7 +189,26 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                       className="border border-gray-200 rounded-lg px-2 py-1.5 bg-white w-24" />
                   </label>
                 </div>
-                <div className="flex gap-2">
+                {(s.periodesPrecedentes || []).length > 0 && (
+                  <div className="font-body text-[11px] text-slate-500 bg-white/70 border border-purple-100 rounded-lg px-2.5 py-1.5">
+                    <span className="font-semibold text-purple-800">Périodes précédentes (au registre) : </span>
+                    {(s.periodesPrecedentes || []).map((p, i) => (
+                      <span key={i}>
+                        {i > 0 ? " · " : ""}
+                        {new Date(p.dateEntree + "T12:00:00").toLocaleDateString("fr-FR")} → {new Date(p.dateSortie + "T12:00:00").toLocaleDateString("fr-FR")}
+                        {p.typeContrat ? ` (${p.typeContrat})` : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2 flex-wrap">
+                  {s.dateEntree && s.dateSortie && (
+                    <button onClick={() => nouvellePeriode(s)} disabled={regSaving}
+                      title="Saisonnier qui revient : archive la période terminée au registre et rouvre les dates"
+                      className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm font-semibold text-purple-700 bg-white border border-purple-300 cursor-pointer hover:bg-purple-100 disabled:opacity-50">
+                      ↻ Nouvelle période (réembauche)
+                    </button>
+                  )}
                   <button onClick={() => saveRegistre(s.id)} disabled={regSaving}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-purple-600 border-none cursor-pointer hover:bg-purple-700 disabled:opacity-50">
                     <Check size={14} /> {regSaving ? "…" : "Enregistrer"}
@@ -185,6 +232,7 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                     {s.heuresContratSemaine != null ? `${s.heuresContratSemaine} h/sem · ` : ""}
                     {s.dateEntree ? `entré(e) le ${new Date(s.dateEntree + "T12:00:00").toLocaleDateString("fr-FR")}` : "fiche registre à compléter"}
                     {s.dateSortie ? ` · sorti(e) le ${new Date(s.dateSortie + "T12:00:00").toLocaleDateString("fr-FR")}` : ""}
+                    {(s.periodesPrecedentes || []).length > 0 ? ` · ${(s.periodesPrecedentes || []).length} période(s) précédente(s)` : ""}
                   </div>
                 </div>
                 {!s.actif && <span className="font-body text-xs text-slate-400 bg-gray-100 px-2 py-0.5 rounded-full">Inactif</span>}
