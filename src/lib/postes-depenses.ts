@@ -21,6 +21,10 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
   { nom: "Locations & loyers", ref: 21357 },
   { nom: "Assurances", ref: 9992 },
   { nom: "Honoraires & gestion (compta, juridique, GHN)", ref: 5321 },
+  // Bilan 24-25 : services bancaires 1 464 + commissions CB 995 + commissions
+  // s/emprunt 39 + frais ANCV 76 — les « Commission vente à distance »,
+  // « Com Carte », factures Crédit Agricole et commissions Stripe vont ici.
+  { nom: "Frais bancaires & commissions (CB, Stripe)", ref: 2574 },
   { nom: "Publicité & communication", ref: 2024 },
   { nom: "Autres dépenses", ref: null },
 ];

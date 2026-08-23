@@ -140,7 +140,8 @@ export async function POST(req: NextRequest) {
                 '  "operations": [ { "date": "AAAA-MM-JJ", "libelle": "libellé de l\'opération, nom du fournisseur mis en avant", "montant": nombre positif, "poste": "…" } ] }\n' +
                 "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. \"libelle\" : le nom du fournisseur/bénéficiaire en 2 à 5 mots, sans les codes ni numéros. Réponds en JSON COMPACT (une opération par ligne, pas d'indentation). Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
                 nomsPostes.map((n) => `- "${n}"`).join("\n") + "\n" +
-                `- "${POSTE_HORS_DEPENSES}" pour tout débit qui n'est PAS une dépense de fonctionnement à suivre : échéance ou remboursement d'emprunt, salaire ou virement à un salarié, cotisations MSA/URSSAF/DGFiP/TESA, TVA et impôts, virement interne entre comptes du centre, retrait d'espèces, remboursement à un client.\n` +
+                `- "${POSTE_HORS_DEPENSES}" pour tout débit qui n'est PAS une dépense de fonctionnement à suivre : échéance ou remboursement d'emprunt, salaire ou virement à un salarié, cotisations MSA/URSSAF/DGFiP/TESA, TVA et impôts, virement interne entre comptes du centre, retrait d'espèces, remboursement à un client, ÉPARGNE et placements (assurance-vie, retraite, prévoyance type Swisslife), dépense PERSONNELLE de l'exploitant (courses alimentaires type Hellofresh, abonnements privés).\n` +
+                "Cas fréquents : « Commission vente à distance », « Com Carte », frais et factures Crédit Agricole, commissions Stripe → \"Frais bancaires & commissions (CB, Stripe)\".\n" +
                 "Montants en euros, point décimal, sans séparateur de milliers. Si ce n'est pas un relevé de compte, réponds {\"erreur\": \"document non reconnu\"}.",
             },
           ],
