@@ -50,6 +50,17 @@ export async function GET(req: NextRequest) {
   const targetDate = req.nextUrl.searchParams.get("date") || addDaysParis(2);
 
   try {
+    // Interrupteur maître (Paramètres → Annulation) : désactivé, la
+    // mécanique entière est en sommeil — cron du soir comme bouton de test.
+    const regSnap = await adminDb.collection("settings").doc("balade-petit-groupe").get();
+    if (regSnap.exists && (regSnap.data() as any)?.actif === false) {
+      return NextResponse.json({
+        date: targetDate, desactive: true,
+        baladesExaminees: 0, baladesSousSeuil: 0, famillesNotifiees: 0,
+        sansEmail: 0, bloques: 0, erreurs: [], dry,
+      });
+    }
+
     // L'option « petit comité » ne s'applique que du 1er septembre au
     // 10 juillet : en plein été, aucune balade n'est examinée.
     if (!dansPeriodePetitGroupe(targetDate)) {

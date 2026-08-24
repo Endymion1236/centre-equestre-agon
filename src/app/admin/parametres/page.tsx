@@ -320,6 +320,10 @@ export default function ParametresPage() {
 
   // ─── Fidélité ───
   const [fideliteEnabled, setFideliteEnabled] = useState(false);
+  // Option « balades petit comité » : maître ON/OFF de toute la mécanique
+  // (emails J-2, choix supplément/report/avoir/remboursement, bouton de test).
+  const [petitGroupeActif, setPetitGroupeActif] = useState(true);
+  const [petitGroupeSaving, setPetitGroupeSaving] = useState(false);
   const [fideliteTaux, setFideliteTaux] = useState(100); // 100 points = 1€
   const [fideliteMinPoints, setFideliteMinPoints] = useState(500); // minimum pour utiliser
   const [fideliteSaved, setFideliteSaved] = useState(false);
@@ -485,6 +489,26 @@ export default function ParametresPage() {
       setInscriptionSaved(true);
       setTimeout(() => setInscriptionSaved(false), 2000);
     } catch (e) { console.error(e); alert("Erreur sauvegarde"); }
+  };
+
+  // Charger le réglage « balades petit comité » (actif par défaut)
+  useEffect(() => {
+    getDoc(doc(db, "settings", "balade-petit-groupe"))
+      .then((snap) => { if (snap.exists()) setPetitGroupeActif((snap.data() as any).actif !== false); })
+      .catch((e) => console.error("Erreur chargement petit comité:", e));
+  }, []);
+
+  const togglePetitGroupe = async () => {
+    if (petitGroupeSaving) return;
+    const nouveau = !petitGroupeActif;
+    setPetitGroupeSaving(true);
+    try {
+      await setDoc(doc(db, "settings", "balade-petit-groupe"), {
+        actif: nouveau, updatedAt: new Date(),
+      }, { merge: true });
+      setPetitGroupeActif(nouveau);
+    } catch (e) { console.error("Sauvegarde petit comité:", e); alert("Erreur lors de la sauvegarde."); }
+    setPetitGroupeSaving(false);
   };
 
   // Charger paramètres fidélité
@@ -1026,6 +1050,29 @@ export default function ParametresPage() {
               <Save size={16} /> Enregistrer
             </button>
           </div>
+        </Card>
+      )}
+
+      {section === "annulation" && (
+        <Card padding="md" className="mt-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h3 className="font-body text-base font-semibold text-blue-800 mb-1">🌙 Balades « petit comité »</h3>
+              <p className="font-body text-xs text-slate-500 m-0 max-w-xl">
+                Quand une balade collective est sous son minimum de participants à J-2 (entre le 1er septembre
+                et le 10 juillet), chaque famille reçoit l&apos;email de choix : maintien avec supplément, report,
+                avoir ou remboursement. Désactivé, plus aucun email ne part — ni par le cron du soir, ni par
+                le bouton de test du planning.
+              </p>
+            </div>
+            <button onClick={togglePetitGroupe} disabled={petitGroupeSaving}
+              className={`w-12 h-6 rounded-full transition-all border-none cursor-pointer flex-shrink-0 disabled:opacity-50 ${petitGroupeActif ? "bg-blue-500" : "bg-gray-200"}`}>
+              <div className={`w-5 h-5 rounded-full bg-white shadow transition-all mx-0.5 ${petitGroupeActif ? "translate-x-6" : "translate-x-0"}`} />
+            </button>
+          </div>
+          <p className={`font-body text-xs font-semibold mt-2 m-0 ${petitGroupeActif ? "text-green-600" : "text-slate-400"}`}>
+            {petitGroupeActif ? "✓ Option active" : "Option désactivée"}
+          </p>
         </Card>
       )}
 
