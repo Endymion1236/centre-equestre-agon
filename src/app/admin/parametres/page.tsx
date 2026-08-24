@@ -1881,6 +1881,29 @@ export default function ParametresPage() {
           {/* Thème saisonnier du site vitrine */}
           <ThemeSaisonnierToggle />
 
+          {/* Outils de diagnostic — retirés de la barre latérale (usage
+              d'exception) : leur place est ici, avec les autres outils rares. */}
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">🩺 Outils de diagnostic</h3>
+            <p className="font-body text-xs text-slate-500 mb-3">
+              Outils d&apos;exception, à n&apos;utiliser qu&apos;en cas de problème constaté.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a href="/admin/diag-stages"
+                className="font-body text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg no-underline hover:bg-blue-100">
+                🩺 Diagnostic stages
+              </a>
+              <a href="/admin/restore-creneaux"
+                className="font-body text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg no-underline hover:bg-amber-100">
+                ↩️ Restaurer des créneaux
+              </a>
+              <a href="/admin/comptabilite/diag-especes"
+                className="font-body text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded-lg no-underline hover:bg-green-100">
+                🔍 Diagnostic espèces
+              </a>
+            </div>
+          </Card>
+
           {/* Avertissement */}
           <Card padding="md" className="bg-orange-50 border-orange-200">
             <div className="flex items-center gap-3 mb-2">
