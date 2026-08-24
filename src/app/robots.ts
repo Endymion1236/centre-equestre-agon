@@ -18,7 +18,6 @@ export default function robots(): MetadataRoute.Robots {
           "/espace-moniteur/",
           "/connexion-magique",
           "/montoir/",
-          "/modeles",
           "/borne",
           "/desabonnement",
         ],

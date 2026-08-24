@@ -32,11 +32,14 @@ interface TabEncaisserProps {
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
   setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes">>;
   refreshAll: () => Promise<void>;
+  /** Pré-remplissage du panier (flux « Dupliquer » du journal). */
+  prefill?: { familyId: string; familySearch: string; items: BasketItem[] } | null;
+  onPrefillConsumed?: () => void;
 }
 
 export function TabEncaisser({
   families, activities, payments, encaissements, avoirs, promos, loading,
-  enregistrerEncaissement, toast, setTab, refreshAll,
+  enregistrerEncaissement, toast, setTab, refreshAll, prefill, onPrefillConsumed,
 }: TabEncaisserProps) {
   // Répartit un montant total en n parts égales avec ajustement du reliquat
   // sur la première part pour que la somme soit EXACTEMENT le total.
@@ -71,8 +74,17 @@ export function TabEncaisser({
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<{ label: string; discountMode: string; discountValue: number } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<{ id: string; label: string; discountMode: string; discountValue: number } | null>(null);
   const [manualDiscount, setManualDiscount] = useState("");
+
+  useEffect(() => {
+    if (!prefill || prefill.items.length === 0) return;
+    setSelectedFamily(prefill.familyId);
+    setFamilySearch(prefill.familySearch);
+    setBasket(prefill.items);
+    onPrefillConsumed?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill]);
 
   // ─── Chèques différés (mode "cheque_differe") ─────────────────────────────
   type ChequeDifferE = { numero: string; banque: string; montant: string; dateEncaissementPrevue: string };
@@ -196,11 +208,23 @@ export function TabEncaisser({
     if (found) {
       if (found.maxUses > 0 && found.usedCount >= found.maxUses) { toast("Ce code a atteint son nombre max d'utilisations."); return; }
       if (found.validUntil && new Date(found.validUntil) < new Date()) { toast("Ce code a expiré.", "warning"); return; }
-      setAppliedPromo({ label: found.label, discountMode: found.discountMode, discountValue: found.discountValue });
+      setAppliedPromo({ id: found.id, label: found.label, discountMode: found.discountMode, discountValue: found.discountValue });
       setManualDiscount("");
     } else {
       toast("Code promo invalide ou non applicable aux paiements.");
     }
+  };
+
+  // Comptabilise une utilisation du code promo appliqué, pour que le
+  // garde-fou « max utilisations » compare un compteur réellement incrémenté.
+  const consommerPromo = async () => {
+    if (!appliedPromo?.id) return;
+    try {
+      const snap = await getDoc(doc(db, "settings", "promos"));
+      const items = (snap.exists() && (snap.data() as any).items) || [];
+      const next = items.map((p: any) => p.id === appliedPromo.id ? { ...p, usedCount: (p.usedCount || 0) + 1 } : p);
+      await updateDoc(doc(db, "settings", "promos"), { items: next });
+    } catch (e) { console.error("[promos] incrément usedCount échoué:", e); }
   };
 
   const removeFromBasket = (id: string) => setBasket(basket.filter((i) => i.id !== id));
@@ -327,7 +351,9 @@ export function TabEncaisser({
         });
       }
 
+      await consommerPromo();
       setBasket([]); setPaymentRef(""); setPaidAmount("");
+      setAppliedPromo(null); setPromoCode("");
       setEncaissementDate(new Date().toISOString().split("T")[0]);
       setChequesDiffres([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
       setSuccess(true);
@@ -375,7 +401,9 @@ export function TabEncaisser({
       });
       bonsGeneres.push(code);
     }
+    await consommerPromo();
     setBasket([]); setPaymentRef(""); setPaidAmount("");
+    setAppliedPromo(null); setPromoCode("");
     setEncaissementDate(new Date().toISOString().split("T")[0]);
     if (bonsGeneres.length > 0) toast(`🎁 Bon(s) créé(s) : ${bonsGeneres.join(", ")} — à remettre à l'acheteur.`, "success");
     setSuccess(true);

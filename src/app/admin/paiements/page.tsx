@@ -18,7 +18,7 @@ import { downloadAvoirPdf } from "@/lib/download-avoir";
 import { fetchDiscountSettings, calculateFamilyDiscount, calculateMultiStageDiscount } from "@/lib/discounts";
 import type { Family, Activity } from "@/types";
 import { normalizePayment, loadPayments } from "./utils";
-import { BasketItem, Payment, PaymentMode, paymentModes } from "./types";
+import { BasketItem, Payment, paymentModes } from "./types";
 import { NoteField } from "./NoteField";
 import { TabEncaisser } from "./TabEncaisser";
 import { TabJournal } from "./TabJournal";
@@ -196,27 +196,10 @@ export default function PaiementsPage() {
   const [correctionRef, setCorrectionRef] = useState("");
   const [correctionRaison, setCorrectionRaison] = useState("");
 
-  // Basket state
-  const [familySearch, setFamilySearch] = useState("");
-  const [basket, setBasket] = useState<BasketItem[]>([]);
-  const [selectedActivity, setSelectedActivity] = useState("");
-  const [selectedChild, setSelectedChild] = useState("");
-  const [customLabel, setCustomLabel] = useState("");
-  const [customPrice, setCustomPrice] = useState("");
-
-  // Payment state
-  const [paymentMode, setPaymentMode] = useState<PaymentMode>("cb_terminal");
-  const [paymentRef, setPaymentRef] = useState("");
-  const [paidAmount, setPaidAmount] = useState("");
-  const [encaissementDate, setEncaissementDate] = useState(new Date().toISOString().split("T")[0]);
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  // Réductions
+  // Réductions (chargées ici, consommées par TabEncaisser)
   const [promos, setPromos] = useState<any[]>([]);
-  const [promoCode, setPromoCode] = useState("");
-  const [appliedPromo, setAppliedPromo] = useState<{ label: string; discountMode: string; discountValue: number } | null>(null);
-  const [manualDiscount, setManualDiscount] = useState("");
+  // Pré-remplissage du panier de TabEncaisser (flux « Dupliquer » du journal)
+  const [encaisserPrefill, setEncaisserPrefill] = useState<{ familyId: string; familySearch: string; items: BasketItem[] } | null>(null);
 
   const fetchData = async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -1070,9 +1053,7 @@ export default function PaiementsPage() {
       priceTTC: safeNumber(item.priceTTC),
       creneauId: "",
     }));
-    setSelectedFamily(family.firestoreId);
-    setFamilySearch(family.parentName || "");
-    setBasket(items);
+    setEncaisserPrefill({ familyId: family.firestoreId, familySearch: family.parentName || "", items });
     setTab("encaisser");
     setDuplicateTarget(null);
     toast(`Panier pré-rempli pour ${family.parentName} — ${items.length} prestation(s). Ajustez les créneaux puis encaissez.`);
@@ -1349,67 +1330,6 @@ export default function PaiementsPage() {
       };
     }));
   };
-  const basketSubtotal = basket.reduce((s, i) => s + i.priceTTC, 0);
-  const promoDiscount = appliedPromo
-    ? (appliedPromo.discountMode === "percent" ? basketSubtotal * appliedPromo.discountValue / 100 : appliedPromo.discountValue)
-    : (safeNumber(manualDiscount));
-  const basketTotal = Math.max(0, basketSubtotal - promoDiscount);
-
-  const applyPromoCode = () => {
-    const found = promos.find((p: any) => p.type === "code" && p.code === promoCode.toUpperCase() && p.active && (p.appliesTo === "paiement" || p.appliesTo === "tout"));
-    if (found) {
-      if (found.maxUses > 0 && found.usedCount >= found.maxUses) { toast("Ce code a atteint son nombre max d'utilisations."); return; }
-      if (found.validUntil && new Date(found.validUntil) < new Date()) { toast("Ce code a expiré.", "warning"); return; }
-      setAppliedPromo({ label: found.label, discountMode: found.discountMode, discountValue: found.discountValue });
-      setManualDiscount("");
-    } else {
-      toast("Code promo invalide ou non applicable aux paiements.");
-    }
-  };
-
-  const filteredFamilies = familySearch
-    ? families.filter((f) => { const terms = familySearch.toLowerCase().trim().split(/\s+/); const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${(c as any).lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); })
-    : families;
-
-  const addToBasket = () => {
-    if (customLabel && customPrice) {
-      const price = safeNumber(customPrice);
-      setBasket([...basket, {
-        id: Date.now().toString(),
-        activityTitle: customLabel,
-        childId: selectedChild || "",
-        childName: selectedChild || "—",
-        description: "Saisie manuelle",
-        priceHT: price / 1.055,
-        tva: 5.5,
-        priceTTC: price,
-      }]);
-      setCustomLabel("");
-      setCustomPrice("");
-      return;
-    }
-
-    const activity = activities.find((a) => a.firestoreId === selectedActivity);
-    if (!activity) return;
-    const child = children.find((c: any) => c.id === selectedChild);
-    const priceTTC = (activity as any).priceTTC || (activity.priceHT || 0) * (1 + (activity.tvaTaux || 5.5) / 100);
-    const priceHT = priceTTC / (1 + (activity.tvaTaux || 5.5) / 100);
-    setBasket([...basket, {
-      id: Date.now().toString(),
-      activityTitle: activity.title,
-      childId: selectedChild || "",
-      childName: child?.firstName || "—",
-      activityId: activity.firestoreId,
-      description: activity.schedule || "",
-      priceHT: Math.round(priceHT * 100) / 100,
-      tva: activity.tvaTaux || 5.5,
-      priceTTC: Math.round(priceTTC * 100) / 100,
-    }]);
-    setSelectedActivity("");
-  };
-
-
-
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   return (
@@ -1460,6 +1380,7 @@ export default function PaiementsPage() {
           encaissements={encaissements} avoirs={avoirs} promos={promos} loading={loading}
           enregistrerEncaissement={enregistrerEncaissement}
           toast={toast} setTab={setTab} refreshAll={refreshAll}
+          prefill={encaisserPrefill} onPrefillConsumed={() => setEncaisserPrefill(null)}
         />
       )}
 

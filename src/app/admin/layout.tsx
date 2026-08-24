@@ -110,8 +110,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Clients & ventes",
     icon: Users,
     items: [
-      { href: "/admin/cavaliers", icon: Users, label: "Familles & cavaliers" },
-      { href: "/admin/paiements", icon: CreditCard, label: "Paiements" },
+      // Cavaliers et Paiements sont déjà dans la barre principale (PRIMARY_NAV) :
+      // ne pas les répéter ici, sinon deux entrées s'allument en même temps.
       { href: "/admin/devis", icon: FileText, label: "Devis" },
       { href: "/admin/forfaits", icon: CalendarDays, label: "Forfaits" },
       { href: "/admin/cartes", icon: CreditCard, label: "Cartes de séances" },
@@ -144,6 +144,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/boite", icon: Inbox, label: "Boîte email (IA)" },
       { href: "/admin/messages-contact", icon: Inbox, label: "Messages du site" },
       { href: "/admin/communication", icon: Mail, label: "Campagnes" },
+      { href: "/admin/offres", icon: Send, label: "Offres last-minute" },
       { href: "/admin/whatsapp", icon: MessageCircle, label: "WhatsApp" },
       { href: "/admin/email-templates", icon: LayoutTemplate, label: "Modèles d’email" },
       { href: "/admin/email-reprise", icon: Send, label: "Email de reprise" },

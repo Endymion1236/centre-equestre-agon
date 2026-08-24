@@ -229,10 +229,14 @@ service cloud.firestore {
       //
       // Liste blanche et non liste noire : un futur document contenant un
       // secret est protégé par défaut au lieu d'être exposé par oubli.
+      // 'stageDeroule' : lu côté client par l'espace cavalier (réserver,
+      // réservations) pour afficher le déroulé type d'un stage — sans lui,
+      // la lecture échoue en silence et les familles ne voient jamais le
+      // déroulé saisi dans Paramètres.
       allow read: if docId in [
-        'vitrine', 'centre', 'actus', 'miniferme', 'promos', 'competitions',
+        'vitrine', 'centre', 'actus', 'miniferme', 'promos',
         'degressivite', 'fidelite', 'inscription', 'progression_labels',
-        'notifications', 'whatsapp', 'email', 'reservations', 'theme'
+        'whatsapp', 'email', 'reservations', 'theme', 'stageDeroule'
       ] || isAdmin();
       allow write: if isAdmin();
     }

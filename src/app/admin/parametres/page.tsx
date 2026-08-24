@@ -41,24 +41,14 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "horaires" | "moniteurs" | "fidelite" | "inscription" | "epreuves" | "progression" | "maintenance" | "notifications" | "marees" | "stages">("centre");
+  const [section, setSection] = useState<"centre" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "moniteurs" | "fidelite" | "inscription" | "progression" | "maintenance" | "notifications" | "marees" | "stages">("centre");
 
   // Ouvrir directement une section via l'URL (ex. /admin/parametres?section=moniteurs)
   useEffect(() => {
-    const allowed = ["centre","reductions","degressivite","vacances","annulation","comptable","horaires","moniteurs","fidelite","inscription","epreuves","progression","maintenance","notifications","marees","stages"];
+    const allowed = ["centre","reductions","degressivite","vacances","annulation","comptable","moniteurs","fidelite","inscription","progression","maintenance","notifications","marees","stages"];
     const s = new URLSearchParams(window.location.search).get("section");
     if (s && allowed.includes(s)) setSection(s as any);
   }, []);
-  const [notifSettings, setNotifSettings] = useState({
-    nouvelle_inscription: true,
-    nouveau_paiement: true,
-    impaye: true,
-    liste_attente: true,
-    annulation: true,
-    nouveau_cavalier: false,
-    rappel_stage: true,
-  });
-  const [notifSaving, setNotifSaving] = useState(false);
   const [testPushSending, setTestPushSending] = useState(false);
   const [maintenanceTab, setMaintenanceTab] = useState<"nettoyage" | "test" | "historique">("nettoyage");
 
@@ -82,15 +72,6 @@ export default function ParametresPage() {
   const [centreSaved, setCentreSaved] = useState(false);
 
   // ─── Type d'une ligne optionnelle libre ───
-  // Ces lignes apparaissent dans l'inscription annuelle et la famille peut les cocher.
-  type CustomInscriptionLine = {
-    id: string;            // identifiant stable (timestamp ou uuid simple)
-    label: string;         // ex. "Forfait compétition", "Tenue club"
-    priceTTC: number;      // montant TTC en euros
-    tvaRate: number;       // 0, 5.5, 10 ou 20
-    accountCode: string;   // code du plan comptable (ex. 70611000)
-  };
-
   // ─── Paramètres inscription annuelle ───
   const [inscriptionParams, setInscriptionParams] = useState({
     // Forfaits par fréquence
@@ -105,52 +86,13 @@ export default function ParametresPage() {
     // Licence FFE
     licenceMoins18: 25,
     licencePlus18: 36,
-    licenceTvaRate: 0,           // TVA appliquée à la licence FFE (typiquement 0%)
-    licenceAccountCode: "70100000", // code comptable de la licence
     // Saison
     totalSessionsSaison: 35,
     dateFinSaison: "2026-06-30",
     // Stages
     assuranceOccasionnelle: 10,
-    // Lignes libres optionnelles (forfait compétition, options, suppléments...)
-    customLines: [] as CustomInscriptionLine[],
   });
   const [inscriptionSaved, setInscriptionSaved] = useState(false);
-
-  // ─── Épreuves compétition ───
-  const DISCIPLINES = [
-    { key: "pony_games", label: "Pony Games", default: ["Trot en ligne","Slalom","Tonneau","Cavaletti","Portique","Barre de vitesse","Étoile","Flag race"] },
-    { key: "cso", label: "CSO", default: ["Parcours A","Barrage","Maniabilité","Chrono"] },
-    { key: "equifun", label: "Équifun", default: ["Parcours thématique","Épreuve de précision","Course d'obstacles","Épreuve d'adresse"] },
-    { key: "endurance", label: "Endurance", default: ["Boucle 1","Boucle 2","Boucle 3","Phase vétérinaire"] },
-  ];
-  const [epreuves, setEpreuves] = useState<Record<string, string[]>>({
-    pony_games: ["Trot en ligne","Slalom","Tonneau","Cavaletti","Portique","Barre de vitesse","Étoile","Flag race"],
-    cso: ["Parcours A","Barrage","Maniabilité","Chrono"],
-    equifun: ["Parcours thématique","Épreuve de précision","Course d'obstacles","Épreuve d'adresse"],
-    endurance: ["Boucle 1","Boucle 2","Boucle 3","Phase vétérinaire"],
-  });
-  const [epreuvesSaved, setEpreuvesSaved] = useState(false);
-  const [newEpreuve, setNewEpreuve] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    getDoc(doc(db, "settings", "notifications")).then(snap => {
-      if (snap.exists()) setNotifSettings(prev => ({ ...prev, ...snap.data() }));
-    });
-  }, []);
-
-  useEffect(() => {
-    if (section !== "epreuves") return;
-    getDoc(doc(db, "settings", "competitions")).then(snap => {
-      if (snap.exists()) setEpreuves(prev => ({ ...prev, ...snap.data() }));
-    });
-  }, [section]);
-
-  const saveEpreuves = async () => {
-    await setDoc(doc(db, "settings", "competitions"), { ...epreuves, updatedAt: new Date() });
-    setEpreuvesSaved(true);
-    setTimeout(() => setEpreuvesSaved(false), 2000);
-  };
 
   // ─── Déroulé des stages (2 séquences) ────────────────────────────────────
   // Réglage unique partagé par tous les stages. Repris dans les emails de
@@ -573,9 +515,7 @@ export default function ParametresPage() {
           ["vacances", "📅 Vacances scolaires"],
           ["annulation", "Annulation"],
           ["comptable", "Plan comptable"],
-          ["horaires", "Horaires"],
           ["moniteurs", "Moniteurs"],
-          ["epreuves", "🏆 Épreuves"],
           ["progression", "📈 Progression"],
           ["fidelite", "🏆 Fidélité"],
           ["notifications", "🔔 Notifications"],
@@ -733,7 +673,7 @@ export default function ParametresPage() {
 
                 {/* Boutons ajout rapide */}
                 <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ajouter une réduction</div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <div className="grid grid-cols-1 gap-3 mb-4">
                   {/* Code promo */}
                   <button onClick={() => setPromos([...promos, {
                     id: `promo_${Date.now()}`, type: "code", code: "", label: "Nouveau code promo",
@@ -744,45 +684,6 @@ export default function ParametresPage() {
                     <div>
                       <div className="font-body text-sm font-semibold text-blue-800">Code promo</div>
                       <div className="font-body text-xs text-gray-400">Ex: BIENVENUE10, ETE2026, NOEL...</div>
-                    </div>
-                  </button>
-
-                  {/* 1ère année */}
-                  <button onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "premiere_annee", code: "", label: "Tarif spécial 1ère année",
-                    discountMode: "percent", discountValue: 10, appliesTo: "forfait", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-green-300 bg-green-50/30 text-left cursor-pointer hover:bg-green-50 transition-all">
-                    <Plus size={18} className="text-green-600" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">1ère année</div>
-                      <div className="font-body text-xs text-gray-400">Réduction auto pour les nouveaux inscrits</div>
-                    </div>
-                  </button>
-
-                  {/* Anniversaire */}
-                  <button onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "anniversaire", code: "", label: "Réduction anniversaire",
-                    discountMode: "percent", discountValue: 15, appliesTo: "tout", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-orange-300 bg-orange-50/30 text-left cursor-pointer hover:bg-orange-50 transition-all">
-                    <Plus size={18} className="text-orange-500" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Anniversaire</div>
-                      <div className="font-body text-xs text-gray-400">Réduction le mois d&apos;anniversaire du cavalier</div>
-                    </div>
-                  </button>
-
-                  {/* Parrainage */}
-                  <button onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "parrainage", code: "", label: "Parrainage",
-                    discountMode: "fixed", discountValue: 30, appliesTo: "forfait", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-purple-300 bg-purple-50/30 text-left cursor-pointer hover:bg-purple-50 transition-all">
-                    <Plus size={18} className="text-purple-600" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Parrainage</div>
-                      <div className="font-body text-xs text-gray-400">Réduction quand un client amène un nouveau</div>
                     </div>
                   </button>
                 </div>
@@ -823,7 +724,6 @@ export default function ParametresPage() {
                             <select value={p.appliesTo} onChange={e => { const up = [...promos]; up[i] = { ...p, appliesTo: e.target.value as any }; setPromos(up); }}
                               className={`${inputCls} !text-left`}>
                               <option value="tout">Forfaits + paiements</option>
-                              <option value="forfait">Forfaits uniquement</option>
                               <option value="paiement">Paiements uniquement</option>
                             </select>
                           </div>
@@ -1094,10 +994,7 @@ export default function ParametresPage() {
       {section === "comptable" && (
         <div>
           <div className="flex justify-between items-center mb-4">
-            <p className="font-body text-sm text-gray-500">Plan comptable importé de Celeris — {defaultAccounts.length} comptes</p>
-            <button className="flex items-center gap-2 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">
-              <Plus size={14} /> Ajouter un compte
-            </button>
+            <p className="font-body text-sm text-gray-500">Plan comptable importé de Celeris — {defaultAccounts.length} comptes (lecture seule, géré par le cabinet comptable)</p>
           </div>
           <Card className="!p-0 overflow-hidden">
             <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
@@ -1105,7 +1002,6 @@ export default function ParametresPage() {
               <span className="flex-1">Intitulé</span>
               <span className="w-20 text-center">TVA</span>
               <span className="flex-1">Affectation</span>
-              <span className="w-12"></span>
             </div>
             {defaultAccounts.map((a, i) => (
               <div key={i} className="px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors">
@@ -1115,37 +1011,10 @@ export default function ParametresPage() {
                   <Badge color={a.tva === "0%" ? "gray" : a.tva === "5.50%" ? "green" : "orange"}>{a.tva}</Badge>
                 </span>
                 <span className="flex-1 font-body text-xs text-gray-400">{a.affectation}</span>
-                <span className="w-12 text-right">
-                  <button className="text-gray-300 hover:text-blue-500 bg-transparent border-none cursor-pointer">✏️</button>
-                </span>
               </div>
             ))}
           </Card>
         </div>
-      )}
-
-      {/* ─── Horaires ─── */}
-      {section === "horaires" && (
-        <Card padding="md">
-          <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Horaires d&apos;ouverture</h3>
-          <div className="flex flex-col gap-3">
-            {[
-              { period: "Pleine saison (Juil–Août)", days: "Lun – Sam", hours: "9h – 19h" },
-              { period: "Vacances scolaires", days: "Lun – Ven", hours: "9h – 18h" },
-              { period: "Période scolaire", days: "Mer, Sam", hours: "9h – 18h" },
-              { period: "Hiver (Déc–Fév)", days: "Fermé", hours: "—" },
-            ].map((h, i) => (
-              <div key={i} className="flex items-center gap-4 pb-3 border-b border-blue-500/8 last:border-b-0">
-                <span className="font-body text-sm font-medium text-blue-800 flex-1">{h.period}</span>
-                <input defaultValue={h.days} className={`${inputCls} w-28`} />
-                <input defaultValue={h.hours} className={`${inputCls} w-24`} />
-              </div>
-            ))}
-          </div>
-          <button onClick={handleSave} className="mt-4 flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-            <Save size={16} /> Enregistrer
-          </button>
-        </Card>
       )}
 
       {/* ─── Moniteurs ─── */}
@@ -1452,30 +1321,6 @@ export default function ParametresPage() {
                   className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
               </div>
 
-              {/* TVA + code compta de la licence FFE (utilisés pour la facturation) */}
-              <div className="mt-2 pt-3 border-t border-blue-500/8">
-                <div className="font-body text-xs text-slate-400 mb-2">Paramètres comptables — appliqués aux deux licences</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="font-body text-xs text-slate-500 block mb-1">Taux de TVA</label>
-                    <select value={inscriptionParams.licenceTvaRate}
-                      onChange={e => setInscriptionParams(prev => ({ ...prev, licenceTvaRate: parseFloat(e.target.value) }))}
-                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
-                      <option value={0}>0 %</option>
-                      <option value={5.5}>5,5 %</option>
-                      <option value={10}>10 %</option>
-                      <option value={20}>20 %</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="font-body text-xs text-slate-500 block mb-1">Code comptable</label>
-                    <input value={inscriptionParams.licenceAccountCode}
-                      onChange={e => setInscriptionParams(prev => ({ ...prev, licenceAccountCode: e.target.value }))}
-                      placeholder="ex. 70100000"
-                      className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                  </div>
-                </div>
-              </div>
             </div>
           </Card>
 
@@ -1496,152 +1341,9 @@ export default function ParametresPage() {
             </div>
           </Card>
 
-          {/* Lignes optionnelles libres (forfait compétition, suppléments, options...) */}
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">➕ Lignes optionnelles</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Ajoutez ici des forfaits ou options proposés en plus à l&apos;inscription (forfait compétition, tenue club, etc.).
-              Ces lignes apparaîtront comme options cochables dans le formulaire d&apos;inscription annuelle.
-            </p>
-            <div className="flex flex-col gap-2 mb-3">
-              {(inscriptionParams.customLines || []).length === 0 && (
-                <div className="font-body text-xs text-slate-400 italic py-2">Aucune ligne optionnelle — cliquez sur « Ajouter une ligne » pour en créer une.</div>
-              )}
-              {(inscriptionParams.customLines || []).map((line, idx) => (
-                <div key={line.id} className="grid grid-cols-12 gap-2 items-center bg-blue-50/30 border border-blue-100 rounded-lg p-3">
-                  <input
-                    value={line.label}
-                    onChange={e => {
-                      const next = [...(inscriptionParams.customLines || [])];
-                      next[idx] = { ...line, label: e.target.value };
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    placeholder="Nom de la ligne"
-                    className="col-span-5 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none" />
-                  <div className="col-span-2 flex items-center gap-1">
-                    <input
-                      type="number"
-                      value={line.priceTTC}
-                      onChange={e => {
-                        const next = [...(inscriptionParams.customLines || [])];
-                        next[idx] = { ...line, priceTTC: parseFloat(e.target.value) || 0 };
-                        setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                      }}
-                      className="w-full px-2 py-2 rounded-lg border border-blue-500/8 font-body text-sm text-right bg-white focus:border-blue-500 focus:outline-none" />
-                    <span className="font-body text-xs text-slate-400">€</span>
-                  </div>
-                  <select
-                    value={line.tvaRate}
-                    onChange={e => {
-                      const next = [...(inscriptionParams.customLines || [])];
-                      next[idx] = { ...line, tvaRate: parseFloat(e.target.value) };
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    className="col-span-2 px-2 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none">
-                    <option value={0}>0%</option>
-                    <option value={5.5}>5,5%</option>
-                    <option value={10}>10%</option>
-                    <option value={20}>20%</option>
-                  </select>
-                  <input
-                    value={line.accountCode}
-                    onChange={e => {
-                      const next = [...(inscriptionParams.customLines || [])];
-                      next[idx] = { ...line, accountCode: e.target.value };
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    placeholder="Code compta"
-                    className="col-span-2 px-2 py-2 rounded-lg border border-blue-500/8 font-body text-xs bg-white focus:border-blue-500 focus:outline-none" />
-                  <button
-                    onClick={() => {
-                      const next = (inscriptionParams.customLines || []).filter(l => l.id !== line.id);
-                      setInscriptionParams(prev => ({ ...prev, customLines: next }));
-                    }}
-                    className="col-span-1 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer flex items-center justify-center"
-                    title="Supprimer">
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={() => {
-                const newLine: CustomInscriptionLine = {
-                  id: `line_${Date.now()}`,
-                  label: "",
-                  priceTTC: 0,
-                  tvaRate: 5.5,
-                  accountCode: "70611000",
-                };
-                setInscriptionParams(prev => ({
-                  ...prev,
-                  customLines: [...(prev.customLines || []), newLine],
-                }));
-              }}
-              className="self-start flex items-center gap-2 font-body text-sm font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 px-4 py-2 rounded-lg border-none cursor-pointer">
-              <Plus size={14} /> Ajouter une ligne
-            </button>
-          </Card>
-
           <button onClick={saveInscription}
             className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
             {inscriptionSaved ? "✅ Sauvegardé !" : "Sauvegarder les paramètres"}
-          </button>
-        </div>
-      )}
-
-      {/* ─── Épreuves compétition ─── */}
-      {section === "epreuves" && (
-        <div className="flex flex-col gap-5">
-          {DISCIPLINES.map(disc => (
-            <Card key={disc.key} padding="md">
-              <h3 className="font-body text-base font-semibold text-blue-800 mb-4">🏆 {disc.label}</h3>
-              <div className="flex flex-col gap-2 mb-3">
-                {(epreuves[disc.key] || []).map((ep, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input value={ep}
-                      onChange={e => setEpreuves(prev => ({
-                        ...prev,
-                        [disc.key]: prev[disc.key].map((x, j) => j === i ? e.target.value : x)
-                      }))}
-                      className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                    <button onClick={() => setEpreuves(prev => ({
-                      ...prev,
-                      [disc.key]: prev[disc.key].filter((_, j) => j !== i)
-                    }))} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
-                      <Trash2 size={14}/>
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-2">
-                <input value={newEpreuve[disc.key] || ""}
-                  onChange={e => setNewEpreuve(prev => ({ ...prev, [disc.key]: e.target.value }))}
-                  onKeyDown={e => {
-                    if (e.key === "Enter" && (newEpreuve[disc.key] || "").trim()) {
-                      setEpreuves(prev => ({ ...prev, [disc.key]: [...(prev[disc.key] || []), newEpreuve[disc.key].trim()] }));
-                      setNewEpreuve(prev => ({ ...prev, [disc.key]: "" }));
-                    }
-                  }}
-                  placeholder="Nouvelle épreuve..."
-                  className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                <button onClick={() => {
-                  if (!(newEpreuve[disc.key] || "").trim()) return;
-                  setEpreuves(prev => ({ ...prev, [disc.key]: [...(prev[disc.key] || []), newEpreuve[disc.key].trim()] }));
-                  setNewEpreuve(prev => ({ ...prev, [disc.key]: "" }));
-                }} className="px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer">
-                  + Ajouter
-                </button>
-              </div>
-              <button onClick={() => setEpreuves(prev => ({ ...prev, [disc.key]: disc.default }))}
-                className="mt-2 font-body text-[10px] text-slate-400 bg-transparent border-none cursor-pointer hover:text-blue-500">
-                Réinitialiser aux épreuves par défaut
-              </button>
-            </Card>
-          ))}
-          <button onClick={saveEpreuves}
-            className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
-            {epreuvesSaved ? "✅ Sauvegardé !" : "Sauvegarder les épreuves"}
           </button>
         </div>
       )}
@@ -2180,8 +1882,7 @@ export default function ParametresPage() {
           <Card padding="md">
             <h3 className="font-body text-base font-semibold text-blue-800 mb-1">🔔 Notifications push — Admin</h3>
             <p className="font-body text-xs text-slate-500 mb-4">
-              Choisissez les événements pour lesquels vous recevez une notification push sur votre téléphone ou ordinateur.
-              Les notifications arrivent même quand l'application est fermée (si vous avez autorisé les notifications dans votre navigateur).
+              Les notifications arrivent même quand l&apos;application est fermée (si vous avez autorisé les notifications dans votre navigateur).
             </p>
 
             {/* Comment activer */}
@@ -2195,46 +1896,7 @@ export default function ParametresPage() {
               </ol>
             </div>
 
-            {/* Événements configurables */}
-            <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Événements déclencheurs</div>
-            <div className="flex flex-col gap-2">
-              {([
-                ["nouvelle_inscription", "Nouvelle inscription", "Un cavalier s'inscrit à un créneau ou un stage"],
-                ["nouveau_paiement", "Nouveau paiement reçu", "Un paiement CB en ligne est confirmé"],
-                ["impaye", "Impayé détecté", "Un paiement en attente dépasse 7 jours"],
-                ["liste_attente", "Place libérée (liste d'attente)", "Une place se libère et un cavalier en liste d'attente est notifié"],
-                ["annulation", "Annulation d'inscription", "Un cavalier annule une réservation"],
-                ["nouveau_cavalier", "Nouveau compte cavalier", "Une famille crée un compte depuis l'espace cavalier"],
-                ["rappel_stage", "Rappel J-3 stage", "Rappel automatique 3 jours avant un stage"],
-              ] as [string, string, string][]).map(([key, label, desc]) => (
-                <label key={key} className="flex items-start gap-3 p-3 rounded-xl border border-gray-100 cursor-pointer hover:bg-sand transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={(notifSettings as any)[key] ?? false}
-                    onChange={e => setNotifSettings(prev => ({ ...prev, [key]: e.target.checked }))}
-                    className="w-4 h-4 accent-blue-500 mt-0.5 flex-shrink-0"
-                  />
-                  <div>
-                    <div className="font-body text-sm font-semibold text-blue-800">{label}</div>
-                    <div className="font-body text-xs text-slate-500">{desc}</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-
             <div className="flex gap-3 mt-4">
-              <button onClick={async () => {
-                setNotifSaving(true);
-                try {
-                  await setDoc(doc(db, "settings", "notifications"), { ...notifSettings, updatedAt: serverTimestamp() }, { merge: true });
-                  setSaved(true); setTimeout(() => setSaved(false), 2000);
-                } catch (e: any) { alert("Erreur : " + e.message); }
-                setNotifSaving(false);
-              }} disabled={notifSaving}
-                className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 disabled:opacity-50">
-                {notifSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
-                Enregistrer
-              </button>
               <button onClick={async () => {
                 setTestPushSending(true);
                 try {
