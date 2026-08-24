@@ -5,6 +5,7 @@ import { STAGE_DEROULE_VIDE, derouleEstRempli, renderDerouleTexte, type StageDer
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { CGV_STAGES_CAS, CGV_COURS_ANNUELS, CGV_BALADES, CGV_BALADES_PETIT_GROUPE, CGV_ANNULATION_CENTRE } from "@/lib/cgv-clauses";
 import { Card, Badge } from "@/components/ui";
 import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar, KeyRound, RefreshCw, Search, ShieldCheck, ShieldOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
@@ -341,7 +342,6 @@ export default function ParametresPage() {
   // Prix plancher par stage (configurable admin). 0 = pas de plancher.
   // Voir lib/discounts.ts > applyDiscounts pour l'application.
   const [prixPlancherStage, setPrixPlancherStage] = useState<number>(0);
-  const [cancellation, setCancellation] = useState({ hours: 72, retention: 50 });
 
   // ═══ Vacances scolaires ═══
   // Source pour la logique de réduction famille/multi-stages.
@@ -409,7 +409,6 @@ export default function ParametresPage() {
         const data = snap.data();
         if (data.multiStage) setMultiStage(data.multiStage);
         if (data.familyDiscount) setFamilyDiscount(data.familyDiscount);
-        if (data.cancellation) setCancellation(data.cancellation);
         if (typeof data.prixPlancherStage === "number") setPrixPlancherStage(data.prixPlancherStage);
       }
     }).catch(console.error);
@@ -546,7 +545,6 @@ export default function ParametresPage() {
       await setDoc(doc(db, "settings", "degressivite"), {
         multiStage,
         familyDiscount,
-        cancellation,
         prixPlancherStage,
         updatedAt: new Date(),
       });
@@ -1025,31 +1023,47 @@ export default function ParametresPage() {
 
       {/* ─── Annulation ─── */}
       {section === "annulation" && (
+        // Ex-formulaire « délai / retenue / mode de remboursement » : ces
+        // champs n'étaient LUS PAR AUCUN code et affichaient une politique
+        // (72h, retenue 50 %) contraire aux CGV réelles. La politique
+        // d'annulation est CONTRACTUELLE : elle vit dans cgv-clauses.ts
+        // (source unique — page CGV, emails, case à cocher au paiement) et
+        // s'affiche ici en lecture seule, sans pouvoir diverger.
         <Card padding="md">
-          <h3 className="font-body text-base font-semibold text-blue-800 mb-4">Politique d&apos;annulation</h3>
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-4">
-              <span className="font-body text-sm text-gray-500 flex-1">Délai d&apos;annulation gratuite</span>
-              <input type="number" value={cancellation.hours} onChange={(e) => setCancellation({ ...cancellation, hours: parseInt(e.target.value) || 0 })} className={`${inputCls} w-20`} />
-              <span className="font-body text-sm text-gray-400">heures avant</span>
+          <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Politique d&apos;annulation (CGV)</h3>
+          <p className="font-body text-xs text-slate-500 mb-4">
+            Ces clauses sont contractuelles : la page CGV, les emails et l&apos;acceptation au paiement affichent
+            exactement le même texte, depuis une source unique. Elles ne se règlent pas ici — un réglage
+            modifiable aurait pu diverger des conditions déjà acceptées par les familles. Pour les faire
+            évoluer : demander la modification, elle s&apos;appliquera partout d&apos;un coup.
+          </p>
+          <div className="flex flex-col gap-3 font-body text-sm text-slate-700">
+            <div>
+              <div className="font-semibold text-blue-800 mb-1">Stages</div>
+              <ul className="m-0 pl-5 text-xs text-slate-600 leading-relaxed">
+                {CGV_STAGES_CAS.map((cas) => (
+                  <li key={cas.quand}><strong>{cas.quand}</strong> : {cas.consequence}</li>
+                ))}
+              </ul>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="font-body text-sm text-gray-500 flex-1">Retenue après délai</span>
-              <input type="number" value={cancellation.retention} onChange={(e) => setCancellation({ ...cancellation, retention: parseInt(e.target.value) || 0 })} className={`${inputCls} w-20`} />
-              <span className="font-body text-sm text-gray-400">%</span>
+            <div>
+              <div className="font-semibold text-blue-800 mb-1">Cours annuels</div>
+              <p className="m-0 text-xs text-slate-600 leading-relaxed">{CGV_COURS_ANNUELS}</p>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="font-body text-sm text-gray-500 flex-1">Mode de remboursement</span>
-              <select className="px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
-                <option>Au choix du client (CB ou avoir)</option>
-                <option>Remboursement CB uniquement</option>
-                <option>Avoir uniquement</option>
-              </select>
+            <div>
+              <div className="font-semibold text-blue-800 mb-1">Balades</div>
+              <p className="m-0 text-xs text-slate-600 leading-relaxed">{CGV_BALADES}</p>
+              <p className="m-0 mt-1 text-xs text-slate-600 leading-relaxed">{CGV_BALADES_PETIT_GROUPE}</p>
             </div>
-            <button onClick={handleSave} className="self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 mt-2">
-              <Save size={16} /> Enregistrer
-            </button>
+            <div>
+              <div className="font-semibold text-blue-800 mb-1">Annulation par le centre</div>
+              <p className="m-0 text-xs text-slate-600 leading-relaxed">{CGV_ANNULATION_CENTRE}</p>
+            </div>
           </div>
+          <a href="/cgv" target="_blank" rel="noopener noreferrer"
+            className="inline-block mt-4 font-body text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg no-underline hover:bg-blue-100">
+            Voir la page CGV publique →
+          </a>
         </Card>
       )}
 
