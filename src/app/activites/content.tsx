@@ -30,13 +30,18 @@ const categories: Array<{ id: "all" | PublicActivityCategory; label: string }> =
   { id: "autres", label: "Autres" },
 ];
 
-// « progression » est un filtre COMBINÉ : cours à l'année + compétitions
-// internes (Pony Games, CSO, Équifun). C'est le parcours du cavalier régulier —
-// le ranger dans « stages vacances » mélangeait tout.
-type FiltreCatalogue = "all" | "progression" | PublicActivityCategory;
+// Deux filtres COMBINÉS au-delà des catégories brutes :
+// - « premiers-pas » (3-5 ans) : Baby Poney + Galops de Bronze et d'Argent —
+//   pas les stages des grands (Galop d'Or, Galop 3-4) ;
+// - « progression » : cours à l'année + compétitions internes (Pony Games,
+//   CSO, Équifun) — le parcours du cavalier régulier.
+// Sans eux, tout profil retombait sur « stages vacances » et tout se mélangeait.
+type FiltreCatalogue = "all" | "premiers-pas" | "progression" | PublicActivityCategory;
+
+const PREMIERS_PAS_IDS = ["baby", "bronze", "argent"];
 
 const profileToCategory: Record<string, FiltreCatalogue> = {
-  baby: "stages",
+  baby: "premiers-pas",
   enfant: "stages",
   confirme: "progression",
   balade: "balades",
@@ -271,7 +276,8 @@ export function ActivitiesContent() {
       const categoryMatches =
         filter === "all"
         || activity.category === filter
-        || (filter === "progression" && (activity.category === "cours" || activity.category === "competitions"));
+        || (filter === "progression" && (activity.category === "cours" || activity.category === "competitions"))
+        || (filter === "premiers-pas" && PREMIERS_PAS_IDS.includes(activity.id));
       if (!categoryMatches) return false;
       if (!needle) return true;
       return [activity.title, activity.ages, activity.description, activity.level, ...activity.features]
