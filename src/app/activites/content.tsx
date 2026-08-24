@@ -276,7 +276,7 @@ export function ActivitiesContent() {
       const categoryMatches =
         filter === "all"
         || activity.category === filter
-        || (filter === "progression" && (activity.category === "cours" || activity.category === "competitions"))
+        || (filter === "progression" && ((activity.category === "cours" && activity.id !== "cours-baby") || activity.category === "competitions"))
         || (filter === "premiers-pas" && PREMIERS_PAS_IDS.includes(activity.id));
       if (!categoryMatches) return false;
       if (!needle) return true;
