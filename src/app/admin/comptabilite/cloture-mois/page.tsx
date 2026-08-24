@@ -118,7 +118,7 @@ export default function ClotureMoisPage() {
         etat: "neutre",
         titre: "Rapprochement banque ↔ caisse",
         detail: "Sans objet : aucun encaissement en caisse ce mois-ci (période Céleris, ou mois sans activité).",
-        href: "/admin/comptabilite/resultat", lien: "Résultat",
+        href: "/admin/comptabilite?tab=rapprochement", lien: "Pointage bancaire",
       });
     } else if (creditsLus.length === 0) {
       pts.push({
@@ -135,7 +135,7 @@ export default function ClotureMoisPage() {
         titre: "Rapprochement banque ↔ caisse",
         detail: `Banque : ${eur(credits)} d'encaissements clients · Caisse : ${eur(ca)} — écart ${ecart >= 0 ? "+" : "−"}${eur(Math.abs(ecart))} (${(pct * 100).toFixed(1)} %).`
           + (pct > 0.05 ? " À creuser : remises CB à cheval sur deux mois, chèques non déposés, impayé… ou relevé partiel." : " Cohérent."),
-        href: "/admin/comptabilite/resultat", lien: "Résultat",
+        href: "/admin/comptabilite?tab=rapprochement", lien: "Pointage bancaire",
       });
     }
     return pts;

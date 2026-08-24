@@ -180,7 +180,11 @@ export default function ComptabilitePage() {
     }
   };
 
-  const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "rapprochement_ignores" | "remise" | "fec" | "export">("journal");
+  const [tab, setTab] = useState<"journal" | "tva" | "rapprochement" | "rapprochement_ignores" | "remise" | "fec" | "export">(
+    // ?tab=rapprochement : la checklist « Boucler le mois » envoie directement
+    // sur le pointage bancaire quand un écart mérite d'être creusé.
+    searchParams?.get("tab") === "rapprochement" ? "rapprochement" : "journal",
+  );
   const [payments, setPayments] = useState<Payment[]>([]);
   const [remises, setRemises] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
