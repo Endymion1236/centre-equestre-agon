@@ -1223,9 +1223,14 @@ export default function ReserverPage() {
                   })();
                   const first = stageCreneaux[0];
                   const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
+                  // `spots` = places pour la SEMAINE COMPLÈTE (le jour le plus
+                  // plein fait foi) : 0 dès qu'UN jour est plein. Ça ne veut PAS
+                  // dire que le stage est plein — sur un stage ouvert à la
+                  // journée, les autres jours restent réservables à l'unité.
                   const spots = Math.min(...stageCreneaux.map(spotsLeft));
                   const joursUniques = [...new Map(stageCreneaux.map(c => [c.date, c])).values()]
                     .sort((a, b) => a.date.localeCompare(b.date));
+                  const joursOuvertsALaJournee = joursUniques.filter((c: any) => c.allowDayBooking && spotsLeft(c) > 0);
                   // Affichage clair AVEC le mois. Si le stage couvre plusieurs
                   // jours, on montre la plage "du lun. 6 au ven. 10 juillet" ;
                   // sinon le jour seul avec son mois.
@@ -1262,7 +1267,7 @@ export default function ReserverPage() {
                         return col ? { borderLeft: `4px solid ${col}` } : undefined;
                       })()}
                     >
-                      <div className="flex justify-between items-start cursor-pointer" onClick={() => { setSelectedCreneau(isSelected ? null : first); setSelectedChildren([]); setStageBookingMode("semaine"); setSelectedDays([]); }}>
+                      <div className="flex justify-between items-start cursor-pointer" onClick={() => { setSelectedCreneau(isSelected ? null : first); setSelectedChildren([]); setStageBookingMode(spots === 0 ? "jour" : "semaine"); setSelectedDays([]); }}>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{first.activityTitle}</div>
                           <div className="font-body text-xs text-gray-600 mt-1">
@@ -1313,12 +1318,14 @@ export default function ReserverPage() {
                             })()}{joursUniques.length > 1 ? "s" : ""}
                           </div>
                           <div className="font-body text-xs text-gray-500">{first.startTime}–{first.endTime}</div>
-                          <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "Complet"}</Badge>
+                          <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>
+                            {spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : joursOuvertsALaJournee.length > 0 ? "Semaine complète" : "Complet"}
+                          </Badge>
                           {/* Un badge "Complet" seul ressemble à une porte fermée :
-                              on annonce la liste d'attente SANS avoir à déplier. */}
+                              on annonce ce qui reste possible SANS avoir à déplier. */}
                           {spots === 0 && (
                             <div className="mt-1 font-body text-[11px] font-semibold text-orange-600 whitespace-nowrap">
-                              🔔 Liste d&apos;attente
+                              {joursOuvertsALaJournee.length > 0 ? "🗓 Jours à l'unité dispo" : "🔔 Liste d'attente"}
                             </div>
                           )}
                         </div>
@@ -1410,7 +1417,7 @@ export default function ReserverPage() {
                         const dejaEnAttente = children.filter((ch: any) => enAttente(joursUniques[0]?.id, ch.id));
                         return (
                           <button
-                            onClick={(e) => { e.stopPropagation(); setSelectedCreneau(first); setSelectedChildren([]); }}
+                            onClick={(e) => { e.stopPropagation(); setSelectedCreneau(first); setSelectedChildren([]); setStageBookingMode("jour"); setSelectedDays([]); }}
                             className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg border px-3 py-2 font-body text-xs font-semibold cursor-pointer ${
                               dejaEnAttente.length > 0
                                 ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
@@ -1419,7 +1426,9 @@ export default function ReserverPage() {
                           >
                             {dejaEnAttente.length > 0
                               ? <>✓ {dejaEnAttente.map((ch: any) => ch.firstName).join(", ")} en liste d&apos;attente</>
-                              : <>🔔 Stage complet — s&apos;inscrire en liste d&apos;attente</>}
+                              : joursOuvertsALaJournee.length > 0
+                                ? <>🗓 Semaine complète — des jours restent disponibles à l&apos;unité</>
+                                : <>🔔 Stage complet — s&apos;inscrire en liste d&apos;attente</>}
                           </button>
                         );
                       })()}
@@ -1434,8 +1443,11 @@ export default function ReserverPage() {
                           ) : (
                             <>
                               <div className="font-body text-xs text-orange-600 mb-2">
-                                🔔 Ce stage est complet. Touchez un prénom pour l&apos;inscrire en liste d&apos;attente
-                                (l&apos;inscription est immédiate) :
+                                {joursOuvertsALaJournee.length > 0
+                                  ? <>🔔 La <strong>semaine complète</strong> n&apos;est plus disponible (un ou plusieurs jours sont pleins).
+                                      Pour être prévenu si elle se libère, touchez un prénom (inscription immédiate) :</>
+                                  : <>🔔 Ce stage est complet. Touchez un prénom pour l&apos;inscrire en liste d&apos;attente
+                                      (l&apos;inscription est immédiate) :</>}
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 {children.filter((ch: any) => !(first.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
@@ -1454,14 +1466,15 @@ export default function ReserverPage() {
                                 ))}
                               </div>
 
-                              {/* Stage ouvert à la journée : la famille qui ne veut
-                                  qu'un ou deux jours s'inscrit en attente de CES
-                                  jours-là — une place libérée un mardi lui est
-                                  proposée, là où la file « semaine » n'est prévenue
-                                  que si la semaine entière se libère. */}
+                              {/* Stage ENTIÈREMENT plein et ouvert à la journée : la
+                                  famille qui ne veut qu'un ou deux jours s'inscrit en
+                                  attente de CES jours-là. Ne lister que les jours
+                                  COMPLETS : si des jours ont encore des places, c'est
+                                  le mode « À la journée » (juste au-dessus) qui gère —
+                                  on réserve les jours ouverts, on n'attend pas. */}
                               {(() => {
-                                const joursALaJournee = joursUniques.filter((c: any) => (c as any).allowDayBooking);
-                                if (joursALaJournee.length === 0) return null;
+                                const joursALaJournee = joursUniques.filter((c: any) => (c as any).allowDayBooking && spotsLeft(c) <= 0);
+                                if (joursALaJournee.length === 0 || joursOuvertsALaJournee.length > 0) return null;
                                 return (
                                   <div className="mt-3 rounded-lg border border-orange-100 bg-orange-50/60 p-2.5">
                                     <div className="font-body text-[11px] font-semibold text-orange-700 mb-1.5">
@@ -1496,7 +1509,10 @@ export default function ReserverPage() {
                         </div>
                       )}
 
-                      {isSelected && spots > 0 && (() => {
+                      {/* Réservation : semaine si elle est encore possible, et TOUJOURS
+                          le mode journée tant que des jours ouverts à l'unité ont des
+                          places — un lundi plein ne doit pas fermer le mardi. */}
+                      {isSelected && (spots > 0 || joursOuvertsALaJournee.length > 0) && (() => {
                         // Jours REELLEMENT ouverts à la journée. L'option se règle
                         // créneau par créneau dans l'admin : un `some()` sur la
                         // semaine ouvrait le mode journée dès qu'UN jour l'autorisait,
@@ -1513,8 +1529,10 @@ export default function ReserverPage() {
                               <div className="font-body text-xs font-semibold text-green-700 mb-2">Mode d'inscription :</div>
                               <div className="flex gap-2">
                                 <button onClick={(e) => { e.stopPropagation(); setStageBookingMode("semaine"); setSelectedDays([]); }}
-                                  className={`flex-1 py-2 rounded-lg font-body text-sm font-semibold border cursor-pointer ${stageBookingMode === "semaine" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
-                                  Semaine complète ({prix.toFixed(0)}€)
+                                  disabled={spots === 0}
+                                  title={spots === 0 ? "Un ou plusieurs jours sont pleins : la semaine complète n'est plus disponible (liste d'attente ci-dessous)" : undefined}
+                                  className={`flex-1 py-2 rounded-lg font-body text-sm font-semibold border ${spots === 0 ? "opacity-45 cursor-not-allowed bg-gray-100 text-gray-400 border-gray-200" : `cursor-pointer ${stageBookingMode === "semaine" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}`}>
+                                  Semaine complète {spots === 0 ? "(complet)" : `(${prix.toFixed(0)}€)`}
                                 </button>
                                 <button onClick={(e) => { e.stopPropagation(); setStageBookingMode("jour"); }}
                                   className={`flex-1 py-2 rounded-lg font-body text-sm font-semibold border cursor-pointer ${stageBookingMode === "jour" ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200"}`}>
