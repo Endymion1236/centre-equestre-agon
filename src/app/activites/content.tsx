@@ -31,14 +31,15 @@ const categories: Array<{ id: "all" | PublicActivityCategory; label: string }> =
 ];
 
 // Deux filtres COMBINÉS au-delà des catégories brutes :
-// - « premiers-pas » (3-5 ans) : Baby Poney + Galops de Bronze et d'Argent —
-//   pas les stages des grands (Galop d'Or, Galop 3-4) ;
+// - « premiers-pas » (3-5 ans) : ce qui existe VRAIMENT pour cet âge — le
+//   stage Baby Poney et le Baby poney à l'année. Bronze et Argent commencent
+//   à 6 ans, ils n'ont rien à faire dans la vue des tout-petits ;
 // - « progression » : cours à l'année + compétitions internes (Pony Games,
 //   CSO, Équifun) — le parcours du cavalier régulier.
 // Sans eux, tout profil retombait sur « stages vacances » et tout se mélangeait.
 type FiltreCatalogue = "all" | "premiers-pas" | "progression" | PublicActivityCategory;
 
-const PREMIERS_PAS_IDS = ["baby", "bronze", "argent"];
+const PREMIERS_PAS_IDS = ["baby", "cours-baby"];
 
 const profileToCategory: Record<string, FiltreCatalogue> = {
   baby: "premiers-pas",
