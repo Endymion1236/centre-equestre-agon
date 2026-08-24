@@ -30,10 +30,15 @@ const categories: Array<{ id: "all" | PublicActivityCategory; label: string }> =
   { id: "autres", label: "Autres" },
 ];
 
-const profileToCategory: Record<string, "all" | PublicActivityCategory> = {
+// « progression » est un filtre COMBINÉ : cours à l'année + compétitions
+// internes (Pony Games, CSO, Équifun). C'est le parcours du cavalier régulier —
+// le ranger dans « stages vacances » mélangeait tout.
+type FiltreCatalogue = "all" | "progression" | PublicActivityCategory;
+
+const profileToCategory: Record<string, FiltreCatalogue> = {
   baby: "stages",
   enfant: "stages",
-  confirme: "stages",
+  confirme: "progression",
   balade: "balades",
   cours: "cours",
   competition: "competitions",
@@ -218,7 +223,7 @@ function ActivityCard({ activity, highlight }: { activity: DisplayActivity; high
 }
 
 export function ActivitiesContent() {
-  const [filter, setFilter] = useState<"all" | PublicActivityCategory>("all");
+  const [filter, setFilter] = useState<FiltreCatalogue>("all");
   const [search, setSearch] = useState("");
   const { vitrine } = useVitrine();
   const searchParams = useSearchParams();
@@ -263,7 +268,10 @@ export function ActivitiesContent() {
   const filtered = useMemo(() => {
     const needle = search.trim().toLocaleLowerCase("fr");
     return activities.filter((activity) => {
-      const categoryMatches = filter === "all" || activity.category === filter;
+      const categoryMatches =
+        filter === "all"
+        || activity.category === filter
+        || (filter === "progression" && (activity.category === "cours" || activity.category === "competitions"));
       if (!categoryMatches) return false;
       if (!needle) return true;
       return [activity.title, activity.ages, activity.description, activity.level, ...activity.features]
