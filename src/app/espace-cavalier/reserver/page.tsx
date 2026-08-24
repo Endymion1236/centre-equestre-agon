@@ -2279,106 +2279,32 @@ export default function ReserverPage() {
                           if (!user || !family) return;
                           setPaying(true);
                           try {
-                            // Places tenues et réservations créées ici : elles
-                            // sont confirmées par l'admin à réception du
-                            // règlement (cf. onglet Déclarations).
-                            const pendingEnrollments: { childId: string; creneauId: string }[] = [];
-                            const reservationIds: string[] = [];
-                            // 1. Inscrire + créer réservations + paiement pending
-                            for (const item of cart) {
-                              // Inscription sécurisée côté serveur (audit P0 #3 + #7).
-                              const enrollRes = await authFetch("/api/enroll", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  enrollments: [{
-                                    childId: item.childId,
-                                    childName: item.childName,
-                                    creneauIds: item.creneauIds,
-                                    // Place TENUE, pas acquise : le règlement est
-                                    // seulement déclaré. Sans ce marqueur, une
-                                    // déclaration jamais honorée laissait une
-                                    // inscription normale, que la purge des places
-                                    // temporaires ne peut pas libérer.
-                                    pending: true,
-                                    paymentMethod: cartPayMode,
-                                    ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
-                                  }],
-                                }),
-                              });
-                              if (!enrollRes.ok) {
-                                const err = await enrollRes.json().catch(() => ({} as any));
-                                throw new Error(err.error || "Inscription refusée (créneau complet ?)");
-                              }
-                              for (const cid of item.creneauIds) {
-                                pendingEnrollments.push({ childId: item.childId, creneauId: cid });
-                              }
-                              const firstCr = creneaux.find(c => c.id === item.creneauIds[0]);
-                              const resRef = await addDoc(collection(db, "reservations"), {
-                                familyId: user.uid, familyName: family.parentName,
-                                ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
-                                childId: item.childId, childName: item.childName,
-                                activityTitle: item.activityTitle, activityType: item.isStage ? "stage" : "cours",
-                                creneauId: item.creneauIds[0],
-                                date: firstCr?.date || todayLocalString(),
-                                startTime: firstCr?.startTime || "", endTime: firstCr?.endTime || "",
-                                priceTTC: item.prixFinal, status: "pending_payment", source: "client",
-                                createdAt: serverTimestamp(),
-                              });
-                              reservationIds.push(resRef.id);
-                            }
-                            const payDoc = await addDoc(collection(db, "payments"), {
-                              familyId: user.uid, familyName: family.parentName,
-                              items: cart.map(i => ({
-                                activityTitle: `${i.activityTitle} — ${i.childName}`,
-                                childId: i.childId, childName: i.childName,
-                                creneauId: i.creneauIds[0],
-                                // TOUS les jours du stage : la levée des places
-                                // tenues (confirmerPlacesTenues) lit ce champ —
-                                // avec le seul premier jour, un stage payé
-                                // gardait mardi-vendredi en « pending » et la
-                                // purge finissait par les désinscrire.
-                                creneauIds: i.creneauIds,
-                                priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
-                              })),
-                              totalTTC: cartTotal,
-                              paymentMode: cartPayMode, paymentRef: "",
-                              status: "pending", paidAmount: 0,
-                              source: "client", date: serverTimestamp(),
-                            });
-                            // 2. Créer la déclaration
-                            await addDoc(collection(db, "payment_declarations"), {
-                              paymentId: payDoc.id,
-                              familyId: user.uid, familyName: family.parentName,
-                              familyEmail: family.parentEmail || user.email || "",
-                              montant: cartTotal,
-                              mode: cartPayMode,
-                              note: "",
-                              activityTitle: cart.map(i => i.activityTitle).join(", "),
-                              status: "pending_confirmation",
-                              // De quoi lever les places tenues à la confirmation
-                              // du règlement — même mécanique que l'inscription
-                              // annuelle réglée par chèque ou espèces.
-                              pendingEnrollments,
-                              reservationIds,
-                              createdAt: serverTimestamp(),
-                            });
-                            // 3. Email admin
-                            authFetch("/api/notify-club", {
-                              method: "POST", headers: { "Content-Type": "application/json" },
+                            // UN SEUL appel serveur : inscriptions (places
+                            // tenues) puis réservations + commande +
+                            // déclaration en une transaction, email au club.
+                            // Avant, le navigateur enchaînait cinq écritures :
+                            // un rafraîchissement au milieu laissait un impayé
+                            // orphelin sans déclaration ni email (vécu). Une
+                            // fois cette requête partie, le serveur termine
+                            // même si l'onglet se ferme.
+                            const res = await authFetch("/api/declarer-paiement", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({
-                                context: "reservation_paiement",
-                                titre: `Paiement ${cartPayMode} à confirmer — ${family.parentName}`,
-                                lignes: [
-                                  `${family.parentName} déclare un paiement de ${cartTotal.toFixed(2)}€ par ${cartPayMode}.`,
-                                  `Activités : ${cart.map(i => i.activityTitle).join(", ")}`,
-                                ],
-                                familyId,
+                                mode: cartPayMode,
+                                items: cart.map(i => ({
+                                  childId: i.childId, childName: i.childName,
+                                  activityTitle: i.activityTitle, isStage: i.isStage,
+                                  creneauIds: i.creneauIds, prixFinal: i.prixFinal,
+                                  ...((i as any).sourceFamilyId ? { sourceFamilyId: (i as any).sourceFamilyId } : {}),
+                                })),
                               }),
-                            }).catch(() => {});
+                            });
+                            const d = await res.json().catch(() => ({} as any));
+                            if (!res.ok) throw new Error(d?.error || "Erreur. Réessayez.");
                             setCartPaySuccess(true);
                             setCart([]);
-                          } catch (e) { console.error(e); toast("Erreur. Réessayez.", "error"); }
+                          } catch (e: any) { console.error(e); toast(e?.message || "Erreur. Réessayez.", "error"); }
                           setPaying(false);
                         }} disabled={paying}
                           className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">
