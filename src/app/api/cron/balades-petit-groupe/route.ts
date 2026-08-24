@@ -27,6 +27,7 @@ import {
   BALADE_CHOIX_COLLECTION,
   adresseClub,
   compterInscritsConfirmes,
+  dansPeriodePetitGroupe,
   emailFamillePetitGroupe,
   formatDateBalade,
 } from "@/lib/balade-petit-groupe";
@@ -49,6 +50,16 @@ export async function GET(req: NextRequest) {
   const targetDate = req.nextUrl.searchParams.get("date") || addDaysParis(2);
 
   try {
+    // L'option « petit comité » ne s'applique que du 1er septembre au
+    // 10 juillet : en plein été, aucune balade n'est examinée.
+    if (!dansPeriodePetitGroupe(targetDate)) {
+      return NextResponse.json({
+        date: targetDate, horsPeriode: true,
+        baladesExaminees: 0, baladesSousSeuil: 0, famillesNotifiees: 0,
+        sansEmail: 0, bloques: 0, erreurs: [], dry,
+      });
+    }
+
     await refreshEmailMode();
 
     const creneauxSnap = await adminDb

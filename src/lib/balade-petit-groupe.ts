@@ -30,11 +30,28 @@ import { emailLayout, emailButton } from "@/lib/email-templates";
 /** Nom de la collection Firestore des propositions de choix. */
 export const BALADE_CHOIX_COLLECTION = "balade-petit-groupe";
 
+/**
+ * Période d'application de l'option « petit comité » (décision gérant,
+ * août 2026) : du 1er SEPTEMBRE au 10 JUILLET. En plein été (11 juillet →
+ * 31 août), les balades tournent à plein régime : la mécanique ne se
+ * déclenche pas, quel que soit le nombre d'inscrits.
+ */
+export const PETIT_GROUPE_DEBUT = "09-01"; // "MM-JJ"
+export const PETIT_GROUPE_FIN = "07-10";   // "MM-JJ"
+
+export function dansPeriodePetitGroupe(dateStr: string): boolean {
+  const md = (dateStr || "").slice(5); // "AAAA-MM-JJ" → "MM-JJ"
+  if (md.length !== 5) return false;
+  // La période chevauche le 1er janvier : sept→déc OU janv→10 juillet.
+  return md >= PETIT_GROUPE_DEBUT || md <= PETIT_GROUPE_FIN;
+}
+
 export type BaladeChoixStatus =
   | "attente" // email envoyé, pas encore de réponse
   | "supplement_choisi" // supplément choisi, paiement CAWL initié (pas forcément abouti)
   | "report" // la famille veut reporter — le club recontacte
-  | "avoir"; // annulé, avoir créé
+  | "avoir" // annulé, avoir créé
+  | "remboursement"; // annulé, remboursement à effectuer par le club (moyen d'origine)
 
 export interface BaladeChoixChild {
   childId: string;
@@ -65,6 +82,9 @@ export interface BaladeChoixDoc {
   paymentId?: string | null;
   avoirId?: string | null;
   avoirAmount?: number | null;
+  /** Montant à rembourser (choix « remboursement ») — le club exécute le
+   *  remboursement par le moyen de paiement d'origine. */
+  remboursementAmount?: number | null;
   createdAt: string; // ISO
   choiceAt?: string | null;
 }
@@ -150,8 +170,11 @@ export function emailFamillePetitGroupe(params: {
       <p style="margin:0 0 8px;color:#1e40af;font-size:13px;line-height:1.5;">
         📅 <strong>Reporter</strong> à une autre date — nous vous recontactons pour convenir ensemble.
       </p>
-      <p style="margin:0;color:#1e40af;font-size:13px;line-height:1.5;">
+      <p style="margin:0 0 8px;color:#1e40af;font-size:13px;line-height:1.5;">
         💶 <strong>Annuler avec un avoir</strong> du montant payé, valable sur toutes nos prestations.
+      </p>
+      <p style="margin:0;color:#1e40af;font-size:13px;line-height:1.5;">
+        ↩️ <strong>Annuler avec remboursement intégral</strong> des sommes payées, par votre moyen de paiement d'origine.
       </p>
     </div>
     ${emailButton("Faire mon choix", lien, "#1e3a5f")}

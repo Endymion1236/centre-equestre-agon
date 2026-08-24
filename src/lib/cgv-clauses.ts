@@ -122,8 +122,9 @@ export const CGV_BALADES_PETIT_GROUPE =
   `de la réservation. Si ce minimum n'est pas atteint ${BALADE_DELAI_PETIT_GROUPE} avant le départ, ` +
   `le centre propose à chaque inscrit, au choix : le maintien de la balade en petit comité moyennant ` +
   `un supplément par cavalier (montant annoncé à la réservation), le report à une autre date, ` +
-  `ou l'annulation avec remise d'un avoir du montant payé. Si le minimum est atteint entre-temps, ` +
-  `la balade est maintenue sans supplément.`;
+  `l'annulation avec remise d'un avoir du montant payé, ou l'annulation avec remboursement intégral ` +
+  `des sommes versées. Si le minimum est atteint entre-temps, la balade est maintenue sans supplément. ` +
+  `Cette disposition s'applique aux balades ayant lieu entre le 1er septembre et le 10 juillet.`;
 
 /**
  * Encadre de rappel des conditions d'annulation, a coller sous un email de

@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Loader2, CheckCircle2, CalendarClock, Coins, Users } from "lucide-react";
+import { Loader2, CheckCircle2, CalendarClock, Coins, Users, Undo2 } from "lucide-react";
 
 interface Infos {
   activityTitle: string;
@@ -25,9 +25,10 @@ interface Infos {
   minimumAtteint: boolean;
   supplementParCavalier: number;
   supplementTotal: number;
-  status: "attente" | "supplement_choisi" | "report" | "avoir";
+  status: "attente" | "supplement_choisi" | "report" | "avoir" | "remboursement";
   supplementPaye: boolean;
   avoirAmount: number | null;
+  remboursementAmount: number | null;
   expiree: boolean;
 }
 
@@ -41,7 +42,7 @@ export default function BaladeChoixPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [sending, setSending] = useState<string | null>(null); // choix en cours d'envoi
-  const [done, setDone] = useState<{ status: string; avoirAmount?: number } | null>(null);
+  const [done, setDone] = useState<{ status: string; avoirAmount?: number; remboursementAmount?: number } | null>(null);
 
   useEffect(() => {
     if (!token) { setError("Lien invalide."); setLoading(false); return; }
@@ -56,10 +57,13 @@ export default function BaladeChoixPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  const choisir = async (choice: "supplement" | "report" | "avoir") => {
+  const choisir = async (choice: "supplement" | "report" | "avoir" | "remboursement") => {
     if (sending) return;
     if (choice === "avoir" && !confirm(
       "Confirmer l'annulation ?\n\nVos cavaliers seront désinscrits de la balade et un avoir du montant payé sera crédité sur votre compte famille."
+    )) return;
+    if (choice === "remboursement" && !confirm(
+      "Confirmer l'annulation avec remboursement ?\n\nVos cavaliers seront désinscrits de la balade et le centre vous remboursera intégralement les sommes payées, par votre moyen de paiement d'origine."
     )) return;
     setSending(choice); setError("");
     try {
@@ -79,7 +83,7 @@ export default function BaladeChoixPage() {
         window.location.href = body.url; // page de paiement CAWL
         return;
       }
-      setDone({ status: body.status, avoirAmount: body.avoirAmount });
+      setDone({ status: body.status, avoirAmount: body.avoirAmount, remboursementAmount: body.remboursementAmount });
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -131,6 +135,12 @@ export default function BaladeChoixPage() {
         texte: (done?.avoirAmount ?? inf.avoirAmount ?? 0) > 0
           ? `Un avoir de ${eur(done?.avoirAmount ?? inf.avoirAmount ?? 0)} a été crédité sur votre compte famille. Il est utilisable sur toutes nos prestations depuis votre espace cavalier.`
           : "Vos cavaliers ont été désinscrits. Le centre équestre vous recontacte pour le remboursement.",
+      },
+      remboursement: {
+        titre: "Annulation enregistrée — remboursement en cours",
+        texte: (done?.remboursementAmount ?? inf.remboursementAmount ?? 0) > 0
+          ? `Vos cavaliers ont été désinscrits. Le centre vous rembourse ${eur(done?.remboursementAmount ?? inf.remboursementAmount ?? 0)} sous quelques jours, par votre moyen de paiement d'origine.`
+          : "Vos cavaliers ont été désinscrits. Le centre équestre vous recontacte pour organiser le remboursement.",
       },
     };
     const m = messages[statusFinal] || { titre: "Choix enregistré", texte: "Merci !" };
@@ -187,7 +197,7 @@ export default function BaladeChoixPage() {
             <Users className="text-amber-600 shrink-0 mt-0.5" size={20} />
             <p className="text-sm text-amber-800 leading-relaxed m-0">
               La balade compte pour l'instant <strong>{inf.inscritsActuels} inscrit{inf.inscritsActuels > 1 ? "s" : ""}</strong> sur
-              un minimum de <strong>{inf.minParticipants} participants</strong>. Trois possibilités s'offrent à vous —
+              un minimum de <strong>{inf.minParticipants} participants</strong>. Plusieurs possibilités s'offrent à vous —
               et si d'autres cavaliers s'inscrivent d'ici là, la balade sera maintenue sans supplément.
             </p>
           </div>
@@ -225,6 +235,17 @@ export default function BaladeChoixPage() {
             </div>
             <p className="text-sm text-slate-600 mt-1 m-0">
               Vos cavaliers sont désinscrits et le montant payé est crédité en avoir, utilisable sur toutes nos prestations (cours, stages, balades…).
+            </p>
+          </button>
+
+          <button onClick={() => choisir("remboursement")} disabled={!!sending}
+            className="text-left rounded-xl border-2 border-rose-200 bg-rose-50 hover:border-rose-400 p-4 cursor-pointer disabled:opacity-50 transition-colors w-full">
+            <div className="flex items-center gap-2 font-bold text-rose-700">
+              <Undo2 size={18} /> Annuler avec remboursement
+              {sending === "remboursement" && <Loader2 className="animate-spin" size={16} />}
+            </div>
+            <p className="text-sm text-rose-600 mt-1 m-0">
+              Vos cavaliers sont désinscrits et le centre vous rembourse intégralement les sommes payées, par votre moyen de paiement d&apos;origine.
             </p>
           </button>
 

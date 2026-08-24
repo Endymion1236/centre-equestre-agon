@@ -802,6 +802,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         return d;
       };
       const sim = await appel(true);
+      if (sim.horsPeriode) {
+        alert(`Hors période : l'option « petit comité » ne s'applique que du 1er septembre au 10 juillet. Aucune vérification pour le ${creneau.date}.`);
+        return;
+      }
       if (!sim.baladesSousSeuil) {
         alert(
           sim.baladesExaminees === 0

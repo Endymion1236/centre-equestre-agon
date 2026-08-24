@@ -115,6 +115,7 @@ export async function GET(req: NextRequest) {
     status: d.status,
     supplementPaye,
     avoirAmount: d.avoirAmount ?? null,
+    remboursementAmount: d.remboursementAmount ?? null,
     expiree: d.date < todayLocalString(),
   });
 }
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
   const token = String(body?.token || "");
   const choice = String(body?.choice || "");
   if (!token) return NextResponse.json({ error: "token requis" }, { status: 400 });
-  if (!["supplement", "report", "avoir"].includes(choice)) {
+  if (!["supplement", "report", "avoir", "remboursement"].includes(choice)) {
     return NextResponse.json({ error: "choix inconnu" }, { status: 400 });
   }
 
@@ -302,7 +303,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, status: "report" });
   }
 
-  // ════ Choix 3 : annulation avec avoir ════
+  // ════ Choix 3 et 4 : annulation — avec avoir OU remboursement ════
+  // Même mécanique de désinscription pour les deux ; seule l'issue diffère :
+  // « avoir » crée l'avoir tout de suite, « remboursement » enregistre le
+  // montant à rendre et le club exécute (CAWL pour la CB, ou moyen d'origine).
   // 1) Désinscription atomique du créneau + verrou sur le doc de choix
   //    (empêche un double-clic de créer deux avoirs).
   const childIds = new Set((d.children || []).map((c: any) => c.childId).filter(Boolean));
@@ -317,13 +321,13 @@ export async function POST(req: NextRequest) {
         const rest = list.filter((e: any) => !(e.familyId === d.familyId && childIds.has(e.childId)));
         tx.update(crRef, { enrolled: rest, enrolledCount: rest.length });
       }
-      tx.update(ref, { status: "avoir", choiceAt: new Date().toISOString() });
+      tx.update(ref, { status: choice, choiceAt: new Date().toISOString() });
     });
   } catch (e: any) {
     if (e?.message === "DEJA_TRAITE") {
-      return NextResponse.json({ error: "Un choix a déjà été enregistré.", status: "avoir" }, { status: 409 });
+      return NextResponse.json({ error: "Un choix a déjà été enregistré.", status: d.status }, { status: 409 });
     }
-    console.error("[balade-choix] transaction avoir:", e);
+    console.error("[balade-choix] transaction annulation:", e);
     return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 
@@ -339,7 +343,7 @@ export async function POST(req: NextRequest) {
       await adminDb.collection("reservations").doc(rd.id).update({
         status: "cancelled",
         cancelledAt: new Date().toISOString(),
-        cancelReason: "Balade sous le minimum de participants — avoir choisi par la famille",
+        cancelReason: `Balade sous le minimum de participants — ${choice === "remboursement" ? "remboursement" : "avoir"} choisi par la famille`,
       });
     }
   } catch (e) {
@@ -366,6 +370,25 @@ export async function POST(req: NextRequest) {
     montantPaye = Math.round(montantPaye * 100) / 100;
   } catch (e) {
     console.error("[balade-choix] recherche paiements:", e);
+  }
+
+  // ── Issue « remboursement » : pas d'avoir — le montant à rendre est
+  // enregistré et le club exécute le remboursement (CAWL back-office pour un
+  // paiement CB, ou le moyen d'origine pour un chèque/espèces).
+  if (choice === "remboursement") {
+    await ref.update({ remboursementAmount: montantPaye });
+    await notifierClub(
+      `↩️ Annulation avec REMBOURSEMENT — ${enTete}`,
+      [
+        `${d.familyName || d.familyId} (${cavaliers}) a choisi l'annulation avec remboursement intégral.`,
+        `Cavaliers désinscrits du créneau, réservations annulées.`,
+        montantPaye > 0
+          ? `À REMBOURSER : ${montantPaye.toFixed(2)}€ — par le moyen de paiement d'origine (CB : remboursement depuis le back-office CAWL ; chèque/espèces : au comptoir ou par virement). Contact : ${d.familyEmail || "email inconnu"}.`
+          : `⚠️ Aucun paiement en ligne encaissé retrouvé pour cette balade — vérifier le règlement (chèque/espèces ?) avant de rembourser. Contact : ${d.familyEmail || "email inconnu"}.`,
+      ],
+      d.familyId
+    );
+    return NextResponse.json({ ok: true, status: "remboursement", remboursementAmount: montantPaye });
   }
 
   let avoirId: string | null = null;
