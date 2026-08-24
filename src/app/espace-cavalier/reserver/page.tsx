@@ -99,6 +99,11 @@ export default function ReserverPage() {
   const [success, setSuccess] = useState(false);
   const [waitlistSuccess, setWaitlistSuccess] = useState<string | null>(null); // creneauId confirmé
   const [waitlistLoading, setWaitlistLoading] = useState<string | null>(null); // creneauId en cours
+  // Enfants déjà en liste d'attente (waiting/notified), clé `${creneauId}|${childId}`.
+  // Chargé au montage puis maintenu localement : sans lui, la confirmation
+  // disparaissait au bout de 4 s et plus RIEN n'indiquait l'inscription — la
+  // famille croyait n'avoir rien fait alors que l'enfant était bien en file.
+  const [mesAttentes, setMesAttentes] = useState<Set<string>>(new Set());
   const [familyAvoirs, setFamilyAvoirs] = useState<any[]>([]);
   // Chargement des avoirs AU MONTAGE, pas seulement au clic sur « Panier ».
   // Le panier s'ouvre depuis 3 endroits mais un seul chargeait les avoirs :
@@ -824,6 +829,25 @@ export default function ReserverPage() {
     return base;
   };
 
+  useEffect(() => {
+    if (!user) return;
+    getDocs(query(collection(db, "waitlist"), where("familyId", "==", user.uid)))
+      .then((snap) => {
+        const s = new Set<string>();
+        snap.docs.forEach((d) => {
+          const w = d.data() as any;
+          if (!["waiting", "notified"].includes(w.status || "waiting")) return;
+          const ids: string[] = Array.isArray(w.creneauIds) && w.creneauIds.length ? w.creneauIds : [w.creneauId];
+          ids.forEach((id) => id && s.add(`${id}|${w.childId}`));
+        });
+        setMesAttentes(s);
+      })
+      .catch((e) => console.warn("[waitlist] lecture mes attentes:", e));
+  }, [user]);
+
+  const enAttente = (creneauId: string | undefined, childId: string) =>
+    !!creneauId && mesAttentes.has(`${creneauId}|${childId}`);
+
   const addToWaitlist = async (c: Creneau, childId: string) => {
     if (!user || !family) return;
     const childObj = children.find((ch: any) => ch.id === childId) as any;
@@ -879,6 +903,7 @@ export default function ReserverPage() {
         }),
       }).catch((e) => console.warn("Confirmation liste d'attente:", e));
 
+      setMesAttentes(prev => new Set(prev).add(`${c.id}|${childId}`));
       setWaitlistSuccess(c.id);
       setTimeout(() => setWaitlistSuccess(null), 4000);
     } catch (e) { console.error(e); toast("Erreur. Réessayez.", "error"); }
@@ -933,6 +958,11 @@ export default function ReserverPage() {
         status: "waiting",
         position: existing.size + 1,
         createdAt: serverTimestamp(),
+      });
+      setMesAttentes(prev => {
+        const s = new Set(prev);
+        jours.forEach(j => s.add(`${j.id}|${childId}`));
+        return s;
       });
       setWaitlistSuccess(first.id);
       setTimeout(() => setWaitlistSuccess(null), 4000);
@@ -1358,14 +1388,23 @@ export default function ReserverPage() {
 
                       {/* Appel à l'action visible SANS déplier la carte : sinon
                           un "Complet" seul donne l'impression d'une impasse. */}
-                      {!isSelected && spots === 0 && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setSelectedCreneau(first); setSelectedChildren([]); }}
-                          className="mt-3 w-full flex items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 font-body text-xs font-semibold text-orange-700 cursor-pointer hover:bg-orange-100"
-                        >
-                          🔔 Stage complet — s&apos;inscrire en liste d&apos;attente
-                        </button>
-                      )}
+                      {!isSelected && spots === 0 && (() => {
+                        const dejaEnAttente = children.filter((ch: any) => enAttente(joursUniques[0]?.id, ch.id));
+                        return (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setSelectedCreneau(first); setSelectedChildren([]); }}
+                            className={`mt-3 w-full flex items-center justify-center gap-2 rounded-lg border px-3 py-2 font-body text-xs font-semibold cursor-pointer ${
+                              dejaEnAttente.length > 0
+                                ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                                : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                            }`}
+                          >
+                            {dejaEnAttente.length > 0
+                              ? <>✓ {dejaEnAttente.map((ch: any) => ch.firstName).join(", ")} en liste d&apos;attente</>
+                              : <>🔔 Stage complet — s&apos;inscrire en liste d&apos;attente</>}
+                          </button>
+                        );
+                      })()}
 
                       {/* Stage complet — liste d'attente (UNE entrée pour la semaine) */}
                       {isSelected && spots === 0 && (
@@ -1377,16 +1416,23 @@ export default function ReserverPage() {
                           ) : (
                             <>
                               <div className="font-body text-xs text-orange-600 mb-2">
-                                🔔 Ce stage est complet. Inscrivez-vous en liste d&apos;attente pour la semaine :
+                                🔔 Ce stage est complet. Touchez un prénom pour l&apos;inscrire en liste d&apos;attente
+                                (l&apos;inscription est immédiate) :
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 {children.filter((ch: any) => !(first.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
-                                  <button key={ch.id}
-                                    onClick={(e) => { e.stopPropagation(); addStageToWaitlist(stageCreneaux, ch.id); }}
-                                    disabled={waitlistLoading === joursUniques[0]?.id}
-                                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50 font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
-                                    {waitlistLoading === joursUniques[0]?.id ? <Loader2 size={12} className="animate-spin" /> : "🔔"} {ch.firstName}
-                                  </button>
+                                  enAttente(joursUniques[0]?.id, ch.id) ? (
+                                    <span key={ch.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 font-body text-xs font-semibold text-green-700">
+                                      <Check size={12} /> {ch.firstName} — en liste d&apos;attente
+                                    </span>
+                                  ) : (
+                                    <button key={ch.id}
+                                      onClick={(e) => { e.stopPropagation(); addStageToWaitlist(stageCreneaux, ch.id); }}
+                                      disabled={waitlistLoading === joursUniques[0]?.id}
+                                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50 font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                      {waitlistLoading === joursUniques[0]?.id ? <Loader2 size={12} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
+                                    </button>
+                                  )
                                 ))}
                               </div>
                             </>
@@ -1670,16 +1716,23 @@ export default function ReserverPage() {
                               ) : (
                                 <>
                                   <div className="font-body text-xs text-orange-600 mb-2">
-                                    🔔 Ce créneau est complet. Inscrivez-vous en liste d&apos;attente :
+                                    🔔 Ce créneau est complet. Touchez un prénom pour l&apos;inscrire en liste d&apos;attente
+                                    (l&apos;inscription est immédiate) :
                                   </div>
                                   <div className="flex flex-wrap gap-2">
                                     {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
-                                      <button key={ch.id}
-                                        onClick={(e) => { e.stopPropagation(); addToWaitlist(c, ch.id); }}
-                                        disabled={waitlistLoading === c.id}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50 font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
-                                        {waitlistLoading === c.id ? <Loader2 size={12} className="animate-spin" /> : "🔔"} {ch.firstName}
-                                      </button>
+                                      enAttente(c.id, ch.id) ? (
+                                        <span key={ch.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 font-body text-xs font-semibold text-green-700">
+                                          <Check size={12} /> {ch.firstName} — en liste d&apos;attente
+                                        </span>
+                                      ) : (
+                                        <button key={ch.id}
+                                          onClick={(e) => { e.stopPropagation(); addToWaitlist(c, ch.id); }}
+                                          disabled={waitlistLoading === c.id}
+                                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-orange-200 bg-orange-50 font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                          {waitlistLoading === c.id ? <Loader2 size={12} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
+                                        </button>
+                                      )
                                     ))}
                                   </div>
                                 </>
@@ -1748,23 +1801,29 @@ export default function ReserverPage() {
                     </div>
                     <div className="font-body text-sm font-semibold text-slate-700 mb-1">Pour quel cavalier ?</div>
                 <div className="font-body text-[11px] text-slate-500 mb-3">
-                  Touchez un ou plusieurs cavaliers, puis validez en bas.
+                  Touchez un cavalier : son inscription en liste d&apos;attente est immédiate.
                 </div>
                     <div className="flex flex-col gap-2">
                       {(family?.children || [])
                         .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
                         .map((ch: any) => (
-                          <button key={ch.id}
-                            onClick={() => addToWaitlist(bookingCreneau, ch.id)}
-                            disabled={waitlistLoading === bookingCreneau.id}
-                            className="flex items-center justify-between px-4 py-3 rounded-xl border border-orange-200 bg-orange-50 font-body text-sm text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
-                            <span className="font-semibold flex items-center gap-2">
-                              {waitlistLoading === bookingCreneau.id ? <Loader2 size={14} className="animate-spin" /> : "🔔"} {ch.firstName}
-                            </span>
-                            {ch.galopLevel && ch.galopLevel !== "—" && (
-                              <span className="font-body text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">{/^\d/.test(String(ch.galopLevel)) ? `G${ch.galopLevel}` : ch.galopLevel}</span>
-                            )}
-                          </button>
+                          enAttente(bookingCreneau.id, ch.id) ? (
+                            <div key={ch.id} className="flex items-center justify-between px-4 py-3 rounded-xl border border-green-200 bg-green-50 font-body text-sm text-green-700">
+                              <span className="font-semibold flex items-center gap-2"><Check size={14} /> {ch.firstName} — en liste d&apos;attente</span>
+                            </div>
+                          ) : (
+                            <button key={ch.id}
+                              onClick={() => addToWaitlist(bookingCreneau, ch.id)}
+                              disabled={waitlistLoading === bookingCreneau.id}
+                              className="flex items-center justify-between px-4 py-3 rounded-xl border border-orange-200 bg-orange-50 font-body text-sm text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                              <span className="font-semibold flex items-center gap-2">
+                                {waitlistLoading === bookingCreneau.id ? <Loader2 size={14} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
+                              </span>
+                              {ch.galopLevel && ch.galopLevel !== "—" && (
+                                <span className="font-body text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">{/^\d/.test(String(ch.galopLevel)) ? `G${ch.galopLevel}` : ch.galopLevel}</span>
+                              )}
+                            </button>
+                          )
                         ))}
                       {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
                         (children.length === 0 ? (
