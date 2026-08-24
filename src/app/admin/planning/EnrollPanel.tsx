@@ -782,6 +782,55 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     setHoldReleasing(false);
   };
 
+  // ── Test « balade sous le minimum » (petit groupe) ───────────────────
+  // Rejoue à la demande la vérification que le cron fait chaque soir à J-2,
+  // sur LA date de ce créneau : d'abord une simulation (rien n'est envoyé),
+  // puis, après confirmation, l'envoi réel des emails de choix aux familles.
+  const [petitGroupeEnCours, setPetitGroupeEnCours] = useState(false);
+  const testerPetitGroupe = async () => {
+    if (petitGroupeEnCours) return;
+    setPetitGroupeEnCours(true);
+    try {
+      const appel = async (dry: boolean) => {
+        const r = await authFetch("/api/admin/tester-petit-groupe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date: creneau.date, dry }),
+        });
+        const d = await r.json().catch(() => ({} as any));
+        if (!r.ok) throw new Error(d?.error || "Erreur");
+        return d;
+      };
+      const sim = await appel(true);
+      if (!sim.baladesSousSeuil) {
+        alert(
+          sim.baladesExaminees === 0
+            ? `Aucune balade à examiner le ${creneau.date} — déjà traitée (un seul envoi par balade), clôturée, ou sans minimum de participants configuré sur l'activité.`
+            : `Balade au-dessus du minimum : les inscrits confirmés atteignent le seuil, aucun email à envoyer. (Rappel : une inscription « place tenue » non réglée ne compte pas.)`
+        );
+        return;
+      }
+      if (!confirm(
+        `⚠️ ${sim.baladesSousSeuil} balade(s) sous le minimum le ${creneau.date} — ` +
+        `${sim.famillesNotifiees} famille(s) recevront l'email de choix (supplément / report / avoir).\n\n` +
+        `ENVOYER POUR DE VRAI ? Chaque balade ne peut être traitée qu'une seule fois.`
+      )) return;
+      const reel = await appel(false);
+      panelToast(
+        `🌙 ${reel.famillesNotifiees} famille(s) notifiée(s)` +
+        (reel.bloques ? ` · ${reel.bloques} bloquée(s) par le mode restreint (voir Journal des emails)` : "") +
+        (reel.sansEmail ? ` · ${reel.sansEmail} sans adresse email` : ""),
+        "success",
+      );
+      await onRefresh?.();
+    } catch (e: any) {
+      console.error("Test petit groupe:", e);
+      panelToast(e?.message || "Erreur lors du test", "error");
+    } finally {
+      setPetitGroupeEnCours(false);
+    }
+  };
+
   // ── Ajout MANUEL en liste d'attente (admin) ──────────────────────────
   // Une famille appelle, le créneau est complet : on l'inscrit en attente
   // sans qu'elle ait à passer par l'espace famille. Même structure de
@@ -2542,6 +2591,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
             <span className="font-body text-xs text-slate-500">{enrolled.length}/{creneau.maxPlaces}</span>
             {(creneau as any).status === "closed" && <Badge color="gray">Clôturée</Badge>}
+            {creneau.activityType === "balade" && (
+              <button disabled={petitGroupeEnCours} onClick={testerPetitGroupe}
+                title="Rejoue la vérification que le cron fait chaque soir à J-2 : si les inscrits confirmés sont sous le minimum de l'activité, propose l'envoi des emails de choix (supplément / report / avoir) aux familles."
+                className="ml-auto flex items-center gap-1 font-body text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                {petitGroupeEnCours ? <Loader2 size={11} className="animate-spin" /> : "🌙"} Tester « petit groupe »
+              </button>
+            )}
           </div>
 
           {/* ── Plan de séance ── */}
