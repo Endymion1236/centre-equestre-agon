@@ -333,9 +333,32 @@ export function ActivitiesContent() {
         </div>
 
         {filtered.length > 0 ? (
-          <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
-            {filtered.map((activity) => <ActivityCard key={activity.id} activity={activity} highlight={activity.id === highlightId} />)}
-          </div>
+          filter === "all" && !search.trim() ? (
+            // Vue « Toutes » : par FAMILLES, avec un titre par section — les
+            // stages d'un côté, les promenades et les cours réguliers de
+            // l'autre. Une grille unique mélangeait tout.
+            <div className="flex flex-col gap-12">
+              {(["stages", "balades", "cours", "competitions", "autres"] as PublicActivityCategory[]).map((cat) => {
+                const groupe = filtered.filter((a) => a.category === cat);
+                if (groupe.length === 0) return null;
+                return (
+                  <div key={cat}>
+                    <h2 className="mb-5 flex items-baseline gap-3 font-display text-2xl font-bold text-blue-950">
+                      {CATEGORY_LABELS[cat]}
+                      <span className="font-body text-xs font-semibold text-slate-400">{groupe.length} activité{groupe.length > 1 ? "s" : ""}</span>
+                    </h2>
+                    <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
+                      {groupe.map((activity) => <ActivityCard key={activity.id} activity={activity} highlight={activity.id === highlightId} />)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
+              {filtered.map((activity) => <ActivityCard key={activity.id} activity={activity} highlight={activity.id === highlightId} />)}
+            </div>
+          )
         ) : (
           <div className="rounded-[24px] border border-dashed border-blue-200 bg-white px-6 py-16 text-center">
             <Sparkles size={28} className="mx-auto text-blue-300" />
