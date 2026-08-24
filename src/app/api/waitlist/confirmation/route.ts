@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
 import { refreshEmailMode, isRecipientAllowed } from "@/lib/email-guard";
+import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 
 /**
  * POST /api/waitlist/confirmation  { creneauId, childName, activityTitle, date, startTime, endTime }
@@ -20,7 +21,7 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const body = await req.json().catch(() => ({}));
-  const { creneauId, childName, activityTitle, date, dateFin, nbJours, startTime, endTime, parentName } = body;
+  const { creneauId, childName, activityTitle, activityType, date, dateFin, nbJours, startTime, endTime, parentName } = body;
   if (!creneauId || !activityTitle) {
     return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
   }
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
     <p style="font-size:13px;color:#555;line-height:1.6;">Cette activité ne vous intéresse plus ?
       Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message,
       nous libérerons votre place pour une autre famille.</p>
+    ${encadreConditionsPourType(String(activityType || ""))}
     <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
   </div>`;
 

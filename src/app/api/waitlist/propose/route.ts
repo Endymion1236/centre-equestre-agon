@@ -3,6 +3,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
 import { refreshEmailMode, isRecipientAllowed } from "@/lib/email-guard";
+import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 
 /**
  * POST /api/waitlist/propose  { creneauId }
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
           <p style="font-size:14px;color:#334155;line-height:1.6;">Elle vous est proposée en priorité pendant <strong>24&nbsp;heures</strong> — passé ce délai, elle sera proposée à la famille suivante.</p>
           <p style="text-align:center;margin:22px 0;"><a href="${lien}" style="background:#16a34a;color:#fff;padding:12px 26px;border-radius:10px;text-decoration:none;font-weight:bold;">Réserver la place</a></p>
           <p style="font-size:13px;color:#555;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
+          ${encadreConditionsPourType(String(c.activityType || ""))}
           <p style="font-size:12px;color:#64748b;">Vous n'êtes plus intéressé ? Ignorez simplement ce message.</p>
         </div>
       </div>`;

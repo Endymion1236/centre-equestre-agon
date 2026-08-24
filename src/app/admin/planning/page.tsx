@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { toLocalDateString } from "@/lib/date-local";
 import { estPerimee } from "@/lib/waitlist-cleanup";
+import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAgentContext } from "@/hooks/useAgentContext";
@@ -1903,6 +1904,7 @@ export default function PlanningPage() {
                   </p>
                   <p style="color:#555;font-size:13px;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au
                     <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
+                  ${encadreConditionsPourType(c.activityType)}
                   <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
                 </div>`,
               }),

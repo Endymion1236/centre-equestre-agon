@@ -895,6 +895,7 @@ export default function ReserverPage() {
         body: JSON.stringify({
           creneauId: c.id,
           activityTitle: c.activityTitle,
+          activityType: c.activityType,
           date: c.date,
           startTime: c.startTime,
           endTime: c.endTime,
@@ -967,6 +968,7 @@ export default function ReserverPage() {
         body: JSON.stringify({
           creneauId: first.id,
           activityTitle: first.activityTitle,
+          activityType: first.activityType,
           date: first.date,
           dateFin: last.date,
           nbJours: jours.length,

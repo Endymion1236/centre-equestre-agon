@@ -150,3 +150,39 @@ export function encadreConditionsStage(): string {
 
 export const CGV_ANNULATION_CENTRE =
   `En cas d'annulation par le centre (météo, force majeure) : report proposé ou remboursement intégral.`;
+
+/** Même encadré que pour les stages, avec les clauses balades. */
+export function encadreConditionsBalade(): string {
+  return `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
+     <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
+     <div style="font-size:12px;line-height:1.6;color:#7c2d12;">
+       <p style="margin:0 0 6px;">${CGV_BALADES}</p>
+       <p style="margin:0 0 6px;">${CGV_BALADES_PETIT_GROUPE}</p>
+       <p style="margin:0;">${CGV_ANNULATION_CENTRE}</p>
+     </div>
+   </div>`;
+}
+
+/** Encadré générique (cours, anniversaires…) : clause utile + renvoi aux CGV. */
+export function encadreConditionsGenerique(clause?: string): string {
+  return `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
+     <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
+     <div style="font-size:12px;line-height:1.6;color:#7c2d12;">
+       ${clause ? `<p style="margin:0 0 6px;">${clause}</p>` : ""}
+       <p style="margin:0;">${CGV_ANNULATION_CENTRE} Conditions complètes sur la page CGV du site.</p>
+     </div>
+   </div>`;
+}
+
+/**
+ * L'encadré qui convient au TYPE d'activité — pour les emails transactionnels
+ * (confirmation de liste d'attente, place libérée…). Un email sans aucune
+ * condition d'annulation laisse la famille dans le flou ; un email avec les
+ * clauses d'une autre activité serait pire. Source unique, comme le reste.
+ */
+export function encadreConditionsPourType(activityType?: string): string {
+  if (activityType === "stage" || activityType === "stage_journee") return encadreConditionsStage();
+  if (activityType === "balade") return encadreConditionsBalade();
+  if (activityType === "cours") return encadreConditionsGenerique(CGV_COURS_ANNUELS);
+  return encadreConditionsGenerique();
+}
