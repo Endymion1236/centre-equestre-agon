@@ -2333,6 +2333,12 @@ export default function ReserverPage() {
                                 activityTitle: `${i.activityTitle} — ${i.childName}`,
                                 childId: i.childId, childName: i.childName,
                                 creneauId: i.creneauIds[0],
+                                // TOUS les jours du stage : la levée des places
+                                // tenues (confirmerPlacesTenues) lit ce champ —
+                                // avec le seul premier jour, un stage payé
+                                // gardait mardi-vendredi en « pending » et la
+                                // purge finissait par les désinscrire.
+                                creneauIds: i.creneauIds,
                                 priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
                               })),
                               totalTTC: cartTotal,

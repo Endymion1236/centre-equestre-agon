@@ -109,6 +109,22 @@ export async function enregistrerEncaissement(
 
   await updateDoc(doc(db, "payments", paymentId), updateData);
 
+  // 4c. Lever les « places tenues » de ce paiement. Une inscription en attente
+  // de règlement (déclaration espèces/chèque de l'espace famille) garde un
+  // marqueur pending+holdUntil sur le créneau ; seul le circuit CAWL le
+  // levait — un encaissement au comptoir laissait la purge automatique
+  // DÉSINSCRIRE un enfant dont le stage était pourtant payé. Non bloquant :
+  // un échec ici n'annule pas l'encaissement, il se voit dans la console.
+  if (totalEncaisse > 0) {
+    try {
+      await authFetch("/api/admin/confirmer-places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId }),
+      });
+    } catch (e) { console.error("Confirmation des places tenues:", e); }
+  }
+
   // 5. Attribuer des points de fidélité (1 point par euro encaissé)
   // Ne pas attribuer sur les avoirs ni les remboursements
   if (montant > 0 && mode !== "avoir") {

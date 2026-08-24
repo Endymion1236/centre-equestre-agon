@@ -73,6 +73,33 @@ export async function confirmerPlacesTenues(paymentId: string): Promise<number> 
       }
     }
 
+    // Filet de sécurité pour les paiements ANCIENS dont les items ne portent
+    // que le premier jour d'un stage : on étend la levée aux jours frères de
+    // la même semaine (même activité) pour les mêmes enfants — sinon un stage
+    // payé gardait mardi→vendredi « pending » et la purge les désinscrivait.
+    for (const [creneauId, childIds] of [...cibles]) {
+      try {
+        const cSnap = await adminDb.collection("creneaux").doc(creneauId).get();
+        if (!cSnap.exists) continue;
+        const c = cSnap.data() as any;
+        if (c.activityType !== "stage" && c.activityType !== "stage_journee") continue;
+        const jour = new Date(`${c.date}T12:00:00`);
+        const lundi = new Date(jour); lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7));
+        const dimanche = new Date(lundi); dimanche.setDate(dimanche.getDate() + 6);
+        const ymd = (d: Date) => d.toISOString().slice(0, 10);
+        const freres = await adminDb.collection("creneaux")
+          .where("activityTitle", "==", c.activityTitle).get();
+        freres.docs.forEach((f) => {
+          const fd = (f.data() as any).date;
+          if (f.id === creneauId || !fd || fd < ymd(lundi) || fd > ymd(dimanche)) return;
+          if (!cibles.has(f.id)) cibles.set(f.id, new Set());
+          childIds.forEach((id) => cibles.get(f.id)!.add(id));
+        });
+      } catch (e) {
+        console.warn("[hold] extension semaine de stage impossible", creneauId, e);
+      }
+    }
+
     for (const [creneauId, childIds] of cibles) {
       const ref = adminDb.collection("creneaux").doc(creneauId);
       await adminDb.runTransaction(async (tx) => {
