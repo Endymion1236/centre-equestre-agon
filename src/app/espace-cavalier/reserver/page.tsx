@@ -959,6 +959,24 @@ export default function ReserverPage() {
         position: existing.size + 1,
         createdAt: serverTimestamp(),
       });
+      // Même confirmation par email que pour les cours et les jours isolés :
+      // une attente de semaine restait muette, la famille doutait d'être inscrite.
+      authFetch("/api/waitlist/confirmation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          creneauId: first.id,
+          activityTitle: first.activityTitle,
+          date: first.date,
+          dateFin: last.date,
+          nbJours: jours.length,
+          startTime: first.startTime,
+          endTime: first.endTime,
+          childName,
+          parentName: family.parentName || "",
+        }),
+      }).catch((e) => console.warn("Confirmation liste d'attente stage:", e));
+
       setMesAttentes(prev => {
         const s = new Set(prev);
         jours.forEach(j => s.add(`${j.id}|${childId}`));

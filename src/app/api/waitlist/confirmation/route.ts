@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   const body = await req.json().catch(() => ({}));
-  const { creneauId, childName, activityTitle, date, startTime, endTime, parentName } = body;
+  const { creneauId, childName, activityTitle, date, dateFin, nbJours, startTime, endTime, parentName } = body;
   if (!creneauId || !activityTitle) {
     return NextResponse.json({ error: "Paramètres manquants" }, { status: 400 });
   }
@@ -41,8 +41,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, raison: "envoi bloqué (mode restreint)" });
   }
 
+  const lisible = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  // Attente de STAGE (semaine entière) : afficher la période, pas un seul jour.
   const dateLisible = date
-    ? new Date(`${date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+    ? (dateFin && dateFin !== date
+      ? `du ${lisible(String(date))} au ${lisible(String(dateFin))}${nbJours ? ` (${nbJours} jours)` : ""}`
+      : lisible(String(date)))
     : "";
   const subject = `Inscription en liste d'attente — ${activityTitle}`;
   const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
