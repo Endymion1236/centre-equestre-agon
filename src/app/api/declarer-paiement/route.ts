@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { refreshEmailMode, isRecipientAllowed } from "@/lib/email-guard";
+import { logEmail } from "@/lib/email-log";
+import { renderDerouleStage } from "@/lib/stage-deroule";
+import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -146,7 +150,56 @@ export async function POST(req: NextRequest) {
 
     await batch.commit();
 
-    // 5. Prévenir le club (non bloquant — la déclaration est déjà en base et
+    // 5a. Confirmation à la FAMILLE — elle ne recevait RIEN au moment de la
+    // déclaration : le premier email n'arrivait qu'à la confirmation de
+    // réception du règlement, parfois des jours plus tard, et la famille
+    // doutait que l'inscription ait été prise. Avec le déroulé du stage et
+    // les conditions d'annulation, comme la confirmation d'inscription admin.
+    try {
+      const emailFamille = String(fam.parentEmail || auth.email || "").trim();
+      await refreshEmailMode();
+      const resendKey = process.env.RESEND_API_KEY;
+      if (emailFamille && resendKey && isRecipientAllowed(emailFamille)) {
+        const modeLisible = mode === "cheque" ? "chèque" : mode === "virement" ? "virement" : "espèces";
+        const lignes = items.map((it, idx) => {
+          const cr = premiers[idx].exists ? (premiers[idx].data() as any) : null;
+          const debut = cr?.date ? new Date(`${cr.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "";
+          return `<li style="margin:4px 0;"><strong>${it.activityTitle}</strong> — ${it.childName}${debut ? ` · à partir du ${debut}` : ""}${it.creneauIds.length > 1 ? ` (${it.creneauIds.length} jours)` : ""} · ${it.prixFinal.toFixed(2)}€</li>`;
+        }).join("");
+        let derouleHtml = "";
+        if (items.some((i) => i.isStage)) {
+          const dSnap = await adminDb.collection("settings").doc("stageDeroule").get();
+          derouleHtml = renderDerouleStage(dSnap.exists ? (dSnap.data() as any) : null);
+        }
+        const typePourCgv = items.some((i) => i.isStage)
+          ? "stage"
+          : String((premiers[0].exists ? (premiers[0].data() as any) : null)?.activityType || "");
+        const subject = `Inscription enregistrée — règlement ${modeLisible} à remettre`;
+        const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+          <p>Bonjour <strong>${fam.parentName || ""}</strong>,</p>
+          <p>Votre inscription est bien <strong>enregistrée</strong> :</p>
+          <ul style="padding-left:18px;color:#334155;font-size:14px;">${lignes}</ul>
+          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px;margin:16px 0;">
+            <p style="margin:0;color:#9a3412;font-weight:600;">💶 Règlement de ${totalTTC.toFixed(2)}€ par ${modeLisible} à remettre au bureau</p>
+            <p style="margin:6px 0 0;color:#7c2d12;font-size:13px;">Votre place est réservée en attendant la remise de votre règlement (sous 7 jours).
+            Vous recevrez une confirmation dès sa réception.</p>
+          </div>
+          ${derouleHtml}
+          ${encadreConditionsPourType(typePourCgv)}
+          <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
+        </div>`;
+        const r = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>", to: emailFamille, subject, html }),
+        });
+        await logEmail({ to: emailFamille, subject, context: "famille_declaration_paiement", template: "declarationPaiement", status: r.ok ? "sent" : "failed", sentBy: "system" }).catch(() => {});
+      } else if (emailFamille) {
+        await logEmail({ to: emailFamille, subject: "Inscription enregistrée — règlement à remettre", context: "famille_declaration_paiement", template: "declarationPaiement", status: "failed", error: "Bloqué par le mode restreint", sentBy: "system" }).catch(() => {});
+      }
+    } catch (e) { console.warn("[declarer-paiement] email famille:", e); }
+
+    // 5b. Prévenir le club (non bloquant — la déclaration est déjà en base et
     // visible dans l'onglet Déclarations même si cet email échoue).
     fetch(`${origin}/api/notify-club`, {
       method: "POST",

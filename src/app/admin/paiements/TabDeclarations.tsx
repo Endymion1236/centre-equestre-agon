@@ -11,6 +11,8 @@ import { normalizePayment } from "./utils";
 import { emailTemplates } from "@/lib/email-templates";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { authFetch } from "@/lib/auth-fetch";
+import { renderDerouleStage } from "@/lib/stage-deroule";
+import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 
 interface TabDeclarationsProps {
   loading: boolean;
@@ -159,8 +161,24 @@ export function TabDeclarations({
                       await updateDoc(doc(db, "payment_declarations", decl.id), {
                         status: "confirmed", confirmedAt: serverTimestamp(),
                       });
-                      // Email confirmation à la famille
+                      // Email confirmation à la famille — avec le déroulé du
+                      // stage et les conditions d'annulation : c'est souvent le
+                      // premier email « officiel » que la famille garde, il doit
+                      // porter la même information qu'une confirmation en ligne.
                       if (decl.familyEmail) {
+                        let derouleHtml = "";
+                        let typeCgv = "";
+                        try {
+                          const cid = decl.pendingEnrollments?.[0]?.creneauId;
+                          if (cid) {
+                            const crSnap = await getDoc(doc(db, "creneaux", cid));
+                            typeCgv = crSnap.exists() ? String((crSnap.data() as any).activityType || "") : "";
+                          }
+                          if (typeCgv === "stage" || typeCgv === "stage_journee") {
+                            const dSnap = await getDoc(doc(db, "settings", "stageDeroule"));
+                            derouleHtml = renderDerouleStage(dSnap.exists() ? (dSnap.data() as any) : null);
+                          }
+                        } catch { /* déroulé/CGV enrichissent l'email, ils ne le bloquent pas */ }
                         authFetch("/api/send-email", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -178,6 +196,9 @@ export function TabDeclarations({
                                 <p style="margin:0;color:#166534;font-weight:600;">✅ ${decl.montant.toFixed(2)}€ — ${decl.mode === "cheque" ? "Chèque" : decl.mode === "virement" ? "Virement" : "Espèces"}</p>
                                 <p style="margin:8px 0 0;color:#555;font-size:13px;">${decl.activityTitle}</p>
                               </div>
+                              <p style="color:#166534;font-size:14px;">Votre inscription est confirmée.</p>
+                              ${derouleHtml}
+                              ${encadreConditionsPourType(typeCgv)}
                               <p>À bientôt au centre équestre !</p>
                             </div>`,
                           }),
