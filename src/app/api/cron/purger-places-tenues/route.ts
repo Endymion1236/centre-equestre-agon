@@ -106,19 +106,54 @@ export async function GET(req: NextRequest) {
 
       await doc.ref.update({ enrolled: conserves, enrolledCount: conserves.length });
     }
+
+    // ── Nettoyage des waitlistHold (priorité 24h de liste d'attente) ──
+    // Deux cas à lever : le hold EXPIRÉ (la famille n'a pas confirmé à
+    // temps), et le hold ORPHELIN — son entrée de liste d'attente n'existe
+    // plus ou n'est plus « notified » (reset de la base, ménage admin).
+    // Un orphelin bloque une place pour tout le monde et affiche à la
+    // famille une promesse fantôme (vécu après un reset pré-production).
+    let holdsLeves = 0;
+    const entreeValide = new Map<string, boolean>();
+    for (const doc of snap.docs) {
+      const h = (doc.data() as any).waitlistHold;
+      if (!h) continue;
+      let lever = false;
+      if (typeof h.until === "string" && h.until < maintenant) {
+        lever = true;
+      } else if (h.waitlistEntryId) {
+        if (!entreeValide.has(h.waitlistEntryId)) {
+          try {
+            const w = await adminDb.collection("waitlist").doc(String(h.waitlistEntryId)).get();
+            entreeValide.set(h.waitlistEntryId, w.exists && (w.data() as any)?.status === "notified");
+          } catch {
+            // Lecture impossible : on ne touche pas — mieux vaut un hold de
+            // trop pendant 15 minutes qu'une priorité retirée à tort.
+            entreeValide.set(h.waitlistEntryId, true);
+          }
+        }
+        if (!entreeValide.get(h.waitlistEntryId)) lever = true;
+      }
+      if (lever) {
+        await doc.ref.update({ waitlistHold: null });
+        holdsLeves++;
+      }
+    }
+    if (holdsLeves > 0) console.log(`[purge-places] ${holdsLeves} hold(s) de liste d'attente levé(s)`);
+
+    console.log(
+      `[purge-places] ${creneauxExamines} créneau(x) · ${placesLiberees} place(s) libérée(s) · ${placesConfirmees} confirmée(s)`
+    );
+    return NextResponse.json({
+      ok: true,
+      creneauxExamines,
+      placesLiberees,
+      placesConfirmees,
+      holdsLeves,
+      details,
+    });
   } catch (e: any) {
     console.error("[purge-places] échec:", e);
     return NextResponse.json({ error: e?.message || "Erreur" }, { status: 500 });
   }
-
-  console.log(
-    `[purge-places] ${creneauxExamines} créneau(x) · ${placesLiberees} place(s) libérée(s) · ${placesConfirmees} confirmée(s)`
-  );
-  return NextResponse.json({
-    ok: true,
-    creneauxExamines,
-    placesLiberees,
-    placesConfirmees,
-    details,
-  });
 }

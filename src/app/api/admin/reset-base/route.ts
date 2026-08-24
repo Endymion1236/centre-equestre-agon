@@ -194,6 +194,26 @@ export async function POST(req: NextRequest) {
       };
     }
 
+    // ─── 4b. Nettoyage des marqueurs laissés sur les créneaux ───
+    // Les créneaux sont des données MÉTIER (jamais effacés ici), mais ils
+    // portent des marqueurs adossés aux collections qu'on vient de vider :
+    // `waitlistHold` (priorité 24h d'une entrée waitlist) et les entrées
+    // `enrolled` en `pending` (place tenue d'une déclaration de paiement).
+    // Sans ce ménage, un reset laissait des bandeaux « place réservée »
+    // fantômes côté famille et des places bloquées pour tout le monde.
+    if (!dryRun && collections.includes("waitlist")) {
+      const aujourdhui = new Date().toISOString().slice(0, 10);
+      const crSnap = await adminDb.collection("creneaux").where("date", ">=", aujourdhui).get();
+      let holdsLeves = 0;
+      for (const d of crSnap.docs) {
+        const c = d.data() as any;
+        const maj: Record<string, unknown> = {};
+        if (c.waitlistHold) { maj.waitlistHold = null; holdsLeves++; }
+        if (Object.keys(maj).length > 0) await d.ref.update(maj);
+      }
+      if (holdsLeves > 0) console.log(`[reset-base] ${holdsLeves} waitlistHold levé(s) sur les créneaux à venir`);
+    }
+
     const durationMs = Date.now() - startTime;
 
     // ─── 5. Log d'audit inaltérable ─────────────────────────────

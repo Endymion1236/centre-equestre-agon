@@ -104,6 +104,12 @@ export default function ReserverPage() {
   // disparaissait au bout de 4 s et plus RIEN n'indiquait l'inscription — la
   // famille croyait n'avoir rien fait alors que l'enfant était bien en file.
   const [mesAttentes, setMesAttentes] = useState<Set<string>>(new Set());
+  // Ids de MES entrées de liste d'attente actives — sert à ne montrer un
+  // bandeau « place réservée » que si l'attente existe encore : un hold posé
+  // sur un créneau peut survivre à la suppression de l'entrée (reset, ménage
+  // admin) et afficherait une promesse fantôme.
+  const [mesEntryIds, setMesEntryIds] = useState<Set<string>>(new Set());
+  const [attentesChargees, setAttentesChargees] = useState(false);
   const [familyAvoirs, setFamilyAvoirs] = useState<any[]>([]);
   // Chargement des avoirs AU MONTAGE, pas seulement au clic sur « Panier ».
   // Le panier s'ouvre depuis 3 endroits mais un seul chargeait les avoirs :
@@ -834,15 +840,19 @@ export default function ReserverPage() {
     getDocs(query(collection(db, "waitlist"), where("familyId", "==", user.uid)))
       .then((snap) => {
         const s = new Set<string>();
+        const ids = new Set<string>();
         snap.docs.forEach((d) => {
           const w = d.data() as any;
           if (!["waiting", "notified"].includes(w.status || "waiting")) return;
-          const ids: string[] = Array.isArray(w.creneauIds) && w.creneauIds.length ? w.creneauIds : [w.creneauId];
-          ids.forEach((id) => id && s.add(`${id}|${w.childId}`));
+          ids.add(d.id);
+          const cids: string[] = Array.isArray(w.creneauIds) && w.creneauIds.length ? w.creneauIds : [w.creneauId];
+          cids.forEach((id) => id && s.add(`${id}|${w.childId}`));
         });
         setMesAttentes(s);
+        setMesEntryIds(ids);
+        setAttentesChargees(true);
       })
-      .catch((e) => console.warn("[waitlist] lecture mes attentes:", e));
+      .catch((e) => { console.warn("[waitlist] lecture mes attentes:", e); setAttentesChargees(true); });
   }, [user]);
 
   const enAttente = (creneauId: string | undefined, childId: string) =>
@@ -1040,26 +1050,49 @@ export default function ReserverPage() {
           son parametre ?creneau= a l'ouverture dans l'application installee
           (PWA demarre sur sa page d'accueil) — on ne depend donc plus de
           l'URL : les holds sont dans les donnees deja chargees. */}
-      {creneaux.filter((c: any) => holdActive(c) && (c as any).waitlistHold?.familyId === familyId).map((c: any) => {
-        const hold = (c as any).waitlistHold;
-        const fin = new Date(hold.until);
-        return (
-          <div key={`hold_${c.id}`} className="mb-4 rounded-2xl border-2 border-green-300 bg-green-50 p-4">
-            <div className="font-body text-sm font-bold text-green-800">
-              🎉 Une place est réservée pour {hold.childName}
+      {attentesChargees && (() => {
+        // Ne montrer que les holds ADOSSÉS à une attente encore vivante : un
+        // hold peut survivre à son entrée de liste d'attente (reset de la
+        // base, ménage admin) et promettrait une place fantôme.
+        const miens = creneaux.filter((c: any) => holdActive(c)
+          && (c as any).waitlistHold?.familyId === familyId
+          && (!(c as any).waitlistHold?.waitlistEntryId || mesEntryIds.has((c as any).waitlistHold.waitlistEntryId)));
+        // Un hold de STAGE est posé sur chaque jour de la semaine : on
+        // regroupe par entrée d'attente → UN bandeau, UN bouton qui met
+        // tous les jours au panier (au lieu de cinq bandeaux identiques).
+        const groupes = new Map<string, any[]>();
+        miens.forEach((c: any) => {
+          const h = (c as any).waitlistHold;
+          const cle = h.waitlistEntryId || `${h.childId}|${h.until}|${c.activityTitle}`;
+          if (!groupes.has(cle)) groupes.set(cle, []);
+          groupes.get(cle)!.push(c);
+        });
+        return [...groupes.entries()].map(([cle, joursHold]) => {
+          const jours = [...joursHold].sort((a: any, b: any) => a.date.localeCompare(b.date));
+          const c = jours[0];
+          const hold = (c as any).waitlistHold;
+          const fin = new Date(hold.until);
+          const fmt = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+          return (
+            <div key={`hold_${cle}`} className="mb-4 rounded-2xl border-2 border-green-300 bg-green-50 p-4">
+              <div className="font-body text-sm font-bold text-green-800">
+                🎉 Une place est réservée pour {hold.childName}
+              </div>
+              <div className="mt-1 font-body text-xs text-green-700">
+                {c.activityTitle} — {jours.length > 1
+                  ? `du ${fmt(c.date)} au ${fmt(jours[jours.length - 1].date)} (${jours.length} jours)`
+                  : fmt(c.date)} · {c.startTime}–{c.endTime}.
+                À confirmer avant le {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" })} à {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
+              </div>
+              <button
+                onClick={() => { jours.forEach((j: any) => addCoursToCart(j, hold.childId, { viaHold: true })); setShowCart(true); }}
+                className="w-full mt-3 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
+                ✓ J&apos;accepte {jours.length > 1 ? "ces places" : "cette place"} — passer au paiement
+              </button>
             </div>
-            <div className="mt-1 font-body text-xs text-green-700">
-              {c.activityTitle} — {new Date(c.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} · {c.startTime}–{c.endTime}.
-              À confirmer avant le {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" })} à {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
-            </div>
-            <button
-              onClick={() => { addCoursToCart(c, hold.childId, { viaHold: true }); setShowCart(true); }}
-              className="w-full mt-3 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
-              ✓ J'accepte cette place — passer au paiement
-            </button>
-          </div>
-        );
-      })}
+          );
+        });
+      })()}
       <div className="flex justify-between items-center mb-4">
         <div>
           <h1 className="font-display text-2xl font-bold text-blue-800">
