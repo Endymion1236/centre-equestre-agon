@@ -166,7 +166,7 @@ function ActivityVisual({ activity }: { activity: DisplayActivity }) {
   );
 }
 
-function ActivityCard({ activity }: { activity: DisplayActivity }) {
+function ActivityCard({ activity, highlight }: { activity: DisplayActivity; highlight?: boolean }) {
   return (
     <article
       id={activity.id}
@@ -174,6 +174,11 @@ function ActivityCard({ activity }: { activity: DisplayActivity }) {
         activity.signature
           ? "border-gold-300/80 shadow-[0_16px_42px_rgba(240,160,16,0.14)] ring-1 ring-gold-200/70 hover:shadow-[0_26px_62px_rgba(240,160,16,0.2)]"
           : "border-blue-500/[0.08] shadow-[0_10px_30px_rgba(12,26,46,0.05)] hover:shadow-[0_24px_58px_rgba(12,26,46,0.11)]"
+      } ${
+        // Surlignage bref de la carte visée par l'ancre (#baby, #bronze…) :
+        // sans lui, deux cartes d'accueil menant au même filtre avec un simple
+        // défilement différent semblent « renvoyer à la même chose ».
+        highlight ? "ring-4 !ring-blue-400/60 shadow-[0_20px_60px_rgba(32,80,160,0.25)]" : ""
       }`}
     >
       <ActivityVisual activity={activity} />
@@ -223,6 +228,7 @@ export function ActivitiesContent() {
   // rien : Next navigue côté client sans remonter le composant, donc un effet
   // à dépendances vides ne se rejouait jamais. La page semblait figée.
   const profile = searchParams.get("profil") || "";
+  const [highlightId, setHighlightId] = useState("");
   useEffect(() => {
     if (profileToCategory[profile]) {
       setFilter(profileToCategory[profile]);
@@ -231,9 +237,17 @@ export function ActivitiesContent() {
     }
 
     if (typeof window !== "undefined" && window.location.hash) {
+      const cible = window.location.hash.slice(1);
       window.setTimeout(() => {
-        document.querySelector(window.location.hash)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        document.getElementById(cible)?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 180);
+      // La carte visée s'illumine deux secondes : plusieurs cartes d'accueil
+      // mènent au même filtre et ne diffèrent que par leur cible — sans ce
+      // signal, l'arrivée semble identique (surtout quand la cible est la
+      // première carte de la liste).
+      setHighlightId(cible);
+      const t = window.setTimeout(() => setHighlightId(""), 2400);
+      return () => window.clearTimeout(t);
     }
   }, [profile, searchParams]);
 
@@ -306,7 +320,7 @@ export function ActivitiesContent() {
 
         {filtered.length > 0 ? (
           <div className="grid gap-5 sm:gap-6 lg:grid-cols-2">
-            {filtered.map((activity) => <ActivityCard key={activity.id} activity={activity} />)}
+            {filtered.map((activity) => <ActivityCard key={activity.id} activity={activity} highlight={activity.id === highlightId} />)}
           </div>
         ) : (
           <div className="rounded-[24px] border border-dashed border-blue-200 bg-white px-6 py-16 text-center">
