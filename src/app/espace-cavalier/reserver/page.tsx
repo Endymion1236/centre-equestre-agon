@@ -1435,6 +1435,44 @@ export default function ReserverPage() {
                                   )
                                 ))}
                               </div>
+
+                              {/* Stage ouvert à la journée : la famille qui ne veut
+                                  qu'un ou deux jours s'inscrit en attente de CES
+                                  jours-là — une place libérée un mardi lui est
+                                  proposée, là où la file « semaine » n'est prévenue
+                                  que si la semaine entière se libère. */}
+                              {(() => {
+                                const joursALaJournee = joursUniques.filter((c: any) => (c as any).allowDayBooking);
+                                if (joursALaJournee.length === 0) return null;
+                                return (
+                                  <div className="mt-3 rounded-lg border border-orange-100 bg-orange-50/60 p-2.5">
+                                    <div className="font-body text-[11px] font-semibold text-orange-700 mb-1.5">
+                                      Ou pour une journée précise seulement :
+                                    </div>
+                                    {joursALaJournee.map((c: any) => (
+                                      <div key={c.id} className="flex flex-wrap items-center gap-1.5 mb-1.5 last:mb-0">
+                                        <span className="font-body text-xs font-semibold text-slate-600 min-w-24">
+                                          {new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+                                        </span>
+                                        {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
+                                          enAttente(c.id, ch.id) ? (
+                                            <span key={ch.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 font-body text-[11px] font-semibold text-green-700">
+                                              <Check size={11} /> {ch.firstName} — en liste d&apos;attente
+                                            </span>
+                                          ) : (
+                                            <button key={ch.id}
+                                              onClick={(e) => { e.stopPropagation(); addToWaitlist(c, ch.id); }}
+                                              disabled={waitlistLoading === c.id}
+                                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-orange-200 bg-white font-body text-[11px] text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                              {waitlistLoading === c.id ? <Loader2 size={11} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
+                                            </button>
+                                          )
+                                        ))}
+                                      </div>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
                             </>
                           )}
                         </div>
@@ -1489,10 +1527,47 @@ export default function ReserverPage() {
                                       className={`px-3 py-2 rounded-lg border font-body text-sm cursor-pointer transition-all ${daySpots <= 0 ? "opacity-40 cursor-not-allowed bg-gray-100 border-gray-200 text-gray-400" : sel ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-400"}`}>
                                       {sel ? <Check size={12} className="inline mr-1" /> : null}{dayLabel}
                                       {daySpots <= 2 && daySpots > 0 && <span className="text-xs ml-1 text-orange-500">({daySpots} pl.)</span>}
+                                      {daySpots <= 0 && <span className="text-xs ml-1">— complet</span>}
                                     </button>
                                   );
                                 })}
                               </div>
+
+                              {/* Liste d'attente PAR JOUR : un jour complet grisé sans
+                                  alternative était une impasse — la seule file existante
+                                  (« semaine entière ») ne sert à rien à une famille qui
+                                  veut juste le mardi. Une entrée par jour rejoint le
+                                  circuit des créneaux simples : hold 24h sur CE jour,
+                                  email, confirmation — tout existe déjà. */}
+                              {joursJournee.some((c: any) => spotsLeft(c) <= 0) && (
+                                <div className="mt-2 rounded-lg border border-orange-100 bg-orange-50/60 p-2.5">
+                                  <div className="font-body text-[11px] font-semibold text-orange-700 mb-1.5">
+                                    🔔 Un jour complet vous intéresse ? Touchez un prénom pour l&apos;inscrire en liste
+                                    d&apos;attente de ce jour (inscription immédiate, vous serez prévenus par email) :
+                                  </div>
+                                  {joursJournee.filter((c: any) => spotsLeft(c) <= 0).map((c: any) => (
+                                    <div key={c.id} className="flex flex-wrap items-center gap-1.5 mb-1.5 last:mb-0">
+                                      <span className="font-body text-xs font-semibold text-slate-600 min-w-24">
+                                        {new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+                                      </span>
+                                      {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
+                                        enAttente(c.id, ch.id) ? (
+                                          <span key={ch.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 font-body text-[11px] font-semibold text-green-700">
+                                            <Check size={11} /> {ch.firstName} — en liste d&apos;attente
+                                          </span>
+                                        ) : (
+                                          <button key={ch.id}
+                                            onClick={(e) => { e.stopPropagation(); addToWaitlist(c, ch.id); }}
+                                            disabled={waitlistLoading === c.id}
+                                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-orange-200 bg-white font-body text-[11px] text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                            {waitlistLoading === c.id ? <Loader2 size={11} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
+                                          </button>
+                                        )
+                                      ))}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
 
