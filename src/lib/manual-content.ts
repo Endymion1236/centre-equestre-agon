@@ -914,6 +914,72 @@ export const MANUAL: ManualChapter[] = [
         ],
       },
       {
+        id: "bascule-production",
+        title: "Passage en production : la bascule, pas à pas",
+        text: `
+          <p>Trois choses seulement doivent être vraies le jour de l'ouverture : <strong>la base ne contient
+          plus une seule donnée de test</strong>, <strong>les emails partent réellement aux familles</strong>, et
+          <strong>les paiements en ligne arrivent sur le vrai compte</strong>. Tout le reste se corrige après —
+          ces trois-là, non.</p>
+          <p><strong>J-10 à J-5 — préparer :</strong></p>
+          <ol>
+            <li><strong>Sauvegarde JSON complète</strong> depuis <code>/admin/reset-base</code>, rangée en trois
+            endroits (classeur, disque externe, cloud).</li>
+            <li><strong>Vider les données de test</strong> (même écran) : cocher Financier & comptable +
+            Inscriptions & réservations + Communications, <em>laisser Données métier décoché</em>, Simuler,
+            puis taper <code>SUPPRIMER-DONNEES-TEST</code>. Noter la référence <code>resetLogs/…</code>.</li>
+            <li><strong>Vérifier que c'est propre</strong> : CA du mois à 0 €, journal vide, livre de caisse vide,
+            journal emails vide — familles, équidés, activités et créneaux <em>intacts</em>.</li>
+            <li><strong>Faire supprimer l'outil de reset</strong> (demander « supprime l'outil de reset-base ») :
+            son existence après la bascule serait contraire à l'inaltérabilité NF525. Sa trace reste dans Git
+            comme preuve de diligence.</li>
+            <li><strong>Publier les règles Firestore</strong> (console Firebase → Règles → coller
+            <code>firestore.rules</code> → Publier), puis vérifier qu'une suppression d'encaissement est refusée.</li>
+            <li><strong>Fonds de caisse initial</strong> : livre de caisse → Apport en caisse, avec ce qui est
+            réellement dans le tiroir.</li>
+          </ol>
+          <p><strong>J-4 à J-1 — ouvrir les vannes, dans l'ordre :</strong> fiches sans adresse email vidées
+          (comptes orphelins) · variables CAWL de production (<code>CAWL_ENV=production</code>, et le
+          <strong>secret du webhook</strong>, pas la clé d'API) + <strong>un vrai paiement d'essai de 1 €</strong> ·
+          mail-témoin puis levée du mode restreint puis mail de pré-inscription · correctifs à rejouer
+          (<code>/admin/tests</code>) · et le verrou Réservations en ligne ouvert en dernier.</p>
+          <p><strong>Jour J :</strong> ouvrir les réservations, envoyer le mail, et rester devant
+          Messages contact + Journal emails la première heure — c'est là que se voit un problème d'envoi.</p>
+          <p>La version complète (avec la note papier de bascule à remplir pour le classeur comptable) est dans
+          <code>docs/PROCEDURE_LANCEMENT.md</code> et <code>docs/PROCEDURE_BASCULE_PROD.md</code> du projet,
+          aussi en PDF.</p>
+        `,
+        tips: [
+          "L'ordre compte : on vérifie AVANT d'ouvrir, jamais l'inverse. Une facture de test numérotée au milieu des vraies ou un paiement perdu ne se rattrapent pas proprement.",
+          "La note de bascule papier (dates, référence resetLogs, commit de suppression, signature) + la sauvegarde JSON = ta preuve de diligence en cas de contrôle fiscal.",
+        ],
+      },
+      {
+        id: "apres-bascule",
+        title: "Après la bascule : ce qui change, et les 15 premiers jours",
+        text: `
+          <p><strong>Ce qui devient impossible</strong> : modifier ou supprimer un encaissement, une facture, une
+          clôture. Toute correction passe par une <strong>contre-passation</strong> (journal → Corriger) ou un
+          <strong>avoir</strong>. C'est l'état normal d'un logiciel de caisse conforme.</p>
+          <p><strong>Ce qui reste possible</strong> : corriger les bugs, tous les jours s'il le faut. La loi exige
+          l'inaltérabilité des <em>données enregistrées</em>, pas le gel du <em>code</em>. La seule règle : ne
+          jamais réintroduire un outil capable d'effacer ou réécrire une écriture passée.</p>
+          <p><strong>La surveillance des 15 premiers jours :</strong></p>
+          <ul>
+            <li>Chaque soir : clôture journalière, et comptage du tiroir si espèces reçues.</li>
+            <li>Chaque matin : comptes orphelins créés la veille, messages du site non traités.</li>
+            <li>Le lundi : vérifier la sauvegarde reçue par mail (la sauvegarde tourne tous les soirs à 22 h
+            vers Firebase Storage ; seule la copie par mail est hebdomadaire — un seul mail par semaine est normal).</li>
+            <li>Au fil de l'eau : le rapprochement bancaire, et « Boucler le mois » en fin de mois.</li>
+          </ul>
+          <p>Le <strong>1er octobre</strong> : brancher le domaine <code>centreequestreagon.com</code> sur Vercel —
+          rien d'autre ne dépend de cette date.</p>
+        `,
+        tips: [
+          "En cas de doute sur une correction comptable après la bascule : en parler d'abord à l'expert-comptable avant toute action technique.",
+        ],
+      },
+      {
         id: "mode-restreint-emails",
         title: "Mode restreint des emails (et comment le lever)",
         text: `
