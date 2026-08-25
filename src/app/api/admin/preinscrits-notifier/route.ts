@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
+import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { refreshEmailMode, isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 import { REPLY_TO } from "@/lib/email-reply-to";
+import { logEmail } from "@/lib/email-log";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -81,15 +83,38 @@ async function collecter() {
   return [...parFamille.values()].sort((a, b) => a.familyName.localeCompare(b.familyName));
 }
 
+/**
+ * Familles déjà prévenues : collection preinscritsNotifies, un doc par
+ * familyId. Sert à ne pas re-relancer les mêmes familles quand de nouveaux
+ * pré-inscrits arrivent — seuls les nouveaux sont cochés par défaut.
+ */
+async function dejaPrevenues(): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  try {
+    const snap = await adminDb.collection("preinscritsNotifies").get();
+    snap.forEach(d => {
+      const ts = (d.data() as any).lastSentAt;
+      const date = ts?.toDate ? ts.toDate() : (ts ? new Date(ts) : null);
+      map.set(d.id, date ? date.toISOString() : "");
+    });
+  } catch (e) { console.error("[preinscrits] lecture preinscritsNotifies:", e); }
+  return map;
+}
+
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
-  const familles = await collecter();
+  const [familles, prevenues] = await Promise.all([collecter(), dejaPrevenues()]);
+  const enrichies = familles.map(f => ({
+    ...f,
+    dejaPrevenuLe: prevenues.get(f.familyId) || null,
+  }));
   return NextResponse.json({
-    nbFamilles: familles.length,
-    nbPlaces: familles.reduce((s, f) => s + f.lignes.length, 0),
-    sansEmail: familles.filter(f => !f.email).length,
-    familles,
+    nbFamilles: enrichies.length,
+    nbPlaces: enrichies.reduce((s, f) => s + f.lignes.length, 0),
+    sansEmail: enrichies.filter(f => !f.email).length,
+    dejaPrevenues: enrichies.filter(f => f.dejaPrevenuLe).length,
+    familles: enrichies,
   });
 }
 
@@ -200,7 +225,9 @@ export async function POST(req: NextRequest) {
     </div>`;
 
     try {
-      const { error } = await resend.emails.send({
+      // Resend limite à 2 requêtes/seconde : un dépassement (429) est
+      // réessayé une fois après une pause au lieu d'être compté en échec.
+      let { error } = await resend.emails.send({
         from: FROM_EMAIL,
         replyTo: REPLY_TO,
         to: f.email,
@@ -208,12 +235,47 @@ export async function POST(req: NextRequest) {
         subject,
         html,
       });
-      if (error) { erreurs++; console.error("[preinscrits]", f.email, error); }
-      else envoyes++;
-    } catch (e) {
+      if (error && ((error as any).name === "rate_limit_exceeded" || (error as any).statusCode === 429)) {
+        await new Promise(r => setTimeout(r, 1500));
+        ({ error } = await resend.emails.send({
+          from: FROM_EMAIL, replyTo: REPLY_TO, to: f.email, bcc: BCC_SUIVI, subject, html,
+        }));
+      }
+      if (error) {
+        erreurs++;
+        console.error("[preinscrits]", f.email, error);
+        await logEmail({
+          to: f.email, subject, context: "preinscrits_notifier",
+          status: "failed", error: (error as any)?.message || String(error),
+          familyId: f.familyId,
+        });
+      } else {
+        envoyes++;
+        await logEmail({
+          to: f.email, subject, context: "preinscrits_notifier",
+          status: "sent", familyId: f.familyId,
+        });
+        // Mémorise la famille comme prévenue : au prochain passage, elle ne
+        // sera plus cochée par défaut — seuls les nouveaux pré-inscrits le seront.
+        await adminDb.collection("preinscritsNotifies").doc(f.familyId).set({
+          familyName: f.familyName || "",
+          email: f.email,
+          lastSubject: subject,
+          lastSentAt: FieldValue.serverTimestamp(),
+          nbEnvois: FieldValue.increment(1),
+        }, { merge: true });
+      }
+    } catch (e: any) {
       erreurs++;
       console.error("[preinscrits]", f.email, e);
+      await logEmail({
+        to: f.email, subject, context: "preinscrits_notifier",
+        status: "failed", error: e?.message || String(e),
+        familyId: f.familyId,
+      }).catch(() => {});
     }
+    // Cadence sous la limite Resend (2 requêtes/seconde).
+    await new Promise(r => setTimeout(r, 600));
   }
 
   return NextResponse.json({ ok: true, envoyes, bloques, erreurs, total: familles.length });

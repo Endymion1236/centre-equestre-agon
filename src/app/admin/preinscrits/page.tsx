@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Loader2, Send, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface Ligne { childName: string; activite: string; date: string; horaire: string; annuel: boolean }
-interface Famille { familyId: string; familyName: string; email: string; lignes: Ligne[] }
+interface Famille { familyId: string; familyName: string; email: string; lignes: Ligne[]; dejaPrevenuLe?: string | null }
 
 const MESSAGE_DEFAUT = `La rentrée approche, et nous voulions faire le point avec vous.
 
@@ -31,6 +31,7 @@ export default function PreinscritsPage() {
   const [onglet, setOnglet] = useState<"cours" | "stages">("cours");
   const [stages, setStages] = useState<any>(null);
   const [envoi, setEnvoi] = useState(false);
+  const [progression, setProgression] = useState<{ fait: number; total: number } | null>(null);
   const [resultat, setResultat] = useState<any>(null);
 
   const load = useCallback(async () => {
@@ -41,7 +42,11 @@ export default function PreinscritsPage() {
       const res = await fetch("/api/admin/preinscrits-notifier", { headers: { Authorization: `Bearer ${token}` } });
       const json = await res.json();
       setData(json);
-      setSelection(new Set((json.familles || []).filter((f: Famille) => f.email).map((f: Famille) => f.familyId)));
+      // Par défaut, seuls les NOUVEAUX pré-inscrits sont cochés : les familles
+      // déjà prévenues (badge vert) restent décochées pour éviter les doublons.
+      setSelection(new Set((json.familles || [])
+        .filter((f: Famille) => f.email && !f.dejaPrevenuLe)
+        .map((f: Famille) => f.familyId)));
     } catch { /* rien */ }
     setLoading(false);
   }, [user]);
@@ -62,20 +67,40 @@ export default function PreinscritsPage() {
 
   const envoyer = async () => {
     if (!user || selection.size === 0) return;
-    if (!confirm(`Envoyer ce message à ${selection.size} famille(s) ?`)) return;
+    const nbDejaPrevenues = [...selection].filter(id =>
+      (data?.familles || []).find(f => f.familyId === id)?.dejaPrevenuLe).length;
+    const avertissement = nbDejaPrevenues > 0
+      ? `\n\n⚠️ Dont ${nbDejaPrevenues} famille(s) DÉJÀ prévenue(s) (recochée(s) à la main).`
+      : "";
+    if (!confirm(`Envoyer ce message à ${selection.size} famille(s) ?${avertissement}`)) return;
     setEnvoi(true); setResultat(null);
+    // Envoi par lots de 25 : l'envoi serveur est cadencé (limite Resend) et
+    // chaque requête doit rester sous la limite de temps des fonctions Vercel.
+    const ids = [...selection];
+    const total = { envoyes: 0, bloques: 0, erreurs: 0, total: 0 };
     try {
       const token = await user.getIdToken(true);
-      const res = await fetch("/api/admin/preinscrits-notifier", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, message, familyIds: [...selection] }),
-      });
-      setResultat(await res.json());
+      for (let i = 0; i < ids.length; i += 25) {
+        setProgression({ fait: Math.min(i, ids.length), total: ids.length });
+        const res = await fetch("/api/admin/preinscrits-notifier", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ subject, message, familyIds: ids.slice(i, i + 25) }),
+        });
+        const json = await res.json();
+        if (json.error) { setResultat({ error: json.error }); setEnvoi(false); setProgression(null); return; }
+        total.envoyes += json.envoyes || 0;
+        total.bloques += json.bloques || 0;
+        total.erreurs += json.erreurs || 0;
+        total.total += json.total || 0;
+      }
+      setResultat({ ok: true, ...total });
+      await load(); // rafraîchit les badges « déjà prévenu » et les coches
     } catch (e: any) {
       setResultat({ error: e?.message || String(e) });
     }
     setEnvoi(false);
+    setProgression(null);
   };
 
   if (!isAdmin) return <div className="p-6 font-body text-slate-600">Accès réservé aux administrateurs.</div>;
@@ -159,6 +184,7 @@ export default function PreinscritsPage() {
         {data && (
           <span className="font-body text-sm text-slate-500">
             {data.nbFamilles} famille(s) · {data.nbPlaces} place(s)
+            {Number((data as any).dejaPrevenues || 0) > 0 && ` · ${(data as any).dejaPrevenues} déjà prévenue(s)`}
           </span>
         )}
       </div>
@@ -180,14 +206,22 @@ export default function PreinscritsPage() {
         <>
           {(() => {
             const joignables = familles.filter(f => f.email);
+            const nouveaux = joignables.filter(f => !f.dejaPrevenuLe);
             const toutesCochees = joignables.length > 0 && joignables.every(f => selection.has(f.familyId));
             return (
-              <div className="mt-5 flex items-center justify-between gap-3">
-                <button
-                  onClick={() => setSelection(toutesCochees ? new Set() : new Set(joignables.map(f => f.familyId)))}
-                  className="font-body text-sm font-semibold text-indigo-700 bg-transparent border-none cursor-pointer hover:underline p-0">
-                  {toutesCochees ? "Tout décocher" : `Tout cocher (${joignables.length})`}
-                </button>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-4">
+                  <button
+                    onClick={() => setSelection(new Set(nouveaux.map(f => f.familyId)))}
+                    className="font-body text-sm font-semibold text-indigo-700 bg-transparent border-none cursor-pointer hover:underline p-0">
+                    Cocher les nouveaux ({nouveaux.length})
+                  </button>
+                  <button
+                    onClick={() => setSelection(toutesCochees ? new Set() : new Set(joignables.map(f => f.familyId)))}
+                    className="font-body text-sm font-semibold text-slate-500 bg-transparent border-none cursor-pointer hover:underline p-0">
+                    {toutesCochees ? "Tout décocher" : `Tout cocher (${joignables.length})`}
+                  </button>
+                </div>
                 <span className="font-body text-xs text-slate-500">
                   {selection.size} sélectionnée(s)
                 </span>
@@ -209,7 +243,14 @@ export default function PreinscritsPage() {
                   }}
                   className="mt-1 cursor-pointer" />
                 <div className="min-w-0">
-                  <div className="font-body font-semibold text-slate-800">{f.familyName || "—"}</div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-body font-semibold text-slate-800">{f.familyName || "—"}</span>
+                    {f.dejaPrevenuLe && (
+                      <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 font-body text-[11px] font-semibold text-emerald-800">
+                        ✉️ Déjà prévenu le {jolieDate(f.dejaPrevenuLe.slice(0, 10))}
+                      </span>
+                    )}
+                  </div>
                   <div className="font-body text-xs text-slate-500">{f.email || "aucune adresse email"}</div>
                   <div className="mt-1 flex flex-wrap gap-1">
                     {f.lignes.map((l, i) => (
@@ -236,8 +277,15 @@ export default function PreinscritsPage() {
             <button onClick={envoyer} disabled={envoi || selection.size === 0}
               className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-body text-sm font-bold text-white border-none cursor-pointer hover:bg-indigo-700 disabled:opacity-50">
               {envoi ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
-              Envoyer à {selection.size} famille(s)
+              {envoi && progression
+                ? `Envoi en cours… ${progression.fait}/${progression.total}`
+                : `Envoyer à ${selection.size} famille(s)`}
             </button>
+            {envoi && (
+              <p className="mt-2 font-body text-xs font-semibold text-amber-700">
+                Envoi cadencé (limite Resend) — ne fermez pas cette page.
+              </p>
+            )}
           </div>
         </>
       )}
