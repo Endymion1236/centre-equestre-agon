@@ -27,6 +27,7 @@ type SendResult = {
   ok: number;
   fail: number;
   bloques: number;
+  desabonnes: number;
   firstError?: string;
 };
 
@@ -161,7 +162,7 @@ export default function CommunicationPage() {
   // dépassement (429) est réessayé après une pause au lieu d'être compté en échec.
   const envoyerUnEmail = async (
     family: any, subjectStr: string, bodyStr: string
-  ): Promise<{ statut: "ok" | "bloque" | "fail"; erreur?: string }> => {
+  ): Promise<{ statut: "ok" | "bloque" | "desabonne" | "fail"; erreur?: string }> => {
     const personalSubject = replaceVariables(subjectStr, family);
     const personalBody = replaceVariables(bodyStr, family);
     const payload = JSON.stringify({
@@ -185,7 +186,13 @@ export default function CommunicationPage() {
           body: payload,
         });
         const data = await response.json().catch(() => ({} as any));
-        if (response.ok) return data?.skipped ? { statut: "bloque" } : { statut: "ok" };
+        if (response.ok) {
+          // skipped === "desabonne" : famille désabonnée écartée par le serveur.
+          // skipped === true : destinataire bloqué par le mode email restreint.
+          if (data?.skipped === "desabonne") return { statut: "desabonne" };
+          if (data?.skipped) return { statut: "bloque" };
+          return { statut: "ok" };
+        }
         derniereErreur = data?.error || `Erreur HTTP ${response.status}`;
         if (response.status === 429) { await sleep(2000 * tentative); continue; }
         if (response.status >= 500 && tentative === 1) { await sleep(1500); continue; }
@@ -207,6 +214,7 @@ export default function CommunicationPage() {
     let ok = 0;
     let fail = 0;
     let bloques = 0;
+    let desabonnesServeur = 0;
     let firstError = "";
     const okFamilyIds: string[] = [];
     const failedFamilyIds: string[] = [];
@@ -220,6 +228,7 @@ export default function CommunicationPage() {
       const res = await envoyerUnEmail(family, subjectStr, bodyStr);
       if (res.statut === "ok") { ok++; okFamilyIds.push(family.firestoreId); }
       else if (res.statut === "bloque") bloques++;
+      else if (res.statut === "desabonne") desabonnesServeur++;
       else {
         fail++;
         failedFamilyIds.push(family.firestoreId);
@@ -238,14 +247,14 @@ export default function CommunicationPage() {
       sentOk: ok,
       sentFail: fail,
       bloquesModeRestreint: bloques,
-      desabonnesExclus: nbDesabonnes,
+      desabonnesExclus: nbDesabonnes + desabonnesServeur,
       okFamilyIds,
       failedFamilyIds,
       ...(firstError ? { firstError } : {}),
       sentAt: serverTimestamp(),
     });
 
-    setSentResult({ ok, fail, bloques, firstError: firstError || undefined });
+    setSentResult({ ok, fail, bloques, desabonnes: nbDesabonnes + desabonnesServeur, firstError: firstError || undefined });
     setProgress(null);
     setSending(false);
     await loadData();
@@ -421,6 +430,11 @@ export default function CommunicationPage() {
           <p className="mt-2 font-body text-sm text-gray-500">
             {sentResult.ok} email{sentResult.ok > 1 ? "s" : ""} envoyé{sentResult.ok > 1 ? "s" : ""} avec succès.
           </p>
+          {sentResult.desabonnes > 0 && (
+            <p className="mt-2 font-body text-sm text-gray-500">
+              {sentResult.desabonnes} famille{sentResult.desabonnes > 1 ? "s" : ""} désabonnée{sentResult.desabonnes > 1 ? "s" : ""} des emails de communication (écartée{sentResult.desabonnes > 1 ? "s" : ""} volontairement).
+            </p>
+          )}
           {sentResult.bloques > 0 && (
             <p className="mt-2 font-body text-sm font-semibold text-orange-600">
               {sentResult.bloques} bloqué{sentResult.bloques > 1 ? "s" : ""} par le mode email restreint.
