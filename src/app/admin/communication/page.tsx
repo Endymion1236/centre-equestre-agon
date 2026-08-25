@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { addDoc, collection, getDocs, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import {
   AlertTriangle,
   AtSign,
@@ -26,6 +26,8 @@ type CommunicationTab = "newsletter" | "historique";
 type SendResult = {
   ok: number;
   fail: number;
+  bloques: number;
+  firstError?: string;
 };
 
 export default function CommunicationPage() {
@@ -40,6 +42,8 @@ export default function CommunicationPage() {
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
   const [sentResult, setSentResult] = useState<SendResult | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [relanceBusy, setRelanceBusy] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
 
   const loadData = async () => {
@@ -119,28 +123,28 @@ export default function CommunicationPage() {
     },
   ], [families, reinscritIds, manualSelection]);
 
-  const getRecipients = () => {
-    if (selectedAudience === "all") return families.filter((family) => family.parentEmail);
-    if (selectedAudience === "with-children") {
+  const getRecipientsFor = (audience: string) => {
+    if (audience === "all") return families.filter((family) => family.parentEmail);
+    if (audience === "with-children") {
       return families.filter((family) => family.parentEmail && (family.children || []).length > 0);
     }
-    if (selectedAudience === "no-children") {
+    if (audience === "no-children") {
       return families.filter((family) => family.parentEmail && (family.children || []).length === 0);
     }
-    if (selectedAudience === "non-reinscrits") {
+    if (audience === "non-reinscrits") {
       return families.filter((family) => family.parentEmail && (family as any).tags?.includes("cavalier_annee") && !reinscritIds.has(family.firestoreId));
     }
-    if (selectedAudience === "manuelle") {
+    if (audience === "manuelle") {
       return families.filter((family) => family.parentEmail && manualSelection.has(family.firestoreId));
     }
-    if (selectedAudience.startsWith("tag-")) {
-      const tag = selectedAudience.replace("tag-", "");
+    if (audience.startsWith("tag-")) {
+      const tag = audience.replace("tag-", "");
       return families.filter((family) => family.parentEmail && (family as any).tags?.includes(tag));
     }
     return [];
   };
 
-  const recipients = getRecipients();
+  const recipients = getRecipientsFor(selectedAudience);
   const familiesWithEmail = families.filter((family) => family.parentEmail).length;
   const latestCampaign = history[0];
 
@@ -151,57 +155,143 @@ export default function CommunicationPage() {
     .replace(/\[nb_enfants\]/g, (family.children || []).length.toString())
     .replace(/\[lien_reservation\]/g, "https://centre-equestre-agon.vercel.app/espace-cavalier/reserver");
 
-  const handleSend = async () => {
-    if (recipients.length === 0 || !subject.trim()) return;
-    setSending(true);
-    let ok = 0;
-    let fail = 0;
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    // Les familles désabonnées sont écartées ici, en plus du contrôle serveur :
-    // le compteur affiché doit refléter les envois réels.
-    const envoyables = recipients.filter((f: any) => f.desabonneEmails !== true);
-    const nbDesabonnes = recipients.length - envoyables.length;
-    for (const family of envoyables) {
+  // Envoi unitaire avec retries : Resend limite à 2 requêtes/seconde, un
+  // dépassement (429) est réessayé après une pause au lieu d'être compté en échec.
+  const envoyerUnEmail = async (
+    family: any, subjectStr: string, bodyStr: string
+  ): Promise<{ statut: "ok" | "bloque" | "fail"; erreur?: string }> => {
+    const personalSubject = replaceVariables(subjectStr, family);
+    const personalBody = replaceVariables(bodyStr, family);
+    const payload = JSON.stringify({
+      to: family.parentEmail,
+      subject: personalSubject,
+      context: "admin_communication",
+      familyId: family.firestoreId,
+      html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:20px;">
+        <h2 style="color:#1e3a5f;">Centre Equestre d'Agon-Coutainville</h2>
+        ${personalBody.split("\n").map((line) => `<p style="color:#333;line-height:1.6;">${line}</p>`).join("")}
+        <hr style="margin:20px 0;border:none;border-top:1px solid #eee;" />
+        <p style="color:#999;font-size:11px;">Centre Equestre d'Agon-Coutainville — 02 44 84 99 96</p>
+      </div>`,
+    });
+    let derniereErreur = "";
+    for (let tentative = 1; tentative <= 4; tentative++) {
       try {
-        const personalSubject = replaceVariables(subject, family);
-        const personalBody = replaceVariables(body, family);
         const response = await authFetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: family.parentEmail,
-            subject: personalSubject,
-            context: "admin_communication",
-            familyId: family.firestoreId,
-            html: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:20px;">
-              <h2 style="color:#1e3a5f;">Centre Equestre d'Agon-Coutainville</h2>
-              ${personalBody.split("\n").map((line) => `<p style="color:#333;line-height:1.6;">${line}</p>`).join("")}
-              <hr style="margin:20px 0;border:none;border-top:1px solid #eee;" />
-              <p style="color:#999;font-size:11px;">Centre Equestre d'Agon-Coutainville — 02 44 84 99 96</p>
-            </div>`,
-          }),
+          body: payload,
         });
-        if (response.ok) ok++;
-        else fail++;
-      } catch {
-        fail++;
+        const data = await response.json().catch(() => ({} as any));
+        if (response.ok) return data?.skipped ? { statut: "bloque" } : { statut: "ok" };
+        derniereErreur = data?.error || `Erreur HTTP ${response.status}`;
+        if (response.status === 429) { await sleep(2000 * tentative); continue; }
+        if (response.status >= 500 && tentative === 1) { await sleep(1500); continue; }
+        return { statut: "fail", erreur: derniereErreur };
+      } catch (e: any) {
+        derniereErreur = e?.message || "Erreur réseau";
+        await sleep(1500 * tentative);
       }
+    }
+    return { statut: "fail", erreur: derniereErreur };
+  };
+
+  const envoyerCampagne = async (
+    destinataires: any[], subjectStr: string, bodyStr: string, audienceId: string
+  ) => {
+    setSending(true);
+    setSentResult(null);
+    setTab("newsletter");
+    let ok = 0;
+    let fail = 0;
+    let bloques = 0;
+    let firstError = "";
+    const okFamilyIds: string[] = [];
+    const failedFamilyIds: string[] = [];
+
+    // Les familles désabonnées sont écartées ici, en plus du contrôle serveur :
+    // le compteur affiché doit refléter les envois réels.
+    const envoyables = destinataires.filter((f: any) => f.desabonneEmails !== true);
+    const nbDesabonnes = destinataires.length - envoyables.length;
+    setProgress({ done: 0, total: envoyables.length });
+    for (const family of envoyables) {
+      const res = await envoyerUnEmail(family, subjectStr, bodyStr);
+      if (res.statut === "ok") { ok++; okFamilyIds.push(family.firestoreId); }
+      else if (res.statut === "bloque") bloques++;
+      else {
+        fail++;
+        failedFamilyIds.push(family.firestoreId);
+        if (!firstError && res.erreur) firstError = res.erreur;
+      }
+      setProgress((p) => ({ done: (p?.done || 0) + 1, total: envoyables.length }));
+      // Cadence : Resend accepte 2 requêtes/seconde, on reste en dessous.
+      await sleep(600);
     }
 
     await addDoc(collection(db, "communications"), {
-      subject,
-      body,
-      audience: selectedAudience,
+      subject: subjectStr,
+      body: bodyStr,
+      audience: audienceId,
       recipientCount: envoyables.length,
       sentOk: ok,
       sentFail: fail,
+      bloquesModeRestreint: bloques,
       desabonnesExclus: nbDesabonnes,
+      okFamilyIds,
+      failedFamilyIds,
+      ...(firstError ? { firstError } : {}),
       sentAt: serverTimestamp(),
     });
 
-    setSentResult({ ok, fail });
+    setSentResult({ ok, fail, bloques, firstError: firstError || undefined });
+    setProgress(null);
     setSending(false);
     await loadData();
+  };
+
+  const handleSend = async () => {
+    if (recipients.length === 0 || !subject.trim()) return;
+    await envoyerCampagne(recipients, subject, body, selectedAudience);
+  };
+
+  // Relance d'une campagne : renvoie UNIQUEMENT aux familles en échec.
+  const relancerEchecs = async (item: any) => {
+    if (sending || relanceBusy) return;
+    setRelanceBusy(true);
+    try {
+      const base = getRecipientsFor(item.audience || "all");
+      let cibles: any[];
+      if (Array.isArray(item.failedFamilyIds) && item.failedFamilyIds.length > 0) {
+        const failedSet = new Set(item.failedFamilyIds);
+        cibles = base.filter((f) => failedSet.has(f.firestoreId));
+      } else {
+        // Campagne d'avant le suivi détaillé : on retrouve dans le Journal des
+        // emails les familles DÉJÀ servies et on relance toutes les autres.
+        const snap = await getDocs(query(
+          collection(db, "emailsSent"),
+          where("context", "==", "admin_communication"),
+          where("status", "==", "sent"),
+        ));
+        const sujetFixe = !!item.subject && !String(item.subject).includes("[");
+        const dejaServies = new Set(
+          snap.docs
+            .filter((d) => !sujetFixe || (d.data() as any).subject === item.subject)
+            .map((d) => (d.data() as any).familyId)
+            .filter(Boolean)
+        );
+        cibles = base.filter((f) => !dejaServies.has(f.firestoreId));
+      }
+      if (cibles.length === 0) {
+        alert("Rien à relancer : toutes les familles de cette audience ont déjà reçu cet email.");
+        return;
+      }
+      if (!confirm(`Relancer « ${item.subject || "Sans objet"} » vers ${cibles.length} famille(s) qui ne l'ont pas reçu ?\n\nLes familles déjà servies ne recevront rien en double.`)) return;
+      await envoyerCampagne(cibles, item.subject || "", item.body || "", item.audience || "all");
+    } finally {
+      setRelanceBusy(false);
+    }
   };
 
   const resetComposer = () => {
@@ -301,7 +391,28 @@ export default function CommunicationPage() {
         ))}
       </div>
 
-      {tab === "newsletter" && sentResult && (
+      {tab === "newsletter" && sending && (
+        <Card padding="lg" className="mx-auto max-w-2xl text-center !rounded-3xl">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+            <Loader2 size={32} className="animate-spin" />
+          </div>
+          <h2 className="font-display text-2xl font-bold text-blue-800">Envoi en cours…</h2>
+          <p className="mt-2 font-body text-sm text-gray-500">
+            {progress ? `${progress.done} / ${progress.total} emails traités` : "Préparation de l'envoi…"}
+          </p>
+          {progress && progress.total > 0 && (
+            <div className="mx-auto mt-4 h-2 w-full max-w-sm overflow-hidden rounded-full bg-gray-100">
+              <div className="h-full rounded-full bg-blue-600 transition-all"
+                style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
+            </div>
+          )}
+          <p className="mt-4 font-body text-xs font-semibold text-orange-600">
+            L&apos;envoi est cadencé pour respecter la limite de Resend (2 emails/seconde) — ne fermez pas cette page.
+          </p>
+        </Card>
+      )}
+
+      {tab === "newsletter" && !sending && sentResult && (
         <Card padding="lg" className="mx-auto max-w-2xl text-center !rounded-3xl">
           <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl ${sentResult.fail === 0 ? "bg-green-50 text-green-600" : "bg-orange-50 text-orange-600"}`}>
             {sentResult.fail === 0 ? <CheckCircle2 size={32} /> : <AlertTriangle size={32} />}
@@ -310,9 +421,24 @@ export default function CommunicationPage() {
           <p className="mt-2 font-body text-sm text-gray-500">
             {sentResult.ok} email{sentResult.ok > 1 ? "s" : ""} envoyé{sentResult.ok > 1 ? "s" : ""} avec succès.
           </p>
+          {sentResult.bloques > 0 && (
+            <p className="mt-2 font-body text-sm font-semibold text-orange-600">
+              {sentResult.bloques} bloqué{sentResult.bloques > 1 ? "s" : ""} par le mode email restreint.
+            </p>
+          )}
           {sentResult.fail > 0 && (
             <p className="mt-2 font-body text-sm font-semibold text-red-600">
               {sentResult.fail} envoi{sentResult.fail > 1 ? "s" : ""} en échec.
+            </p>
+          )}
+          {sentResult.firstError && (
+            <p className="mx-auto mt-2 max-w-md rounded-xl bg-red-50 px-4 py-2 font-body text-xs text-red-700">
+              Première erreur rencontrée : {sentResult.firstError}
+            </p>
+          )}
+          {sentResult.fail > 0 && (
+            <p className="mt-3 font-body text-xs text-gray-500">
+              Les familles en échec sont mémorisées — bouton « Relancer les échecs » dans l&apos;Historique.
             </p>
           )}
           <button
@@ -324,7 +450,7 @@ export default function CommunicationPage() {
         </Card>
       )}
 
-      {tab === "newsletter" && !sentResult && (
+      {tab === "newsletter" && !sending && !sentResult && (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
           <Card padding="md" className="h-fit !rounded-2xl xl:sticky xl:top-6">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -582,12 +708,24 @@ export default function CommunicationPage() {
                             {date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
                           </div>
                           <div className="mt-2 line-clamp-2 font-body text-xs leading-relaxed text-gray-500">{item.body || ""}</div>
+                          {item.firstError && (
+                            <div className="mt-1 font-body text-[11px] text-red-500">Erreur : {item.firstError}</div>
+                          )}
                         </div>
                       </div>
                       <div className="flex flex-shrink-0 flex-wrap items-center gap-2 sm:justify-end">
                         <Badge color="blue">{total} destinataire{total > 1 ? "s" : ""}</Badge>
                         <Badge color="green">{item.sentOk || 0} envoyé{Number(item.sentOk || 0) > 1 ? "s" : ""}</Badge>
                         {Number(item.sentFail || 0) > 0 && <Badge color="red">{item.sentFail} échec{Number(item.sentFail) > 1 ? "s" : ""}</Badge>}
+                        {Number(item.sentFail || 0) > 0 && (
+                          <button
+                            onClick={() => relancerEchecs(item)}
+                            disabled={sending || relanceBusy}
+                            className="rounded-xl border-none bg-blue-600 px-3.5 py-2 font-body text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"
+                          >
+                            {relanceBusy ? "Relance…" : "🔁 Relancer les échecs"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </Card>

@@ -190,13 +190,19 @@ export async function POST(request: NextRequest) {
 
     if (error) {
       console.error("Resend error:", error);
+      const errName = (error as any)?.name || "";
+      const errMessage = (error as any)?.message || String(error);
       await logEmail({
         to: validRecipients, subject,
         context: logContext, template: logTemplate,
-        status: "failed", error: (error as any)?.message || String(error),
+        status: "failed", error: errMessage,
         sentBy, ...logMeta,
       });
-      return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+      // Le message et le statut réels de Resend sont renvoyés à l'appelant
+      // (route admin) : un 429 rate-limit doit être réessayable côté client,
+      // pas noyé dans un « Erreur interne » générique.
+      const statusCode = errName === "rate_limit_exceeded" || (error as any)?.statusCode === 429 ? 429 : 502;
+      return NextResponse.json({ error: errMessage, name: errName }, { status: statusCode });
     }
 
     // Succès — log
