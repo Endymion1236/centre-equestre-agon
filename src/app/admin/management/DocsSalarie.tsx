@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/components/ui/Toast";
 import { FolderLock, Loader2, Trash2, Upload, X, Download } from "lucide-react";
 import type { Salarie } from "./types";
+import DossierInterne from "./DossierInterne";
 import { TYPES_DOC_SALARIE, labelTypeDoc, emojiTypeDoc, labelPeriode, type DocSalarie, type TypeDocSalarie } from "@/lib/docs-salaries";
 
 interface Props {
@@ -274,6 +275,10 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
               ))}
             </div>
           )}
+
+          {/* Dossier interne employeur — pièces disciplinaires et preuves,
+              jamais visibles par le salarié (collection admin-only dédiée). */}
+          <DossierInterne salarie={salarie} />
         </>
       )}
     </div>
