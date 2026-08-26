@@ -30,6 +30,11 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
   const [docsList, setDocsList] = useState<DocSalarie[]>([]);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
+  // Comptes moniteurs (Paramètres → Moniteurs) : leurs emails alimentent la
+  // liste déroulante, pour ne jamais avoir à retaper une adresse existante.
+  const [comptes, setComptes] = useState<{ id: string; name: string; email: string }[]>([]);
+  // Saisie libre : pour un salarié sans compte moniteur (palefrenier…).
+  const [emailLibre, setEmailLibre] = useState(false);
   const [type, setType] = useState<TypeDocSalarie>("fiche_paie");
   const [periode, setPeriode] = useState(() => new Date().toISOString().slice(0, 7));
   const [titre, setTitre] = useState("");
@@ -51,11 +56,22 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
     (async () => {
       try {
         await fetchDocs();
-        // Préremplir l'email depuis la fiche moniteur liée (moniteurId, sinon le nom)
+        // Préremplir l'email depuis la fiche moniteur liée : moniteurId, sinon
+        // le nom — comparé sans accents ni majuscules (« Éméline » ≈ « emeline »).
+        const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
         const monSnap = await getDocs(collection(db, "moniteurs"));
         const moniteurs = monSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        setComptes(
+          moniteurs
+            .filter(m => m.email)
+            .map(m => ({ id: m.id, name: m.name || "", email: String(m.email).toLowerCase() }))
+            .sort((a, b) => a.name.localeCompare(b.name)),
+        );
         const match = moniteurs.find(m => m.id === (salarie as any).moniteurId)
-          || moniteurs.find(m => (m.name || "").toLowerCase().trim() === salarie.nom.toLowerCase().trim());
+          || moniteurs.find(m => norm(m.name) === norm(salarie.nom))
+          // Nom du planning = souvent le prénom seul ; la fiche moniteur porte
+          // parfois « Prénom Nom » : on tente le premier mot de chaque côté.
+          || moniteurs.find(m => norm(m.name).split(" ")[0] === norm(salarie.nom).split(" ")[0]);
         if (match?.email) setEmail(String(match.email).toLowerCase());
       } catch (e) { console.error(e); }
       setLoading(false);
@@ -161,9 +177,33 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
           {/* Formulaire de dépôt */}
           <div className="bg-white rounded-lg border border-sky-100 p-3 flex flex-col gap-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-body text-xs">
-              <label className="flex flex-col gap-1 text-slate-600">Email du salarié (accès)
-                <input value={email} onChange={e => setEmail(e.target.value)} placeholder="prenom@exemple.fr"
-                  className="border border-gray-200 rounded-lg px-2 py-1.5" />
+              <label className="flex flex-col gap-1 text-slate-600">Compte du salarié (accès)
+                {comptes.length > 0 && !emailLibre ? (
+                  <>
+                    <select value={email}
+                      onChange={e => {
+                        if (e.target.value === "__libre__") { setEmailLibre(true); setEmail(""); }
+                        else setEmail(e.target.value);
+                      }}
+                      className="border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                      <option value="">— choisir un compte —</option>
+                      {comptes.map(c => <option key={c.id} value={c.email}>{c.name} — {c.email}</option>)}
+                      <option value="__libre__">Autre email (salarié sans compte moniteur)…</option>
+                    </select>
+                    <span className="font-normal text-[10px] text-slate-400">Comptes de Paramètres → Moniteurs. Le bon est présélectionné quand le nom correspond.</span>
+                  </>
+                ) : (
+                  <>
+                    <input value={email} onChange={e => setEmail(e.target.value)} placeholder="prenom@exemple.fr"
+                      className="border border-gray-200 rounded-lg px-2 py-1.5" />
+                    {comptes.length > 0 && (
+                      <button type="button" onClick={() => { setEmailLibre(false); setEmail(""); }}
+                        className="self-start font-body text-[10px] text-sky-600 bg-transparent border-none cursor-pointer p-0 underline">
+                        ← revenir à la liste des comptes
+                      </button>
+                    )}
+                  </>
+                )}
               </label>
               <label className="flex flex-col gap-1 text-slate-600">Type de document
                 <select value={type} onChange={e => setType(e.target.value as TypeDocSalarie)}
