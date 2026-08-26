@@ -54,8 +54,15 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
 
   useEffect(() => {
     (async () => {
+      // Chargements INDEPENDANTS : si la liste des documents est refusee
+      // (rules pas encore publiees, par exemple), les comptes moniteurs
+      // doivent quand meme se charger — et reciproquement.
       try {
         await fetchDocs();
+      } catch (e) {
+        console.error("[docs-salarie] lecture documents-salaries refusee — rules publiees ?", e);
+      }
+      try {
         // Préremplir l'email depuis la fiche moniteur liée : moniteurId, sinon
         // le nom — comparé sans accents ni majuscules (« Éméline » ≈ « emeline »).
         const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
