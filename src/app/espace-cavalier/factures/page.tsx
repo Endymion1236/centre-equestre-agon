@@ -102,6 +102,10 @@ interface Devis {
 const devisLineTTC = (ligne: DevisLigne) =>
   Math.round((ligne.qty || 1) * (ligne.priceTTC || 0) * (1 - (ligne.remisePct || 0) / 100) * 100) / 100;
 
+/** Devis contenant un forfait annuel : accepté, il déclenche une inscription
+ *  aux cours par le club (qui facture à ce moment-là) — pas une facture ici. */
+const devisContientForfait = (devis: Devis) => devis.items.some((ligne) => /forfait/i.test(ligne.label));
+
 const devisStatusLabels: Record<Devis["status"], { label: string; color: "orange" | "green" | "red" | "blue" }> = {
   sent: { label: "En attente de votre réponse", color: "orange" },
   accepted: { label: "Accepté", color: "green" },
@@ -322,7 +326,11 @@ export default function FacturesPage() {
           lignes: [
             `${devis.familyName} a ${accepted ? "accepté" : "refusé"} le devis ${devis.numero} depuis son espace famille.`,
             `Montant : ${(devis.totalTTC || 0).toFixed(2)}€ TTC.`,
-            ...(accepted ? ["À convertir en commande depuis Admin → Devis."] : []),
+            ...(accepted
+              ? [devisContientForfait(devis)
+                  ? "Contient un forfait annuel : à inscrire via Planning → mode annuel (pas de conversion en commande)."
+                  : "À convertir en commande depuis Admin → Devis."]
+              : []),
           ],
           familyId: devis.familyId,
         }),
@@ -767,7 +775,9 @@ export default function FacturesPage() {
 
                     {devis.status === "accepted" && (
                       <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 font-body text-[11px] text-green-800">
-                        ✅ Devis accepté — le club prépare la facturation. Elle apparaîtra ici, dans « À régler ».
+                        {devisContientForfait(devis)
+                          ? "✅ Devis accepté — le club finalise l'inscription aux cours et vous recontacte. La facturation se fera à l'inscription."
+                          : "✅ Devis accepté — le club prépare la facturation. Elle apparaîtra ici, dans « À régler »."}
                       </div>
                     )}
                   </Card>

@@ -47,6 +47,17 @@ interface Devis {
   validUntil?: string;
 }
 
+/**
+ * Un devis qui contient un forfait annuel ne se convertit PAS en commande.
+ *
+ * La conversion ne crée qu'un paiement : pas d'inscription aux créneaux, pas
+ * de document forfait, pas de contrôle de capacité. Et le parcours
+ * d'inscription annuelle (Planning → mode annuel) facture lui-même — convertir
+ * puis inscrire doublerait la facturation. Le devis accepté sert de trace ;
+ * l'inscription au Planning fait le reste.
+ */
+const contientForfait = (d: Devis) => d.items.some(i => /forfait/i.test(i.label));
+
 const statusColors: Record<string, "gray"|"blue"|"green"|"red"|"orange"> = {
   draft: "gray", sent: "blue", accepted: "green", refused: "red", converted: "orange",
 };
@@ -326,6 +337,11 @@ export default function DevisPage() {
   };
 
   const handleConvert = async (d: Devis) => {
+    // Garde-fou même si le bouton est masqué (voir contientForfait).
+    if (contientForfait(d)) {
+      alert(`Le devis ${d.numero} contient un forfait annuel : il ne se convertit pas en commande.\n\nInscrivez le cavalier via Planning → inscription en mode annuel — c'est ce parcours qui crée le forfait, l'inscription aux créneaux et la facturation (échéancier compris).`);
+      return;
+    }
     if (!confirm(`Convertir le devis ${d.numero} en commande pending pour ${d.familyName} ?`)) return;
     try {
       await addDoc(collection(db, "payments"), {
@@ -657,10 +673,16 @@ export default function DevisPage() {
                   </button>
                 )}
                 {(d.status === "sent" || d.status === "accepted") && (
-                  <button onClick={() => handleConvert(d)}
-                    className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg border-none cursor-pointer">
-                    <Check size={12}/> Convertir en commande
-                  </button>
+                  contientForfait(d) ? (
+                    <div className="flex items-center gap-1.5 font-body text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">
+                      🎓 Forfait annuel — pas de conversion : inscrivez le cavalier via <strong>Planning → mode annuel</strong> (l'inscription crée le forfait, les créneaux et la facturation).
+                    </div>
+                  ) : (
+                    <button onClick={() => handleConvert(d)}
+                      className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg border-none cursor-pointer">
+                      <Check size={12}/> Convertir en commande
+                    </button>
+                  )
                 )}
                 {d.status === "sent" && (
                   <>
