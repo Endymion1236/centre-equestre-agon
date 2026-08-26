@@ -16,6 +16,7 @@ export const TYPES_DOC_SALARIE = [
   { id: "fiche_paie", label: "Fiche de paie", emoji: "💶" },
   { id: "attestation", label: "Attestation France Travail", emoji: "📄" },
   { id: "contrat", label: "Contrat de travail", emoji: "✍️" },
+  { id: "certificat", label: "Certificat de travail", emoji: "📜" },
   { id: "autre", label: "Autre document", emoji: "📎" },
 ] as const;
 
