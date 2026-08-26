@@ -258,8 +258,25 @@ service cloud.firestore {
     }
 
     // ── Devis ─────────────────────────────────────────────────────────────
+    / Lecture : admin, ou la famille concernée — mais jamais les brouillons,
+    / qui restent internes tant que l'admin ne les a pas envoyés. La query
+    / côté espace famille doit donc filtrer sur status in [sent, accepted,
+    / refused, converted] en plus de familyId (rules ≠ filtres).
+    / Update famille : uniquement répondre à un devis "sent" (accepter ou
+    / refuser), sans toucher aux montants ni à quoi que ce soit d'autre.
     match /devis/{docId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin()
+        || (isAuth()
+            && resource.data.familyId == request.auth.uid
+            && resource.data.status != "draft");
+      allow update: if isAdmin()
+        || (isAuth()
+            && resource.data.familyId == request.auth.uid
+            && resource.data.status == "sent"
+            && (request.resource.data.status == "accepted" || request.resource.data.status == "refused")
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['status', 'decidedAt', 'decidedBy']));
+      allow create, delete: if isAdmin();
     }
 
     // ── Avoirs ────────────────────────────────────────────────────────────

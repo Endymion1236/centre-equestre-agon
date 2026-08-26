@@ -42,6 +42,7 @@ const CONTEXTES = [
   "declaration_paiement",
   "inscription_annuelle",
   "reservation_paiement",
+  "devis_reponse",
 ] as const;
 
 export async function POST(req: NextRequest) {

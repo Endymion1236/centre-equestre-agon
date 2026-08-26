@@ -300,7 +300,7 @@ export default function DevisPage() {
           </table>
           ${d.note ? `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;"><p style="margin:0;color:#854d0e;font-size:13px;">📝 ${d.note}</p></div>` : ""}
           <p style="color:#555;font-size:13px;">Ce devis est valable jusqu'au <strong>${d.validUntil ? new Date(d.validUntil).toLocaleDateString("fr-FR") : "30 jours"}</strong>.</p>
-          <p style="color:#555;font-size:13px;">Pour accepter ce devis ou pour toute question, contactez-nous au centre équestre.</p>
+          <p style="color:#555;font-size:13px;">Pour accepter ou refuser ce devis, rendez-vous dans votre <strong>espace famille</strong> sur notre site (rubrique Paiements). Pour toute question, contactez-nous au centre équestre.</p>
           <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0;">
           <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Agon-Coutainville, Normandie</p>
         </div>
@@ -607,6 +607,11 @@ export default function DevisPage() {
                     <Badge color={statusColors[d.status]}>{statusLabels[d.status]}</Badge>
                     {d.validUntil && new Date(d.validUntil) < new Date() && d.status !== "converted" && (
                       <span className="font-body text-[10px] text-red-500 bg-red-50 px-2 py-0.5 rounded">Expiré</span>
+                    )}
+                    {(d as any).decidedBy === "famille" && (d.status === "accepted" || d.status === "refused") && (
+                      <span className="font-body text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded" title="La famille a répondu depuis son espace en ligne">
+                        Réponse en ligne
+                      </span>
                     )}
                   </div>
                   <div className="font-body text-base font-semibold text-blue-800 mt-1">{nomClient(d)}</div>

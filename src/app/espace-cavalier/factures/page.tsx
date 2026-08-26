@@ -17,6 +17,7 @@ import {
   ChevronDown,
   CreditCard,
   Download,
+  FileText,
   Gift,
   Landmark,
   Loader2,
@@ -74,6 +75,40 @@ interface SessionCard {
   history?: any[];
 }
 
+interface DevisLigne {
+  label: string;
+  description?: string;
+  qty: number;
+  priceTTC: number;
+  tva: number;
+  remisePct?: number;
+}
+
+interface Devis {
+  id: string;
+  numero: string;
+  familyId: string;
+  familyName: string;
+  serviceFacture?: string;
+  items: DevisLigne[];
+  totalTTC: number;
+  status: "sent" | "accepted" | "refused" | "converted";
+  note?: string;
+  validUntil?: string;
+  createdAt?: any;
+}
+
+/** Total TTC d'une ligne de devis, remise comprise (même calcul que l'admin). */
+const devisLineTTC = (ligne: DevisLigne) =>
+  Math.round((ligne.qty || 1) * (ligne.priceTTC || 0) * (1 - (ligne.remisePct || 0) / 100) * 100) / 100;
+
+const devisStatusLabels: Record<Devis["status"], { label: string; color: "orange" | "green" | "red" | "blue" }> = {
+  sent: { label: "En attente de votre réponse", color: "orange" },
+  accepted: { label: "Accepté", color: "green" },
+  refused: { label: "Refusé", color: "red" },
+  converted: { label: "Facturé", color: "blue" },
+};
+
 const modeLabels: Record<string, string> = {
   cb_terminal: "CB",
   cb_online: "CB en ligne",
@@ -107,6 +142,9 @@ export default function FacturesPage() {
   const { toast } = useToast();
 
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [devisList, setDevisList] = useState<Devis[]>([]);
+  const [openDevisId, setOpenDevisId] = useState<string | null>(null);
+  const [answeringDevis, setAnsweringDevis] = useState<string | null>(null);
   const [cards, setCards] = useState<SessionCard[]>([]);
   const [credits, setCredits] = useState<any[]>([]);
   const [fidelity, setFidelity] = useState<any>(null);
@@ -148,6 +186,21 @@ export default function FacturesPage() {
         } catch {
           setPayments([]);
         }
+      }
+
+      try {
+        // Les brouillons restent invisibles : les rules exigent que la query
+        // exclue "draft", d'où le filtre status in [...] en plus de familyId.
+        const snapshot = await getDocs(query(
+          collection(db, "devis"),
+          where("familyId", "==", user.uid),
+          where("status", "in", ["sent", "accepted", "refused", "converted"]),
+        ));
+        const docs = snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Devis[];
+        docs.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        setDevisList(docs);
+      } catch {
+        setDevisList([]);
       }
 
       try {
@@ -241,6 +294,45 @@ export default function FacturesPage() {
   const pastSepa = sepaSchedules
     .filter((schedule: any) => schedule.status !== "pending")
     .sort((a: any, b: any) => (b.dateEcheance || "").localeCompare(a.dateEcheance || ""));
+
+  const answerDevis = async (devis: Devis, accepted: boolean) => {
+    if (!user) return;
+    const question = accepted
+      ? `Accepter le devis ${devis.numero} (${(devis.totalTTC || 0).toFixed(2)}€) ?`
+      : `Refuser le devis ${devis.numero} ?`;
+    if (!confirm(question)) return;
+
+    setAnsweringDevis(devis.id);
+    try {
+      await updateDoc(doc(db, "devis", devis.id), {
+        status: accepted ? "accepted" : "refused",
+        decidedAt: serverTimestamp(),
+        decidedBy: "famille",
+      });
+      setDevisList((current) => current.map((item) => (item.id === devis.id ? { ...item, status: accepted ? "accepted" : "refused" } : item)));
+      toast(accepted ? "Devis accepté. Le club vous recontacte pour la suite." : "Votre refus a bien été transmis.", "success");
+
+      // Prévenir le club — best effort, la réponse est déjà enregistrée.
+      authFetch("/api/notify-club", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          context: "devis_reponse",
+          titre: `Devis ${devis.numero} ${accepted ? "accepté" : "refusé"} — ${devis.familyName}`,
+          lignes: [
+            `${devis.familyName} a ${accepted ? "accepté" : "refusé"} le devis ${devis.numero} depuis son espace famille.`,
+            `Montant : ${(devis.totalTTC || 0).toFixed(2)}€ TTC.`,
+            ...(accepted ? ["À convertir en commande depuis Admin → Devis."] : []),
+          ],
+          familyId: devis.familyId,
+        }),
+      }).catch(() => {});
+    } catch (error) {
+      console.error(error);
+      toast("Impossible d'enregistrer votre réponse. Réessayez ou contactez le club.", "error");
+    }
+    setAnsweringDevis(null);
+  };
 
   const startOnlinePayment = async (payment: Payment) => {
     if (!user) return;
@@ -579,6 +671,109 @@ export default function FacturesPage() {
         <section className="mb-7">
           <h2 className="font-display text-lg font-bold text-blue-800 mb-3">À régler</h2>
           <div className="flex flex-col gap-3">{duePayments.map((payment) => renderPayment(payment, true))}</div>
+        </section>
+      )}
+
+      {devisList.length > 0 && (
+        <section className="mb-7">
+          <div className="flex items-center gap-2 mb-3">
+            <h2 className="font-display text-lg font-bold text-blue-800">Mes devis</h2>
+            {devisList.some((item) => item.status === "sent") && (
+              <span className="font-body text-[11px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                {devisList.filter((item) => item.status === "sent").length} à valider
+              </span>
+            )}
+          </div>
+          <div className="flex flex-col gap-3">
+            {[...devisList]
+              .sort((a, b) => (a.status === "sent" ? -1 : 0) - (b.status === "sent" ? -1 : 0))
+              .map((devis) => {
+                const meta = devisStatusLabels[devis.status] || devisStatusLabels.sent;
+                const open = openDevisId === devis.id;
+                const expired = Boolean(devis.validUntil && new Date(devis.validUntil) < new Date() && devis.status === "sent");
+                const created = devis.createdAt?.seconds ? new Date(devis.createdAt.seconds * 1000) : null;
+                return (
+                  <Card key={devis.id} padding="md" className={devis.status === "sent" ? "!border-orange-200" : ""}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <FileText size={15} className="text-blue-500 flex-shrink-0" />
+                          <span className="font-body text-xs text-gray-400">{devis.numero}</span>
+                          <Badge color={meta.color}>{meta.label}</Badge>
+                        </div>
+                        {devis.serviceFacture && (
+                          <div className="font-body text-xs text-gray-600 mt-1">Service : {devis.serviceFacture}</div>
+                        )}
+                        <div className="font-body text-xs text-gray-500 mt-1">
+                          {created && `Reçu le ${created.toLocaleDateString("fr-FR")} · `}
+                          {devis.items.length} ligne{devis.items.length > 1 ? "s" : ""}
+                          {devis.validUntil && ` · valable jusqu'au ${new Date(devis.validUntil).toLocaleDateString("fr-FR")}`}
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <div className="font-display text-xl font-bold text-blue-800">{(devis.totalTTC || 0).toFixed(2)}€</div>
+                        <div className="font-body text-xs text-gray-500">TTC</div>
+                      </div>
+                    </div>
+
+                    <button type="button" onClick={() => setOpenDevisId(open ? null : devis.id)} className="flex items-center gap-1 font-body text-xs text-gray-400 mt-2 bg-transparent border-none cursor-pointer hover:text-blue-500 px-0">
+                      <ChevronDown size={13} className={`transition-transform ${open ? "rotate-180" : ""}`} />
+                      {open ? "Masquer le détail" : "Voir le détail"}
+                    </button>
+
+                    {open && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        {devis.items.map((ligne, index) => (
+                          <div key={index} className="flex justify-between gap-3 font-body text-xs py-1.5 border-b border-gray-50 last:border-0">
+                            <span className="text-gray-600">
+                              {ligne.qty > 1 ? `${ligne.qty}× ` : ""}{ligne.label}
+                              {ligne.remisePct ? <span className="text-rose-600"> (remise -{ligne.remisePct}%)</span> : null}
+                            </span>
+                            <span className="font-semibold text-blue-800 flex-shrink-0">{devisLineTTC(ligne).toFixed(2)}€</span>
+                          </div>
+                        ))}
+                        {devis.note && <div className="mt-2 font-body text-xs text-gray-500 italic">📝 {devis.note}</div>}
+                      </div>
+                    )}
+
+                    {devis.status === "sent" && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        {expired && (
+                          <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 font-body text-[11px] text-amber-800">
+                            ⚠️ La date de validité de ce devis est dépassée. Vous pouvez encore répondre : le club confirmera si le tarif est maintenu.
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={answeringDevis === devis.id}
+                            onClick={() => answerDevis(devis, true)}
+                            className="flex-1 min-w-[130px] flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-green-600 border-none cursor-pointer disabled:opacity-50"
+                          >
+                            {answeringDevis === devis.id ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
+                            Accepter le devis
+                          </button>
+                          <button
+                            type="button"
+                            disabled={answeringDevis === devis.id}
+                            onClick={() => answerDevis(devis, false)}
+                            className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-red-500 bg-red-50 border-none cursor-pointer disabled:opacity-50"
+                          >
+                            Refuser
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {devis.status === "accepted" && (
+                      <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 font-body text-[11px] text-green-800">
+                        ✅ Devis accepté — le club prépare la facturation. Elle apparaîtra ici, dans « À régler ».
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+          </div>
         </section>
       )}
 
