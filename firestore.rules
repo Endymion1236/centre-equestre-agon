@@ -258,12 +258,12 @@ service cloud.firestore {
     }
 
     // ── Devis ─────────────────────────────────────────────────────────────
-    / Lecture : admin, ou la famille concernée — mais jamais les brouillons,
-    / qui restent internes tant que l'admin ne les a pas envoyés. La query
-    / côté espace famille doit donc filtrer sur status in [sent, accepted,
-    / refused, converted] en plus de familyId (rules ≠ filtres).
-    / Update famille : uniquement répondre à un devis "sent" (accepter ou
-    / refuser), sans toucher aux montants ni à quoi que ce soit d'autre.
+    // Lecture : admin, ou la famille concernée — mais jamais les brouillons,
+    // qui restent internes tant que l'admin ne les a pas envoyés. La query
+    // côté espace famille doit donc filtrer sur status in [sent, accepted,
+    // refused, converted] en plus de familyId (rules ≠ filtres).
+    // Update famille : uniquement répondre à un devis "sent" (accepter ou
+    // refuser), sans toucher aux montants ni à quoi que ce soit d'autre.
     match /devis/{docId} {
       allow read: if isAdmin()
         || (isAuth()
@@ -517,11 +517,11 @@ service cloud.firestore {
     }
 
     // ── Documents salariés (fiches de paie, attestations France Travail…) ─
-    / Métadonnées des documents personnels déposés par l'admin pour chaque
-    / membre de l'équipe. Lecture : admin, ou le salarié lui-même — l'email
-    / du document (stocké en minuscules) doit être celui du compte connecté.
-    / La query côté salarié doit donc filtrer where email == <son email en
-    / minuscules>. Écriture : admin uniquement.
+    // Métadonnées des documents personnels déposés par l'admin pour chaque
+    // membre de l'équipe. Lecture : admin, ou le salarié lui-même — l'email
+    // du document (stocké en minuscules) doit être celui du compte connecté.
+    // La query côté salarié doit donc filtrer where email == <son email en
+    // minuscules>. Écriture : admin uniquement.
     match /documents-salaries/{docId} {
       allow read: if isAdmin()
         || (isAuth() && resource.data.email == request.auth.token.email.lower());
