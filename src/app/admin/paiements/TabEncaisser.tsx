@@ -12,7 +12,7 @@ import {
   type DiscountSettings,
 } from "@/lib/discounts";
 import { Card, Badge } from "@/components/ui";
-import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift } from "lucide-react";
+import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift, CalendarClock } from "lucide-react";
 import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
@@ -412,6 +412,111 @@ export function TabEncaisser({
     } catch (err) {
       console.error("[paiements] Erreur lors de l'encaissement:", err);
       toast(`Erreur lors de l'encaissement : ${(err as Error)?.message || "erreur inconnue"}`, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * Enregistre la commande SANS encaissement : impayé assumé, à régler plus
+   * tard — en ligne depuis l'espace famille (« À régler », bouton CB) ou au
+   * centre. La famille est prévenue par email. Remplace l'astuce « montant
+   * encaissé = 0 », invisible et sans notification.
+   */
+  const handleSaveWithoutPayment = async () => {
+    if (!selectedFamily) {
+      toast("Veuillez sélectionner une famille avant d'enregistrer la commande", "warning");
+      return;
+    }
+    if (basket.length === 0) {
+      toast("Le panier est vide", "warning");
+      return;
+    }
+    // Un bon cadeau ne se vend qu'encaissé : son code serait actif et
+    // utilisable immédiatement alors que rien n'a été payé.
+    if (basket.some((i: any) => i.isBonCadeau)) {
+      toast("Un bon cadeau ne peut pas être enregistré sans encaissement — retirez-le du panier ou encaissez.", "warning");
+      return;
+    }
+    if (!confirm(`Enregistrer la commande de ${basketTotal.toFixed(2)}€ pour ${selectedFam?.parentName} sans encaisser ?\n\nElle apparaîtra dans Impayés, et dans l'espace famille (« À régler », paiement CB en ligne possible).`)) return;
+
+    setSaving(true);
+    try {
+      await addDoc(collection(db, "payments"), {
+        orderId: generateOrderId(),
+        familyId: selectedFamily,
+        familyName: selectedFam?.parentName || "—",
+        ...(serviceFacture ? { serviceFacture } : {}),
+        items: basket,
+        totalTTC: basketTotal,
+        paymentMode: "",
+        paymentRef: "",
+        status: "pending",
+        paidAmount: 0,
+        source: "caisse_paiement_differe",
+        date: encaissementDate ? Timestamp.fromDate(new Date(encaissementDate + "T12:00:00")) : serverTimestamp(),
+        createdAt: serverTimestamp(),
+      });
+      await consommerPromo();
+
+      // Prévenir la famille — best effort, la commande est déjà enregistrée.
+      if (selectedFam?.parentEmail) {
+        const lignesHtml = basket.map(i => `
+          <tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e3a5f;">${i.activityTitle}${i.childName ? `<br><span style="font-size:11px;color:#94a3b8;">${i.childName}</span>` : ""}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;font-weight:600;color:#1e3a5f;">${i.priceTTC.toFixed(2)}€</td>
+          </tr>`).join("");
+        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <div style="background:#0C1A2E;padding:24px;border-radius:12px 12px 0 0;">
+            <h1 style="color:#F0A010;margin:0;font-size:22px;">🐴 Centre Équestre d'Agon-Coutainville</h1>
+            <p style="color:#94a3b8;margin:4px 0 0;font-size:13px;">Votre commande est enregistrée</p>
+          </div>
+          <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
+            <p style="color:#1e3a5f;">Bonjour <strong>${selectedFam?.parentName || ""}</strong>,</p>
+            <p style="color:#555;">Nous avons enregistré votre commande. Aucun paiement n'a été prélevé :</p>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+              <tbody>${lignesHtml}</tbody>
+              <tfoot>
+                <tr style="background:#fff7ed;">
+                  <td style="padding:12px;font-weight:bold;color:#1e3a5f;">Total à régler</td>
+                  <td style="padding:12px;text-align:right;font-size:20px;font-weight:bold;color:#1e3a5f;">${basketTotal.toFixed(2)}€</td>
+                </tr>
+              </tfoot>
+            </table>
+            <p style="color:#555;font-size:13px;">Vous pouvez régler <strong>quand vous le souhaitez</strong> : en ligne par carte depuis votre <strong>espace famille</strong> (rubrique Paiements → « À régler »), ou directement au centre équestre (CB, chèque, espèces…).</p>
+            <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0;">
+            <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Agon-Coutainville, Normandie</p>
+          </div>
+        </div>`;
+        authFetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: selectedFam.parentEmail,
+            subject: `Votre commande de ${basketTotal.toFixed(2)}€ — Centre Équestre d'Agon-Coutainville`,
+            html,
+            context: "admin_commande_differee",
+            template: "commande_differee",
+            familyId: selectedFamily,
+          }),
+        }).catch(e => console.warn("Email commande différée:", e));
+      }
+
+      setBasket([]); setPaymentRef(""); setPaidAmount("");
+      setAppliedPromo(null); setPromoCode(""); setManualDiscount("");
+      setEncaissementDate(new Date().toISOString().split("T")[0]);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+      toast(
+        selectedFam?.parentEmail
+          ? `📋 Commande de ${basketTotal.toFixed(2)}€ enregistrée sans encaissement — email envoyé à la famille.`
+          : `📋 Commande de ${basketTotal.toFixed(2)}€ enregistrée sans encaissement (pas d'email : la famille n'a pas d'adresse).`,
+        "success",
+      );
+      await refreshAll();
+    } catch (err) {
+      console.error("[paiements] Erreur enregistrement sans encaissement:", err);
+      toast(`Erreur : ${(err as Error)?.message || "erreur inconnue"}`, "error");
     } finally {
       setSaving(false);
     }
@@ -1088,6 +1193,16 @@ export function TabEncaisser({
               return `Valider le paiement — ${aEncaisser.toFixed(2)}€${partiel ? " (partiel)" : ""}`;
             })()}
           </button>
+
+          <button onClick={handleSaveWithoutPayment} disabled={saving}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-semibold text-orange-700 bg-orange-50 border border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors mt-2 disabled:opacity-50">
+            <CalendarClock size={16} />
+            Enregistrer sans encaisser — paiement ultérieur
+          </button>
+          <p className="font-body text-[10px] text-slate-500 mt-1.5">
+            Crée la commande en impayé et prévient la famille par email : elle pourra régler en ligne
+            depuis son espace (Paiements → « À régler ») ou au centre. Elle apparaîtra aussi dans l&apos;onglet Impayés.
+          </p>
         </Card>
       )}
     </div>
