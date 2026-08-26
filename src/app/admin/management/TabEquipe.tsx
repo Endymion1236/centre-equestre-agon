@@ -2,9 +2,10 @@
 import { useState } from "react";
 import { updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Pencil, Trash2, Check, X, ExternalLink, RefreshCw, BookUser } from "lucide-react";
+import { Pencil, Trash2, Check, X, ExternalLink, RefreshCw, BookUser, FolderLock } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { TYPES_CONTRAT, type Salarie, type TypeContrat } from "./types";
+import DocsSalarie from "./DocsSalarie";
 import Link from "next/link";
 
 interface Props { salaries: Salarie[]; onRefresh: () => void; }
@@ -19,12 +20,15 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
   const [regId, setRegId] = useState<string | null>(null);
   const [reg, setReg] = useState({ prenom: "", nomFamille: "", dateEntree: "", dateSortie: "", typeContrat: "" as TypeContrat | "", emploi: "", heures: "" });
   const [regSaving, setRegSaving] = useState(false);
+  // Coffre à documents (fiches de paie, attestations…) ouvert pour ce salarié
+  const [docsId, setDocsId] = useState<string | null>(null);
 
-  const startEdit = (s: Salarie) => { setEditId(s.id); setCouleur(s.couleur); setRegId(null); };
+  const startEdit = (s: Salarie) => { setEditId(s.id); setCouleur(s.couleur); setRegId(null); setDocsId(null); };
   const cancel = () => { setEditId(null); };
 
   const startRegistre = (s: Salarie) => {
     setEditId(null);
+    setDocsId(null);
     setRegId(s.id);
     setReg({
       prenom: s.prenom || "", nomFamille: s.nomFamille || "",
@@ -151,6 +155,8 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                   </button>
                 </div>
               </div>
+            ) : docsId === s.id ? (
+              <DocsSalarie salarie={s} onClose={() => setDocsId(null)} />
             ) : regId === s.id ? (
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex flex-col gap-3">
                 <div className="font-body text-sm font-semibold text-purple-900 flex items-center gap-2">
@@ -243,6 +249,9 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                   </button>
                   <button onClick={() => startRegistre(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-purple-50 hover:text-purple-600" title="Fiche registre (contrat, dates, heures)">
                     <BookUser size={13} />
+                  </button>
+                  <button onClick={() => { setEditId(null); setRegId(null); setDocsId(s.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-sky-50 hover:text-sky-600" title="Documents personnels (fiches de paie, attestations…)">
+                    <FolderLock size={13} />
                   </button>
                   <button onClick={() => startEdit(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500" title="Changer la couleur">
                     <Pencil size={13} />

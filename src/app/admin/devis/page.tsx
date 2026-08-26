@@ -47,6 +47,17 @@ interface Devis {
   validUntil?: string;
 }
 
+/**
+ * Un devis qui contient un forfait annuel ne se convertit PAS en commande.
+ *
+ * La conversion ne crée qu'un paiement : pas d'inscription aux créneaux, pas
+ * de document forfait, pas de contrôle de capacité. Et le parcours
+ * d'inscription annuelle (Planning → mode annuel) facture lui-même — convertir
+ * puis inscrire doublerait la facturation. Le devis accepté sert de trace ;
+ * l'inscription au Planning fait le reste.
+ */
+const contientForfait = (d: Devis) => d.items.some(i => /forfait/i.test(i.label));
+
 const statusColors: Record<string, "gray"|"blue"|"green"|"red"|"orange"> = {
   draft: "gray", sent: "blue", accepted: "green", refused: "red", converted: "orange",
 };
@@ -300,7 +311,7 @@ export default function DevisPage() {
           </table>
           ${d.note ? `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;"><p style="margin:0;color:#854d0e;font-size:13px;">📝 ${d.note}</p></div>` : ""}
           <p style="color:#555;font-size:13px;">Ce devis est valable jusqu'au <strong>${d.validUntil ? new Date(d.validUntil).toLocaleDateString("fr-FR") : "30 jours"}</strong>.</p>
-          <p style="color:#555;font-size:13px;">Pour accepter ce devis ou pour toute question, contactez-nous au centre équestre.</p>
+          <p style="color:#555;font-size:13px;">Pour accepter ou refuser ce devis, rendez-vous dans votre <strong>espace famille</strong> sur notre site (rubrique Paiements). Pour toute question, contactez-nous au centre équestre.</p>
           <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0;">
           <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Agon-Coutainville, Normandie</p>
         </div>
@@ -326,6 +337,11 @@ export default function DevisPage() {
   };
 
   const handleConvert = async (d: Devis) => {
+    // Garde-fou même si le bouton est masqué (voir contientForfait).
+    if (contientForfait(d)) {
+      alert(`Le devis ${d.numero} contient un forfait annuel : il ne se convertit pas en commande.\n\nInscrivez le cavalier via Planning → inscription en mode annuel — c'est ce parcours qui crée le forfait, l'inscription aux créneaux et la facturation (échéancier compris).`);
+      return;
+    }
     if (!confirm(`Convertir le devis ${d.numero} en commande pending pour ${d.familyName} ?`)) return;
     try {
       await addDoc(collection(db, "payments"), {
@@ -608,6 +624,11 @@ export default function DevisPage() {
                     {d.validUntil && new Date(d.validUntil) < new Date() && d.status !== "converted" && (
                       <span className="font-body text-[10px] text-red-500 bg-red-50 px-2 py-0.5 rounded">Expiré</span>
                     )}
+                    {(d as any).decidedBy === "famille" && (d.status === "accepted" || d.status === "refused") && (
+                      <span className="font-body text-[10px] text-blue-600 bg-blue-50 px-2 py-0.5 rounded" title="La famille a répondu depuis son espace en ligne">
+                        Réponse en ligne
+                      </span>
+                    )}
                   </div>
                   <div className="font-body text-base font-semibold text-blue-800 mt-1">{nomClient(d)}</div>
                   {d.serviceFacture && (
@@ -652,10 +673,16 @@ export default function DevisPage() {
                   </button>
                 )}
                 {(d.status === "sent" || d.status === "accepted") && (
-                  <button onClick={() => handleConvert(d)}
-                    className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg border-none cursor-pointer">
-                    <Check size={12}/> Convertir en commande
-                  </button>
+                  contientForfait(d) ? (
+                    <div className="flex items-center gap-1.5 font-body text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-lg">
+                      🎓 Forfait annuel — pas de conversion : inscrivez le cavalier via <strong>Planning → mode annuel</strong> (l'inscription crée le forfait, les créneaux et la facturation).
+                    </div>
+                  ) : (
+                    <button onClick={() => handleConvert(d)}
+                      className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg border-none cursor-pointer">
+                      <Check size={12}/> Convertir en commande
+                    </button>
+                  )
                 )}
                 {d.status === "sent" && (
                   <>
