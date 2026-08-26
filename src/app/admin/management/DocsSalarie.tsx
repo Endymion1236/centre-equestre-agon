@@ -33,7 +33,10 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
   const [type, setType] = useState<TypeDocSalarie>("fiche_paie");
   const [periode, setPeriode] = useState(() => new Date().toISOString().slice(0, 7));
   const [titre, setTitre] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  // Plusieurs fichiers d'un coup : un document photographié page par page
+  // (contrat, certificat…) se dépose en une seule fois, chaque page numérotée.
+  const [files, setFiles] = useState<File[]>([]);
+  const [inputKey, setInputKey] = useState(0);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -66,40 +69,53 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
 
   const upload = async () => {
     const emailClean = email.trim().toLowerCase();
-    if (!file) { toast("Choisissez un fichier.", "error"); return; }
+    if (files.length === 0) { toast("Choisissez un fichier (ou des photos).", "error"); return; }
     if (!emailClean || !emailClean.includes("@")) { toast("Renseignez l'email du salarié : c'est lui qui lui donne accès au document.", "error"); return; }
-    if (file.size > MAX_MO * 1024 * 1024) { toast(`Fichier trop lourd (max ${MAX_MO} Mo).`, "error"); return; }
+    const tropLourd = files.find(f => f.size > MAX_MO * 1024 * 1024);
+    if (tropLourd) { toast(`« ${tropLourd.name} » est trop lourd (max ${MAX_MO} Mo par fichier).`, "error"); return; }
 
     setUploading(true);
     try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const storagePath = `documents-salaries/${emailClean}/${Date.now()}_${safeName}`;
-      const task = uploadBytesResumable(ref(storage, storagePath), file);
-      await new Promise<void>((resolve, reject) => { task.on("state_changed", null, reject, () => resolve()); });
-      const url = await getDownloadURL(task.snapshot.ref);
+      const titreBase = titre.trim() || titreParDefaut();
+      let deposes = 0;
+      for (const [index, f] of files.entries()) {
+        const safeName = f.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storagePath = `documents-salaries/${emailClean}/${Date.now()}_${index}_${safeName}`;
+        const task = uploadBytesResumable(ref(storage, storagePath), f);
+        await new Promise<void>((resolve, reject) => { task.on("state_changed", null, reject, () => resolve()); });
+        const url = await getDownloadURL(task.snapshot.ref);
 
-      await addDoc(collection(db, "documents-salaries"), {
-        salarieId: salarie.id,
-        salarieNom: salarie.nom,
-        email: emailClean,
-        type,
-        titre: titre.trim() || titreParDefaut(),
-        ...(type === "fiche_paie" && periode ? { periode } : {}),
-        fileName: file.name,
-        url,
-        storagePath,
-        size: file.size,
-        uploadedBy: user?.email || "",
-        createdAt: serverTimestamp(),
-      });
+        await addDoc(collection(db, "documents-salaries"), {
+          salarieId: salarie.id,
+          salarieNom: salarie.nom,
+          email: emailClean,
+          type,
+          titre: files.length > 1 ? `${titreBase} (page ${index + 1}/${files.length})` : titreBase,
+          ...(type === "fiche_paie" && periode ? { periode } : {}),
+          fileName: f.name,
+          url,
+          storagePath,
+          size: f.size,
+          uploadedBy: user?.email || "",
+          createdAt: serverTimestamp(),
+        });
+        deposes++;
+      }
 
-      setFile(null);
+      setFiles([]);
+      setInputKey(k => k + 1);
       setTitre("");
       await fetchDocs();
-      toast("Document déposé — visible par le salarié dans « Mes documents ».", "success");
+      toast(
+        deposes > 1
+          ? `${deposes} pages déposées — visibles par le salarié dans « Mes documents ».`
+          : "Document déposé — visible par le salarié dans « Mes documents ».",
+        "success",
+      );
     } catch (e) {
       console.error(e);
-      toast("Erreur lors du dépôt du document.", "error");
+      toast("Erreur lors du dépôt — vérifiez la liste : certaines pages ont pu être déposées avant l'erreur.", "error");
+      await fetchDocs().catch(() => {});
     }
     setUploading(false);
   };
@@ -167,15 +183,19 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
               </label>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
-              <input type="file" accept=".pdf,image/*" onChange={e => setFile(e.target.files?.[0] || null)}
+              <input key={inputKey} type="file" accept=".pdf,image/*" multiple
+                onChange={e => setFiles(Array.from(e.target.files || []))}
                 className="font-body text-xs text-slate-600" />
-              <button onClick={upload} disabled={uploading || !file}
+              <button onClick={upload} disabled={uploading || files.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-xs font-semibold text-white bg-sky-600 border-none cursor-pointer hover:bg-sky-700 disabled:opacity-50">
                 {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                Déposer
+                {files.length > 1 ? `Déposer ${files.length} pages` : "Déposer"}
               </button>
             </div>
-            <p className="font-body text-[10px] text-slate-400">PDF ou image, max {MAX_MO} Mo.</p>
+            <p className="font-body text-[10px] text-slate-400">
+              PDF ou photo, max {MAX_MO} Mo par fichier. Depuis un téléphone, vous pouvez prendre les documents en photo directement.
+              Plusieurs photos = les pages d'un même document, numérotées automatiquement.
+            </p>
           </div>
 
           {/* Liste des documents */}
