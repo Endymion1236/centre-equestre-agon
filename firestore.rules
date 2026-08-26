@@ -528,6 +528,14 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ── Dossier interne employeur (pièces disciplinaires, preuves) ────────
+    // Remises en main propre signées, preuves de dépôt, convocations,
+    // sanctions… STRICTEMENT admin : les salariés n'y ont jamais accès —
+    // c'est le dossier de l'employeur, pas un espace partagé.
+    match /dossier-interne-salaries/{docId} {
+      allow read, write: if isAdmin();
+    }
+
     // ── RH : absences/congés et bilans d'heures (compteur récup) ───────────
     match /absences-management/{docId} {
       allow read: if isStaff();

@@ -43,6 +43,60 @@ export interface DocSalarie {
 export const labelTypeDoc = (type: string) =>
   TYPES_DOC_SALARIE.find((t) => t.id === type)?.label || "Document";
 
+// ── Dossier interne employeur ───────────────────────────────────────────────
+// Pièces disciplinaires et preuves de procédure, STRICTEMENT admin-only :
+// collection `dossier-interne-salaries` et chemin Storage dédiés, jamais
+// d'email d'accès — le salarié ne peut pas les voir, par construction.
+
+export const TYPES_DOC_INTERNE = [
+  { id: "remise_signee", label: "Remise en main propre signée (décharge)", emoji: "🖊️" },
+  { id: "preuve_depot", label: "Preuve de dépôt / accusé de réception", emoji: "📮" },
+  { id: "convocation", label: "Convocation à entretien préalable", emoji: "📅" },
+  { id: "sanction", label: "Sanction disciplinaire (avertissement, mise à pied…)", emoji: "⚖️" },
+  { id: "compte_rendu", label: "Compte rendu d'entretien", emoji: "📝" },
+  { id: "autre_interne", label: "Autre pièce interne", emoji: "🗂️" },
+] as const;
+
+export type TypeDocInterne = (typeof TYPES_DOC_INTERNE)[number]["id"];
+
+export interface DocInterne {
+  id: string;
+  salarieId: string;
+  salarieNom: string;
+  type: TypeDocInterne;
+  titre: string;
+  /** Date du document lui-même ("2026-08-26") — les délais de procédure et la
+   *  prescription se comptent sur elle, pas sur la date de dépôt. */
+  dateDocument?: string;
+  note?: string;
+  fileName: string;
+  url: string;
+  storagePath: string;
+  size: number;
+  createdAt?: any;
+  uploadedBy?: string;
+}
+
+export const labelTypeInterne = (type: string) =>
+  TYPES_DOC_INTERNE.find((t) => t.id === type)?.label || "Pièce interne";
+
+export const emojiTypeInterne = (type: string) =>
+  TYPES_DOC_INTERNE.find((t) => t.id === type)?.emoji || "🗂️";
+
+/**
+ * Sanction prescrite : plus de 3 ans (art. L.1332-5 du Code du travail), elle
+ * ne peut plus être invoquée à l'appui d'une nouvelle sanction — signal
+ * qu'elle est bonne à purger du dossier.
+ */
+export function sanctionPrescrite(d: Pick<DocInterne, "type" | "dateDocument">): boolean {
+  if (d.type !== "sanction" || !d.dateDocument) return false;
+  const date = new Date(`${d.dateDocument}T12:00:00`);
+  if (isNaN(date.getTime())) return false;
+  const limite = new Date();
+  limite.setFullYear(limite.getFullYear() - 3);
+  return date < limite;
+}
+
 export const emojiTypeDoc = (type: string) =>
   TYPES_DOC_SALARIE.find((t) => t.id === type)?.emoji || "📎";
 

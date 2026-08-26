@@ -4,6 +4,7 @@ import { updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Pencil, Trash2, Check, X, ExternalLink, RefreshCw, BookUser, FolderLock } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
+import { useAuth } from "@/lib/auth-context";
 import { TYPES_CONTRAT, type Salarie, type TypeContrat } from "./types";
 import DocsSalarie from "./DocsSalarie";
 import Link from "next/link";
@@ -14,6 +15,10 @@ const COULEURS = ["#2050A0","#16a34a","#dc2626","#d97706","#7c3aed","#0891b2","#
 
 export default function TabEquipe({ salaries, onRefresh }: Props) {
   const { toast } = useToast();
+  // Documents personnels + dossier interne : réservés à l'admin. La page
+  // Équipe est ouverte aux moniteurs, mais ces boutons ne doivent même pas
+  // leur apparaître (les rules Firestore les bloquent de toute façon).
+  const { isAdmin } = useAuth();
   const [editId, setEditId] = useState<string | null>(null);
   const [couleur, setCouleur] = useState(COULEURS[0]);
   // Fiche registre en cours d'édition (registre unique du personnel)
@@ -155,7 +160,7 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                   </button>
                 </div>
               </div>
-            ) : docsId === s.id ? (
+            ) : docsId === s.id && isAdmin ? (
               <DocsSalarie salarie={s} onClose={() => setDocsId(null)} />
             ) : regId === s.id ? (
               <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 flex flex-col gap-3">
@@ -250,9 +255,11 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                   <button onClick={() => startRegistre(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-purple-50 hover:text-purple-600" title="Fiche registre (contrat, dates, heures)">
                     <BookUser size={13} />
                   </button>
-                  <button onClick={() => { setEditId(null); setRegId(null); setDocsId(s.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-sky-50 hover:text-sky-600" title="Documents personnels (fiches de paie, attestations…)">
-                    <FolderLock size={13} />
-                  </button>
+                  {isAdmin && (
+                    <button onClick={() => { setEditId(null); setRegId(null); setDocsId(s.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-sky-50 hover:text-sky-600" title="Documents personnels (fiches de paie, attestations…)">
+                      <FolderLock size={13} />
+                    </button>
+                  )}
                   <button onClick={() => startEdit(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500" title="Changer la couleur">
                     <Pencil size={13} />
                   </button>
