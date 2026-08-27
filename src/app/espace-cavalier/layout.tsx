@@ -100,6 +100,7 @@ function LoginScreen() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const reset = () => {
     setEmail("");
@@ -107,6 +108,7 @@ function LoginScreen() {
     setDisplayName("");
     setError("");
     setMagicSent(false);
+    setResetSent(false);
   };
 
   const changeMode = (next: typeof mode) => {
@@ -126,11 +128,38 @@ function LoginScreen() {
       await signInWithEmail(email, password);
     } catch (err: any) {
       if (["auth/user-not-found", "auth/wrong-password", "auth/invalid-credential"].includes(err?.code)) {
-        setError("Email ou mot de passe incorrect.");
+        // Cas fréquent : compte créé avec Google/Facebook (ou par le club),
+        // donc AUCUN mot de passe n'existe sur ce site — le guider plutôt
+        // que de le laisser réessayer un mot de passe qui n'existe pas.
+        setError("Email ou mot de passe incorrect. Si vous utilisez d'habitude Google ou Facebook, revenez en arrière et choisissez ce bouton. Sinon, utilisez « Mot de passe oublié » ou le lien de connexion sans mot de passe.");
       } else {
         setError("Erreur de connexion. Réessayez.");
       }
     }
+    setLoading(false);
+  };
+
+  /**
+   * Réinitialisation du mot de passe. Réponse volontairement identique dans
+   * tous les cas (compte inexistant, compte Google sans mot de passe…) : on
+   * ne révèle jamais si une adresse a un compte. Firebase n'envoie l'email
+   * que si un mot de passe existe réellement pour cette adresse.
+   */
+  const forgotPassword = async () => {
+    setError("");
+    if (!email || !email.includes("@")) {
+      setError("Saisissez d'abord votre adresse email ci-dessus.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { sendPasswordResetEmail } = await import("firebase/auth");
+      const { auth } = await import("@/lib/firebase");
+      await sendPasswordResetEmail(auth, email.trim());
+    } catch {
+      // Silencieux : même message que le succès (pas d'énumération de comptes).
+    }
+    setResetSent(true);
     setLoading(false);
   };
 
@@ -223,10 +252,24 @@ function LoginScreen() {
               <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Adresse email" className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400"/>
               <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} onKeyDown={(event) => event.key === "Enter" && (mode === "login" ? login() : register())} placeholder="Mot de passe" className="w-full px-4 py-3 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400"/>
               {error && <p className="font-body text-xs text-red-600 text-center">{error}</p>}
+              {resetSent && (
+                <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
+                  <p className="font-body text-xs text-green-800">
+                    Si un compte avec mot de passe existe pour cette adresse, un email de réinitialisation vient de partir (pensez aux spams).
+                    Compte créé avec <strong>Google</strong> ou <strong>Facebook</strong> ? Il n&apos;y a pas de mot de passe à réinitialiser :
+                    revenez en arrière et utilisez le bouton correspondant, ou le lien de connexion sans mot de passe.
+                  </p>
+                </div>
+              )}
               <button type="button" disabled={loading} onClick={mode === "login" ? login : register} className="w-full px-5 py-3.5 rounded-xl bg-blue-600 font-body text-sm font-bold text-white border-none cursor-pointer disabled:opacity-50">
                 {loading ? "Chargement..." : mode === "login" ? "Se connecter" : "Créer mon compte"}
               </button>
-              {mode === "login" && <button type="button" onClick={() => changeMode("magic")} className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer py-1">Recevoir un lien sans mot de passe</button>}
+              {mode === "login" && (
+                <div className="flex items-center justify-center gap-4">
+                  <button type="button" disabled={loading} onClick={forgotPassword} className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer py-1 disabled:opacity-50">Mot de passe oublié ?</button>
+                  <button type="button" onClick={() => changeMode("magic")} className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer py-1">Recevoir un lien sans mot de passe</button>
+                </div>
+              )}
               <button type="button" onClick={() => changeMode("social")} className="font-body text-xs text-gray-500 bg-transparent border-none cursor-pointer py-2">← Retour</button>
             </div>
           )}
