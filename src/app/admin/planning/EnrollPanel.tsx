@@ -287,7 +287,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   const nomActuel = (e: any): string => {
     const fam = families.find((f: any) => f.firestoreId === e.familyId);
-    const child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
+    let child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
+    if (!child && e.childId) {
+      // L'inscription garde le familyId du moment : si l'enfant a depuis
+      // changé de fiche (« Lier cavaliers », fusion, fiche recréée), on le
+      // retrouve par son id à travers TOUTES les familles plutôt que de
+      // retomber sur la copie figée (souvent le prénom seul).
+      for (const f of families) {
+        const c = ((f as any).children || []).find((c: any) => c.id === e.childId);
+        if (c) { child = c; break; }
+      }
+    }
     if (!child) return e.childName || "—";
     const nom = `${child.firstName || ""} ${child.lastName || ""}`.trim();
     return nom || e.childName || "—";

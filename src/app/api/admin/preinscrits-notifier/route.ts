@@ -27,10 +27,34 @@ const BCC_SUIVI = "ceagon50@gmail.com";
 /** Rassemble les pré-inscrits par famille, sur les créneaux à venir. */
 async function collecter() {
   const aujourdhui = new Date().toISOString().split("T")[0];
-  const snap = await adminDb
-    .collection("creneaux")
-    .where("date", ">=", aujourdhui)
-    .get();
+  const [snap, famSnap] = await Promise.all([
+    adminDb.collection("creneaux").where("date", ">=", aujourdhui).get(),
+    adminDb.collection("families").get(),
+  ]);
+
+  // Index des familles par id, et des enfants par childId. L'inscription d'un
+  // créneau garde le familyId du moment : si l'enfant a depuis changé de
+  // fiche (« Lier cavaliers », fusion de doublons, fiche recréée), l'ancien
+  // id pointe dans le vide et la famille apparaissait « sans email » alors
+  // que sa fiche actuelle en a un. On résout donc la fiche RÉELLE : par
+  // familyId, en suivant les fusions (mergedInto), puis par l'enfant lui-même.
+  const parId = new Map<string, any>();
+  const parEnfant = new Map<string, { fam: any; child: any }>();
+  famSnap.docs.forEach(d => {
+    const fd = { id: d.id, ...(d.data() as any) };
+    parId.set(d.id, fd);
+    (fd.children || []).forEach((c: any) => { if (c?.id) parEnfant.set(c.id, { fam: fd, child: c }); });
+  });
+  const resoudreFamille = (e: any): any => {
+    let fam = parId.get(e.familyId);
+    let garde = 0;
+    while (fam?.mergedInto && parId.get(fam.mergedInto) && garde++ < 3) fam = parId.get(fam.mergedInto);
+    const viaEnfant = e.childId ? parEnfant.get(e.childId)?.fam : null;
+    // La fiche portant réellement l'enfant prime dès que la piste familyId
+    // est morte ou muette (fiche disparue, fusionnée, sans email).
+    if (viaEnfant && (!fam || fam.status === "merged" || !(fam.parentEmail || "").trim())) fam = viaEnfant;
+    return fam || null;
+  };
 
   const parFamille = new Map<string, {
     familyId: string; familyName: string; email: string;
@@ -46,16 +70,26 @@ async function collecter() {
     for (const e of c.enrolled || []) {
       if (!e?.preinscription) continue;
       if (e.preinscriptionMode === "stage") continue;
-      const cle = e.familyId;
+      const fam = resoudreFamille(e);
+      const cle = fam?.id || e.familyId;
       if (!cle) continue;
       if (!parFamille.has(cle)) {
         parFamille.set(cle, {
-          familyId: cle, familyName: e.familyName || "", email: "", lignes: [],
+          familyId: cle,
+          familyName: fam?.parentName || e.familyName || "",
+          email: (fam?.parentEmail || "").trim(),
+          lignes: [],
         });
       }
       const jourIndex = c.date ? (new Date(c.date + "T12:00:00Z").getUTCDay() + 6) % 7 : -1;
+      // Nom actuel de la fiche (Prénom Nom) plutôt que la copie figée du
+      // créneau, souvent réduite au prénom.
+      const enfant = e.childId ? parEnfant.get(e.childId)?.child : null;
+      const nomEnfant = enfant
+        ? `${enfant.firstName || ""} ${enfant.lastName || ""}`.trim() || e.childName || ""
+        : e.childName || "";
       parFamille.get(cle)!.lignes.push({
-        childName: e.childName || "",
+        childName: nomEnfant,
         activite: c.activityTitle || "",
         date: c.date || "",
         horaire: `${c.startTime || ""}–${c.endTime || ""}`,
@@ -63,18 +97,6 @@ async function collecter() {
         waKey: c.activityId && jourIndex >= 0 ? `${c.activityId}-${jourIndex}-${c.startTime}` : "",
       });
     }
-  }
-
-  // Emails résolus côté serveur, jamais transmis par le navigateur.
-  for (const f of parFamille.values()) {
-    try {
-      const fam = await adminDb.collection("families").doc(f.familyId).get();
-      if (fam.exists) {
-        const fd = fam.data() as any;
-        f.email = (fd.parentEmail || "").trim();
-        if (!f.familyName) f.familyName = fd.parentName || "";
-      }
-    } catch { /* famille supprimée : laissée sans email, signalée à l'écran */ }
   }
 
   for (const f of parFamille.values()) {
