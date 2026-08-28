@@ -293,8 +293,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return nom || e.childName || "—";
   };
 
-  const nomFoyerDeduit = (() => {
-    const brut = (newFam.parentName || "").trim();
+  const nomDeduitDuParent = (parentName: string) => {
+    const brut = (parentName || "").trim();
     if (!brut) return "";
     const mots = brut.split(/\s+/).filter(Boolean);
     const estMaj = (m: string) => m.length > 1 && m === m.toUpperCase() && /[A-ZÀ-Ý]/.test(m);
@@ -304,7 +304,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     if (majuscules.length > 0) return majuscules.join(" ");
     // Aucune majuscule ("Marie Dupont") : convention nom en dernier.
     return (mots[mots.length - 1] || "").toUpperCase();
-  })();
+  };
+  const nomFoyerDeduit = nomDeduitDuParent(newFam.parentName);
 
   const [newChildren, setNewChildren] = useState<any[]>([{ firstName: "", lastName: null as string | null, birthDate: "", galopLevel: "—" }]);
   const [localFamilies, setLocalFamilies] = useState<(Family & { firestoreId: string })[]>([]);
@@ -2023,7 +2024,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     // Le cavalier est simplement posé sur le créneau, marqué pré-inscrit.
     if (inscriptionMode === "annuel" && preinscription) {
       if (!selChild || !fam) return;
-      const childName = (fam.children || []).find((c: any) => c.id === selChild)?.firstName || "—";
+      // childName (calculé plus haut) porte « Prénom Nom » : ne pas le
+      // réécraser par le prénom seul — c'est lui qui est copié sur le créneau.
       setEnrolling(true);
       try {
         await onEnroll(creneau.id!, {
@@ -3489,7 +3491,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   );
                 })}
                   {/* Ajout d'un membre de la famille sans quitter la modale */}
-                  <button onClick={() => { setChildDraft({ firstName: "", lastName: fam.children?.[0]?.lastName || "", birthDate: "", galopLevel: "—" }); setShowAddChild(v => !v); }}
+                  <button onClick={() => { setChildDraft({ firstName: "", lastName: fam.children?.[0]?.lastName || nomDeduitDuParent(fam.parentName), birthDate: "", galopLevel: "—" }); setShowAddChild(v => !v); }}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-blue-300 bg-blue-50 text-blue-700 font-body text-sm cursor-pointer hover:bg-blue-100">
                     <Plus size={12}/> Ajouter un cavalier
                   </button>
@@ -3552,7 +3554,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </button>
                     );
                   })}
-                  <button onClick={() => { setChildDraft({ firstName: "", lastName: fam.children?.[0]?.lastName || "", birthDate: "", galopLevel: "—" }); setShowAddChild(v => !v); }}
+                  <button onClick={() => { setChildDraft({ firstName: "", lastName: fam.children?.[0]?.lastName || nomDeduitDuParent(fam.parentName), birthDate: "", galopLevel: "—" }); setShowAddChild(v => !v); }}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-green-400 bg-green-50 text-green-700 font-body text-sm cursor-pointer hover:bg-green-100">
                     <Plus size={12}/> Ajouter un cavalier
                   </button>
