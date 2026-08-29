@@ -577,7 +577,10 @@ function FacturationModal({ recurrences, onClose, onDone }: {
             // comptable ni rubrique — les statistiques la rangeaient dans
             // « autre » et le comptable devait la reclasser à la main.
             category: r.categorie || "autre",
-            compteComptable: r.compteComptable || compteDeCategorie(r.categorie),
+            // Compte DÉDUIT de la catégorie, pas recopié depuis la récurrence :
+            // corriger un code dans le plan comptable corrige alors toutes les
+            // factures suivantes, sans rouvrir chaque récurrence.
+            compteComptable: r.categorie ? compteDeCategorie(r.categorie) : (r.compteComptable || compteDeCategorie(undefined)),
             activityType: r.categorie || "autre",
             recurrenceId: r.id,
             moisFacture: moisKey,

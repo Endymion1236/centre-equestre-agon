@@ -98,7 +98,10 @@ export async function GET(req: NextRequest) {
           // catégorie choisie sur la récurrence. Sans elle, repli sur
           // « autre » (compte 708000) plutôt qu'une ligne non classée.
           category: r.categorie || "autre",
-          compteComptable: r.compteComptable || compteDeCategorie(r.categorie),
+          // Compte DÉDUIT de la catégorie, pas recopié depuis la récurrence :
+          // corriger un code dans le plan comptable corrige alors toutes les
+          // factures suivantes, sans rouvrir chaque récurrence.
+          compteComptable: r.categorie ? compteDeCategorie(r.categorie) : (r.compteComptable || compteDeCategorie(undefined)),
           activityType: r.categorie || "autre",
           recurrenceId: recDoc.id,
           moisFacture: moisKey,
