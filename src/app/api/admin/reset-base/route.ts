@@ -62,10 +62,10 @@ const RESETTABLE_COLLECTIONS = [
   "emailsReprise",
   "payment_declarations",
   "cheques-differes",
-  "fidelite_transactions",
+  "fidelite", // soldes et historique de fidélité ("fidelite_transactions" n'existe pas)
   "rattrapages",
   "devis",
-  "cards", // cartes cadeau / carnets
+  "cartes", // cartes / carnets de séances ("cards" n'existe pas)
   // Noms RÉELS des collections SEPA. Les anciens ("sepa_mandats", etc.)
   // n'existaient pas : le compteur affichait 0 et cocher la case n'effaçait
   // rien — un outil de remise à zéro qui ment sur ce qu'il va faire.
@@ -77,7 +77,7 @@ const RESETTABLE_COLLECTIONS = [
   // ─── Métier (optionnel) ─────────────────────────────
   "forfaits",
   "creneaux",
-  "indispos",
+  "indisponibilites", // ("indispos" n'existe pas)
   "soins",
   "families", // ⚠️ supprime aussi les enfants imbriqués
   "equides",
