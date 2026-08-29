@@ -369,8 +369,28 @@ export default function PaiementsPage() {
 
       // ── Mode SEPA : créer les échéances au lieu d'encaisser directement ──
       if (quickMode === "prelevement_sepa") {
-        const nbEch = parseInt(quickRef || "10");
+        // Le nombre d'échéances transite par quickRef (le même champ que la
+        // référence) : on le borne, plutôt que de risquer un NaN qui créerait
+        // ZÉRO échéance tout en marquant la facture comme planifiée.
+        const nbEch = Math.min(36, Math.max(1, parseInt(quickRef || "10") || 10));
         const startDate = new Date(quickDate || new Date().toISOString().split("T")[0]);
+
+        // Échéances déjà créées pour cette facture ? Sans ce contrôle, un
+        // second passage produisait un second échéancier — donc un double
+        // prélèvement sur le compte de la famille.
+        const dejaSnap = await getDocs(query(
+          collection(db, "echeances-sepa"),
+          where("paymentId", "==", p.id)
+        ));
+        if (!dejaSnap.empty) {
+          const enAttente = dejaSnap.docs.filter(d => d.data().status === "pending").length;
+          toast(
+            `Cette facture a déjà ${dejaSnap.size} échéance(s) SEPA (${enAttente} en attente). Gérez-les dans Prélèvements SEPA plutôt que d'en créer de nouvelles.`,
+            "warning",
+          );
+          setQuickSaving(false);
+          return;
+        }
 
         // Trouver le mandat SEPA de cette famille
         const mandatSnap = await getDocs(collection(db, "mandats-sepa"));
@@ -408,9 +428,13 @@ export default function PaiementsPage() {
           });
         }
 
-        // Marquer le paiement comme SEPA (mais pas payé — il sera payé quand la remise passera)
+        // Marquer le paiement comme SEPA (mais pas payé — il sera payé quand la
+        // remise passera). Le statut « sepa_scheduled » est ce qui sort la
+        // facture des Impayés : sans lui, elle y restait et pouvait être
+        // planifiée une seconde fois — double prélèvement à la clé.
         await updateDoc(doc(db, "payments", p.id), {
           paymentMode: "prelevement_sepa",
+          status: "sepa_scheduled",
           paymentRef: `${nbEch}× SEPA · ${mandatData.mandatId}`,
           updatedAt: serverTimestamp(),
         });
@@ -2125,8 +2149,11 @@ export default function PaiementsPage() {
                   <p className="font-body text-[10px] text-slate-400 mt-1">Modifiable si encaissement différé</p>
                 </div>
               )}
-              {/* Référence (masquée en mode cheque_differe : le N° se saisit par chèque) */}
-              {quickMode !== "cheque_differe" && (
+              {/* Référence — masquée en mode cheque_differe (le N° se saisit par
+                  chèque) ET en mode SEPA, où ce même champ porte le NOMBRE
+                  d'échéances : y écrire un texte libre effaçait le compte et
+                  ne créait alors aucune échéance. */}
+              {quickMode !== "cheque_differe" && quickMode !== "prelevement_sepa" && (
                 <div>
                   <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Référence (optionnel)</label>
                   <input value={quickRef} onChange={e => setQuickRef(e.target.value)}
