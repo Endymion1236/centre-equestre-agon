@@ -1682,12 +1682,38 @@ export default function ParametresPage() {
                       <span className="font-body text-sm text-blue-800">{item.label}</span>
                     </div>
                     <button type="button" onClick={async () => {
+                      // `encaissements` est scellé par les règles Firestore
+                      // (allow delete: if false) au titre de l'inaltérabilité
+                      // comptable — loi anti-fraude TVA 2018 / NF525 / CGI art.
+                      // 286-I-3°bis. Le bouton promettait un vidage que la base
+                      // refuse : mieux vaut le dire que laisser croire que la
+                      // caisse a été remise à zéro.
+                      if (item.col === "encaissements") {
+                        alert(
+                          "Le journal des encaissements est INALTÉRABLE : les règles Firestore " +
+                          "interdisent toute suppression, y compris à l'administrateur (NF525).\n\n" +
+                          "Pour corriger une écriture, passez par une contre-passation. " +
+                          "Pour repartir d'une base vierge avant la bascule, utilisez « Réinitialiser la base » " +
+                          "(SDK serveur), qui journalise l'opération dans resetLogs."
+                        );
+                        return;
+                      }
                       if (!confirm(`Supprimer TOUS les documents de "${item.label}" ?\n\nAction irréversible.`)) return;
                       try {
                         const snap = await getDocs(collection(db, item.col));
-                        let count = 0;
-                        for (const d of snap.docs) { await deleteDoc(doc(db, item.col, d.id)); count++; }
-                        alert(`✅ ${count} document(s) supprimé(s) dans "${item.label}".`);
+                        let count = 0, refus = 0;
+                        for (const d of snap.docs) {
+                          try { await deleteDoc(doc(db, item.col, d.id)); count++; }
+                          catch { refus++; }
+                        }
+                        // Suppression document par document depuis le navigateur :
+                        // chaque document passe par les règles, et certaines
+                        // collections en refusent une partie. Sans ce décompte,
+                        // un vidage partiel passait pour un vidage complet.
+                        alert(
+                          `${count} document(s) supprimé(s) dans "${item.label}".` +
+                          (refus > 0 ? `\n\n⚠️ ${refus} refusé(s) par les règles Firestore — collection protégée.` : "")
+                        );
                       } catch (e) { console.error(e); alert("Erreur."); }
                     }} className="font-body text-[10px] text-red-500 bg-white border border-red-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-red-100 border-solid">
                       Vider

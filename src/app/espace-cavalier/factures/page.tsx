@@ -174,6 +174,7 @@ export default function FacturesPage() {
   const [declareChequeRef, setDeclareChequeRef] = useState("");
   const [declareCashDate, setDeclareCashDate] = useState("");
   const [declareSending, setDeclareSending] = useState(false);
+  const [cancelling, setCancelling] = useState<string | null>(null);
   const [declareSuccess, setDeclareSuccess] = useState(false);
 
   useEffect(() => {
@@ -340,6 +341,41 @@ export default function FacturesPage() {
       toast("Impossible d'enregistrer votre réponse. Réessayez ou contactez le club.", "error");
     }
     setAnsweringDevis(null);
+  };
+
+  /**
+   * Renoncer à une réservation non réglée.
+   *
+   * Le parcours crée l'inscription, la réservation et le paiement AVANT
+   * d'envoyer vers la banque. Sans ce bouton, une famille qui changeait
+   * d'avis gardait indéfiniment un « reste à régler » dans son espace, et le
+   * club une facture fantôme dans ses impayés — la seule issue était
+   * d'appeler le centre.
+   *
+   * Le serveur refuse dès qu'un centime a été encaissé.
+   */
+  const cancelReservation = async (payment: Payment) => {
+    const lignes = (payment.items || []).map((i: any) => i.activityTitle).filter(Boolean).join(", ");
+    if (!confirm(
+      `Annuler cette réservation ?\n\n${lignes}\n\nLa place sera immédiatement remise à la vente. ` +
+      `Rien n'a été encaissé, tu n'as donc rien à payer.`
+    )) return;
+    setCancelling(payment.id!);
+    try {
+      const res = await authFetch("/api/annuler-reservation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: payment.id }),
+      });
+      const data = await res.json().catch(() => ({} as any));
+      if (!res.ok) throw new Error(data?.error || "Annulation impossible.");
+      setPayments((current) => current.map((item) =>
+        item.id === payment.id ? ({ ...item, status: "cancelled" } as Payment) : item
+      ));
+    } catch (e: any) {
+      alert(e?.message || "Annulation impossible pour le moment. Contacte le club.");
+    }
+    setCancelling(null);
   };
 
   const startOnlinePayment = async (payment: Payment) => {
@@ -605,6 +641,19 @@ export default function FacturesPage() {
                 <button type="button" onClick={() => openDeclaration(payment)} className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-gray-600 bg-gray-100 border-none cursor-pointer">
                   Déclarer un règlement
                 </button>
+                {/* Renoncer. Visible uniquement tant que RIEN n'a été encaissé :
+                    dès le premier centime, l'annulation relève des conditions
+                    d'annulation et passe par le club. */}
+                {(payment.paidAmount || 0) === 0 && !(payment as any).invoiceNumber && (
+                  <button
+                    type="button"
+                    disabled={cancelling === payment.id}
+                    onClick={() => cancelReservation(payment)}
+                    className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 border-none cursor-pointer disabled:opacity-50"
+                  >
+                    {cancelling === payment.id ? <Loader2 size={14} className="animate-spin" /> : "Annuler"}
+                  </button>
+                )}
               </>
             )}
             <button type="button" onClick={() => downloadReceipt(payment)} className="w-10 h-10 rounded-xl bg-gray-50 text-gray-600 border-none cursor-pointer flex items-center justify-center" title="Télécharger la facture">
