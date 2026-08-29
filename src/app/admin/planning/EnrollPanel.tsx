@@ -2171,7 +2171,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               setEnrolling(false);
               return;
             }
-            const mandatData = mandatSnap.docs[0].data();
+            // Plusieurs mandats actifs (changement de banque sans révocation
+            // de l'ancien) : sans tri, on rattachait les échéances à un mandat
+            // ARBITRAIRE — donc possiblement au RIB que la famille n'utilise
+            // plus, et le prélèvement serait rejeté. On prend le plus récent.
+            const dateMandat = (m: any) => m?.createdAt?.seconds || 0;
+            const mandatData = mandatSnap.docs
+              .map(d => d.data())
+              .sort((a: any, b: any) => dateMandat(b) - dateMandat(a))[0];
             const orderId = generateOrderId();
             for (let i = 0; i < nbEcheances; i++) {
               const echeanceDate = new Date();
