@@ -115,6 +115,8 @@ export default function SepaPage() {
 
   // Forms
   const [showNewMandat, setShowNewMandat] = useState(false);
+  /** Nom de la famille quand le formulaire arrive pré-rempli depuis la Boîte email. */
+  const [prefill, setPrefill] = useState("");
   const [newMandat, setNewMandat] = useState({ familyId: "", iban: "", bic: "", titulaire: "", libelle: "", dateSignature: new Date().toISOString().split("T")[0] });
   const [showNewEcheancier, setShowNewEcheancier] = useState(false);
   const [newEcheancier, setNewEcheancier] = useState({ mandatId: "", mandatId2: "", montantTotal: "", montant2: "", nbEcheances: "10", dateDebut: "", description: "" });
@@ -144,6 +146,31 @@ export default function SepaPage() {
   };
 
   useEffect(() => { fetchAll(); }, []);
+
+  /**
+   * Brouillon venu de la Boîte email (lecture assistée d'un RIB) : le
+   * formulaire s'ouvre pré-rempli, l'admin relit et valide. Le brouillon
+   * transite par sessionStorage — un IBAN n'a rien à faire dans une URL — et
+   * il est consommé une seule fois.
+   */
+  useEffect(() => {
+    try {
+      const brut = sessionStorage.getItem("ce_mandat_brouillon");
+      if (!brut) return;
+      sessionStorage.removeItem("ce_mandat_brouillon");
+      const d = JSON.parse(brut);
+      if (!d?.familyId) return;
+      setNewMandat(m => ({
+        ...m,
+        familyId: d.familyId,
+        iban: d.iban || "",
+        bic: d.bic || "",
+        titulaire: d.titulaire || d.parentName || "",
+      }));
+      setShowNewMandat(true);
+      setPrefill(d.parentName || "");
+    } catch { /* brouillon illisible : formulaire vierge, rien de bloquant */ }
+  }, []);
 
   // ─── Créer un mandat ───
   const handleCreateMandat = async () => {
@@ -696,6 +723,14 @@ export default function SepaPage() {
               {showNewMandat && (
                 <Card padding="md" className="mb-5 border-2 border-blue-500/20">
                   <h3 className="font-body text-sm font-semibold text-blue-800 mb-4">Nouveau mandat SEPA</h3>
+                  {prefill && (
+                    <div className="mb-4 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 font-body text-xs text-emerald-800">
+                      Pré-rempli depuis le RIB reçu par email{prefill ? <> — <strong>{prefill}</strong></> : null}.
+                      <span className="block text-[11px] text-emerald-700 mt-0.5">
+                        Relisez l&apos;IBAN et le titulaire avant de valider : le mandat sera envoyé à la famille pour signature.
+                      </span>
+                    </div>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                     <div>
                       <label className="font-body text-xs font-semibold text-gray-400 block mb-1">Famille</label>

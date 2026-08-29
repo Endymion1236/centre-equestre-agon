@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone } from "lucide-react";
+import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone, Paperclip, Landmark, AlertTriangle } from "lucide-react";
+import { formatIban } from "@/lib/sepa-validation";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
   inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
@@ -35,6 +36,11 @@ function estVocal(m: any): boolean {
 export default function BoiteAssistantPage() {
   const [vocal, setVocal] = useState<any>(null);
   const [vocalLoading, setVocalLoading] = useState(false);
+  // Pièces jointes du mail sélectionné + lecture assistée d'un RIB
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [ribBusy, setRibBusy] = useState<string>("");
+  const [rib, setRib] = useState<any>(null);
+  const [ribErr, setRibErr] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [from, setFrom] = useState("");
@@ -258,6 +264,58 @@ export default function BoiteAssistantPage() {
     }
   };
 
+  /**
+   * Lecture assistée d'une pièce jointe RIB.
+   *
+   * L'assistant EXTRAIT et PROPOSE ; il n'enregistre rien. L'IBAN lu est
+   * vérifié par sa clé de contrôle côté serveur — une erreur de lecture est
+   * donc écartée avant d'atteindre la banque. Le mandat reste créé à la main
+   * dans Paiements → SEPA, après relecture.
+   */
+  const lireRib = async (a: any) => {
+    setRibBusy(a.attachmentId);
+    setRib(null);
+    setRibErr("");
+    try {
+      const r = await authFetch("/api/admin/rib-extract", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messageId: selectedId,
+          attachmentId: a.attachmentId,
+          mimeType: a.mimeType,
+          from,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) setRibErr(d.error || "Lecture impossible");
+      else setRib(d);
+    } catch {
+      setRibErr("Lecture impossible");
+    }
+    setRibBusy("");
+  };
+
+  /**
+   * Passe le relais au module SEPA avec le formulaire pré-rempli. Le brouillon
+   * transite par sessionStorage et non par l'URL : un IBAN n'a rien à faire
+   * dans un historique de navigation ni dans des logs.
+   */
+  const preremplirMandat = (familyId: string, parentName: string) => {
+    try {
+      sessionStorage.setItem("ce_mandat_brouillon", JSON.stringify({
+        familyId,
+        parentName,
+        iban: rib?.iban || "",
+        bic: rib?.bic || "",
+        titulaire: rib?.titulaire || "",
+      }));
+      window.location.href = "/admin/sepa";
+    } catch {
+      setRibErr("Impossible d'ouvrir le module SEPA — saisissez le mandat à la main.");
+    }
+  };
+
   const pickMessage = async (m: any) => {
     setFrom(decodeHtml(m.from || ""));
     setSubject(decodeHtml(m.subject || ""));
@@ -269,6 +327,9 @@ export default function BoiteAssistantPage() {
     setErr("");
     setSendMsg(null);
     setVocal(null);
+    setAttachments(m.docAttachments || []);
+    setRib(null);
+    setRibErr("");
     window.scrollTo({ top: 0, behavior: "smooth" });
 
     // Message du répondeur → on remplace le mail de notification par la
@@ -554,6 +615,11 @@ export default function BoiteAssistantPage() {
                           <Phone size={10} /> Vocal
                         </span>
                       )}
+                      {(m.docAttachments || []).length > 0 && (
+                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-body text-[10px] font-semibold text-slate-600">
+                          <Paperclip size={10} /> {(m.docAttachments || []).length}
+                        </span>
+                      )}
                     </div>
                     <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
                     <div className="truncate font-body text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
@@ -634,6 +700,95 @@ export default function BoiteAssistantPage() {
               {mailboxMsg.text}
             </p>
           )}
+          {/* Pièces jointes — lecture assistée d'un RIB (mandat SEPA) */}
+          {attachments.length > 0 && (
+            <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <div className="mb-1.5 flex items-center gap-1.5 font-body text-xs font-semibold text-slate-700">
+                <Paperclip size={13} /> {attachments.length} pièce{attachments.length > 1 ? "s" : ""} jointe{attachments.length > 1 ? "s" : ""}
+              </div>
+              <div className="flex flex-col gap-1.5">
+                {attachments.map((a: any) => (
+                  <div key={a.attachmentId} className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate font-body text-[11px] text-slate-600">{a.filename}</span>
+                    <button
+                      onClick={() => lireRib(a)}
+                      disabled={!!ribBusy}
+                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      {ribBusy === a.attachmentId ? <Loader2 size={12} className="animate-spin" /> : <Landmark size={12} />}
+                      Lire le RIB
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {ribErr && <p className="mt-1.5 font-body text-[11px] font-semibold text-red-600">{ribErr}</p>}
+            </div>
+          )}
+
+          {/* Résultat de lecture — propositions à relire, rien n'est enregistré */}
+          {rib && (
+            <div className={`mb-3 rounded-lg border px-3 py-2.5 ${rib.estRib && rib.ibanValide ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+              {!rib.estRib ? (
+                <div className="flex items-start gap-1.5 font-body text-xs text-amber-800">
+                  <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+                  <span>{rib.remarque || "Ce document ne ressemble pas à un RIB."}</span>
+                </div>
+              ) : (
+                <>
+                  <div className="mb-1.5 font-body text-xs font-semibold text-slate-700">Coordonnées lues — à vérifier avant de créer le mandat</div>
+                  <div className="grid gap-x-4 gap-y-0.5 font-body text-[11px] text-slate-700 sm:grid-cols-2">
+                    <div><span className="text-slate-400">Titulaire :</span> {rib.titulaire || "—"}</div>
+                    <div><span className="text-slate-400">Banque :</span> {rib.banque || "—"}</div>
+                    <div className="sm:col-span-2">
+                      <span className="text-slate-400">IBAN :</span>{" "}
+                      {rib.ibanValide
+                        ? <span className="font-mono font-semibold">{formatIban(rib.iban)}</span>
+                        : <span className="font-semibold text-red-600">{rib.ibanBrut || "non lu"} — {rib.ibanErreur}</span>}
+                    </div>
+                    <div><span className="text-slate-400">BIC :</span> {rib.bic || (rib.bicErreur ? <span className="text-red-600">{rib.bicErreur}</span> : "déduit à la création")}</div>
+                  </div>
+                  {rib.ibanValide && (
+                    <div className="mt-1 font-body text-[10px] text-emerald-700">✓ Clé de contrôle de l'IBAN vérifiée</div>
+                  )}
+                  {rib.remarque && (
+                    <div className="mt-1 flex items-start gap-1.5 font-body text-[11px] text-amber-800">
+                      <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {rib.remarque}
+                    </div>
+                  )}
+                  {rib.ibanValide && (
+                    <div className="mt-2 border-t border-white/60 pt-2">
+                      {(rib.candidats || []).length === 0 ? (
+                        <div className="font-body text-[11px] text-slate-600">
+                          Aucune fiche famille reconnue — ouvrez Paiements → SEPA et choisissez la famille à la main.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mb-1 font-body text-[11px] text-slate-600">Créer le mandat pour :</div>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(rib.candidats || []).map((c: any) => (
+                              <button
+                                key={c.familyId}
+                                onClick={() => preremplirMandat(c.familyId, c.parentName)}
+                                title={`Rapprochement par ${c.motif}`}
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 font-body text-[11px] font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+                              >
+                                <Landmark size={12} /> {c.parentName}
+                                <span className="font-normal text-slate-400">({c.motif})</span>
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                      <div className="mt-1.5 font-body text-[10px] text-slate-500">
+                        Le formulaire SEPA s'ouvrira pré-rempli. Le mandat n'est créé qu'après votre validation, et il reste à faire signer.
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           <input
             value={from}
             onChange={(e) => setFrom(e.target.value)}
