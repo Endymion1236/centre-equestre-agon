@@ -194,6 +194,16 @@ export interface GmailMessage {
   /** Pièce jointe audio (message vocal du répondeur), si présente. */
   audioAttachmentId?: string;
   audioFilename?: string;
+  /** Pièces jointes lisibles (PDF, photos) — RIB, certificats médicaux… */
+  docAttachments?: DocAttachment[];
+}
+
+/** Pièce jointe exploitable par l'assistant (PDF ou image). */
+export interface DocAttachment {
+  attachmentId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
 }
 
 /**
@@ -220,6 +230,34 @@ function findAudioAttachment(
     return null;
   };
   return walk(payload);
+}
+
+/**
+ * Pièces jointes PDF/image d'un message (hors audio, traité à part).
+ *
+ * Le payload est déjà chargé (format=full) : aucun appel réseau. On ne
+ * remonte que ce qu'un modèle sait lire — un .docx ou un .zip n'a rien à
+ * faire dans le bouton « Lire le RIB ».
+ */
+function findDocAttachments(payload: any): DocAttachment[] {
+  const out: DocAttachment[] = [];
+  const walk = (part: any) => {
+    if (!part) return;
+    const mime = (part.mimeType || "").toLowerCase();
+    const name = part.filename || "";
+    const lisible = mime === "application/pdf" || mime.startsWith("image/");
+    if (lisible && part.body?.attachmentId && name) {
+      out.push({
+        attachmentId: part.body.attachmentId,
+        filename: name,
+        mimeType: mime,
+        size: Number(part.body.size || 0),
+      });
+    }
+    (part.parts || []).forEach(walk);
+  };
+  walk(payload);
+  return out;
 }
 
 /**
@@ -305,6 +343,7 @@ export async function gmailListRecent(max = 25, pageToken?: string): Promise<{ m
         body: extractBody(m.payload),
         audioAttachmentId: audio?.attachmentId,
         audioFilename: audio?.filename,
+        docAttachments: findDocAttachments(m.payload),
       });
     } catch {
       /* skip */
