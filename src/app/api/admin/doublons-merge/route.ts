@@ -51,18 +51,53 @@ export async function POST(req: NextRequest) {
     const merge = mergeSnap.data() as any;
     const keepName = keep.parentName || "";
 
-    // Décompte par collection
+    // ── Appariement des cavaliers ─────────────────────────────────────────
+    // Les deux fiches d'un doublon portent souvent les MÊMES enfants sous des
+    // ids différents (fiche recréée à la connexion du parent, enfant re-saisi).
+    // Les additionner donnerait « Garance » et « Aurèle » en double. On
+    // reconnaît un même cavalier par prénom (sans accents ni majuscules) +
+    // date de naissance identiques — le NOM peut différer (coquille, nom de
+    // l'autre parent). Un enfant apparié n'est pas dupliqué : toutes ses
+    // références (créneaux, forfaits, réservations, paiements…) sont
+    // repointées vers le cavalier conservé.
+    const norm = (s: string) => (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const dateKey = (b: any): string => {
+      if (!b) return "";
+      const d = typeof b?.toDate === "function" ? b.toDate() : new Date(b);
+      return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+    };
+    const keepChildren: any[] = keep.children || [];
+    const keepChildIds = new Set(keepChildren.map((c: any) => c.id));
+    const childMap = new Map<string, any>(); // id absorbé -> enfant conservé
+    const childrenToAdd: any[] = [];
+    for (const c of (merge.children || []) as any[]) {
+      if (keepChildIds.has(c.id)) continue; // strictement le même enregistrement
+      const candidats = keepChildren.filter((k: any) => norm(k.firstName) && norm(k.firstName) === norm(c.firstName));
+      // Date identique d'abord ; à défaut, prénom seul quand une date manque
+      // d'un côté. Deux dates renseignées et DIFFÉRENTES = deux enfants.
+      const exact = candidats.find((k: any) => dateKey(k.birthDate) && dateKey(k.birthDate) === dateKey(c.birthDate));
+      const souple = candidats.find((k: any) => !dateKey(k.birthDate) || !dateKey(c.birthDate));
+      const cible = exact || souple;
+      if (cible && c.id) childMap.set(c.id, cible);
+      else childrenToAdd.push(c);
+    }
+    const nomCible = (k: any) => `${k.firstName || ""} ${k.lastName || ""}`.trim();
+
+    // Décompte par collection — avec re-pointage childId des enfants appariés
     const counts: Record<string, number> = {};
     const reassignOps: { ref: FirebaseFirestore.DocumentReference; data: any }[] = [];
     for (const coll of REASSIGN) {
       const snap = await adminDb.collection(coll).where("familyId", "==", mergeId).get();
       counts[coll] = snap.size;
-      snap.docs.forEach(d => reassignOps.push({ ref: d.ref, data: { familyId: keepId, familyName: keepName } }));
+      snap.docs.forEach(d => {
+        const dd = d.data() as any;
+        const cible = dd.childId ? childMap.get(dd.childId) : null;
+        reassignOps.push({ ref: d.ref, data: {
+          familyId: keepId, familyName: keepName,
+          ...(cible ? { childId: cible.id, childName: nomCible(cible) || dd.childName || "" } : {}),
+        } });
+      });
     }
-
-    // Enfants à ajouter (dédoublonnage par id)
-    const keepChildIds = new Set((keep.children || []).map((c: any) => c.id));
-    const childrenToAdd = (merge.children || []).filter((c: any) => !keepChildIds.has(c.id));
 
     // Créneaux contenant le compte absorbé dans enrolled
     const crSnap = await adminDb.collection("creneaux").get();
@@ -73,7 +108,14 @@ export async function POST(req: NextRequest) {
       const enrolled = Array.isArray(c.enrolled) ? c.enrolled : [];
       if (!enrolled.some((e: any) => e?.familyId === mergeId)) return;
       creneauxTouches++;
-      const newEnrolled = enrolled.map((e: any) => e?.familyId === mergeId ? { ...e, familyId: keepId, familyName: keepName } : e);
+      const newEnrolled = enrolled.map((e: any) => {
+        if (e?.familyId !== mergeId) return e;
+        const cible = e.childId ? childMap.get(e.childId) : null;
+        return {
+          ...e, familyId: keepId, familyName: keepName,
+          ...(cible ? { childId: cible.id, childName: nomCible(cible) || e.childName || "" } : {}),
+        };
+      });
       creneauOps.push({ ref: d.ref, data: { enrolled: newEnrolled } });
     });
 
@@ -86,6 +128,12 @@ export async function POST(req: NextRequest) {
       enfantsConserves: (keep.children || []).map(nomEnfant),
       enfantsDeplaces: childrenToAdd.map(nomEnfant),
       enfantsAjoutes: childrenToAdd.length,
+      // Cavaliers reconnus IDENTIQUES (même prénom + date de naissance) :
+      // non dupliqués, leurs inscriptions sont repointées vers « vers ».
+      enfantsFusionnes: [...childMap.entries()].map(([id, k]) => {
+        const src = (merge.children || []).find((c: any) => c.id === id);
+        return { de: nomEnfant(src || {}), vers: nomEnfant(k) };
+      }),
       reassign: counts,
       creneauxTouches,
     };
@@ -116,6 +164,9 @@ export async function POST(req: NextRequest) {
     await adminDb.collection("family-merges").add({
       keepId, mergeId, keepName: keep.parentName || "", mergeName: merge.parentName || "",
       counts, enfantsAjoutes: childrenToAdd.length, creneauxTouches,
+      // Paires d'ids appariés (absorbé -> conservé) : indispensable pour
+      // comprendre, après coup, où sont passées les références d'un cavalier.
+      enfantsApparies: [...childMap.entries()].map(([de, k]) => ({ de, vers: k.id })),
       mergedBy: (auth as any)?.email || "admin", mergedAt: new Date(),
     });
 

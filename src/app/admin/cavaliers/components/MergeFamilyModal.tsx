@@ -82,6 +82,12 @@ export default function MergeFamilyModal({ sourceFamilyId, families, onClose, on
                 {Object.entries(preview.reassign).map(([k, v]: any) => v > 0 && <span key={k}>{v} {k}</span>)}
                 {preview.creneauxTouches > 0 && <span>{preview.creneauxTouches} créneau(x)</span>}
               </div>
+              {(preview.enfantsFusionnes || []).length > 0 && (
+                <div className="mt-1.5 text-indigo-800">
+                  {(preview.enfantsFusionnes as any[]).length} cavalier(s) reconnus identiques (même prénom + date de naissance) :
+                  non dupliqués, leurs inscriptions sont repointées — {(preview.enfantsFusionnes as any[]).map(p => p.vers).join(", ")}.
+                </div>
+              )}
             </div>
           )}
           {err && <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 font-body text-xs text-rose-700">{err}</div>}
