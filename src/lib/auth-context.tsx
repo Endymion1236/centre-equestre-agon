@@ -85,82 +85,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           if (!resolved) setFamily({ id: familySnap.id, ...familySnap.data() } as Family);
         } else {
-          // 2. Chercher une fiche famille existante par email (créée par l'admin)
+          // 2. Rattachement à une fiche pré-créée par l'admin — CÔTÉ SERVEUR.
+          //
+          // Cette étape se faisait ici même : requête `families` par email
+          // puis recopie de la fiche entière sous l'uid. La copie emportait
+          // `linkedChildren`, le champ qui autorise à réserver pour l'enfant
+          // d'une autre famille : le navigateur composant le document, il
+          // suffisait de créer sa fiche à la première connexion avec les liens
+          // de son choix. Les règles interdisent désormais à une famille
+          // d'écrire ces champs — le report est fait par /api/famille/lier-compte
+          // en Admin SDK, après vérification de l'adresse du jeton.
+          //
+          // Bénéfice au passage : la requête par email était régulièrement
+          // refusée par les règles, et une famille pré-inscrite repartait alors
+          // sur une fiche vierge, sans ses enfants. L'Admin SDK ne connaît pas
+          // ce cas.
           let linked = false;
-          if (firebaseUser.email) {
-            try {
-              const emailQuery = query(
-                collection(db, "families"),
-                where("parentEmail", "==", firebaseUser.email)
-              );
-              const emailSnap = await getDocs(emailQuery);
-
-              if (!emailSnap.empty) {
-                // Trouvé ! On lie le compte auth à cette fiche existante
-                const existingDoc = emailSnap.docs[0];
-                const existingData = existingDoc.data();
-                const provider = firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook";
-
-                const familyData = {
-                  ...existingData,
-                  authUid: firebaseUser.uid,
-                  authProvider: provider,
-                  parentName: existingData.parentName || firebaseUser.displayName || "",
-                  updatedAt: serverTimestamp(),
-                };
-
-                // 1. Créer/mettre à jour la fiche avec l'uid comme ID
-                await setDoc(familyRef, familyData);
-                setFamily({ id: firebaseUser.uid, ...familyData } as unknown as Family);
+          try {
+            const token = await firebaseUser.getIdToken();
+            const res = await fetch("/api/famille/lier-compte", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.lie && data.family) {
+                setFamily(data.family as Family);
                 linked = true;
-
-                // 2. Supprimer l'ancienne fiche SEULEMENT si différente et si le setDoc a réussi
-                // On ne bloque pas si cette suppression échoue (droits insuffisants = pas grave)
-                if (existingDoc.id !== firebaseUser.uid) {
-                  try {
-                    await deleteDoc(doc(db, "families", existingDoc.id));
-                  } catch (delErr) {
-                    // Pas critique : la fiche uid existe déjà, l'ancienne sera ignorée
-                    console.warn(`Ancienne fiche non supprimée (sera ignorée) : ${existingDoc.id}`);
-                  }
-                }
-                console.log(`Compte lié : ${firebaseUser.email} → uid ${firebaseUser.uid}`);
-              }
-            } catch (e: any) {
-              // Firebase Security Rules peuvent refuser la query list quand la
-              // collection contient des docs dont `parentEmail` ne matche pas
-              // `request.auth.token.email`. C'est un cas edge — la query ne
-              // sert qu'à lier un compte Google à une fiche pré-créée par
-              // l'admin. Si elle échoue, on bascule simplement en création de
-              // nouvelle fiche (étape 3).
-              if (e?.code === "permission-denied") {
-                console.info(
-                  "Query families par email non autorisée (cas normal si aucune fiche pré-existante). Bascule en création."
-                );
-              } else {
-                console.error("Erreur recherche email:", e);
               }
             }
+          } catch (e) {
+            console.warn("Rattachement de compte impossible, bascule en création:", e);
           }
 
           if (!linked) {
-            // 3. Aucune fiche trouvée → créer un nouveau profil
-            const newFamily: Partial<Family> = {
-              parentName: firebaseUser.displayName || "",
-              parentEmail: firebaseUser.email || "",
-              parentPhone: "",
-              authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
-              authUid: firebaseUser.uid,
-              children: [],
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-            await setDoc(familyRef, {
-              ...newFamily,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
-            setFamily({ id: firebaseUser.uid, ...newFamily } as Family);
+            // La route serveur crée la fiche vierge quand aucune n'existe :
+            // si on arrive ici, c'est qu'elle a échoué (réseau, incident).
+            // On ne crée plus la fiche depuis le navigateur — les règles
+            // interdisent désormais à une famille de se déclarer elle-même
+            // `parentEmail`, `authUid` et `authProvider`.
+            console.error("Fiche famille indisponible — nouvelle tentative à la prochaine connexion.");
+            setFamily(null);
           }
         }
         } // fin else !isStaff

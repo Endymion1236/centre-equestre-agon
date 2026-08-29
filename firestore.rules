@@ -38,18 +38,59 @@ service cloud.firestore {
     // On vérifie donc d'abord familyId == auth.uid (le plus fiable, ne dépend
     // pas du contenu). On garde les fallbacks sur des champs internes pour
     // compatibilité avec d'anciens docs (uid, authUid, parentEmail).
+    // ── Champs ADMINISTRATIFS : jamais écrits par la famille ──────────────
+    //
+    // `linkedChildren` est le plus important. C'est LUI qui autorise à
+    // réserver pour l'enfant d'une AUTRE famille (cas des grands-parents), et
+    // /api/enroll s'y fie comme source d'autorité. Le lien n'est enregistré
+    // que dans la fiche de la famille bénéficiaire — il n'existe aucune trace
+    // réciproque côté famille source. Tant que la famille pouvait écrire ce
+    // champ depuis le navigateur, elle pouvait s'auto-attribuer n'importe quel
+    // enfant du club et l'inscrire : la vérification serveur de /api/enroll
+    // reposait sur une donnée que l'attaquant contrôlait.
+    //
+    // `tags` pilote la segmentation commerciale, `parentEmail`/`authUid`/`uid`
+    // servent au rattachement de compte, `status`/`mergedInto` à la fusion de
+    // doublons. Aucun n'a de raison d'être modifié depuis l'espace famille.
+    function champsAdminFamille() {
+      return ['linkedChildren', 'tags', 'parentEmail', 'authUid', 'uid',
+              'authProvider', 'civilite', 'status', 'mergedInto', 'createdAt'];
+    }
+
     match /families/{familyId} {
       allow read: if isStaff()
         || (isAuth() && familyId == request.auth.uid)
         || (isAuth() && resource.data.uid == request.auth.uid)
         || (isAuth() && resource.data.authUid == request.auth.uid)
         || (isAuth() && resource.data.parentEmail == request.auth.token.email);
-      allow create: if isAuth();
-      allow update, delete: if isStaff()
-        || (isAuth() && familyId == request.auth.uid)
-        || (isAuth() && resource.data.uid == request.auth.uid)
-        || (isAuth() && resource.data.authUid == request.auth.uid)
-        || (isAuth() && resource.data.parentEmail == request.auth.token.email);
+
+      // Création : le navigateur ne crée plus JAMAIS de fiche famille.
+      // C'est /api/famille/lier-compte (Admin SDK) qui s'en charge à la
+      // première connexion — soit en reprenant la fiche pré-créée par l'admin
+      // sur la même adresse, soit en créant une fiche vierge. Le compte ne
+      // peut donc plus se déclarer lui-même ses `linkedChildren`, son
+      // `parentEmail` ni son `authUid`.
+      allow create: if isStaff();
+
+      // Mise à jour : le staff fait ce qu'il veut ; la famille ne touche qu'à
+      // ses propres coordonnées et à ses enfants.
+      allow update: if isStaff()
+        || (estSaFiche(familyId)
+            && !request.resource.data.diff(resource.data)
+                 .affectedKeys().hasAny(champsAdminFamille()));
+
+      // Suppression réservée au staff : une famille qui efface sa fiche
+      // emporte l'historique de ses enfants.
+      allow delete: if isStaff();
+    }
+
+    function estSaFiche(familyId) {
+      return isAuth() && (
+        familyId == request.auth.uid
+        || resource.data.uid == request.auth.uid
+        || resource.data.authUid == request.auth.uid
+        || resource.data.parentEmail == request.auth.token.email
+      );
     }
 
     // ── Planning (créneaux) ───────────────────────────────────────────────
@@ -183,7 +224,24 @@ service cloud.firestore {
     match /mandats-sepa/{docId} {
       allow read: if isAdmin()
         || (isAuth() && resource.data.familyId == request.auth.uid);
-      allow write: if isAdmin();
+      allow create, delete: if isAdmin();
+      // RÉVOCATION PAR LA FAMILLE. Le règlement SEPA donne au débiteur le
+      // droit de révoquer son mandat à tout moment. Le bouton existait dans
+      // l'espace famille, mais `allow write: if isAdmin()` refusait l'écriture :
+      // la famille recevait systématiquement « Impossible de révoquer le
+      // mandat » (audit complémentaire).
+      //
+      // On ouvre le strict nécessaire : passer SON mandat à "revoked", et rien
+      // d'autre. L'IBAN, le RUM, la date de signature et la famille restent
+      // scellés, et un mandat révoqué ne peut pas être réactivé depuis le
+      // navigateur.
+      allow update: if isAdmin()
+        || (isAuth()
+            && resource.data.familyId == request.auth.uid
+            && resource.data.status != "revoked"
+            && request.resource.data.status == "revoked"
+            && request.resource.data.diff(resource.data)
+                 .affectedKeys().hasOnly(['status', 'revokedAt']));
     }
     match /echeances-sepa/{docId} {
       allow read: if isAdmin()
@@ -479,8 +537,24 @@ service cloud.firestore {
 
     // ── Payment declarations (CAWL webhooks) ──────────────────────────────
     match /payment_declarations/{docId} {
-      allow read: if isAdmin();
-      allow create: if isAuth();
+      allow read: if isAdmin() || (isAuth() && resource.data.familyId == request.auth.uid);
+      // Une déclaration dit « j'ai payé tant, par tel moyen » et débloque, à la
+      // validation admin, des places tenues et la création de forfaits.
+      // `allow create: if isAuth()` laissait donc n'importe quel compte
+      // déclarer un règlement AU NOM D'UNE AUTRE FAMILLE, pour le montant de
+      // son choix, et fixer lui-même `status` (audit complémentaire).
+      // On impose la famille, le statut initial, et une liste fermée de champs.
+      allow create: if isAuth()
+        && request.resource.data.familyId == request.auth.uid
+        && request.resource.data.status == "pending_confirmation"
+        && request.resource.data.montant is number
+        && request.resource.data.montant > 0
+        && request.resource.data.keys().hasOnly([
+             'paymentId', 'familyId', 'familyName', 'familyEmail', 'montant',
+             'mode', 'note', 'activityTitle', 'status', 'type', 'paymentPlan',
+             'pendingEnrollments', 'reservationIds', 'forfaitPayloads',
+             'chequeRef', 'dateEncaissement', 'createdAt'
+           ]);
       allow update, delete: if isAdmin();
     }
 
@@ -568,12 +642,29 @@ service cloud.firestore {
     match /taches-planifiees/{docId} {
       allow read: if isStaff();
       allow create, delete: if isAdmin();
-      // Un moniteur peut mettre à jour UNIQUEMENT si :
-      //  - la tâche lui appartient (salarieId correspond à un moniteur identifié par email)
-      //  - les seuls champs modifiés sont 'done' et 'updatedAt'
+      // Un moniteur ne peut modifier que 'done' et 'updatedAt', et uniquement
+      // sur SA tâche quand celle-ci porte l'email de son ou sa titulaire.
+      //
+      // Le commentaire d'origine annonçait déjà la condition d'appartenance,
+      // mais la règle ne la vérifiait pas : n'importe quel moniteur pouvait
+      // cocher ou décocher la tâche d'un collègue (audit complémentaire).
+      //
+      // ⚠️ Contrainte du modèle de données : une tâche porte `salarieId` et
+      // `salarieName`, et la fiche `salaries-management` NE PORTE PAS d'email.
+      // Il n'existe donc aucun chemin, dans les règles, entre une tâche et le
+      // compte Firebase de son titulaire. La règle applique le contrôle dès
+      // que la tâche porte `salarieEmail`, et retombe sur l'ancien
+      // comportement quand le champ est absent (tâches déjà créées).
+      //
+      // Pour fermer complètement : ajouter un email aux fiches salariés, le
+      // reporter dans `salarieEmail` à la création des tâches, puis retirer la
+      // branche de repli ci-dessous. C'est une décision de modèle de données,
+      // pas un correctif — voir l'audit.
       allow update: if isAdmin()
         || (isMoniteur()
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['done', 'updatedAt']));
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['done', 'updatedAt'])
+            && (!('salarieEmail' in resource.data)
+                || resource.data.salarieEmail == request.auth.token.email));
     }
 
     // ── Avis satisfaction ─────────────────────────────────────────────────
