@@ -335,6 +335,12 @@ export default function SepaPage() {
     setSaving(false);
   };
 
+  /** "2026-08-29" → "29-08-26" pour un nom de fichier lisible (jamais de "/"). */
+  const nomDate = (iso: string): string => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+    return m ? `${m[3]}-${m[2]}-${m[1].slice(2)}` : "sans-date";
+  };
+
   // ─── Créer une remise SEPA ───
   const handleCreateRemise = async () => {
     if (selectedEcheances.size === 0) return;
@@ -378,7 +384,12 @@ export default function SepaPage() {
 
       // Générer le XML
       const xml = generateSepaXml(remiseData);
-      const fileName = `SEPA_${nextNum}.xml`;
+      // Nom de fichier daté : « SEPA_1.xml » ne disait rien une fois dans le
+      // dossier Téléchargements, et deux remises finissaient en « (1) »,
+      // « (2) » — impossible de savoir laquelle porter à la banque. On retient
+      // la date de PRÉLÈVEMENT (celle qui apparaîtra sur le relevé), pas la
+      // date de création.
+      const fileName = `SEPA_${nomDate(datePrlv)}_n${nextNum}.xml`;
 
       // Sauvegarder la remise
       const remiseRef = await addDoc(collection(db, "remises-sepa"), {
@@ -429,7 +440,9 @@ export default function SepaPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = remise.xmlFileName || `SEPA_${remise.numero}.xml`;
+      // Remises créées avant le nommage daté : on les redate au téléchargement
+      // plutôt que de ressortir un « SEPA_3.xml » anonyme.
+      a.download = remise.xmlFileName || `SEPA_${nomDate(remise.datePrelevement)}_n${remise.numero}.xml`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) { toast(e.message, "error"); }
