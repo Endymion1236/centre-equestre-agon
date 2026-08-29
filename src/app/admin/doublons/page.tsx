@@ -217,7 +217,23 @@ export default function DoublonsPage() {
                         <span key={`m-${n}`} className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px]">{n} (rapatrié)</span>
                       ))}
                     </div>
-                    <div className="text-[11px] text-slate-400 mt-1">Aucun cavalier n&apos;est supprimé : les deux listes sont réunies.</div>
+                    {(preview.enfantsFusionnes || []).length > 0 && (
+                      <div className="mt-1.5">
+                        <div className="text-[11px] text-indigo-700 mb-1">
+                          Cavaliers reconnus <strong>identiques</strong> (même prénom + date de naissance) — non dupliqués, leurs inscriptions sont repointées :
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {(preview.enfantsFusionnes || []).map((p: any, i: number) => (
+                            <span key={`f-${i}`} className="px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-[11px]">{p.de} → {p.vers}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="text-[11px] text-slate-400 mt-1">
+                      {(preview.enfantsFusionnes || []).length > 0
+                        ? "Les cavaliers identiques sont fusionnés ; les autres sont rapatriés — rien n'est perdu."
+                        : "Aucun cavalier n'est supprimé : les deux listes sont réunies."}
+                    </div>
                   </div>
                 )}
                 <div className="flex flex-wrap gap-x-4 gap-y-0.5">
