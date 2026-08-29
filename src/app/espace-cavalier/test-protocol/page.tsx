@@ -183,7 +183,7 @@ const SCENARIOS: Scenario[] = [
   //      donc un stage à 3 € ne laisse AUCUN solde : le prélèvement automatique
   //      ne se teste qu'avec un stage à plus de 30 € ;
   //   3. tout ce qui est encaissé ici disparaîtra au reset de la base — à
-  //      condition de le faire avant le 1er septembre, date à laquelle l'outil
+  //      condition de le faire avant le 1er octobre, date à laquelle l'outil
   //      de reset se verrouille définitivement.
   {
     id: "paiements_en_ligne",
@@ -385,7 +385,7 @@ const SCENARIOS: Scenario[] = [
         description: "Ces paiements sont réels : leur sort se décide au départ",
         steps: [
           { action: "Supprimer les trois créneaux « ZZ Test — … »", attendu: "Ils disparaissent du planning et du catalogue" },
-          { action: "Faire le reset de la base APRÈS ce protocole et AVANT le 1er septembre", attendu: "Tous ces encaissements de test disparaissent avec lui. L'outil de reset se verrouille tout seul au 1er septembre 2026 : passé cette date, plus de rattrapage possible" },
+          { action: "Faire le reset de la base APRÈS ce protocole et AVANT la bascule en production", attendu: "Tous ces encaissements de test disparaissent avec lui. L'outil de reset se verrouille tout seul au 1er octobre 2026 : passé cette date, plus de rattrapage possible" },
           { action: "Si le reset a déjà eu lieu : rembourser chaque paiement CB à la main dans le back-office Worldline", attendu: "Puis une contre-passation au journal (Paiements → Journal → Corriger). Rien ne s'efface : c'est une écriture en sens inverse, et c'est la façon normale de corriger" },
           { action: "Le bon cadeau de PAY-14", attendu: "Il vit dans une collection que le reset n'efface pas : le supprimer depuis la console Firebase, ou le laisser dormir épuisé" },
         ],
