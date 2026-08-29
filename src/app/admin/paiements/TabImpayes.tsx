@@ -222,7 +222,16 @@ export function TabImpayes({
                   {multi.map(([fid, e]) => (
                     <div key={fid} className="flex items-center justify-between gap-3 bg-white rounded-lg px-3 py-2">
                       <div className="font-body text-sm text-slate-700 min-w-0">
-                        <span className="font-semibold text-blue-800">{e.name}</span>
+                        <a
+                          href={fid
+                            ? `/admin/cavaliers?id=${encodeURIComponent(fid)}`
+                            : `/admin/cavaliers?search=${encodeURIComponent(e.name || "")}`}
+                          target="_blank" rel="noopener noreferrer"
+                          title="Ouvrir la fiche famille dans un nouvel onglet"
+                          className="font-semibold text-blue-800 no-underline hover:text-blue-500 hover:underline"
+                        >
+                          {e.name}
+                        </a>
                         <span className="text-slate-500"> · {e.pays.length} factures · {e.total.toFixed(2)}€</span>
                       </div>
                       <button onClick={() => onMultiEncaisser(fid, e.name, e.pays)}
@@ -325,7 +334,13 @@ export function TabImpayes({
               return (
                 <Card key={p.id} padding="md" className={`overflow-hidden border-l-4 ${isEcheance ? "border-l-orange-400" : "border-l-red-400"}`}>
                   {/* ── En-tête accordéon (toujours visible) ── */}
-                  <button onClick={() => toggle(p.id)} className="w-full flex items-center justify-between gap-3 bg-transparent border-none cursor-pointer text-left p-0">
+                  {/* En-tête cliquable : <div> et non <button>, pour pouvoir y
+                      loger le lien vers la fiche famille — un lien imbriqué
+                      dans un bouton est invalide et capte mal les clics. */}
+                  <div role="button" tabIndex={0}
+                    onClick={() => toggle(p.id)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(p.id); } }}
+                    className="w-full flex items-center justify-between gap-3 bg-transparent border-none cursor-pointer text-left p-0">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         {isEcheance ? (
@@ -333,7 +348,19 @@ export function TabImpayes({
                         ) : (
                           <FileText size={14} className="text-red-500 flex-shrink-0" aria-label="Facture impayée" />
                         )}
-                        <span className="font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
+                        {/* Accès direct à la fiche famille : relancer un impayé
+                            demande souvent de vérifier un téléphone ou un email. */}
+                        <a
+                          href={p.familyId
+                            ? `/admin/cavaliers?id=${encodeURIComponent(p.familyId)}`
+                            : `/admin/cavaliers?search=${encodeURIComponent(p.familyName || "")}`}
+                          target="_blank" rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          title="Ouvrir la fiche famille dans un nouvel onglet"
+                          className="font-body text-sm font-semibold text-blue-800 no-underline hover:text-blue-500 hover:underline"
+                        >
+                          {p.familyName}
+                        </a>
                         {isEcheance ? (
                           <Badge color="orange">Échéance {(p as any).echeance}/{(p as any).echeancesTotal}</Badge>
                         ) : (
@@ -373,7 +400,7 @@ export function TabImpayes({
                       </div>
                       <ChevronDown size={16} className={`text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}/>
                     </div>
-                  </button>
+                  </div>
 
                   {/* ── Détail déplié ── */}
                   {isOpen && (
