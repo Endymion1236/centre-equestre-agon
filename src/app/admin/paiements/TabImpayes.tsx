@@ -11,6 +11,7 @@ import { emailTemplates } from "@/lib/email-templates";
 import { paymentModes } from "./types";
 import { NoteField } from "./NoteField";
 import { authFetch } from "@/lib/auth-fetch";
+import { useConfirm } from "@/components/ui/Confirm";
 
 interface TabImpayesProps {
   loading: boolean;
@@ -54,6 +55,7 @@ export function TabImpayes({
   removePaymentItem, setDuplicateTarget, deletePaymentCommand, enrollChildInForfait,
   onMultiEncaisser, initialSearch, familyFilterId,
 }: TabImpayesProps) {
+  const confirmer = useConfirm();
   const [impayesSearch, setImpayesSearch] = useState(initialSearch || "");
   const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
@@ -234,7 +236,7 @@ export function TabImpayes({
                         </a>
                         <span className="text-slate-500"> · {e.pays.length} factures · {e.total.toFixed(2)}€</span>
                       </div>
-                      <button onClick={() => onMultiEncaisser(fid, e.name, e.pays)}
+                      <button type="button" onClick={() => onMultiEncaisser(fid, e.name, e.pays)}
                         className="shrink-0 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer">
                         💳 Tout encaisser
                       </button>
@@ -256,7 +258,7 @@ export function TabImpayes({
                 Impayés de <span className="font-semibold text-blue-800">{familyFilterLabel}</span>
                 <span className="text-slate-500"> · {filtered.length} facture{filtered.length > 1 ? "s" : ""} · {totalFiltre.toFixed(2)}€</span>
               </div>
-              <button data-testid="impaye-family-filter-clear" onClick={() => setFamilyFilter("")}
+              <button type="button" data-testid="impaye-family-filter-clear" onClick={() => setFamilyFilter("")}
                 className="shrink-0 flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer">
                 <X size={13}/> Tous les impayés
               </button>
@@ -269,23 +271,23 @@ export function TabImpayes({
             <input data-testid="impaye-search-input" value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher par nom, activité, date..."
               className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"/>
-            {search && <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={14}/></button>}
+            {search && <button type="button" onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={14}/></button>}
           </div>
 
           {/* Filtres par type — n'apparaissent que si on a au moins un de chaque type */}
           {nbInvoice > 0 && nbEcheance > 0 && (
             <div className="flex gap-2 mb-4 flex-wrap">
-              <button
+              <button type="button"
                 onClick={() => setTypeFilter("all")}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${typeFilter === "all" ? "bg-blue-500 text-white" : "bg-blue-50 text-blue-700 hover:bg-blue-100"}`}>
                 Tous <span className="bg-white/20 px-1.5 py-0.5 rounded text-[10px]">{unpaid.length}</span>
               </button>
-              <button
+              <button type="button"
                 onClick={() => setTypeFilter("invoice")}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${typeFilter === "invoice" ? "bg-red-500 text-white" : "bg-red-50 text-red-600 hover:bg-red-100"}`}>
                 <FileText size={12} /> Factures <span className={`px-1.5 py-0.5 rounded text-[10px] ${typeFilter === "invoice" ? "bg-white/20" : "bg-white/60"}`}>{nbInvoice}</span>
               </button>
-              <button
+              <button type="button"
                 onClick={() => setTypeFilter("echeance")}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${typeFilter === "echeance" ? "bg-orange-500 text-white" : "bg-orange-50 text-orange-600 hover:bg-orange-100"}`}>
                 <Calendar size={12} /> Échéances en retard <span className={`px-1.5 py-0.5 rounded text-[10px] ${typeFilter === "echeance" ? "bg-white/20" : "bg-white/60"}`}>{nbEcheance}</span>
@@ -406,9 +408,9 @@ export function TabImpayes({
                   {isOpen && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
                       <div className="flex flex-wrap gap-2 mb-3">
-                        <button onClick={() => { setQuickEncaisser({ payment: p }); setQuickMontant(due.toFixed(2)); setQuickDate(new Date().toISOString().split("T")[0]); setQuickRef(""); setQuickMode("cheque"); }}
+                        <button type="button" onClick={() => { setQuickEncaisser({ payment: p }); setQuickMontant(due.toFixed(2)); setQuickDate(new Date().toISOString().split("T")[0]); setQuickRef(""); setQuickMode("cheque"); }}
                           className="font-body text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg border-none cursor-pointer font-semibold">💶 Encaisser</button>
-                        <button onClick={async () => {
+                        <button type="button" onClick={async () => {
                           const fam = families.find(f => f.firestoreId === p.familyId);
                           const email = fam?.parentEmail || "";
                           if (!email) { toast("Pas d'email pour cette famille.", "warning"); return; }
@@ -428,7 +430,7 @@ export function TabImpayes({
                           toast(`Relance envoyée à ${email}`);
                         }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Relancer</button>
                         {/* Bouton lien de paiement personnalisé */}
-                        <button
+                        <button type="button"
                           onClick={() => {
                             const fam = families.find(f => f.firestoreId === p.familyId);
                             setPayLinkModal(p);
@@ -439,7 +441,7 @@ export function TabImpayes({
                           className="font-body text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-indigo-100 flex items-center gap-1">
                           💳 Envoyer lien de paiement
                         </button>
-                        <button onClick={() => { setEditPayment(p); setEditItems((p.items || []).map((i: any) => ({ ...i }))); setEditRemisePct(""); setEditRemiseEuros(""); }}
+                        <button type="button" onClick={() => { setEditPayment(p); setEditItems((p.items || []).map((i: any) => ({ ...i }))); setEditRemisePct(""); setEditRemiseEuros(""); }}
                           className="font-body text-xs text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
                       </div>
                       {(p.items || []).map((item: any, idx: number) => {
@@ -474,7 +476,7 @@ export function TabImpayes({
                               <span className="text-slate-600 flex-1 min-w-0 truncate">{item.childName ? `${item.childName} — ` : ""}{cleanTitle}{item.startTime && !planning ? ` ${item.startTime}` : ""}</span>
                               <div className="flex items-center gap-2 flex-shrink-0">
                                 <span className="text-blue-500 font-semibold">{(item.priceTTC || 0) === 0 ? <span className="text-slate-400 text-[10px]">Inclus</span> : `${(item.priceTTC || 0).toFixed(2)}€`}</span>
-                                <button onClick={() => { if (!confirm(`Retirer "${item.activityTitle}" ?\n\nL'enfant sera désinscrit.`)) return; removePaymentItem(p, idx); }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12}/></button>
+                                <button type="button" onClick={() => { if (!confirm(`Retirer "${item.activityTitle}" ?\n\nL'enfant sera désinscrit.`)) return; removePaymentItem(p, idx); }} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0.5"><X size={12}/></button>
                               </div>
                             </div>
                             {planning && (
@@ -488,7 +490,7 @@ export function TabImpayes({
                       </div>
                       <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1.5 justify-between">
                         <div className="flex gap-1.5">
-                          <button onClick={async () => {
+                          <button type="button" onClick={async () => {
                             const items = p.items || [];
                             const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
                             const totalTTC = p.totalTTC || 0;
@@ -501,34 +503,51 @@ export function TabImpayes({
                           }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> {(p as any).invoiceNumber ? "Facture" : "Proforma"}</button>
                           {(p as any).invoiceNumber && (
                             <>
-                              <button onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
+                              <button type="button" onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
                                 title="XML Factur-X (EN 16931) — réforme facturation électronique"
                                 className="font-body text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-100 whitespace-nowrap leading-none">XML</button>
-                              <button onClick={() => downloadFacturXPdf(p.id!, (p as any).invoiceNumber)}
+                              <button type="button" onClick={() => downloadFacturXPdf(p.id!, (p as any).invoiceNumber)}
                                 title="PDF Factur-X hybride (facture PDF + XML embarqué)"
                                 className="font-body text-[10px] font-bold text-white bg-indigo-500 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-600 whitespace-nowrap leading-none">F-X</button>
                             </>
                           )}
                           {!(p as any).invoiceNumber && (
-                            <button onClick={async () => {
-                              if (!confirm(`Convertir cette proforma en facture définitive pour ${p.familyName} ?\n\nUne fois convertie, la facture aura un numéro séquentiel et ne pourra plus être supprimée.`)) return;
+                            <button type="button" onClick={async () => {
+                              if (!(await confirmer({
+                                titre: `Convertir en facture définitive — ${p.familyName} ?`,
+                                details: [
+                                  "Un numéro séquentiel définitif sera attribué (F-AAAA-NNNN).",
+                                  "La facture ne pourra plus être supprimée : la numérotation doit rester continue.",
+                                ],
+                                libelleConfirmer: "Convertir",
+                                danger: true,
+                              }))) return;
                               try {
-                                const year = new Date().getFullYear();
-                                const counterRef = doc(db, "settings", "invoiceCounter");
-                                const counterSnap = await getDoc(counterRef);
-                                const currentNum = counterSnap.exists() ? (counterSnap.data()?.[`year_${year}`] || 0) : 0;
-                                const nextNum = currentNum + 1;
-                                await setDoc(counterRef, { [`year_${year}`]: nextNum }, { merge: true });
-                                const invoiceNumber = `F-${year}-${String(nextNum).padStart(4, "0")}`;
-                                await updateDoc(doc(db, "payments", p.id!), { invoiceNumber, updatedAt: serverTimestamp() });
+                                // Numérotation attribuée par le SERVEUR, en transaction
+                                // atomique, avec trace dans `invoice_audit`
+                                // (CGI art. 242 nonies A). Ce bouton lisait puis
+                                // incrémentait le compteur depuis le navigateur, sans
+                                // transaction : deux onglets ouverts, ou deux personnes
+                                // convertissant en même temps, produisaient DEUX factures
+                                // portant le même numéro — et aucune n'apparaissait dans
+                                // la piste d'audit.
+                                const res = await authFetch("/api/invoice/next-number", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ paymentId: p.id }),
+                                });
+                                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                                const { invoiceNumber } = await res.json();
+                                if (!invoiceNumber) throw new Error("numéro absent de la réponse");
+                                await updateDoc(doc(db, "payments", p.id!), { invoiceNumber, invoiceDate: serverTimestamp(), updatedAt: serverTimestamp() });
                                 setPayments(prev => prev.map(x => x.id === p.id ? { ...x, invoiceNumber } as any : x));
                                 toast(`Facture ${invoiceNumber} créée pour ${p.familyName}`, "success");
                               } catch (e) { console.error(e); toast("Erreur conversion", "error"); }
                             }} className="font-body text-[10px] text-orange-600 bg-orange-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-orange-100 flex items-center gap-1"><Receipt size={10}/> → Facture définitive</button>
                           )}
-                          <button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
+                          <button type="button" onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
                           {(p.items||[]).some((i:any) => i.activityType === "cours" || i.activityTitle?.includes("Forfait")) && (
-                            <button onClick={async () => {
+                            <button type="button" onClick={async () => {
                               // Charger le paiement source si dupliqué, sinon utiliser le paiement lui-même
                               let paymentToUse = p;
                               if (p.sourcePaymentId) {
@@ -546,7 +565,7 @@ export function TabImpayes({
                             </button>
                           )}
                         </div>
-                        <button onClick={() => deletePaymentCommand(p)} className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1"><Trash2 size={10}/> Annuler</button>
+                        <button type="button" onClick={() => deletePaymentCommand(p)} className="font-body text-[10px] text-red-500 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100 flex items-center gap-1"><Trash2 size={10}/> Annuler</button>
                       </div>
                     </div>
                   )}

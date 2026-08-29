@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { collection, query, where, orderBy, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { signalerErreur } from "@/lib/signaler-erreur";
 
 /**
  * Une photo de galerie stockée dans Firestore.
@@ -60,7 +61,7 @@ export function useGaleriePhotos(category: string | null | undefined) {
         setLoading(false);
       },
       (err) => {
-        console.error("[useGaleriePhotos] erreur:", err);
+        signalerErreur(err, "galerie: chargement des photos", { category });
         setError(err.message || "Erreur de chargement");
         setLoading(false);
       }

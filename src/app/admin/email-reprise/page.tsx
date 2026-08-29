@@ -148,11 +148,11 @@ export default function EmailReprisePage() {
 
       {/* Day nav */}
       <div className="flex items-center justify-between mb-5">
-        <button onClick={() => setDayOffset(d => d-1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">← Veille</button>
+        <button type="button" onClick={() => setDayOffset(d => d-1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">← Veille</button>
         <div className="font-display text-base font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}</div>
         <div className="flex gap-2">
-          <button onClick={() => setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
-          <button onClick={() => setDayOffset(d => d+1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain →</button>
+          <button type="button" onClick={() => setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
+          <button type="button" onClick={() => setDayOffset(d => d+1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain →</button>
         </div>
       </div>
 
@@ -212,7 +212,7 @@ export default function EmailReprisePage() {
                     <div className="w-16 h-16 rounded-2xl bg-green-50 flex items-center justify-center mx-auto mb-4"><Check size={32} className="text-green-500" /></div>
                     <div className="font-body text-lg font-semibold text-blue-800 mb-2">Email envoyé !</div>
                     <p className="font-body text-sm text-gray-500 mb-4">{getEmails(selectedCreneau).length} destinataire{getEmails(selectedCreneau).length > 1 ? "s" : ""}.</p>
-                    <button onClick={() => { setSent(false); setSelectedCreneau(null); }}
+                    <button type="button" onClick={() => { setSent(false); setSelectedCreneau(null); }}
                       className="font-body text-sm text-blue-500 bg-transparent border-none cursor-pointer">← Choisir une autre reprise</button>
                   </div>
                 ) : (
@@ -220,7 +220,7 @@ export default function EmailReprisePage() {
                     <div className="flex items-center justify-between mb-3">
                       <div className="font-body text-sm font-semibold text-blue-800">📧 {selectedCreneau.activityTitle}</div>
                       {/* Bouton IA */}
-                      <button onClick={() => setShowIaContext(!showIaContext)}
+                      <button type="button" onClick={() => setShowIaContext(!showIaContext)}
                         className="flex items-center gap-1.5 font-body text-xs font-semibold text-white px-3 py-1.5 rounded-lg border-none cursor-pointer"
                         style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
                         <Sparkles size={13}/> Générer avec l&apos;IA
@@ -235,7 +235,7 @@ export default function EmailReprisePage() {
                             <Sparkles size={13} style={{ color:"#7c3aed" }}/>
                             <span className="font-body text-xs font-semibold" style={{ color:"#7c3aed" }}>Génération IA</span>
                           </div>
-                          <button onClick={() => setShowIaContext(false)} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={13}/></button>
+                          <button type="button" onClick={() => setShowIaContext(false)} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={13}/></button>
                         </div>
                         <div className="font-body text-xs text-gray-500 mb-2">
                           {getCavaliers(selectedCreneau).length} cavalier(s) · {selectedCreneau.monitor} · {selectedCreneau.startTime}–{selectedCreneau.endTime}
@@ -244,7 +244,7 @@ export default function EmailReprisePage() {
                         <input value={iaContext} onChange={e => setIaContext(e.target.value)}
                           placeholder="Ex: annulation, météo, équipement spécial requis..."
                           className="w-full font-body text-xs border border-gray-200 rounded-lg px-3 py-2 mb-3 bg-white focus:outline-none focus:border-purple-400" />
-                        <button onClick={genererAvecIA} disabled={iaLoading}
+                        <button type="button" onClick={genererAvecIA} disabled={iaLoading}
                           className="flex items-center gap-1.5 font-body text-xs font-semibold text-white px-4 py-2 rounded-lg border-none cursor-pointer w-full justify-center disabled:opacity-50"
                           style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
                           {iaLoading ? <><Loader2 size={13} className="animate-spin"/> Génération en cours...</> : <><Sparkles size={13}/> Générer l&apos;email</>}
@@ -282,7 +282,7 @@ export default function EmailReprisePage() {
                         className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none resize-vertical" />
                     </div>
 
-                    <button onClick={handleSend} disabled={getEmails(selectedCreneau).length === 0 || sending}
+                    <button type="button" onClick={handleSend} disabled={getEmails(selectedCreneau).length === 0 || sending}
                       className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-3 rounded-xl border-none cursor-pointer disabled:opacity-40 hover:bg-blue-400">
                       <Send size={16}/> {sending ? "Envoi..." : `Envoyer à ${getEmails(selectedCreneau).length} famille(s)`}
                     </button>

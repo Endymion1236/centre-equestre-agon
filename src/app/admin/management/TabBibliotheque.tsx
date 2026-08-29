@@ -64,7 +64,7 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
         <label className="font-body text-xs font-semibold text-blue-800 block mb-1.5">Jours par défaut</label>
         <div className="flex flex-wrap gap-1.5">
           {JOURS.map(j => (
-            <button key={j} onClick={() => toggleJour(j)}
+            <button type="button" key={j} onClick={() => toggleJour(j)}
               className={`px-2.5 py-1 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
                 ${(form.joursDefaut || []).includes(j) ? "bg-blue-500 text-white" : "bg-white text-slate-500 border border-gray-200"}`}>
               {JOURS_LABELS[j].slice(0, 3)}
@@ -79,7 +79,7 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
           {(form.horairesDefaut || []).sort().map(h => (
             <span key={h} className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 font-body text-xs font-semibold text-amber-700">
               {h}
-              <button onClick={() => onChange({ ...form, horairesDefaut: (form.horairesDefaut || []).filter(x => x !== h) })}
+              <button type="button" onClick={() => onChange({ ...form, horairesDefaut: (form.horairesDefaut || []).filter(x => x !== h) })}
                 className="bg-transparent border-none cursor-pointer text-amber-400 hover:text-red-500 p-0 text-xs leading-none">✕</button>
             </span>
           ))}
@@ -106,7 +106,7 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
           </button>
           <div className="flex gap-1 ml-1">
             {["08:00","08:45","09:00","10:00","14:00","16:30"].filter(h => !(form.horairesDefaut || []).includes(h)).slice(0, 4).map(h => (
-              <button key={h} onClick={() => onChange({ ...form, horairesDefaut: [...(form.horairesDefaut || []), h] })}
+              <button type="button" key={h} onClick={() => onChange({ ...form, horairesDefaut: [...(form.horairesDefaut || []), h] })}
                 className="px-2 py-1 rounded-md bg-gray-100 text-gray-500 font-body text-[10px] border-none cursor-pointer hover:bg-amber-100 hover:text-amber-700">
                 {h}
               </button>
@@ -144,7 +144,7 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
             {JOURS.map(j => {
               const selected = (form.joursObligatoires || []).includes(j);
               return (
-                <button key={j} onClick={() => {
+                <button type="button" key={j} onClick={() => {
                   const curr = form.joursObligatoires || [];
                   onChange({ ...form, joursObligatoires: selected ? curr.filter(x => x !== j) : [...curr, j] });
                 }}
@@ -158,11 +158,11 @@ function TacheForm({ form, editId, saving, onChange, onSave, onCancel }: FormPro
         </div>
       )}
       <div className="flex gap-2">
-        <button onClick={onSave} disabled={!form.label?.trim() || saving}
+        <button type="button" onClick={onSave} disabled={!form.label?.trim() || saving}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
           <Check size={14} /> {editId ? "Modifier" : "Créer"}
         </button>
-        <button onClick={onCancel}
+        <button type="button" onClick={onCancel}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">
           <X size={14} /> Annuler
         </button>
@@ -215,7 +215,7 @@ export default function TabBibliotheque({ taches, onRefresh }: Props) {
     <div className="flex flex-col gap-5">
       <div className="flex items-center justify-between">
         <p className="font-body text-sm text-slate-500">{taches.length} tâche{taches.length > 1 ? "s" : ""} dans la bibliothèque</p>
-        <button onClick={() => { setShowNew(true); setEditId(null); setForm(emptyForm()); }}
+        <button type="button" onClick={() => { setShowNew(true); setEditId(null); setForm(emptyForm()); }}
           className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <Plus size={15} /> Nouvelle tâche
         </button>
@@ -265,10 +265,10 @@ export default function TabBibliotheque({ taches, onRefresh }: Props) {
                       </div>
                     )}
                     <div className="flex gap-1">
-                      <button onClick={() => startEdit(t)} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500">
+                      <button type="button" onClick={() => startEdit(t)} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500">
                         <Pencil size={13} />
                       </button>
-                      <button onClick={() => del(t)} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500">
+                      <button type="button" onClick={() => del(t)} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -284,7 +284,7 @@ export default function TabBibliotheque({ taches, onRefresh }: Props) {
         <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
           <div className="text-4xl mb-3">📋</div>
           <p className="font-body text-sm text-slate-500 mb-4">Aucune tâche dans la bibliothèque.</p>
-          <button onClick={() => setShowNew(true)}
+          <button type="button" onClick={() => setShowNew(true)}
             className="font-body text-sm font-semibold text-blue-500 bg-blue-50 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-blue-100">
             Créer ma première tâche
           </button>

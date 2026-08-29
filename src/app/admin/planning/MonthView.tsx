@@ -29,7 +29,7 @@ export default function MonthView({
     <>
       {/* Navigation */}
       <div className="flex items-center justify-between mb-5">
-        <button onClick={onPrev} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+        <button type="button" onClick={onPrev} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
           <ChevronLeft size={16}/>Préc.
         </button>
         <div className="text-center">
@@ -41,8 +41,8 @@ export default function MonthView({
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={onToday} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
-          <button onClick={onNext} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+          <button type="button" onClick={onToday} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
+          <button type="button" onClick={onNext} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
             Suiv.<ChevronRight size={16}/>
           </button>
         </div>
@@ -117,7 +117,7 @@ export default function MonthView({
                         <Bell size={12} className="text-orange-400" />
                       </span>
                     )}
-                    <button onClick={() => onDeleteRdv(r.id)} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer">
+                    <button type="button" onClick={() => onDeleteRdv(r.id)} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer">
                       <Trash2 size={14}/>
                     </button>
                   </div>

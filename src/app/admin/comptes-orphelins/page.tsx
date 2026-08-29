@@ -158,7 +158,7 @@ export default function ComptesOrphelinsPage() {
             garde ensuite cette adresse, qui ne peut plus être donnée à la bonne fiche.
           </p>
         </div>
-        <button onClick={load} disabled={loading}
+        <button type="button" onClick={load} disabled={loading}
           className="shrink-0 flex items-center gap-2 font-body text-xs font-semibold text-slate-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
         </button>
@@ -249,7 +249,7 @@ export default function ComptesOrphelinsPage() {
                                 <span className="font-semibold">{c.email}</span>
                                 <span className="text-slate-500 text-xs"> · via {c.source}</span>
                               </div>
-                              <button onClick={() => rattacher(p.familyId, c.email)}
+                              <button type="button" onClick={() => rattacher(p.familyId, c.email)}
                                 disabled={rattachEnCours === p.familyId}
                                 className="shrink-0 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                                 {rattachEnCours === p.familyId ? "…" : "Rattacher"}

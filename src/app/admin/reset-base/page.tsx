@@ -376,7 +376,7 @@ export default function ResetBasePage() {
         <p className="font-body text-xs text-slate-600 mb-3">
           Exporte toutes les collections de la base au format JSON. Fichier téléchargé localement sur ton ordinateur, à conserver en cas de besoin de restauration.
         </p>
-        <button onClick={handleBackup} disabled={working}
+        <button type="button" onClick={handleBackup} disabled={working}
           className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-body text-sm font-semibold px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
           <Download size={14} />
           Télécharger la sauvegarde JSON complète
@@ -424,7 +424,7 @@ export default function ResetBasePage() {
               ))}
             </select>
           </div>
-          <button
+          <button type="button"
             onClick={handleFamilyDryRun}
             disabled={!familyResetId || familyResetWorking}
             className="flex items-center gap-2 bg-slate-700 hover:bg-slate-800 text-white font-body text-sm font-semibold px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50"
@@ -450,7 +450,7 @@ export default function ResetBasePage() {
               )}
             </ul>
             {familyResetDryRun.totalDocs > 0 && (
-              <button
+              <button type="button"
                 onClick={handleFamilyApply}
                 disabled={familyResetWorking}
                 className="mt-3 flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-body text-sm font-semibold px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50"
@@ -486,7 +486,7 @@ export default function ResetBasePage() {
             <span className="w-6 h-6 rounded-full bg-blue-500 text-white font-bold text-xs flex items-center justify-center">2</span>
             <h2 className="font-display text-base font-bold text-blue-800">Sélectionner les collections à effacer</h2>
           </div>
-          <button onClick={fetchCounts} disabled={loading}
+          <button type="button" onClick={fetchCounts} disabled={loading}
             className="flex items-center gap-1 text-xs text-slate-500 bg-transparent border-none cursor-pointer hover:text-blue-500">
             <RefreshCw size={11} className={loading ? "animate-spin" : ""} />
             Actualiser les comptages
@@ -512,7 +512,7 @@ export default function ResetBasePage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-body text-xs text-slate-500">{groupCount} doc{groupCount > 1 ? "s" : ""}</span>
-                      <button onClick={() => toggleGroup(group)}
+                      <button type="button" onClick={() => toggleGroup(group)}
                         className="font-body text-[11px] bg-white border border-gray-200 hover:bg-gray-50 px-2 py-1 rounded cursor-pointer">
                         {allSelected ? "Tout décocher" : someSelected ? "Tout cocher" : "Tout cocher"}
                       </button>
@@ -557,7 +557,7 @@ export default function ResetBasePage() {
               <strong>{selected.size}</strong> collection{selected.size > 1 ? "s" : ""} sélectionnée{selected.size > 1 ? "s" : ""} →
               <strong className="ml-1">{totalToDelete}</strong> document{totalToDelete > 1 ? "s" : ""} à supprimer
             </div>
-            <button onClick={handleDryRun} disabled={working}
+            <button type="button" onClick={handleDryRun} disabled={working}
               className="flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-blue-300 text-blue-800 font-body text-xs font-semibold px-3 py-1.5 rounded-lg cursor-pointer disabled:opacity-50">
               <Eye size={12} />
               Simuler (sans rien supprimer)
@@ -640,7 +640,7 @@ export default function ResetBasePage() {
             </span>
           </label>
 
-          <button
+          <button type="button"
             onClick={handleReset}
             disabled={working || !finalConfirm || confirmation !== confirmationPhrase || selected.size === 0 || (isProd && prodUnlock !== prodUnlockPhrase)}
             className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-body text-sm font-bold px-4 py-3 rounded-lg border-none cursor-pointer">

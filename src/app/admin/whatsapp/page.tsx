@@ -143,7 +143,7 @@ export default function WhatsAppAdminPage() {
             )}
           </Card>
 
-          <button
+          <button type="button"
             onClick={save}
             disabled={saving || !allValid}
             className="self-start flex items-center gap-2 px-5 py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer disabled:opacity-50"

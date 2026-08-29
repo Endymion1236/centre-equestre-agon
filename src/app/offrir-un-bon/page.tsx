@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Navbar } from "@/components/layout/Navbar";
@@ -81,7 +82,7 @@ export default function OffrirUnBonPage() {
             </div>
 
             <div className="relative min-h-[380px] overflow-hidden rounded-[32px] border border-white/12 bg-white/[0.06] shadow-[0_30px_85px_rgba(0,0,0,0.24)]">
-              <img src="/images/vitrine/choices/anniversaire-poney.webp" alt="Un anniversaire au centre équestre avec un enfant et un poney" className="absolute inset-0 h-full w-full object-cover" />
+              <Image src="/images/vitrine/choices/anniversaire-poney.webp" alt="Un anniversaire au centre équestre avec un enfant et un poney" fill sizes="100vw" className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/58 via-transparent to-white/5" />
               <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-white/14 bg-emerald-950/58 p-5 backdrop-blur-md">
                 <div className="font-body text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">Pour toutes les occasions</div>

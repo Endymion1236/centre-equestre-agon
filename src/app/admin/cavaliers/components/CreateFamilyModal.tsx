@@ -162,7 +162,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
       <div className="bg-white rounded-2xl w-full max-w-lg mx-4 mb-8 shadow-xl" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100">
           <h2 className="font-display text-lg font-bold text-blue-800">Nouvelle famille</h2>
-          <button onClick={handleClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
+          <button type="button" onClick={handleClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
         </div>
         <div className="p-5 space-y-5">
           {/* Type de compte */}
@@ -170,7 +170,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
             <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Type de compte</div>
             <div className="flex gap-2">
               {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"]] as const).map(([val, label]) => (
-                <button key={val} onClick={() => setNewFamily(f => ({ ...f, accountType: val }))}
+                <button type="button" key={val} onClick={() => setNewFamily(f => ({ ...f, accountType: val }))}
                   className={`flex-1 py-2 px-3 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${newFamily.accountType === val ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
                   {label}
                 </button>
@@ -346,22 +346,22 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                   </div>
                 </div>
                 {newChildren.length > 1 && (
-                  <button onClick={() => setNewChildren(newChildren.filter((_, j) => j !== i))}
+                  <button type="button" onClick={() => setNewChildren(newChildren.filter((_, j) => j !== i))}
                     className="w-8 h-10 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
                     <Trash2 size={14}/>
                   </button>
                 )}
               </div>
             ))}
-            <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: null, birthDate: "", galopLevel: "—" }])}
+            <button type="button" onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: null, birthDate: "", galopLevel: "—" }])}
               className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-2">
               <Plus size={14}/> Ajouter un cavalier
             </button>
           </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-          <button onClick={handleClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-          <button onClick={handleCreate} disabled={saving || !canCreate}
+          <button type="button" onClick={handleClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+          <button type="button" onClick={handleCreate} disabled={saving || !canCreate}
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
             {saving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Créer la famille
           </button>

@@ -9,14 +9,10 @@
  * admin pour ne pas bloquer le diagnostic.
  */
 
+import { isAdminToken } from "@/lib/api-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 
-const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-];
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +26,7 @@ export async function GET(req: NextRequest) {
     try {
       const decoded = await adminAuth.verifyIdToken(token);
       callerEmail = decoded.email || "?";
-      isAdmin = decoded.admin === true || ADMIN_EMAILS.includes(decoded.email || "");
+      isAdmin = isAdminToken(decoded);
     } catch (e) {
       return NextResponse.json({ error: "Token invalide" }, { status: 401 });
     }

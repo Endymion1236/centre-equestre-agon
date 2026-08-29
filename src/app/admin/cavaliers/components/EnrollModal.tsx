@@ -56,7 +56,7 @@ export default function EnrollModal({ childId, childName, familyId, familyName, 
             <h2 className="font-display text-lg font-bold text-blue-800">Inscrire {childName}</h2>
             <p className="font-body text-xs text-slate-600">Sélectionnez un créneau à venir</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
+          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
         </div>
         <div className="p-5">
           <div className="relative mb-4">
@@ -85,7 +85,7 @@ export default function EnrollModal({ childId, childName, familyId, familyName, 
                     ) : spots <= 0 ? (
                       <Badge color="red">Complet</Badge>
                     ) : (
-                      <button onClick={() => handleEnroll(c.id)} disabled={saving}
+                      <button type="button" onClick={() => handleEnroll(c.id)} disabled={saving}
                         className="font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
                         {saving ? <Loader2 size={12} className="animate-spin"/> : "Inscrire"}
                       </button>

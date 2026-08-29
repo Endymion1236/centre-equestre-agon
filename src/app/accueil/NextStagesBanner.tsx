@@ -79,7 +79,7 @@ export function NextStagesBanner() {
               <Button variant="primary" size="lg">Réserver maintenant</Button>
             </Link>
             <Link href="/tarifs" className="no-underline">
-              <button className="glass px-8 py-4 rounded-xl font-body text-base font-medium text-white hover:bg-white/18 transition-all cursor-pointer border-none">
+              <button type="button" className="glass px-8 py-4 rounded-xl font-body text-base font-medium text-white hover:bg-white/18 transition-all cursor-pointer border-none">
                 Voir les tarifs
               </button>
             </Link>

@@ -110,6 +110,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ dryRun: false, eligibilite, requete, result });
   } catch (e: any) {
     console.error("test-mit-charge:", e);
-    return NextResponse.json({ error: (e?.message || String(e)).slice(0, 300) }, { status: 500 });
+    console.error("[test-mit-charge]", e);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

@@ -186,6 +186,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("fix-pending-reservations error:", e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }

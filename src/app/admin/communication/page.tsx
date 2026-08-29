@@ -388,7 +388,7 @@ export default function CommunicationPage() {
           ["newsletter", "Nouvelle campagne", Mail],
           ["historique", "Historique", History],
         ] as const).map(([id, label, Icon]) => (
-          <button
+          <button type="button"
             key={id}
             onClick={() => setTab(id)}
             className={`flex items-center gap-2 rounded-xl border-none px-4 py-2.5 font-body text-sm font-semibold transition-colors ${
@@ -455,7 +455,7 @@ export default function CommunicationPage() {
               Les familles en échec sont mémorisées — bouton « Relancer les échecs » dans l&apos;Historique.
             </p>
           )}
-          <button
+          <button type="button"
             onClick={resetComposer}
             className="mt-6 rounded-xl border-none bg-blue-600 px-5 py-3 font-body text-sm font-bold text-white hover:bg-blue-700"
           >
@@ -679,7 +679,7 @@ export default function CommunicationPage() {
                 </p>
               </div>
 
-              <button
+              <button type="button"
                 onClick={handleSend}
                 disabled={!selectedAudience || !subject.trim() || recipients.length === 0 || sending}
                 className={`flex w-full items-center justify-center gap-2 rounded-xl border-none px-6 py-3.5 font-body text-sm font-bold transition-colors ${
@@ -732,7 +732,7 @@ export default function CommunicationPage() {
                         <Badge color="green">{item.sentOk || 0} envoyé{Number(item.sentOk || 0) > 1 ? "s" : ""}</Badge>
                         {Number(item.sentFail || 0) > 0 && <Badge color="red">{item.sentFail} échec{Number(item.sentFail) > 1 ? "s" : ""}</Badge>}
                         {Number(item.sentFail || 0) > 0 && (
-                          <button
+                          <button type="button"
                             onClick={() => relancerEchecs(item)}
                             disabled={sending || relanceBusy}
                             className="rounded-xl border-none bg-blue-600 px-3.5 py-2 font-body text-xs font-bold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400"

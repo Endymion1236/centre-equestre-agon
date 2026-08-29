@@ -58,7 +58,7 @@ export default function ActivityPicker({ activities, value, onChange, className 
           </span>
         )}
         {selected && !open && (
-          <button onClick={e => { e.stopPropagation(); clear(); }}
+          <button type="button" onClick={e => { e.stopPropagation(); clear(); }}
             className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer p-0 flex-shrink-0">
             <X size={14}/>
           </button>
@@ -72,7 +72,7 @@ export default function ActivityPicker({ activities, value, onChange, className 
             <div className="px-3 py-3 font-body text-sm text-slate-400 text-center">Aucune activité trouvée</div>
           ) : (
             filtered.map((a, i) => (
-              <button key={`${a.id}-${i}`} onClick={() => select(a)}
+              <button type="button" key={`${a.id}-${i}`} onClick={() => select(a)}
                 className={`w-full text-left px-3 py-2.5 font-body text-sm border-none cursor-pointer flex items-center gap-2
                   ${a.id === value ? "bg-blue-50 text-blue-700 font-semibold" : "text-blue-800 hover:bg-sand bg-white"}
                   ${i > 0 ? "border-t border-gray-50" : ""}`}>

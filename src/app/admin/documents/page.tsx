@@ -68,16 +68,16 @@ export default function DocumentsPage() {
     <div className="flex justify-between items-center mb-6">
       <div><h1 className="font-display text-2xl font-bold text-blue-800">Documents personnalisables</h1><p className="font-body text-xs text-gray-400">Modeles de mails, fiches d&apos;inscription, certificats avec variables dynamiques</p></div>
       <div className="flex gap-2">
-        {templates.length === 0 && <button onClick={initDefaults} disabled={saving} className="flex items-center gap-2 font-body text-sm text-blue-500 bg-blue-50 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">{saving ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} Modeles par defaut</button>}
-        <button onClick={() => { setForm({ name: "", category: "email", subject: "", body: "", active: true }); setEditingId(null); setShowForm(true); }} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600"><Plus size={16} /> Nouveau</button>
+        {templates.length === 0 && <button type="button" onClick={initDefaults} disabled={saving} className="flex items-center gap-2 font-body text-sm text-blue-500 bg-blue-50 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">{saving ? <Loader2 size={16} className="animate-spin" /> : <FileText size={16} />} Modeles par defaut</button>}
+        <button type="button" onClick={() => { setForm({ name: "", category: "email", subject: "", body: "", active: true }); setEditingId(null); setShowForm(true); }} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600"><Plus size={16} /> Nouveau</button>
       </div>
     </div>
 
     <div className="flex flex-wrap gap-3 mb-5">
       <div className="relative flex-1 min-w-[200px]"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" /><input type="text" placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className={`${inputStyle} !pl-9`} /></div>
       <div className="flex gap-1.5">
-        <button onClick={() => setFilterCat("all")} className={`font-body text-sm px-3 py-2 rounded-lg border cursor-pointer ${filterCat === "all" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>Tous</button>
-        {categories.map(c => <button key={c.id} onClick={() => setFilterCat(c.id)} className={`font-body text-sm px-3 py-2 rounded-lg border cursor-pointer ${filterCat === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{c.label}</button>)}
+        <button type="button" onClick={() => setFilterCat("all")} className={`font-body text-sm px-3 py-2 rounded-lg border cursor-pointer ${filterCat === "all" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>Tous</button>
+        {categories.map(c => <button type="button" key={c.id} onClick={() => setFilterCat(c.id)} className={`font-body text-sm px-3 py-2 rounded-lg border cursor-pointer ${filterCat === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>{c.label}</button>)}
       </div>
     </div>
 
@@ -100,10 +100,10 @@ export default function DocumentsPage() {
             <p className="font-body text-xs text-gray-400 mb-3 flex-1">{t.body.slice(0, 100)}...</p>
             <div className="flex flex-wrap gap-1 mb-3">{(t.variables || []).slice(0, 5).map(v => <span key={v} className="font-body text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">{`{{${v}}}`}</span>)}</div>
             <div className="flex gap-2 pt-3 border-t border-gray-100">
-              <button onClick={() => previewTemplate(t)} className="flex items-center gap-1 font-body text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-100"><Eye size={12} /> Apercu</button>
-              <button onClick={() => editTemplate(t)} className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100"><Edit3 size={12} /> Modifier</button>
-              <button onClick={() => duplicateTemplate(t)} className="flex items-center gap-1 font-body text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-100"><Copy size={12} /> Copier</button>
-              <button onClick={() => deleteTemplate(t.id, t.name)} className="flex items-center gap-1 font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100 ml-auto"><Trash2 size={12} /></button>
+              <button type="button" onClick={() => previewTemplate(t)} className="flex items-center gap-1 font-body text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-100"><Eye size={12} /> Apercu</button>
+              <button type="button" onClick={() => editTemplate(t)} className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100"><Edit3 size={12} /> Modifier</button>
+              <button type="button" onClick={() => duplicateTemplate(t)} className="flex items-center gap-1 font-body text-xs text-gray-500 bg-gray-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-100"><Copy size={12} /> Copier</button>
+              <button type="button" onClick={() => deleteTemplate(t.id, t.name)} className="flex items-center gap-1 font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100 ml-auto"><Trash2 size={12} /></button>
             </div>
           </Card>
         ); })}
@@ -115,7 +115,7 @@ export default function DocumentsPage() {
         <div className="bg-white rounded-2xl w-full max-w-2xl mx-4 mb-8 shadow-xl" onClick={e => e.stopPropagation()}>
           <div className="flex justify-between items-center p-5 border-b border-gray-100">
             <h2 className="font-display text-lg font-bold text-blue-800">{editingId ? "Modifier" : "Nouveau modele"}</h2>
-            <button onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+            <button type="button" onClick={() => setShowForm(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
           </div>
           <div className="p-5 space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -130,8 +130,8 @@ export default function DocumentsPage() {
             <div><label className={labelStyle}>Contenu *</label><textarea className={`${inputStyle} !h-64 resize-y font-mono text-xs`} value={form.body} onChange={e => setForm({ ...form, body: e.target.value })} placeholder="Redigez votre modele ici..." /></div>
           </div>
           <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-            <button onClick={() => setShowForm(false)} className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-            <button onClick={saveTemplate} disabled={saving || !form.name || !form.body} className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 ${(saving || !form.name || !form.body) ? "opacity-50" : ""}`}>{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer</button>
+            <button type="button" onClick={() => setShowForm(false)} className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+            <button type="button" onClick={saveTemplate} disabled={saving || !form.name || !form.body} className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 ${(saving || !form.name || !form.body) ? "opacity-50" : ""}`}>{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} Enregistrer</button>
           </div>
         </div>
       </div>
@@ -142,7 +142,7 @@ export default function DocumentsPage() {
         <div className="bg-white rounded-2xl w-full max-w-lg mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
           <div className="flex justify-between items-center p-5 border-b border-gray-100">
             <h2 className="font-display text-lg font-bold text-blue-800">Apercu</h2>
-            <button onClick={() => setShowPreview(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+            <button type="button" onClick={() => setShowPreview(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
           </div>
           <div className="p-5"><pre className="font-body text-sm text-gray-700 whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-xl p-4 max-h-96 overflow-y-auto">{previewContent}</pre></div>
         </div>

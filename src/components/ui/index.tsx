@@ -37,7 +37,7 @@ export function Button({
   ...props
 }: ButtonProps) {
   return (
-    <button
+    <button type="button"
       className={`
         font-body font-semibold transition-all duration-300 cursor-pointer
         ${variantStyles[variant]}

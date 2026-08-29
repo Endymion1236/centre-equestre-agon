@@ -76,7 +76,7 @@ export default function TabIndispos({ equides, indispos, showForm, onCloseForm, 
           <div className="bg-white rounded-2xl w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-5 border-b border-gray-100">
               <h2 className="font-display text-lg font-bold text-blue-800">Déclarer une indisponibilité</h2>
-              <button onClick={onCloseForm} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
+              <button type="button" onClick={onCloseForm} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
             </div>
             <div className="p-5 space-y-4">
               <div>
@@ -111,8 +111,8 @@ export default function TabIndispos({ equides, indispos, showForm, onCloseForm, 
               </div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button onClick={onCloseForm} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-              <button onClick={handleSave} disabled={saving || !form.equideId}
+              <button type="button" onClick={onCloseForm} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button type="button" onClick={handleSave} disabled={saving || !form.equideId}
                 className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-red-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-red-600 disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} Déclarer
               </button>
@@ -142,7 +142,7 @@ export default function TabIndispos({ equides, indispos, showForm, onCloseForm, 
                   {ind.details && <div className="font-body text-xs text-gray-400 mt-0.5">{ind.details}</div>}
                 </div>
                 <Badge color={MOTIF_COLORS[ind.motif] || "gray"}>{MOTIF_LABELS[ind.motif] || ind.motif}</Badge>
-                <button onClick={async () => {
+                <button type="button" onClick={async () => {
                   if (!confirm("Terminer cette indisponibilité ?")) return;
                   await updateDoc(doc(db, "indisponibilites", ind.id), { active: false, dateFin: Timestamp.now() });
                   await updateDoc(doc(db, "equides", ind.equideId), { available: true, status: "actif", updatedAt: serverTimestamp() });

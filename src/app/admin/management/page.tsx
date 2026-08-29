@@ -183,7 +183,7 @@ export default function ManagementPage() {
       {/* Onglets style dashboard */}
       <div className="flex gap-2 mb-6 flex-wrap print-hide">
         {TABS.map(({id, label, icon: Icon}) => (
-          <button key={id} onClick={()=>setTab(id)}
+          <button type="button" key={id} onClick={()=>setTab(id)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all
               ${tab===id
                 ? id==="ia" ? "text-white border-transparent shadow-lg" : "bg-blue-500 text-white border-blue-500 shadow-md shadow-blue-500/25"

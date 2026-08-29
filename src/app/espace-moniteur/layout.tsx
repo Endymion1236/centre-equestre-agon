@@ -69,7 +69,7 @@ export default function EspaceMoniteurLayout({ children }: { children: React.Rea
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
             </div>
             {loginError && <p className="font-body text-xs text-red-500">{loginError}</p>}
-            <button onClick={handleLogin} disabled={loggingIn || !email || !password}
+            <button type="button" onClick={handleLogin} disabled={loggingIn || !email || !password}
               className="w-full py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-400 disabled:opacity-50 mt-2">
               {loggingIn ? <Loader2 size={16} className="animate-spin inline mr-2" /> : null}
               {loggingIn ? "Connexion..." : "Se connecter"}
@@ -88,7 +88,7 @@ export default function EspaceMoniteurLayout({ children }: { children: React.Rea
           <div className="text-4xl mb-3">🔒</div>
           <h2 className="font-display text-lg font-bold text-blue-800 mb-2">Accès réservé</h2>
           <p className="font-body text-sm text-slate-500 mb-4">Cet espace est réservé aux collaborateurs du centre équestre.</p>
-          <button onClick={() => { import("firebase/auth").then(({ getAuth, signOut }) => signOut(getAuth())); }}
+          <button type="button" onClick={() => { import("firebase/auth").then(({ getAuth, signOut }) => signOut(getAuth())); }}
             className="font-body text-sm text-red-500 bg-red-50 px-4 py-2 rounded-lg border-none cursor-pointer">
             Déconnexion
           </button>

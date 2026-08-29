@@ -111,7 +111,7 @@ export default function InscriptionsImpayeesPage() {
       </p>
 
       <div className="mt-4 flex items-center gap-2">
-        <button onClick={load} disabled={loading}
+        <button type="button" onClick={load} disabled={loading}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 font-body text-sm disabled:opacity-50">
           {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           Actualiser
@@ -222,7 +222,7 @@ export default function InscriptionsImpayeesPage() {
               ))}
             </div>
 
-            <button onClick={() => liberer(imp)} disabled={liberation === imp.paymentId}
+            <button type="button" onClick={() => liberer(imp)} disabled={liberation === imp.paymentId}
               className="mt-3 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-500 hover:bg-rose-600 text-white font-body text-xs font-semibold border-none cursor-pointer disabled:opacity-50">
               {liberation === imp.paymentId
                 ? <Loader2 size={13} className="animate-spin" />

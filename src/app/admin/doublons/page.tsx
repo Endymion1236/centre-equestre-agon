@@ -123,7 +123,7 @@ export default function DoublonsPage() {
           <span className="font-body text-sm text-slate-600">
             « {dernierIgnore.label} » a été écartée des doublons.
           </span>
-          <button onClick={annulerIgnore}
+          <button type="button" onClick={annulerIgnore}
             className="ml-auto px-3 py-1.5 rounded-lg bg-slate-800 text-white font-body text-xs font-semibold border-none cursor-pointer hover:bg-slate-700">
             Annuler
           </button>
@@ -138,7 +138,7 @@ export default function DoublonsPage() {
             Comptes susceptibles d'être la même famille (souvent après inscription en ligne avec une autre adresse). Vérifie, puis ignore les faux positifs.
           </p>
         </div>
-        <button onClick={load} disabled={loading} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-600 disabled:opacity-50">
+        <button type="button" onClick={load} disabled={loading} className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-600 disabled:opacity-50">
           <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Rescanner
         </button>
       </div>
@@ -165,10 +165,10 @@ export default function DoublonsPage() {
                 <FamCard f={p.b} />
               </div>
               <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-100">
-                <button onClick={() => ignorer(p.a.id, p.b.id, `${p.a.parentName} / ${p.b.parentName}`)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-500 hover:bg-slate-50">
+                <button type="button" onClick={() => ignorer(p.a.id, p.b.id, `${p.a.parentName} / ${p.b.parentName}`)} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-500 hover:bg-slate-50">
                   <X size={12} /> Pas un doublon
                 </button>
-                <button onClick={() => openMerge(p)} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold hover:bg-blue-500">
+                <button type="button" onClick={() => openMerge(p)} className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold hover:bg-blue-500">
                   Fusionner…
                 </button>
               </div>
@@ -183,7 +183,7 @@ export default function DoublonsPage() {
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-display text-lg font-bold text-slate-900">Fusionner les comptes</h2>
-              <button onClick={() => setMergePair(null)} disabled={merging} className="text-slate-400"><X size={18} /></button>
+              <button type="button" onClick={() => setMergePair(null)} disabled={merging} className="text-slate-400"><X size={18} /></button>
             </div>
             <p className="font-body text-xs text-slate-500 mb-3">
               Choisis le <strong>compte à conserver</strong>. Les enfants, forfaits, avoirs, fidélité, devis, réservations et l'historique de paiement de l'autre compte y seront rattachés. Les encaissements (immuables) ne sont pas modifiés. Le compte absorbé est masqué (réversible).
@@ -246,10 +246,10 @@ export default function DoublonsPage() {
             {mergeErr && <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 font-body text-xs text-rose-700 mb-3">{mergeErr}</div>}
 
             <div className="flex items-center justify-end gap-2">
-              <button onClick={() => callMerge(true)} disabled={merging} className="px-3 py-2 rounded-lg border border-slate-300 bg-white font-body text-xs font-semibold text-slate-700 disabled:opacity-50">
+              <button type="button" onClick={() => callMerge(true)} disabled={merging} className="px-3 py-2 rounded-lg border border-slate-300 bg-white font-body text-xs font-semibold text-slate-700 disabled:opacity-50">
                 {merging && !preview ? <Loader2 size={13} className="animate-spin inline" /> : "Prévisualiser"}
               </button>
-              <button onClick={() => callMerge(false)} disabled={merging || !preview} title={!preview ? "Prévisualise d'abord" : ""} className="px-3 py-2 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold disabled:opacity-40">
+              <button type="button" onClick={() => callMerge(false)} disabled={merging || !preview} title={!preview ? "Prévisualise d'abord" : ""} className="px-3 py-2 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold disabled:opacity-40">
                 {merging && preview ? <Loader2 size={13} className="animate-spin inline" /> : "Fusionner définitivement"}
               </button>
             </div>

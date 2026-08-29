@@ -156,7 +156,7 @@ export default function EmailsLogPage() {
           <h1 className="font-display text-2xl font-bold text-blue-800">Journal des emails</h1>
           <p className="font-body text-sm text-slate-500 mt-1">Historique centralisé — conservation 90 jours</p>
         </div>
-        <button
+        <button type="button"
           onClick={fetchLogs}
           disabled={refreshing}
           className="flex items-center gap-2 font-body text-sm text-blue-500 bg-blue-50 hover:bg-blue-100 border-none px-4 py-2 rounded-lg cursor-pointer disabled:opacity-50">
@@ -212,7 +212,7 @@ export default function EmailsLogPage() {
               { id: "sent", label: "Envoyés" },
               { id: "failed", label: `Échecs${stats.failed > 0 ? ` (${stats.failed})` : ""}` },
             ].map(f => (
-              <button key={f.id} onClick={() => setStatusFilter(f.id as any)}
+              <button type="button" key={f.id} onClick={() => setStatusFilter(f.id as any)}
                 className={`font-body text-xs px-3 py-2 rounded-lg border cursor-pointer ${statusFilter === f.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
                 {f.label}
               </button>
@@ -240,7 +240,7 @@ export default function EmailsLogPage() {
             title="Date fin"
           />
           {(search || statusFilter !== "all" || contextFilter !== "all" || dateFrom || dateTo) && (
-            <button
+            <button type="button"
               onClick={() => { setSearch(""); setStatusFilter("all"); setContextFilter("all"); setDateFrom(""); setDateTo(""); }}
               className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
               Réinitialiser
@@ -269,7 +269,7 @@ export default function EmailsLogPage() {
               const isFail = log.status === "failed";
               const ctxLabel = CONTEXT_LABELS[log.context] || log.context;
               return (
-                <button
+                <button type="button"
                   key={log.id}
                   onClick={() => setSelectedLog(log)}
                   className={`text-left flex items-start gap-3 px-3 py-2 rounded-lg border-none cursor-pointer transition-colors ${isFail ? "bg-red-50/40 hover:bg-red-50" : "bg-white hover:bg-slate-50"}`}>
@@ -305,7 +305,7 @@ export default function EmailsLogPage() {
           <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-5 border-b border-gray-100">
               <h2 className="font-display text-base font-bold text-blue-800">Détail de l'envoi</h2>
-              <button onClick={() => setSelectedLog(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">✕</button>
+              <button type="button" onClick={() => setSelectedLog(null)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">✕</button>
             </div>
             <div className="p-5 flex flex-col gap-3">
               <div className="flex items-center gap-2">

@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     return NextResponse.json(
-      { error: "Erreur serveur", message: e.message || String(e) },
+      { error: "Erreur serveur" },
       { status: 500 }
     );
   }

@@ -35,6 +35,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(d, { status: r.status });
   } catch (e: any) {
     console.error("[test-charge-balances]", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }

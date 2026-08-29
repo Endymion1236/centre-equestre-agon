@@ -535,7 +535,7 @@ export default function BoiteAssistantPage() {
           </div>
           {gmail.connected && (
             <div className="flex flex-shrink-0 items-center gap-2">
-              <button
+              <button type="button"
                 onClick={connectGmail}
                 disabled={connecting}
                 title="Redemander l'autorisation Google (nécessaire pour activer l'envoi)"
@@ -543,7 +543,7 @@ export default function BoiteAssistantPage() {
               >
                 {connecting ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Reconnecter
               </button>
-              <button
+              <button type="button"
                 onClick={loadGmail}
                 disabled={gmail.loading}
                 className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
@@ -568,7 +568,7 @@ export default function BoiteAssistantPage() {
         )}
 
         {!gmail.loading && gmail.configured && !gmail.connected && (
-          <button
+          <button type="button"
             onClick={connectGmail}
             disabled={connecting}
             className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-body text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
@@ -589,13 +589,13 @@ export default function BoiteAssistantPage() {
                   {selectedIds.length} sélectionné{selectedIds.length > 1 ? "s" : ""}
                 </span>
                 <div className="flex items-center gap-2">
-                  <button
+                  <button type="button"
                     onClick={() => setSelectedIds([])}
                     className="font-body text-[11px] text-slate-500 hover:text-slate-700"
                   >
                     Annuler
                   </button>
-                  <button
+                  <button type="button"
                     onClick={deleteSelected}
                     disabled={mailboxBusy === "trash"}
                     className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
@@ -627,7 +627,7 @@ export default function BoiteAssistantPage() {
                     className="mt-1 h-4 w-4 flex-shrink-0 cursor-pointer accent-red-600"
                     aria-label="Sélectionner ce mail"
                   />
-                  <button onClick={() => pickMessage(m)} className="min-w-0 flex-1 text-left">
+                  <button type="button" onClick={() => pickMessage(m)} className="min-w-0 flex-1 text-left">
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-body text-xs font-semibold text-slate-700">
                         {estVocal(m) ? "Répondeur téléphonique" : decodeHtml(m.from)}
@@ -650,7 +650,7 @@ export default function BoiteAssistantPage() {
               ))}
             </div>
             {gmail.nextPageToken && (
-              <button
+              <button type="button"
                 onClick={loadMore}
                 disabled={loadingMore}
                 className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 py-2 font-body text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50"
@@ -672,14 +672,14 @@ export default function BoiteAssistantPage() {
             </div>
             {selectedId && (
               <div className="flex items-center gap-2">
-                <button
+                <button type="button"
                   onClick={forwardMail}
                   disabled={!!mailboxBusy}
                   className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
                 >
                   {mailboxBusy === "forward" ? <Loader2 size={12} className="animate-spin" /> : <Forward size={12} />} Transférer
                 </button>
-                <button
+                <button type="button"
                   onClick={deleteMail}
                   disabled={!!mailboxBusy}
                   className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 font-body text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
@@ -735,7 +735,7 @@ export default function BoiteAssistantPage() {
                 {attachments.map((a: any) => (
                   <div key={a.attachmentId} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate font-body text-[11px] text-slate-600">{a.filename}</span>
-                    <button
+                    <button type="button"
                       onClick={() => lireRib(a)}
                       disabled={!!ribBusy}
                       className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
@@ -752,7 +752,7 @@ export default function BoiteAssistantPage() {
                         Fichier Google Drive
                       </a>
                     </span>
-                    <button
+                    <button type="button"
                       onClick={() => lireRib(d)}
                       disabled={!!ribBusy}
                       className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
@@ -830,7 +830,7 @@ export default function BoiteAssistantPage() {
                           <div className="mb-1 font-body text-[11px] text-slate-600">Créer le mandat pour :</div>
                           <div className="flex flex-wrap gap-1.5">
                             {(rib.candidats || []).map((c: any) => (
-                              <button
+                              <button type="button"
                                 key={c.familyId}
                                 onClick={() => preremplirMandat(c.familyId, c.parentName)}
                                 title={`Rapprochement par ${c.motif}`}
@@ -872,7 +872,7 @@ export default function BoiteAssistantPage() {
             rows={9}
             className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
           />
-          <button
+          <button type="button"
             onClick={analyser}
             disabled={loading || (!body.trim() && !subject.trim())}
             className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-body text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
@@ -1017,7 +1017,7 @@ export default function BoiteAssistantPage() {
                   </div>
                   {!newFam && (
                     <div className="mt-2.5">
-                      <button
+                      <button type="button"
                         onClick={createFamily}
                         disabled={creatingFam || !famForm.parentEmail.trim() || !famForm.children.some((c) => c.firstName.trim())}
                         className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 font-body text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
@@ -1151,7 +1151,7 @@ export default function BoiteAssistantPage() {
                                 {s.prixMode === "semaine" && s.nbJours > 1 ? ` · ${s.nbJours} jours` : ""}
                               </span>
                             ) : (
-                              <button
+                              <button type="button"
                                 onClick={() => enrollSuggestion(s, i)}
                                 disabled={enrollState[i]?.busy}
                                 className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
@@ -1226,7 +1226,7 @@ export default function BoiteAssistantPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     {gmail.connected && (
-                      <button
+                      <button type="button"
                         onClick={sendReply}
                         disabled={sending || !from.trim() || !draft.trim()}
                         className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
@@ -1234,7 +1234,7 @@ export default function BoiteAssistantPage() {
                         {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
                       </button>
                     )}
-                    <button
+                    <button type="button"
                       onClick={copyDraft}
                       className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
                     >

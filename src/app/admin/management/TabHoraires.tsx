@@ -530,7 +530,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
     <div className="flex flex-col gap-5">
       {/* Navigation mois */}
       <div className="flex items-center justify-between no-print">
-        <button onClick={prevMonth} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
+        <button type="button" onClick={prevMonth} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
           <ChevronLeft size={16} />Mois préc.
         </button>
         <div className="text-center">
@@ -538,11 +538,11 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
           <div className="font-body text-xs text-slate-400">{weeksOfMonth.length} semaines · {joursduMois.length} jours</div>
         </div>
         <div className="flex gap-2">
-          <button onClick={handlePrint}
+          <button type="button" onClick={handlePrint}
             className="flex items-center gap-1.5 font-body text-sm text-slate-600 bg-gray-100 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-200">
             <Printer size={14} /> Imprimer
           </button>
-          <button onClick={nextMonth} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
+          <button type="button" onClick={nextMonth} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
             Mois suiv.<ChevronRight size={16} />
           </button>
         </div>
@@ -550,12 +550,12 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 
       {/* Sélecteur salarié */}
       <div className="flex flex-wrap gap-2 no-print">
-        <button onClick={() => setSelectedSalId("")}
+        <button type="button" onClick={() => setSelectedSalId("")}
           className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${!selectedSalId ? "bg-blue-500 text-white" : "bg-white text-slate-500 border border-gray-200"}`}>
           Tous
         </button>
         {activeSals.map(sal => (
-          <button key={sal.id} onClick={() => setSelectedSalId(sal.id)}
+          <button type="button" key={sal.id} onClick={() => setSelectedSalId(sal.id)}
             className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer flex items-center gap-1.5 ${selectedSalId === sal.id ? "bg-blue-500 text-white" : "bg-white text-slate-500 border border-gray-200"}`}>
             <div className="w-2.5 h-2.5 rounded-full" style={{ background: sal.couleur }} />
             {sal.nom}
@@ -919,11 +919,11 @@ function PanneauRH({
         <span className={`font-body text-sm font-bold ${compteurPrev < 0 ? "text-red-600" : "text-teal-700"}`}>{fmtSigne(compteurPrev)}</span>
         <span className="font-body text-[11px] text-slate-400">(acquis {fmtSigne(compteurStocke)} · prévision mois {fmtSigne(previsionMois)})</span>
         <span className="ml-auto flex items-center gap-1">
-          <button onClick={() => onAjusterCompteur(sal, -60)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">−1h</button>
-          <button onClick={() => onAjusterCompteur(sal, -30)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">−30</button>
-          <button onClick={() => onAjusterCompteur(sal, 30)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">+30</button>
-          <button onClick={() => onAjusterCompteur(sal, 60)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">+1h</button>
-          <button onClick={() => { if (confirm("Remettre l'acquis du compteur à zéro ?")) onAjusterCompteur(sal, -compteurStocke); }}
+          <button type="button" onClick={() => onAjusterCompteur(sal, -60)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">−1h</button>
+          <button type="button" onClick={() => onAjusterCompteur(sal, -30)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">−30</button>
+          <button type="button" onClick={() => onAjusterCompteur(sal, 30)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">+30</button>
+          <button type="button" onClick={() => onAjusterCompteur(sal, 60)} className="px-2 py-1 rounded bg-gray-100 text-xs font-semibold">+1h</button>
+          <button type="button" onClick={() => { if (confirm("Remettre l'acquis du compteur à zéro ?")) onAjusterCompteur(sal, -compteurStocke); }}
             className="px-2 py-1 rounded bg-red-50 text-red-600 text-xs font-semibold hover:bg-red-100">À 0</button>
         </span>
       </div>
@@ -959,7 +959,7 @@ function PanneauRH({
                     Chacune ajoute {fmtDuree(contratMinDe(sal))} au contrat de la période et efface d&apos;autant
                     les heures sup des autres semaines. Si le salarié n&apos;était pas en poste, sors-les du contrat.
                   </div>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       if (!confirm(
                         `Marquer ${lissage.semainesVides.length} semaine(s) hors contrat pour ${sal.nom} ?\n\n` +
@@ -1054,9 +1054,9 @@ function PanneauRH({
                 <>
                   {w.surplus > 0 && (
                     <span className="inline-flex rounded-md overflow-hidden border border-gray-200">
-                      <button onClick={() => onSetMode(sal.id, w.isoWeek, "paye")} disabled={w.clos}
+                      <button type="button" onClick={() => onSetMode(sal.id, w.isoWeek, "paye")} disabled={w.clos}
                         className={`px-2 py-1 ${w.mode === "paye" ? "bg-red-500 text-white" : "bg-white text-slate-500"} disabled:opacity-40`}>sup payée</button>
-                      <button onClick={() => onSetMode(sal.id, w.isoWeek, "recup")} disabled={w.clos}
+                      <button type="button" onClick={() => onSetMode(sal.id, w.isoWeek, "recup")} disabled={w.clos}
                         className={`px-2 py-1 ${w.mode === "recup" ? "bg-teal-600 text-white" : "bg-white text-slate-500"} disabled:opacity-40`}>récup</button>
                     </span>
                   )}
@@ -1067,11 +1067,11 @@ function PanneauRH({
               {w.clos ? (
                 <span className="ml-auto inline-flex items-center gap-2">
                   <span className="text-slate-400">intégré ✓</span>
-                  <button onClick={() => onDecloturer(sal, w.isoWeek)}
+                  <button type="button" onClick={() => onDecloturer(sal, w.isoWeek)}
                     className="px-2 py-1 rounded bg-gray-100 text-slate-600 font-semibold hover:bg-gray-200">Rouvrir</button>
                 </span>
               ) : w.lissee || w.enCours ? null : !w.aVenir ? (
-                <button onClick={() => onAppliquerSemaine(sal, w.isoWeek, w.contribution)}
+                <button type="button" onClick={() => onAppliquerSemaine(sal, w.isoWeek, w.contribution)}
                   className="ml-auto px-2 py-1 rounded bg-blue-600 text-white font-semibold">
                   Clôturer ({fmtSigne(w.contribution)})
                 </button>
@@ -1098,7 +1098,7 @@ function PanneauRH({
             {[...absences].sort((a, b) => a.date.localeCompare(b.date)).map(a => (
               <span key={a.id} className="inline-flex items-center gap-1 rounded-full bg-white border border-gray-200 px-2 py-1 text-[11px] font-body">
                 {new Date(a.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" })} · {LIBELLE_ABSENCE[a.type]} · {fmtDuree(a.dureeMinutes)}
-                <button onClick={() => onSupprimerAbsence(a.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={12} /></button>
+                <button type="button" onClick={() => onSupprimerAbsence(a.id)} className="text-slate-300 hover:text-red-500"><Trash2 size={12} /></button>
               </span>
             ))}
           </div>
@@ -1110,7 +1110,7 @@ function PanneauRH({
           </select>
           <input type="number" min="0" step="0.5" value={absDuree} onChange={e => setAbsDuree(e.target.value)}
             placeholder={`${(jourDefautMin / 60).toFixed(1)}h`} className={`${inp} w-20`} title="Durée en heures. Laisser vide = une journée." />
-          <button
+          <button type="button"
             onClick={() => {
               if (!absDate) return;
               const dureeMin = absDuree ? Math.round(parseFloat(absDuree) * 60) : jourDefautMin;

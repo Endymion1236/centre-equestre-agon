@@ -144,6 +144,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ sent: true, to: familyEmail, acompte, solde });
   } catch (e: any) {
     console.error("[stage-acompte-recu]", e);
-    return NextResponse.json({ error: e?.message || "Erreur d'envoi" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur d'envoi" }, { status: 500 });
   }
 }

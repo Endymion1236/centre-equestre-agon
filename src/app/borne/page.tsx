@@ -589,7 +589,7 @@ export default function BornePage() {
       {/* Bouton principal */}
       <div className="flex flex-col items-center gap-3 pb-2">
         {etat === "off" ? (
-          <button onClick={demarrer}
+          <button type="button" onClick={demarrer}
             className="w-28 h-28 rounded-full bg-gradient-to-br from-blue-500 to-sky-400 hover:scale-105 flex items-center justify-center border-none cursor-pointer shadow-2xl transition-transform">
             <Mic size={44} className="text-white" />
           </button>
@@ -598,7 +598,7 @@ export default function BornePage() {
             <Loader2 size={40} className="text-white animate-spin" />
           </div>
         ) : (
-          <button onClick={raccrocher}
+          <button type="button" onClick={raccrocher}
             className="w-28 h-28 rounded-full bg-gradient-to-br from-red-500 to-rose-400 hover:scale-105 flex items-center justify-center border-none cursor-pointer shadow-2xl transition-transform">
             <PhoneOff size={36} className="text-white" />
           </button>

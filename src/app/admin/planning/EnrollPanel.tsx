@@ -80,6 +80,7 @@ import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCrene
 import { MOTIFS_OFFERT } from "@/lib/offerts";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
+import { signalerErreur } from "@/lib/signaler-erreur";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll, onRefresh }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
@@ -363,7 +364,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </select>
                     </div>
                     <div className="flex gap-2 mt-2">
-                      <button disabled={addingChild || !childDraft.firstName.trim()}
+                      <button type="button" disabled={addingChild || !childDraft.firstName.trim()}
                         onClick={async () => {
                           setAddingChild(true);
                           try {
@@ -495,7 +496,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     ))
       .then(snap => setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance))))
       .catch(e => {
-        console.warn("Notes load:", e);
+        signalerErreur(e, "planning: notes de séance (tri serveur)", { creneauId: creneau.id });
         // Index composite manquant → fallback sans orderBy
         getDocs(query(collection(db, "notes-seance"), where("creneauId", "==", creneau.id)))
           .then(snap => {
@@ -2613,13 +2614,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92dvh] md:max-h-[88vh] my-auto flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex-1 overflow-auto">
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button onClick={confirmClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
+          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button type="button" onClick={confirmClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
           <div className="flex items-center gap-3 mt-3">
             <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
             <span className="font-body text-xs text-slate-500">{enrolled.length}/{creneau.maxPlaces}</span>
             {(creneau as any).status === "closed" && <Badge color="gray">Clôturée</Badge>}
             {creneau.activityType === "balade" && (
-              <button disabled={petitGroupeEnCours} onClick={testerPetitGroupe}
+              <button type="button" disabled={petitGroupeEnCours} onClick={testerPetitGroupe}
                 title="Rejoue la vérification que le cron fait chaque soir à J-2 : si les inscrits confirmés sont sous le minimum de l'activité, propose l'envoi des emails de choix (supplément / report / avoir) aux familles."
                 className="ml-auto flex items-center gap-1 font-body text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-orange-100 disabled:opacity-50">
                 {petitGroupeEnCours ? <Loader2 size={11} className="animate-spin" /> : "🌙"} Tester « petit groupe »
@@ -2662,14 +2663,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     </div>
                   </a>
                 ) : (
-                  <button onClick={() => openLightbox()} className="w-full border-none p-0 bg-transparent cursor-zoom-in block">
+                  <button type="button" onClick={() => openLightbox()} className="w-full border-none p-0 bg-transparent cursor-zoom-in block">
                     <img src={planUrl} alt="Plan de séance" className="w-full rounded-xl object-cover max-h-48 hover:opacity-90 transition-opacity" />
                     <div className="absolute inset-0 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 transition-opacity">
                       <span className="font-body text-xs text-white bg-black/50 px-2 py-1 rounded-lg">🔍 Agrandir</span>
                     </div>
                   </button>
                 )}
-                <button onClick={deletePlan}
+                <button type="button" onClick={deletePlan}
                   className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity text-xs">
                   ✕
                 </button>
@@ -2699,7 +2700,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 )}
               </span>
               {notes.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => setShowHistorique(v => !v)}
                   className="flex items-center gap-1 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline"
                 >
@@ -2708,7 +2709,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 </button>
               )}
               {notesPrecedentes.length > 0 && (
-                <button
+                <button type="button"
                   onClick={() => setShowPrecedentes(v => !v)}
                   className="flex items-center gap-1 font-body text-xs text-violet-600 bg-transparent border-none cursor-pointer hover:underline"
                 >
@@ -2742,7 +2743,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 <span className="font-body text-[10px] text-amber-600/70">
                   Sauvegarde automatique
                 </span>
-                <button
+                <button type="button"
                   onClick={saveNotePrepa}
                   disabled={notePrepaSaving}
                   className="flex items-center gap-1 font-body text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-amber-500 text-white border-none cursor-pointer hover:bg-amber-400 disabled:opacity-40"
@@ -2767,7 +2768,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   ? "✓ Le plan de séance courant sera associé à la note"
                   : "Aucun plan associé"}
               </span>
-              <button
+              <button type="button"
                 onClick={saveNote}
                 disabled={noteSaving || !noteTexte.trim()}
                 className="flex items-center gap-1 font-body text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500 text-white border-none cursor-pointer hover:bg-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
@@ -2814,7 +2815,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                             <span className="text-slate-400">· {n.createdByName}</span>
                           )}
                         </div>
-                        <button
+                        <button type="button"
                           onClick={() => deleteNote(n.id)}
                           className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"
                           title="Supprimer cette note"
@@ -2915,7 +2916,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         {(creneau as any).status === "closed" && (
           <div className="p-5 bg-gray-50 border-b border-gray-200">
             <p className="font-body text-sm text-slate-600 mb-2">Cette séance est clôturée. Les inscriptions et modifications sont verrouillées.</p>
-            <button onClick={async () => {
+            <button type="button" onClick={async () => {
               if (!confirm("Réouvrir cette séance ?\n\nLes modifications seront à nouveau possibles.\nLes traces pédagogiques et débits de cartes déjà créés ne seront pas affectés.")) return;
               await updateDoc(doc(db, "creneaux", creneau.id!), { status: "planned" });
               onClose();
@@ -2930,17 +2931,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             <h3 className="font-body text-sm font-semibold text-blue-800"><Users size={16} className="inline mr-1"/>Inscrits ({enrolled.length})</h3>
             {enrolled.length > 0 && (
               <div className="flex items-center gap-1.5">
-                <button onClick={handlePrintProgressions}
+                <button type="button" onClick={handlePrintProgressions}
                   className="flex items-center gap-1 font-body text-xs text-purple-500 bg-purple-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100"
                   title="Imprimer les fiches de progression">
                   <Printer size={12} /> Fiches
                 </button>
-                <button onClick={handleEmailProgressions} disabled={progressionSending}
+                <button type="button" onClick={handleEmailProgressions} disabled={progressionSending}
                   className="flex items-center gap-1 font-body text-xs text-green-600 bg-green-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100 disabled:opacity-50"
                   title="Envoyer les fiches de progression par email">
                   {progressionSending ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Envoyer fiches
                 </button>
-                <button onClick={() => { setShowEmailForm(!showEmailForm); if (!showEmailForm && !emailSubject) setEmailSubject(`${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`); }}
+                <button type="button" onClick={() => { setShowEmailForm(!showEmailForm); if (!showEmailForm && !emailSubject) setEmailSubject(`${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`); }}
                   className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                   <Mail size={12} /> Email
                 </button>
@@ -2953,7 +2954,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             <div className="mb-4 border border-blue-200 rounded-xl overflow-hidden">
               <div className="bg-blue-50 px-4 py-2.5 flex items-center justify-between">
                 <span className="font-body text-xs font-semibold text-blue-700">📧 Email aux {getCreneauRecipients().length} famille{getCreneauRecipients().length > 1 ? "s" : ""}</span>
-                <button onClick={() => setShowEmailForm(false)} className="text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
+                <button type="button" onClick={() => setShowEmailForm(false)} className="text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
               </div>
               <div className="p-4 space-y-3">
                 <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
@@ -2964,12 +2965,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   rows={6}
                   className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm resize-y focus:outline-none focus:border-blue-500" />
                 <div className="flex gap-2">
-                  <button onClick={handleEmailGenerate} disabled={emailGenerating}
+                  <button type="button" onClick={handleEmailGenerate} disabled={emailGenerating}
                     className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50">
                     {emailGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
                     Générer avec IA
                   </button>
-                  <button onClick={handleEmailSend} disabled={emailSending || !emailSubject || !emailBody}
+                  <button type="button" onClick={handleEmailSend} disabled={emailSending || !emailSubject || !emailBody}
                     className="flex-1 flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
                     {emailSending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
                     Envoyer
@@ -3080,7 +3081,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   })()}
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button onClick={() => toggleHighlight(e)} disabled={highlightBusy === e.childId}
+                  <button type="button" onClick={() => toggleHighlight(e)} disabled={highlightBusy === e.childId}
                     title={e.highlight ? "Retirer le surlignage" : "Surligner"}
                     className={`border-none cursor-pointer px-1.5 py-0.5 rounded text-sm leading-none disabled:opacity-40 ${e.highlight ? "bg-yellow-200 opacity-100" : "bg-transparent opacity-40 hover:opacity-80"}`}>
                     🖍️
@@ -3092,20 +3093,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     title={`Progression de ${e.childName}`}>
                     <span>📊</span>
                   </a>
-                  <button onClick={() => handleSendOneFiche(e)} disabled={sendingFicheFor !== null}
+                  <button type="button" onClick={() => handleSendOneFiche(e)} disabled={sendingFicheFor !== null}
                     className="flex items-center gap-1 font-body text-xs text-green-500 hover:text-green-700 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-green-50 flex-shrink-0 disabled:opacity-40"
                     title={`Envoyer la fiche d'évaluation de ${e.childName} par email à la famille`}>
                     {sendingFicheFor === e.childId ? <Loader2 size={12} className="animate-spin" /> : <span>✉️</span>}
                   </button>
                   {(e as any).preinscription && (
-                    <button onClick={() => convertirPreinscription(e)} disabled={conversion === e.childId}
+                    <button type="button" onClick={() => convertirPreinscription(e)} disabled={conversion === e.childId}
                       title="Transformer en inscription définitive : le paiement sera créé"
                       className="flex items-center gap-1 font-body text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-indigo-50 flex-shrink-0 disabled:opacity-40">
                       {conversion === e.childId ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                       <span className="hidden sm:inline">Confirmer</span>
                     </button>
                   )}
-                  <button onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
+                  <button type="button" onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
                     className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">
                     {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>}
                   </button>
@@ -3151,7 +3152,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 Si vous inscrivez quelqu&apos;un d&apos;autre sur cette place, libérez d&apos;abord la réservation —
                 sinon sa demande resterait bloquée et elle ne serait plus jamais renotifiée.
               </div>
-              <button onClick={libererHold} disabled={holdReleasing}
+              <button type="button" onClick={libererHold} disabled={holdReleasing}
                 className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 font-body text-[11px] font-semibold text-amber-800 cursor-pointer hover:bg-amber-100 disabled:opacity-50">
                 {holdReleasing ? <Loader2 size={12} className="animate-spin inline" /> : "Libérer la réservation"}
               </button>
@@ -3175,13 +3176,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     <div className="font-body text-xs text-slate-500">{entry.familyName}</div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button
+                    <button type="button"
                       onClick={() => acceptWaitlist(entry)}
                       disabled={waitlistLoading || spots <= 0}
                       className={`font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer ${spots > 0 ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-100 text-slate-400 cursor-not-allowed"} disabled:opacity-50`}>
                       {waitlistLoading ? <Loader2 size={12} className="animate-spin inline" /> : "✓ Accepter"}
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => retirerWaitlist(entry)}
                       disabled={waitRemoving === entry.id}
                       title="Retirer de la liste d'attente"
@@ -3224,7 +3225,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     ))}
                   </select>
                 )}
-                <button onClick={addToWaitlistAdmin} disabled={!selChild || waitAdding}
+                <button type="button" onClick={addToWaitlistAdmin} disabled={!selChild || waitAdding}
                   className={`w-full py-2.5 rounded-lg font-body text-sm font-semibold border-none ${!selChild || waitAdding ? "bg-gray-100 text-slate-400 cursor-not-allowed" : "bg-orange-500 text-white cursor-pointer hover:bg-orange-600"}`}>
                   {waitAdding ? <Loader2 size={14} className="animate-spin inline" /> : "🔔 Mettre en liste d'attente"}
                 </button>
@@ -3243,7 +3244,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
             {/* Bouton nouvelle famille */}
             {!selFam && !showNewFamily && (
-              <button onClick={() => setShowNewFamily(true)}
+              <button type="button" onClick={() => setShowNewFamily(true)}
                 className="flex items-center gap-1.5 font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-green-100 self-start">
                 <UserPlus size={12} /> Nouvelle famille
               </button>
@@ -3254,7 +3255,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               <div className="border border-green-200 rounded-xl overflow-hidden">
                 <div className="bg-green-50 px-4 py-2.5 flex items-center justify-between">
                   <span className="font-body text-xs font-semibold text-green-700">👨‍👩‍👧 Nouvelle famille</span>
-                  <button onClick={() => setShowNewFamily(false)} className="text-green-400 hover:text-green-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
+                  <button type="button" onClick={() => setShowNewFamily(false)} className="text-green-400 hover:text-green-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
                 </div>
                 <div className="p-4 space-y-2.5">
                   <div className="flex gap-2">
@@ -3310,7 +3311,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           <input value={child.lastName ?? nomFoyerDeduit} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
                             placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                           {newChildren.length > 1 && (
-                            <button onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
+                            <button type="button" onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
                               className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><X size={14} /></button>
                           )}
                         </div>
@@ -3346,7 +3347,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         </div>
                       </div>
                     ))}
-                    <button onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: null, birthDate: "", galopLevel: "—" }])}
+                    <button type="button" onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: null, birthDate: "", galopLevel: "—" }])}
                       className="font-body text-xs text-green-600 bg-transparent border-none cursor-pointer hover:underline p-0">
                       + Ajouter un cavalier
                     </button>

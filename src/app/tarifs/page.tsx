@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Metadata } from "next";
 import { BadgeEuro, CheckCircle2 } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -30,7 +31,7 @@ export default function TarifsPage() {
           </div>
 
           <div className="relative min-h-[330px] overflow-hidden rounded-[30px] border border-white/12 bg-white/[0.06] shadow-[0_28px_75px_rgba(0,0,0,0.2)]">
-            <img src="/images/vitrine/choices/stages-enfants.webp" alt="Des enfants profitent d'un stage à poney" className="absolute inset-0 h-full w-full object-cover" />
+            <Image src="/images/vitrine/choices/stages-enfants.webp" alt="Des enfants profitent d'un stage à poney" fill sizes="100vw" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-blue-950/48 via-transparent to-white/5" />
             <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-white/14 bg-blue-950/55 p-4 backdrop-blur-md">
               <div className="font-body text-[10px] font-bold uppercase tracking-[0.15em] text-gold-300">Réserver au bon moment</div>

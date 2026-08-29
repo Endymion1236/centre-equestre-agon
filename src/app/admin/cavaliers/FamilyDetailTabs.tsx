@@ -238,7 +238,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
             const cid = id.replace("child_", "");
             const childBadge = reservations.filter((r: any) => r.childId === cid && r.date >= today && r.status !== "cancelled").length;
             return (
-              <button key={id} onClick={() => setTab(id)}
+              <button type="button" key={id} onClick={() => setTab(id)}
                 className={`font-body text-xs px-4 py-2 rounded-xl border-none cursor-pointer transition-all flex items-center gap-1.5 ${tab === id ? "bg-blue-500 text-white font-semibold shadow-sm" : "text-blue-800 bg-blue-50 hover:bg-blue-100"}`}>
                 {label}
                 {childBadge > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === id ? "bg-white/20" : "bg-blue-200/60 text-blue-600"}`}>{childBadge}</span>}
@@ -254,7 +254,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
           {familyTabs.map(({ id, label }) => {
             const badge = id === "paiements" ? payments.length : 0;
             return (
-              <button key={id} onClick={() => setTab(id)}
+              <button type="button" key={id} onClick={() => setTab(id)}
                 className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all flex items-center gap-1 ${tab === id ? "bg-slate-700 text-white font-semibold" : "text-slate-500 bg-sand hover:bg-gray-200"}`}>
                 {label}
                 {badge > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${tab === id ? "bg-white/20" : "bg-gray-200"}`}>{badge}</span>}
@@ -280,7 +280,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               <div className="relative shrink-0">
                 {child.photoUrl ? (
                   /* Photo présente : clic = agrandir (lightbox) */
-                  <button onClick={() => setPhotoLightbox(child.id)} title="Agrandir la photo"
+                  <button type="button" onClick={() => setPhotoLightbox(child.id)} title="Agrandir la photo"
                     className="w-12 h-12 rounded-xl overflow-hidden border-none p-0 cursor-zoom-in bg-blue-50 block">
                     <img src={child.photoUrl} alt={child.firstName} className="w-full h-full object-cover" />
                   </button>
@@ -318,7 +318,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                         <input type="file" accept="image/*" className="hidden" disabled={photoUploading === child.id}
                           onChange={e => { const f = e.target.files?.[0]; if (f) { uploadPhoto(child, f); setPhotoLightbox(null); } e.target.value = ""; }} />
                       </label>
-                      <button onClick={() => setPhotoLightbox(null)}
+                      <button type="button" onClick={() => setPhotoLightbox(null)}
                         className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Fermer</button>
                     </div>
                   </div>
@@ -377,7 +377,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                 )}
                 {child.sanitaryForm ? <Badge color="green">Attestation ✓</Badge> : <>
                   <Badge color="orange">⚠ Attestation</Badge>
-                  <button onClick={() => relancerAttestation(child)}
+                  <button type="button" onClick={() => relancerAttestation(child)}
                     disabled={relanceSending === child.id || relanceSent[child.id] || !family.parentEmail}
                     title={family.parentEmail ? `Envoyer un email de relance à ${family.parentEmail}` : "Pas d'email renseigné"}
                     className="font-body text-[10px] font-semibold text-orange-700 bg-white border border-orange-300 px-2 py-0.5 rounded-full cursor-pointer hover:bg-orange-50 disabled:opacity-50 disabled:cursor-default">
@@ -395,26 +395,26 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
             {/* Hiérarchie : Inscrire = primaire plein ; consultation = secondaires
                 neutres ; actions rares ou destructives = menu ⋯ */}
             <div className="relative flex items-center gap-1.5 flex-wrap -mt-2 pb-3 border-b border-blue-500/8">
-              {onInscribe && <button onClick={() => onInscribe(child.id, child.firstName)} className="font-body text-[11px] font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 flex items-center gap-1"><CalendarDays size={11}/> Inscrire</button>}
+              {onInscribe && <button type="button" onClick={() => onInscribe(child.id, child.firstName)} className="font-body text-[11px] font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 flex items-center gap-1"><CalendarDays size={11}/> Inscrire</button>}
               <a href={`/admin/progression/${child.id}?familyId=${family.id}`} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg no-underline cursor-pointer hover:bg-gray-200">📈 Progression</a>
-              {onBilanPdf && <button onClick={() => onBilanPdf(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">🖨 Bilan PDF</button>}
-              {onEditSanitary && <button onClick={() => onEditSanitary(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">🩺 Fiche sanitaire</button>}
-              <button onClick={() => setActionMenuOpen(actionMenuOpen === child.id ? null : child.id)}
+              {onBilanPdf && <button type="button" onClick={() => onBilanPdf(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">🖨 Bilan PDF</button>}
+              {onEditSanitary && <button type="button" onClick={() => onEditSanitary(child)} className="font-body text-[11px] text-slate-600 bg-gray-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">🩺 Fiche sanitaire</button>}
+              <button type="button" onClick={() => setActionMenuOpen(actionMenuOpen === child.id ? null : child.id)}
                 title="Plus d'actions"
                 className="font-body text-[13px] font-bold text-slate-500 bg-gray-100 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-gray-200">⋯</button>
               {actionMenuOpen === child.id && (
                 <div className="absolute right-0 top-9 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[170px]">
-                  {onEditChild && <button onClick={() => { setActionMenuOpen(null); onEditChild(child); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">✏️ Modifier la fiche</button>}
-                  {onEditGalop && <button onClick={() => { setActionMenuOpen(null); onEditGalop(child.id); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">🎖 Changer le niveau</button>}
-                  {onMoveChild && <button onClick={() => { setActionMenuOpen(null); onMoveChild(child); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50 border-t border-gray-100">🔀 Déplacer vers une autre famille</button>}
-                  {onDeleteChild && <button onClick={() => { setActionMenuOpen(null); onDeleteChild(child.id, child.firstName); }} className="w-full text-left font-body text-xs text-red-500 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-red-50 border-t border-gray-100">🗑 Supprimer le cavalier</button>}
+                  {onEditChild && <button type="button" onClick={() => { setActionMenuOpen(null); onEditChild(child); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">✏️ Modifier la fiche</button>}
+                  {onEditGalop && <button type="button" onClick={() => { setActionMenuOpen(null); onEditGalop(child.id); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50">🎖 Changer le niveau</button>}
+                  {onMoveChild && <button type="button" onClick={() => { setActionMenuOpen(null); onMoveChild(child); }} className="w-full text-left font-body text-xs text-slate-700 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-gray-50 border-t border-gray-100">🔀 Déplacer vers une autre famille</button>}
+                  {onDeleteChild && <button type="button" onClick={() => { setActionMenuOpen(null); onDeleteChild(child.id, child.firstName); }} className="w-full text-left font-body text-xs text-red-500 px-3 py-2 bg-transparent border-none cursor-pointer hover:bg-red-50 border-t border-gray-100">🗑 Supprimer le cavalier</button>}
                 </div>
               )}
             </div>
 
             {/* Fiche sanitaire — repliée en une ligne par défaut */}
             {child.sanitaryForm && (
-              <button onClick={() => setSanitaryExpanded(sanitaryExpanded === child.id ? null : child.id)}
+              <button type="button" onClick={() => setSanitaryExpanded(sanitaryExpanded === child.id ? null : child.id)}
                 className="w-full text-left bg-green-50 hover:bg-green-100 rounded-xl px-4 py-2.5 border-none cursor-pointer transition-colors">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-body text-[10px] text-green-600 uppercase tracking-wider font-semibold">🩺 Fiche sanitaire ✓{!sanitaryExpanded && child.sanitaryForm.allergies ? <span className="ml-2 normal-case tracking-normal font-normal text-orange-600">Allergies : {child.sanitaryForm.allergies}</span> : null}</span>
@@ -496,7 +496,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                         <span className="text-slate-500">{r.startTime}–{r.endTime}</span>
                         <span className="text-blue-800 font-semibold">{r.activityTitle}</span>
                       </div>
-                      <button title="Annuler" onClick={async () => {
+                      <button type="button" title="Annuler" onClick={async () => {
                         if (!confirm(`Annuler ${child.firstName} le ${new Date(r.date + "T12:00:00").toLocaleDateString("fr-FR")} ?`)) return;
                         await updateDoc(doc(db, "reservations", r.id), { status: "cancelled", cancelledAt: new Date().toISOString() });
                         if (r.creneauId) { const cs = await getDoc(doc(db, "creneaux", r.creneauId)); if (cs.exists()) { const enrolled = (cs.data().enrolled || []).filter((e: any) => !(e.childId === r.childId && e.familyId === r.familyId)); await updateDoc(doc(db, "creneaux", r.creneauId), { enrolled, enrolledCount: enrolled.length }); } }
@@ -505,7 +505,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                     </div>
                   ))}
                   {upcoming.length > 3 && (
-                    <button
+                    <button type="button"
                       onClick={() => setSeancesExpanded(seancesExpanded === child.id ? null : child.id)}
                       className="font-body text-[10px] text-blue-500 hover:text-blue-700 text-center bg-transparent border-none cursor-pointer py-1"
                     >
@@ -516,7 +516,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               )}
               {past.length > 0 && (
                 <div className="mt-2">
-                  <button onClick={() => setPastExpanded(pastExpanded === child.id ? null : child.id)}
+                  <button type="button" onClick={() => setPastExpanded(pastExpanded === child.id ? null : child.id)}
                     className="font-body text-[10px] text-slate-400 font-semibold mb-1 bg-transparent border-none cursor-pointer p-0 hover:text-slate-600">
                     {pastExpanded === child.id ? "▼" : "▶"} Passées ({past.length})
                   </button>
@@ -545,7 +545,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
 
             {/* Progression FFE — accordéon replié par défaut (bloc volumineux) */}
             <div>
-              <button
+              <button type="button"
                 onClick={() => setProgressionExpanded(progressionExpanded === child.id ? null : child.id)}
                 className="w-full flex items-center justify-between gap-2 bg-purple-50 hover:bg-purple-100 rounded-lg px-3 py-2 border-none cursor-pointer transition-colors"
               >

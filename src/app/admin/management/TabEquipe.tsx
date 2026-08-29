@@ -121,7 +121,7 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={onRefresh}
+          <button type="button" onClick={onRefresh}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">
             <RefreshCw size={13} /> Synchroniser
           </button>
@@ -144,17 +144,17 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                 <div className="font-body text-sm font-semibold text-blue-800">{s.nom} — changer la couleur</div>
                 <div className="flex flex-wrap gap-2">
                   {COULEURS.map(c => (
-                    <button key={c} onClick={() => setCouleur(c)}
+                    <button type="button" key={c} onClick={() => setCouleur(c)}
                       className={`w-8 h-8 rounded-full border-2 cursor-pointer transition-transform ${couleur === c ? "border-blue-500 scale-125" : "border-white"}`}
                       style={{ background: c }} />
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => saveCouleur(s.id)}
+                  <button type="button" onClick={() => saveCouleur(s.id)}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">
                     <Check size={14} /> Valider
                   </button>
-                  <button onClick={cancel}
+                  <button type="button" onClick={cancel}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">
                     <X size={14} /> Annuler
                   </button>
@@ -214,17 +214,17 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                 )}
                 <div className="flex gap-2 flex-wrap">
                   {s.dateEntree && s.dateSortie && (
-                    <button onClick={() => nouvellePeriode(s)} disabled={regSaving}
+                    <button type="button" onClick={() => nouvellePeriode(s)} disabled={regSaving}
                       title="Saisonnier qui revient : archive la période terminée au registre et rouvre les dates"
                       className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm font-semibold text-purple-700 bg-white border border-purple-300 cursor-pointer hover:bg-purple-100 disabled:opacity-50">
                       ↻ Nouvelle période (réembauche)
                     </button>
                   )}
-                  <button onClick={() => saveRegistre(s.id)} disabled={regSaving}
+                  <button type="button" onClick={() => saveRegistre(s.id)} disabled={regSaving}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm font-semibold text-white bg-purple-600 border-none cursor-pointer hover:bg-purple-700 disabled:opacity-50">
                     <Check size={14} /> {regSaving ? "…" : "Enregistrer"}
                   </button>
-                  <button onClick={() => setRegId(null)}
+                  <button type="button" onClick={() => setRegId(null)}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-sm text-slate-500 bg-white border border-gray-200 cursor-pointer">
                     <X size={14} /> Annuler
                   </button>
@@ -248,22 +248,22 @@ export default function TabEquipe({ salaries, onRefresh }: Props) {
                 </div>
                 {!s.actif && <span className="font-body text-xs text-slate-400 bg-gray-100 px-2 py-0.5 rounded-full">Inactif</span>}
                 <div className="flex gap-1">
-                  <button onClick={() => toggleActif(s)}
+                  <button type="button" onClick={() => toggleActif(s)}
                     className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${s.actif ? "bg-green-50 text-green-600 hover:bg-orange-50 hover:text-orange-600" : "bg-orange-50 text-orange-600 hover:bg-green-50 hover:text-green-600"}`}>
                     {s.actif ? "Actif" : "Inactif"}
                   </button>
-                  <button onClick={() => startRegistre(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-purple-50 hover:text-purple-600" title="Fiche registre (contrat, dates, heures)">
+                  <button type="button" onClick={() => startRegistre(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-purple-50 hover:text-purple-600" title="Fiche registre (contrat, dates, heures)">
                     <BookUser size={13} />
                   </button>
                   {isAdmin && (
-                    <button onClick={() => { setEditId(null); setRegId(null); setDocsId(s.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-sky-50 hover:text-sky-600" title="Documents personnels (fiches de paie, attestations…)">
+                    <button type="button" onClick={() => { setEditId(null); setRegId(null); setDocsId(s.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-sky-50 hover:text-sky-600" title="Documents personnels (fiches de paie, attestations…)">
                       <FolderLock size={13} />
                     </button>
                   )}
-                  <button onClick={() => startEdit(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500" title="Changer la couleur">
+                  <button type="button" onClick={() => startEdit(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-500" title="Changer la couleur">
                     <Pencil size={13} />
                   </button>
-                  <button onClick={() => del(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Retirer du planning">
+                  <button type="button" onClick={() => del(s)} className="w-8 h-8 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500" title="Retirer du planning">
                     <Trash2 size={13} />
                   </button>
                 </div>

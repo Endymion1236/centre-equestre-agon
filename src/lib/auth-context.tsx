@@ -13,11 +13,13 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   updateProfile,
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "@/lib/firebase";
+import { estEmailAdmin, repliEmailAutorise } from "@/lib/admin-emails";
 import type { Family } from "@/types";
 
 interface AuthContextType {
@@ -32,6 +34,10 @@ interface AuthContextType {
   isAdmin: boolean;
   isMoniteur: boolean;
   userRole: "admin" | "moniteur" | "cavalier";
+  /** Une fiche existe à cette adresse, mais elle n'est pas encore confirmée. */
+  emailAConfirmer: boolean;
+  /** Renvoie le lien de confirmation à l'adresse du compte connecté. */
+  renvoyerConfirmation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -46,19 +52,16 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   isMoniteur: false,
   userRole: "cavalier",
+  emailAConfirmer: false,
+  renvoyerConfirmation: async () => {},
 });
 
-// Nicolas & Emmeline admin emails
-const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [family, setFamily] = useState<Family | null>(null);
   const [loading, setLoading] = useState(true);
+  const [emailAConfirmer, setEmailAConfirmer] = useState(false);
 
   // Listen to auth state
   useEffect(() => {
@@ -73,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isStaff) {
           // Admin ou moniteur : pas de fiche famille
           setFamily(null);
+          setEmailAConfirmer(false);
         } else {
         // 1. Chercher une fiche famille par uid (cas normal : déjà lié)
         const familyRef = doc(db, "families", firebaseUser.uid);
@@ -90,87 +94,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
           if (!resolved) setFamily({ id: familySnap.id, ...familySnap.data() } as Family);
         } else {
-          // 2. Chercher une fiche famille existante par email (créée par l'admin)
+          // 2. Rattachement à une fiche pré-créée par l'admin — CÔTÉ SERVEUR.
+          //
+          // Cette étape se faisait ici même : requête `families` par email
+          // puis recopie de la fiche entière sous l'uid. La copie emportait
+          // `linkedChildren`, le champ qui autorise à réserver pour l'enfant
+          // d'une autre famille : le navigateur composant le document, il
+          // suffisait de créer sa fiche à la première connexion avec les liens
+          // de son choix. Les règles interdisent désormais à une famille
+          // d'écrire ces champs — le report est fait par /api/famille/lier-compte
+          // en Admin SDK, après vérification de l'adresse du jeton.
+          //
+          // Bénéfice au passage : la requête par email était régulièrement
+          // refusée par les règles, et une famille pré-inscrite repartait alors
+          // sur une fiche vierge, sans ses enfants. L'Admin SDK ne connaît pas
+          // ce cas.
           let linked = false;
-          if (firebaseUser.email) {
-            try {
-              const emailQuery = query(
-                collection(db, "families"),
-                where("parentEmail", "==", firebaseUser.email)
-              );
-              const emailSnap = await getDocs(emailQuery);
-
-              if (!emailSnap.empty) {
-                // Trouvé ! On lie le compte auth à cette fiche existante
-                const existingDoc = emailSnap.docs[0];
-                const existingData = existingDoc.data();
-                const provider = firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook";
-
-                const familyData = {
-                  ...existingData,
-                  authUid: firebaseUser.uid,
-                  authProvider: provider,
-                  parentName: existingData.parentName || firebaseUser.displayName || "",
-                  updatedAt: serverTimestamp(),
-                };
-
-                // 1. Créer/mettre à jour la fiche avec l'uid comme ID
-                await setDoc(familyRef, familyData);
-                setFamily({ id: firebaseUser.uid, ...familyData } as unknown as Family);
+          let aConfirmer = false;
+          try {
+            const token = await firebaseUser.getIdToken();
+            const res = await fetch("/api/famille/lier-compte", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.lie && data.family) {
+                setFamily(data.family as Family);
                 linked = true;
-
-                // 2. Supprimer l'ancienne fiche SEULEMENT si différente et si le setDoc a réussi
-                // On ne bloque pas si cette suppression échoue (droits insuffisants = pas grave)
-                if (existingDoc.id !== firebaseUser.uid) {
-                  try {
-                    await deleteDoc(doc(db, "families", existingDoc.id));
-                  } catch (delErr) {
-                    // Pas critique : la fiche uid existe déjà, l'ancienne sera ignorée
-                    console.warn(`Ancienne fiche non supprimée (sera ignorée) : ${existingDoc.id}`);
-                  }
-                }
-                console.log(`Compte lié : ${firebaseUser.email} → uid ${firebaseUser.uid}`);
               }
-            } catch (e: any) {
-              // Firebase Security Rules peuvent refuser la query list quand la
-              // collection contient des docs dont `parentEmail` ne matche pas
-              // `request.auth.token.email`. C'est un cas edge — la query ne
-              // sert qu'à lier un compte Google à une fiche pré-créée par
-              // l'admin. Si elle échoue, on bascule simplement en création de
-              // nouvelle fiche (étape 3).
-              if (e?.code === "permission-denied") {
-                console.info(
-                  "Query families par email non autorisée (cas normal si aucune fiche pré-existante). Bascule en création."
-                );
-              } else {
-                console.error("Erreur recherche email:", e);
+            } else if (res.status === 403) {
+              // Une fiche existe bien à cette adresse, mais elle n'a pas été
+              // confirmée : le serveur refuse de la rattacher. On renvoie le
+              // lien et on l'explique, plutôt que de laisser un espace vide.
+              const data = await res.json().catch(() => null);
+              if (data?.error === "EMAIL_NON_VERIFIE") {
+                aConfirmer = true;
+                try { await sendEmailVerification(firebaseUser); } catch { /* déjà envoyé */ }
               }
             }
+          } catch (e) {
+            console.warn("Rattachement de compte impossible, bascule en création:", e);
           }
+          setEmailAConfirmer(aConfirmer);
 
           if (!linked) {
-            // 3. Aucune fiche trouvée → créer un nouveau profil
-            const newFamily: Partial<Family> = {
-              parentName: firebaseUser.displayName || "",
-              parentEmail: firebaseUser.email || "",
-              parentPhone: "",
-              authProvider: firebaseUser.providerData[0]?.providerId === "google.com" ? "google" : "facebook",
-              authUid: firebaseUser.uid,
-              children: [],
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            };
-            await setDoc(familyRef, {
-              ...newFamily,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
-            setFamily({ id: firebaseUser.uid, ...newFamily } as Family);
+            // La route serveur crée la fiche vierge quand aucune n'existe :
+            // si on arrive ici, c'est qu'elle a échoué (réseau, incident).
+            // On ne crée plus la fiche depuis le navigateur — les règles
+            // interdisent désormais à une famille de se déclarer elle-même
+            // `parentEmail`, `authUid` et `authProvider`.
+            console.error("Fiche famille indisponible — nouvelle tentative à la prochaine connexion.");
+            setFamily(null);
           }
         }
         } // fin else !isStaff
       } else {
         setFamily(null);
+        setEmailAConfirmer(false);
       }
 
       setLoading(false);
@@ -204,6 +185,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (displayName) {
       await updateProfile(cred.user, { displayName });
     }
+    // Sans cette confirmation, l'adresse ne prouve rien : le serveur refuse
+    // alors de rattacher une fiche déjà remplie (cf. /api/famille/lier-compte).
+    try {
+      await sendEmailVerification(cred.user);
+    } catch (e) {
+      console.warn("Envoi du lien de confirmation impossible:", e);
+    }
+  };
+
+  const renvoyerConfirmation = async () => {
+    if (auth.currentUser) await sendEmailVerification(auth.currentUser);
   };
 
   const signOut = async () => {
@@ -234,14 +226,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }).catch(() => {});
   }, [user]);
 
-  // isAdmin : custom claim Firebase OU email dans la liste admin.
-  // Important : le fallback email s'applique meme quand le claim vaut
-  // explicitement false (cas d'un environnement Firebase sans claims
-  // configures, ex: base de test gestion-2026-test). Sans ce OR, un
-  // admin connu par email mais sans claim ne serait jamais reconnu.
+  // isAdmin : le custom claim Firebase fait autorite. Le repli par email
+  // (source unique dans lib/admin-emails.ts) ne s'applique que hors base de
+  // production et sur une adresse verifiee, exactement comme cote serveur
+  // dans lib/api-auth.ts — sans quoi l'affichage admin et les droits reels
+  // divergeraient. Ce n'est de toute facon qu'un rendu : les donnees restent
+  // protegees par les regles Firestore.
   const isAdmin =
     adminClaim === true ||
-    (user?.email ? ADMIN_EMAILS.includes(user.email) : false);
+    (repliEmailAutorise() && !!user?.emailVerified && estEmailAdmin(user?.email));
   
   const isMoniteur = moniteurClaim;
   const userRole: "admin" | "moniteur" | "cavalier" = isAdmin ? "admin" : isMoniteur ? "moniteur" : "cavalier";
@@ -260,6 +253,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         isMoniteur,
         userRole,
+        emailAConfirmer,
+        renvoyerConfirmation,
       }}
     >
       {children}

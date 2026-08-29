@@ -21,6 +21,6 @@ export async function POST(req: NextRequest) {
     else await ref.set({ ignoredAt: new Date() });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }

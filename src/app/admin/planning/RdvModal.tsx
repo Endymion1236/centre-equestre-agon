@@ -35,7 +35,7 @@ export default function RdvModal({ form, onChange, onClose, onSave }: Props) {
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-md sm:mx-4 shadow-xl max-h-[92vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100">
           <h2 className="font-display text-lg font-bold text-blue-800">Nouveau RDV professionnel</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
         </div>
         <div className="p-5 space-y-3 overflow-y-auto flex-1">
           <div>
@@ -99,8 +99,8 @@ export default function RdvModal({ form, onChange, onClose, onSave }: Props) {
           </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-gray-100 flex-shrink-0">
-          <button onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-          <button onClick={onSave} disabled={!form.title || !form.date}
+          <button type="button" onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+          <button type="button" onClick={onSave} disabled={!form.title || !form.date}
             className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-orange-600 ${!form.title || !form.date ? "opacity-50" : ""}`}>
             <Briefcase size={16} /> Créer le RDV
           </button>

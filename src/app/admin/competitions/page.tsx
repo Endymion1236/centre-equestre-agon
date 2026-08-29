@@ -116,13 +116,13 @@ export default function CompetitionsPage() {
           <p className="font-body text-xs text-slate-500 mt-1">Challenges internes du centre · Gestion des épreuves</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={fetchChallenges} className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50"><RefreshCw size={13} /> Actualiser</button>
-          <button onClick={() => fileRef.current?.click()} disabled={importing}
+          <button type="button" onClick={fetchChallenges} className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50"><RefreshCw size={13} /> Actualiser</button>
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={importing}
             className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50">
             {importing ? <><Loader2 size={13} className="animate-spin" /> Import...</> : <>📥 Importer JSON</>}
           </button>
           <input ref={fileRef} type="file" accept=".json" onChange={importJSON} className="hidden" />
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-green-500"><Plus size={16} /> Nouveau challenge</button>
+          <button type="button" onClick={() => setShowCreate(true)} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-green-500"><Plus size={16} /> Nouveau challenge</button>
         </div>
       </div>
 
@@ -138,7 +138,7 @@ export default function CompetitionsPage() {
               <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Disciplines</label>
               <div className="flex flex-wrap gap-2">
                 {DISCS.map(d => (
-                  <button key={d.id} onClick={() => setNewDisciplines(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])}
+                  <button type="button" key={d.id} onClick={() => setNewDisciplines(prev => prev.includes(d.id) ? prev.filter(x => x !== d.id) : [...prev, d.id])}
                     className={`font-body text-xs px-3 py-1.5 rounded-lg border cursor-pointer ${newDisciplines.includes(d.id) ? "bg-green-600 text-white border-green-600" : "bg-white text-slate-600 border-gray-200"}`}>
                     {d.label}
                   </button>
@@ -146,11 +146,11 @@ export default function CompetitionsPage() {
               </div>
             </div>
             <div className="flex gap-2 mt-1">
-              <button onClick={createChallenge} disabled={!newTitle.trim() || creating}
+              <button type="button" onClick={createChallenge} disabled={!newTitle.trim() || creating}
                 className="flex-1 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
                 {creating ? <><Loader2 size={14} className="animate-spin" /> Création...</> : "✓ Créer"}
               </button>
-              <button onClick={() => setShowCreate(false)} className="px-4 py-2.5 rounded-lg font-body text-sm text-slate-600 bg-gray-100 border-none cursor-pointer">Annuler</button>
+              <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2.5 rounded-lg font-body text-sm text-slate-600 bg-gray-100 border-none cursor-pointer">Annuler</button>
             </div>
           </div>
         </Card>
@@ -182,8 +182,8 @@ export default function CompetitionsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <button onClick={() => openChallenge(c.id)} className="flex items-center gap-1.5 font-body text-sm font-semibold text-white bg-green-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-green-500"><ExternalLink size={14} /> Ouvrir</button>
-                      <button onClick={() => archiveChallenge(c.id)} className="font-body text-xs text-slate-500 bg-gray-100 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-200">Archiver</button>
+                      <button type="button" onClick={() => openChallenge(c.id)} className="flex items-center gap-1.5 font-body text-sm font-semibold text-white bg-green-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-green-500"><ExternalLink size={14} /> Ouvrir</button>
+                      <button type="button" onClick={() => archiveChallenge(c.id)} className="font-body text-xs text-slate-500 bg-gray-100 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-200">Archiver</button>
                     </div>
                   </div>
                 </Card>
@@ -203,7 +203,7 @@ export default function CompetitionsPage() {
                       <div className="font-body text-sm font-semibold text-slate-700">{c.title}</div>
                       <div className="font-body text-xs text-slate-400">{c.date} · {c.riderCount} cavaliers</div>
                     </div>
-                    <button onClick={() => openChallenge(c.id)} className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer"><ExternalLink size={12} /> Consulter</button>
+                    <button type="button" onClick={() => openChallenge(c.id)} className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer"><ExternalLink size={12} /> Consulter</button>
                   </div>
                 </Card>
               ))}

@@ -175,7 +175,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                 }</span>
                 <span className="text-slate-500"> · {filtered.length} ligne{filtered.length > 1 ? "s" : ""}</span>
               </div>
-              <button data-testid="historique-family-filter-clear" onClick={() => setFamilyFilter("")}
+              <button type="button" data-testid="historique-family-filter-clear" onClick={() => setFamilyFilter("")}
                 className="shrink-0 flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer">
                 <X size={13}/> Tout l&apos;historique
               </button>
@@ -206,7 +206,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
           <div className="flex flex-wrap gap-3 mb-4 items-center">
             <div className="flex gap-1.5">
               {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"], ["sepa_scheduled", "SEPA en cours"], ["cancelled", "Annulés"]] as const).map(([val, label]) => (
-                <button key={val} onClick={() => setHistStatusFilter(val as any)}
+                <button type="button" key={val} onClick={() => setHistStatusFilter(val as any)}
                   className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${histStatusFilter === val ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200"}`}>
                   {label}
                 </button>
@@ -220,7 +220,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
             <input type="month" value={histPeriod} onChange={e => setHistPeriod(e.target.value)}
               className="font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
             {(modeFilter !== "all" || statusFilter !== "all" || searchFilter || periodFilter || familyFilter) && (
-              <button onClick={() => { setHistModeFilter("all"); setHistStatusFilter("all"); setHistSearch(""); setHistPeriod(""); setFamilyFilter(""); }}
+              <button type="button" onClick={() => { setHistModeFilter("all"); setHistStatusFilter("all"); setHistSearch(""); setHistPeriod(""); setFamilyFilter(""); }}
                 className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
                 Réinitialiser
               </button>
@@ -351,19 +351,19 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                     <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "sepa_scheduled" ? "blue" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "sepa_scheduled" ? "SEPA" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                     <span className="w-32 text-center">
                       {p.status === "cancelled" && printAllAvoirs ? (
-                        <button onClick={printAllAvoirs} title={`Télécharger ${linkedAvoirs.length} avoir(s) PDF`} className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100 flex items-center gap-0.5 justify-center"><Receipt size={12} />{linkedAvoirs.length > 1 ? <span className="text-[9px]">×{linkedAvoirs.length}</span> : null}</button>
+                        <button type="button" onClick={printAllAvoirs} title={`Télécharger ${linkedAvoirs.length} avoir(s) PDF`} className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100 flex items-center gap-0.5 justify-center"><Receipt size={12} />{linkedAvoirs.length > 1 ? <span className="text-[9px]">×{linkedAvoirs.length}</span> : null}</button>
                       ) : (
                         <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
-                          <button onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
+                          <button type="button" onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
                           {(p as any).invoiceNumber && (
                             <>
-                              <button
+                              <button type="button"
                                 onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
                                 title="XML Factur-X (EN 16931) — réforme facturation électronique"
                                 className="font-body text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-100 whitespace-nowrap leading-none">
                                 XML
                               </button>
-                              <button
+                              <button type="button"
                                 onClick={() => downloadFacturXPdf(p.id!, (p as any).invoiceNumber)}
                                 title="PDF Factur-X hybride (facture PDF + XML embarqué)"
                                 className="font-body text-[9px] font-bold text-white bg-indigo-500 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-600 whitespace-nowrap leading-none">
@@ -374,10 +374,10 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                         </span>
                       )}
                     </span>
-                    <span className="w-16 text-center"><button onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
+                    <span className="w-16 text-center"><button type="button" onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
                     <span className="w-16 text-center">
                       {p.status !== "cancelled" && (
-                        <button
+                        <button type="button"
                           onClick={() => {
                             if ((p as any).invoiceNumber) {
                               toast(`🔒 Facture ${(p as any).invoiceNumber} — modification impossible. Annulez-la via avoir pour la corriger.`, "warning", 5000);
@@ -396,7 +396,7 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                     </span>
                     <span className="w-16 text-center">
                       {p.status !== "cancelled" && !(p as any)._fromEncaissement && (
-                        <button onClick={() => deletePaymentCommand(p)} title="Annuler + avoir" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Trash2 size={12} /></button>
+                        <button type="button" onClick={() => deletePaymentCommand(p)} title="Annuler + avoir" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Trash2 size={12} /></button>
                       )}
                     </span>
                   </div>

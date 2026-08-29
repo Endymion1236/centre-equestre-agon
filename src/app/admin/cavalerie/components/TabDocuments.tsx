@@ -54,7 +54,7 @@ export default function TabDocuments({
         </div>
         <div className="flex gap-2">
           <input value={url} onChange={e => setUrl(e.target.value)} placeholder="URL (Google Drive, lien externe...)" className={`flex-1 ${inputStyle}`}/>
-          <button onClick={handleAdd} disabled={!equideId || !type || !label}
+          <button type="button" onClick={handleAdd} disabled={!equideId || !type || !label}
             className="px-4 py-2 rounded-lg bg-blue-500 text-white font-body text-sm font-semibold border-none cursor-pointer hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400">
             Ajouter
           </button>
@@ -85,7 +85,7 @@ export default function TabDocuments({
                   </td>
                   <td className="px-3 py-2.5 font-body text-xs text-gray-400">{d.date || "—"}</td>
                   <td className="px-3 py-2.5">
-                    <button onClick={async () => { if (confirm("Supprimer ce document ?")) { await deleteDoc(doc(db, "documents_equide", d.id)); onRefresh(); } }}
+                    <button type="button" onClick={async () => { if (confirm("Supprimer ce document ?")) { await deleteDoc(doc(db, "documents_equide", d.id)); onRefresh(); } }}
                       className="font-body text-xs text-red-400 bg-transparent border-none cursor-pointer hover:text-red-600">Supprimer</button>
                   </td>
                 </tr>

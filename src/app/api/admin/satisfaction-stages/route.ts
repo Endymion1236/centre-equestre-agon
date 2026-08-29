@@ -29,7 +29,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e: any) {
     console.error("satisfaction-stages (admin):", e);
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }
 

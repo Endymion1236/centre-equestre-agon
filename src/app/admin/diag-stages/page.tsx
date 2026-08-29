@@ -140,17 +140,17 @@ export default function DiagStagesPage() {
 
       {/* Sélecteur de semaine */}
       <div className="mt-5 flex flex-wrap items-center gap-2">
-        <button onClick={() => changerSemaine(-1)}
+        <button type="button" onClick={() => changerSemaine(-1)}
           className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50" title="Semaine précédente">
           <ChevronLeft size={16} />
         </button>
         <input type="date" value={date} onChange={e => setDate(lundiDe(e.target.value))}
           className="font-body px-3 py-2 rounded-lg border border-slate-300 text-sm" />
-        <button onClick={() => changerSemaine(1)}
+        <button type="button" onClick={() => changerSemaine(1)}
           className="p-2 rounded-lg border border-slate-300 hover:bg-slate-50" title="Semaine suivante">
           <ChevronRight size={16} />
         </button>
-        <button onClick={() => load(date)} disabled={loading}
+        <button type="button" onClick={() => load(date)} disabled={loading}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 font-body text-sm disabled:opacity-50">
           {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />}
           Actualiser
@@ -179,11 +179,11 @@ export default function DiagStagesPage() {
           <span className="font-body text-sm text-blue-900">
             {selection.size} créneau(x) sélectionné(s)
           </span>
-          <button onClick={regrouper} disabled={selection.size < 2 || regroupement}
+          <button type="button" onClick={regrouper} disabled={selection.size < 2 || regroupement}
             className="rounded-lg bg-blue-700 px-4 py-2 font-body text-xs font-bold text-white border-none cursor-pointer hover:bg-blue-800 disabled:opacity-50">
             {regroupement ? "…" : "Réunir sous un même stage"}
           </button>
-          <button onClick={() => setSelection(new Set())}
+          <button type="button" onClick={() => setSelection(new Set())}
             className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:underline">
             Annuler
           </button>

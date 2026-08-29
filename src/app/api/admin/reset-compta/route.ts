@@ -201,7 +201,7 @@ export async function GET(req: NextRequest) {
       report,
     });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Erreur interne"}, { status: 500 });
   }
 }
 
@@ -240,6 +240,6 @@ export async function POST(req: NextRequest) {
       ...result,
     });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Erreur interne"}, { status: 500 });
   }
 }

@@ -712,7 +712,6 @@ section("7. CRON — Protection des routes automatisées");
 const CRON_ROUTES = [
   "src/app/api/cron/rappels-j1/route.ts",
   "src/app/api/cron/daily-notifications/route.ts",
-  "src/app/api/cron/daily-monitor-recap/route.ts",
   "src/app/api/cron/charge-stage-balances/route.ts",
 ];
 
@@ -795,8 +794,7 @@ test("EM2 — Pas d'email personnel comme fallback en dur (hors mentions-legales
     "src/app/api/send-email/route.ts",
     "src/app/api/send-payment-link/route.ts",
     "src/app/api/cron/daily-notifications/route.ts",
-    "src/app/api/cron/daily-monitor-recap/route.ts",
-  ];
+    ];
   for (const f of criticalFiles) {
     const content = readFile(f);
     if (!content) continue;

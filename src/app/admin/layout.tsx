@@ -60,6 +60,7 @@ import GlobalKeyboardShortcuts from "@/components/admin/GlobalKeyboardShortcuts"
 import GlobalSearch from "@/components/admin/GlobalSearch";
 import VoiceAssistant from "@/components/VoiceAssistant";
 import { ToastProvider } from "@/components/ui/Toast";
+import { ConfirmProvider } from "@/components/ui/Confirm";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
@@ -536,6 +537,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <ToastProvider>
+    <ConfirmProvider>
       <div className="min-h-screen bg-cream flex">
         <AdminSidebar nbImpayes={nbImpayes} />
 
@@ -682,6 +684,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <GlobalSearch />
         <GlobalKeyboardShortcuts />
       </div>
+    </ConfirmProvider>
     </ToastProvider>
   );
 }

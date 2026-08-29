@@ -58,6 +58,6 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ success: true });
   } catch (e: any) {
-    return NextResponse.json({ success: false, error: e.message, code: e.code }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Erreur interne", code: e.code }, { status: 500 });
   }
 }

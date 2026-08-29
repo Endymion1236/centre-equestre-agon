@@ -206,14 +206,14 @@ export default function BasculeProdPage() {
           <strong>{selected.size}</strong> selectionnee(s) <span className="text-slate-500">/ {filtered.length} affichees</span>
         </div>
         <div className="flex-1" />
-        <button
+        <button type="button"
           onClick={() => handleSend(true)}
           disabled={sending || selected.size === 0}
           className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-900 font-body font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {sending ? "..." : "🔍 Simuler"}
         </button>
-        <button
+        <button type="button"
           onClick={() => handleSend(false)}
           disabled={sending || selected.size === 0}
           className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-body font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"

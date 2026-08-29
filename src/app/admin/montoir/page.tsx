@@ -1032,7 +1032,7 @@ export default function MontoirPage() {
               {monitorsToday.map((m) => (<option key={m} value={m}>{m}</option>))}
             </select>
           )}
-          <button onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer{printMonitor ? ` — ${printMonitor}` : ""}</button>
+          <button type="button" onClick={()=>window.print()} className="flex items-center gap-2 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><Printer size={16} /> Imprimer{printMonitor ? ` — ${printMonitor}` : ""}</button>
         </div>
       </div>
       {/* Navigation jour : sur mobile la date passe en premier (pleine largeur,
@@ -1049,8 +1049,8 @@ export default function MontoirPage() {
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer print:hidden"
           />
           <div className="font-display text-lg font-bold text-blue-800 capitalize flex items-center justify-center gap-1.5">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}<CalendarDays size={15} className="text-blue-400 print:hidden" /></div>{printMonitor && <div className="hidden print:block font-body text-sm font-semibold text-blue-800 mt-0.5">Appel — {printMonitor}</div>}<div className="font-body text-xs text-slate-600">{creneaux.length} reprise{creneaux.length>1?"s":""} · {totalE} inscrits · {totalP} présents</div></div>
-        <button onClick={()=>setDayOffset(d=>d-1)} className="sm:order-1 flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
-        <div className="sm:order-3 flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
+        <button type="button" onClick={()=>setDayOffset(d=>d-1)} className="sm:order-1 flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16} /> Veille</button>
+        <div className="sm:order-3 flex gap-2"><button type="button" onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button type="button" onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain <ChevronRight size={16} /></button></div>
       </div>
       {loading ? <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div> :
       <>
@@ -1097,11 +1097,11 @@ export default function MontoirPage() {
           tout deplier d'un geste si on prefere l'ancien affichage. */}
       {creneaux.length > 0 && (
         <div className="flex items-center gap-2 mb-3 print:hidden">
-          <button onClick={()=>toutDeplier(creneaux.map(c=>c.id!))}
+          <button type="button" onClick={()=>toutDeplier(creneaux.map(c=>c.id!))}
             className="font-body text-xs font-semibold text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">
             ⤵ Tout déplier
           </button>
-          <button onClick={toutReplier}
+          <button type="button" onClick={toutReplier}
             className="font-body text-xs font-semibold text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">
             ⤴ Tout replier
           </button>
@@ -1117,7 +1117,7 @@ export default function MontoirPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-blue-500/8">
             <div className="flex items-center gap-4">
               <div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px]" style={{color:"#475569"}}>{c.endTime}</div></div>
-              <button onClick={()=>basculerReprise(c.id!)} aria-label={estDepliee(c.id!) ? "Replier" : "Déplier"}
+              <button type="button" onClick={()=>basculerReprise(c.id!)} aria-label={estDepliee(c.id!) ? "Replier" : "Déplier"}
                 title={estDepliee(c.id!) ? "Replier cette reprise" : "Voir les cavaliers"}
                 className="print:hidden p-1.5 rounded-lg text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer shrink-0">
                 {estDepliee(c.id!) ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
@@ -1128,28 +1128,28 @@ export default function MontoirPage() {
               {/* Navigation jour intégrée à la reprise : passer veille/lendemain
                   sans remonter en haut de page. */}
               <div className="flex items-center gap-0.5 mr-1" title="Changer de jour">
-                <button onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(d=>d-1); }} aria-label="Jour précédent"
+                <button type="button" onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(d=>d-1); }} aria-label="Jour précédent"
                   className="p-1.5 rounded-md text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer"><ChevronLeft size={14}/></button>
-                {dayOffset !== 0 && <button onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(0); }}
+                {dayOffset !== 0 && <button type="button" onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(0); }}
                   className="px-2 py-1 rounded-md text-[11px] font-semibold text-blue-600 bg-blue-50 border-none cursor-pointer">auj.</button>}
-                <button onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(d=>d+1); }} aria-label="Jour suivant"
+                <button type="button" onClick={()=>{ pendingScrollSig.current = _sig; setDayOffset(d=>d+1); }} aria-label="Jour suivant"
                   className="p-1.5 rounded-md text-slate-500 bg-gray-100 hover:bg-gray-200 border-none cursor-pointer"><ChevronRight size={14}/></button>
               </div>
               <Badge color={closed?"gray":pres===en.length&&en.length>0?"green":"orange"}>{closed?"Clôturée":`${pres}/${en.length} présents`}</Badge>
               {closed && (
-                <button onClick={()=>reopenCreneau(c.id, c.activityTitle)}
+                <button type="button" onClick={()=>reopenCreneau(c.id, c.activityTitle)}
                   className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-700 bg-amber-100 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-amber-200">
                   🔓 Rouvrir
                 </button>
               )}
               {!closed && (
-                <button onClick={()=>setAddCreneau(c)}
+                <button type="button" onClick={()=>setAddCreneau(c)}
                   className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-600 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-500">
                   + Ajouter
                 </button>
               )}
               {!closed && (
-                <button onClick={()=>toggleRotationPoneys(c)}
+                <button type="button" onClick={()=>toggleRotationPoneys(c)}
                   title="Rotation poneys : même poney autorisé sur deux stages simultanés (fait 1h dans chacun)"
                   className={`flex items-center gap-1.5 font-body text-xs px-2.5 py-1.5 rounded-lg border-none cursor-pointer transition-all ${c.rotationPoneys ? "bg-green-100 text-green-700 font-semibold" : "bg-gray-100 text-gray-400"}`}>
                   🔄 Rotation{c.rotationPoneys ? " ✓" : ""}
@@ -1159,7 +1159,7 @@ export default function MontoirPage() {
                 <ThemeSuggestion creneau={c} families={families} />
               )}
               {!closed && en.length>0 && <>
-                <button onClick={async () => {
+                <button type="button" onClick={async () => {
                   const recipients = new Map<string, { email: string; parentName: string; children: string[]; familyId: string }>();
                   en.forEach((e: any) => {
                     const fam = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === e.childId));
@@ -1193,7 +1193,7 @@ export default function MontoirPage() {
                   }
                   toast(`${sent} rappel${sent > 1 ? "s" : ""} envoyé${sent > 1 ? "s" : ""}`, "success");
                 }} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">Rappeler</button>
-                <button onClick={()=>closeCreneau(c.id)} className="font-body text-xs font-semibold text-slate-600 bg-sand px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">Clôturer</button>
+                <button type="button" onClick={()=>closeCreneau(c.id)} className="font-body text-xs font-semibold text-slate-600 bg-sand px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">Clôturer</button>
               </>}
             </div>
           </div>
@@ -1324,16 +1324,16 @@ export default function MontoirPage() {
                 <span className="shrink-0 ml-auto sm:ml-0 sm:w-32 flex justify-end sm:justify-center gap-1 sm:gap-2">{!closed ? <>
                   {/* Bouton "Chute" (facultatif) : à activer UNIQUEMENT s'il y a eu
                       une chute. Rouge plein = chute enregistrée dans le registre. */}
-                  <button onClick={()=>openChute(c,e)} title={chutes[chuteKey(c.id,e.childId)] ? "Chute enregistrée — cliquer pour modifier" : "Signaler une chute"} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${chutes[chuteKey(c.id,e.childId)] ? "bg-red-600 text-white" : "bg-gray-100 text-slate-600 hover:bg-red-100"}`}><AlertTriangle size={17}/></button>
+                  <button type="button" onClick={()=>openChute(c,e)} title={chutes[chuteKey(c.id,e.childId)] ? "Chute enregistrée — cliquer pour modifier" : "Signaler une chute"} className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${chutes[chuteKey(c.id,e.childId)] ? "bg-red-600 text-white" : "bg-gray-100 text-slate-600 hover:bg-red-100"}`}><AlertTriangle size={17}/></button>
                   {/* Bouton "Present" retire (mai 2026, demande Nicolas) :
                       tout cavalier non explicitement marque absent/non
                       justifie est considere present par defaut. On ne
                       coche plus que les absences. */}
-                  <button onClick={()=>togglePresence(c,e.childId,"absent")} title="Absent (rattrapage offert) — recliquer pour annuler" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
+                  <button type="button" onClick={()=>togglePresence(c,e.childId,"absent")} title="Absent (rattrapage offert) — recliquer pour annuler" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent"?"bg-red-500 text-white":"bg-gray-100 text-slate-600 hover:bg-red-100"}`}><XCircle size={18}/></button>
                   {/* 3ème bouton : absence non justifiée → séance perdue, AUCUN rattrapage généré à la clôture.
                       Utilisé pour les cavaliers qui ne préviennent pas (ou trop tard). Couleur ambre/orange
                       pour le distinguer visuellement du rouge "absent justifié". */}
-                  <button onClick={()=>togglePresence(c,e.childId,"absent_nonjustified")} title="Absent non justifié (séance perdue, pas de rattrapage) — recliquer pour annuler" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent_nonjustified"?"bg-amber-500 text-white":"bg-gray-100 text-slate-600 hover:bg-amber-100"}`}><AlertCircle size={18}/></button>
+                  <button type="button" onClick={()=>togglePresence(c,e.childId,"absent_nonjustified")} title="Absent non justifié (séance perdue, pas de rattrapage) — recliquer pour annuler" className={`print:hidden w-10 h-10 sm:w-8 sm:h-8 rounded-xl sm:rounded-lg flex items-center justify-center border-none cursor-pointer ${e.presence==="absent_nonjustified"?"bg-amber-500 text-white":"bg-gray-100 text-slate-600 hover:bg-amber-100"}`}><AlertCircle size={18}/></button>
                   <span className="hidden print:inline font-body text-xs font-semibold">{e.presence==="absent"?"✗ Absent":e.presence==="absent_nonjustified"?"⚠ NJ":"✓ Présent"}</span>
                 </> : <span className="flex items-center gap-1.5">{chutes[chuteKey(c.id,e.childId)] && <Badge color="red">⚠️ Chute</Badge>}<Badge color={e.presence==="absent"?"red":e.presence==="absent_nonjustified"?"orange":"green"}>{e.presence==="absent"?"Absent":e.presence==="absent_nonjustified"?"Absent non justifié":"Présent"}</Badge></span>}</span>
               </div>
@@ -1355,7 +1355,7 @@ export default function MontoirPage() {
                   <p className="font-body text-xs text-slate-600">{chuteModal.e.childName}{chuteModal.e.horseName ? ` — 🐴 ${displayFromHorseName(chuteModal.e.horseName)}` : ""} · {chuteModal.c.activityTitle} ({chuteModal.c.startTime})</p>
                 </div>
               </div>
-              <button onClick={() => setChuteModal(null)} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+              <button type="button" onClick={() => setChuteModal(null)} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
             </div>
             <div className="p-4 flex flex-col gap-4">
               <div>
@@ -1385,11 +1385,11 @@ export default function MontoirPage() {
             </div>
             <div className="p-4 border-t border-gray-100 flex items-center justify-between gap-2">
               {chutes[chuteKey(chuteModal.c.id, chuteModal.e.childId)] ? (
-                <button onClick={deleteChute} disabled={chuteSaving} className="flex items-center gap-1.5 font-body text-sm font-semibold text-red-600 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100 disabled:opacity-50"><Trash2 size={15} /> Retirer</button>
+                <button type="button" onClick={deleteChute} disabled={chuteSaving} className="flex items-center gap-1.5 font-body text-sm font-semibold text-red-600 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100 disabled:opacity-50"><Trash2 size={15} /> Retirer</button>
               ) : <span />}
               <div className="flex gap-2">
-                <button onClick={() => setChuteModal(null)} disabled={chuteSaving} className="font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer disabled:opacity-50">Annuler</button>
-                <button onClick={saveChute} disabled={chuteSaving} className="flex items-center gap-1.5 font-body text-sm font-semibold text-white bg-red-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-red-500 disabled:opacity-50">{chuteSaving ? <Loader2 size={15} className="animate-spin" /> : <AlertTriangle size={15} />} Enregistrer</button>
+                <button type="button" onClick={() => setChuteModal(null)} disabled={chuteSaving} className="font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer disabled:opacity-50">Annuler</button>
+                <button type="button" onClick={saveChute} disabled={chuteSaving} className="flex items-center gap-1.5 font-body text-sm font-semibold text-white bg-red-600 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-red-500 disabled:opacity-50">{chuteSaving ? <Loader2 size={15} className="animate-spin" /> : <AlertTriangle size={15} />} Enregistrer</button>
               </div>
             </div>
           </div>
@@ -1436,7 +1436,7 @@ export default function MontoirPage() {
                     {!bilan && (
                       <div className="flex flex-col gap-2">
                         <div className="flex gap-2 flex-wrap">
-                          <button
+                          <button type="button"
                             onClick={() => isRec ? stopRecording() : startRecording(child.childId)}
                             disabled={loading}
                             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all disabled:opacity-50 ${isRec ? "bg-red-500 text-white" : "bg-purple-50 text-purple-700 hover:bg-purple-100"}`}>
@@ -1448,7 +1448,7 @@ export default function MontoirPage() {
                             </div>
                           )}
                           {transcript && !loading && !isRec && (
-                            <button onClick={() => analyserBilanIA(child, creneau)}
+                            <button type="button" onClick={() => analyserBilanIA(child, creneau)}
                               className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white border-none cursor-pointer"
                               style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
                               <Sparkles size={14} /> Analyser avec l'IA
@@ -1510,11 +1510,11 @@ export default function MontoirPage() {
                           {bilan.nouvelObjectif && <Badge color="purple">+ Nouvel objectif</Badge>}
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => saveBilanIA(child, bilan)}
+                          <button type="button" onClick={() => saveBilanIA(child, bilan)}
                             className="flex-1 py-2 rounded-xl font-body text-sm font-semibold text-white bg-green-500 border-none cursor-pointer hover:bg-green-600">
                             ✓ Enregistrer
                           </button>
-                          <button onClick={() => { setIaBilans(prev => { const n={...prev}; delete n[child.childId]; return n; }); }}
+                          <button type="button" onClick={() => { setIaBilans(prev => { const n={...prev}; delete n[child.childId]; return n; }); }}
                             className="px-4 py-2 rounded-xl font-body text-sm text-slate-600 bg-gray-100 border-none cursor-pointer">
                             Modifier
                           </button>
@@ -1539,9 +1539,9 @@ export default function MontoirPage() {
             </div>
 
             <div className="p-4 border-t border-gray-100 flex gap-3">
-              <button onClick={() => { stopRecording(); setQuickNoteChild(null); setQuickNotes({}); setTranscripts({}); setIaBilans({}); }}
+              <button type="button" onClick={() => { stopRecording(); setQuickNoteChild(null); setQuickNotes({}); setTranscripts({}); setIaBilans({}); }}
                 className="flex-1 py-2.5 rounded-xl font-body text-sm text-slate-600 bg-gray-100 border-none cursor-pointer">Fermer</button>
-              <button onClick={saveQuickNotes}
+              <button type="button" onClick={saveQuickNotes}
                 className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-500 bg-blue-50 border-none cursor-pointer hover:bg-blue-100">
                 Enregistrer les notes manuelles
               </button>

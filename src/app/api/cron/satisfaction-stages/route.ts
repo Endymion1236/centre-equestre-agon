@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ stages, promenades });
   } catch (e: any) {
     console.error("satisfaction-stages (cron):", e);
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }
 

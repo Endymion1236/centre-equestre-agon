@@ -57,7 +57,7 @@ export default function EmailRestrictedToggle() {
             </div>
           </div>
         </div>
-        <button
+        <button type="button"
           onClick={toggle}
           disabled={restricted === null || saving}
           aria-pressed={!!restricted}

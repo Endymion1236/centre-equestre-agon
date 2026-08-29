@@ -132,7 +132,7 @@ export default function CavaleriePage() {
   const primaryAction = () => {
     if (tab === "fiches") {
       return (
-        <button
+        <button type="button"
           onClick={() => { setEditingEquide(null); setShowEquideForm(true); }}
           className="inline-flex items-center justify-center gap-2 rounded-xl border-none bg-blue-600 px-5 py-3 font-body text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
         >
@@ -142,7 +142,7 @@ export default function CavaleriePage() {
     }
     if (tab === "soins") {
       return (
-        <button
+        <button type="button"
           onClick={() => { setSoinDefaultEquideId(undefined); setShowSoinForm(true); }}
           className="inline-flex items-center justify-center gap-2 rounded-xl border-none bg-blue-600 px-5 py-3 font-body text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
         >
@@ -152,7 +152,7 @@ export default function CavaleriePage() {
     }
     if (tab === "registre") {
       return (
-        <button
+        <button type="button"
           onClick={() => setShowMouvForm(true)}
           className="inline-flex items-center justify-center gap-2 rounded-xl border-none bg-blue-600 px-5 py-3 font-body text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
         >
@@ -162,7 +162,7 @@ export default function CavaleriePage() {
     }
     if (tab === "indispos") {
       return (
-        <button
+        <button type="button"
           onClick={() => setShowIndispoForm(true)}
           className="inline-flex items-center justify-center gap-2 rounded-xl border-none bg-red-600 px-5 py-3 font-body text-sm font-bold text-white shadow-sm transition-colors hover:bg-red-700"
         >
@@ -241,7 +241,7 @@ export default function CavaleriePage() {
       <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-2 shadow-[0_5px_24px_rgba(12,26,46,0.035)]">
         <div className="flex gap-1.5 overflow-x-auto hide-scrollbar">
           {TABS.map(t => (
-            <button
+            <button type="button"
               key={t.id}
               onClick={() => setTab(t.id)}
               className={`flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border px-3.5 py-2.5 font-body text-xs font-semibold transition-all sm:text-sm ${

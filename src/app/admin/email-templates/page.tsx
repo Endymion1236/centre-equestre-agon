@@ -302,7 +302,7 @@ export default function EmailTemplatesPage() {
           <h1 className="font-display text-2xl font-bold text-blue-800">Templates email</h1>
           <p className="font-body text-xs text-slate-500">Personnalisez vos emails automatiques</p>
         </div>
-        <button onClick={handleSave} disabled={saving}
+        <button type="button" onClick={handleSave} disabled={saving}
           className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-600 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-green-700 disabled:opacity-50">
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
           Sauvegarder tout
@@ -324,7 +324,7 @@ export default function EmailTemplatesPage() {
         {/* ── Sidebar : liste des templates ── */}
         <div className="w-full lg:w-64 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
           {Object.keys(DEFAULT_TEMPLATES).map(key => (
-            <button key={key} onClick={() => setSelectedKey(key)}
+            <button type="button" key={key} onClick={() => setSelectedKey(key)}
               className={`text-left px-3 py-2.5 rounded-lg font-body text-xs font-semibold whitespace-nowrap cursor-pointer border-none transition-all flex-shrink-0 ${
                 selectedKey === key ? "bg-blue-500 text-white" : "bg-white text-slate-600 hover:bg-blue-50"
               }`}>
@@ -346,7 +346,7 @@ export default function EmailTemplatesPage() {
                   </div>
                 )}
               </div>
-              <button onClick={handleReset} className="font-body text-[10px] text-slate-400 bg-transparent border-none cursor-pointer hover:text-red-500 flex items-center gap-1">
+              <button type="button" onClick={handleReset} className="font-body text-[10px] text-slate-400 bg-transparent border-none cursor-pointer hover:text-red-500 flex items-center gap-1">
                 <RotateCcw size={10} /> Réinitialiser
               </button>
             </div>
@@ -374,11 +374,11 @@ export default function EmailTemplatesPage() {
 
             {/* Toggle preview/code */}
             <div className="flex gap-2 mb-3">
-              <button onClick={() => setPreviewMode(true)}
+              <button type="button" onClick={() => setPreviewMode(true)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${previewMode ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-600"}`}>
                 <Eye size={12} /> Aperçu
               </button>
-              <button onClick={() => setPreviewMode(false)}
+              <button type="button" onClick={() => setPreviewMode(false)}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${!previewMode ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-600"}`}>
                 <Code size={12} /> HTML
               </button>
@@ -411,7 +411,7 @@ export default function EmailTemplatesPage() {
               <input value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}
                 placeholder="Ex: plus chaleureux, ajouter les horaires de rendez-vous, ton plus formel..."
                 className="flex-1 px-3 py-2.5 rounded-lg border border-purple-200 font-body text-sm bg-white focus:border-purple-500 focus:outline-none" />
-              <button onClick={handleGenerate} disabled={generating}
+              <button type="button" onClick={handleGenerate} disabled={generating}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-purple-600 border-none cursor-pointer hover:bg-purple-700 disabled:opacity-50 whitespace-nowrap">
                 {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
                 Générer
@@ -433,7 +433,7 @@ export default function EmailTemplatesPage() {
               <input value={sendTestTo} onChange={e => setSendTestTo(e.target.value)}
                 placeholder="votre@email.com" type="email"
                 className="flex-1 px-3 py-2.5 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none" />
-              <button onClick={handleSendTest} disabled={sendingTest || !sendTestTo}
+              <button type="button" onClick={handleSendTest} disabled={sendingTest || !sendTestTo}
                 className="flex items-center gap-2 px-4 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-700 disabled:opacity-50 whitespace-nowrap">
                 {sendingTest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 Envoyer test

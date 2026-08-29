@@ -392,7 +392,7 @@ export default function DevisPage() {
           <h1 className="font-display text-2xl font-bold text-blue-800">Devis</h1>
           <p className="font-body text-sm text-slate-500 mt-1">Créez et envoyez des devis aux familles</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)}
+        <button type="button" onClick={() => setShowForm(!showForm)}
           className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer hover:bg-blue-400">
           <Plus size={16} /> Nouveau devis
         </button>
@@ -403,7 +403,7 @@ export default function DevisPage() {
         <Card padding="md" className="mb-6 border-blue-500/20">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-body text-base font-semibold text-blue-800">Nouveau devis</h3>
-            <button onClick={() => setShowForm(false)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            <button type="button" onClick={() => setShowForm(false)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
           </div>
           <div className="flex flex-col gap-4">
             {/* Famille */}
@@ -414,7 +414,7 @@ export default function DevisPage() {
               {familySearch && !selFamily && (
                 <div className="mt-1 border border-gray-200 rounded-lg overflow-hidden shadow-sm">
                   {filteredFams.slice(0, 6).map(f => (
-                    <button key={f.firestoreId} onClick={() => { setSelFamily(f.firestoreId); setSelChild(""); setServiceFacture(""); setFamilySearch(f.parentName || ""); }}
+                    <button type="button" key={f.firestoreId} onClick={() => { setSelFamily(f.firestoreId); setSelChild(""); setServiceFacture(""); setFamilySearch(f.parentName || ""); }}
                       className="w-full text-left px-3 py-2 font-body text-sm hover:bg-blue-50 bg-white border-none cursor-pointer border-b border-gray-100 last:border-0">
                       <div className="font-semibold text-blue-800">{f.parentName}</div>
                       <div className="text-xs text-slate-400">{(f as any).parentEmail}</div>
@@ -430,7 +430,7 @@ export default function DevisPage() {
                       const nom = `${c.firstName || ""} ${c.lastName || ""}`.trim();
                       const on = selChild === c.id;
                       return (
-                        <button key={c.id} onClick={() => setSelChild(on ? "" : c.id)}
+                        <button type="button" key={c.id} onClick={() => setSelChild(on ? "" : c.id)}
                           className={`px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${on ? "bg-blue-500 text-white border-blue-500" : "bg-white text-blue-700 border-blue-200 hover:bg-blue-50"}`}>
                           {nom || "Enfant"}
                         </button>
@@ -468,7 +468,7 @@ export default function DevisPage() {
 
             {/* Inscription annuelle (dégressivité câblée) */}
             <div>
-              <button onClick={() => setShowInscr(!showInscr)}
+              <button type="button" onClick={() => setShowInscr(!showInscr)}
                 className="flex items-center gap-2 font-body text-xs text-emerald-700 bg-emerald-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-emerald-100 mb-2">
                 🎓 Inscription annuelle (dégressivité) {showInscr ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
               </button>
@@ -508,7 +508,7 @@ export default function DevisPage() {
                       </div>
                     )}
                   </div>
-                  <button onClick={ajouterInscription}
+                  <button type="button" onClick={ajouterInscription}
                     className="self-start px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-xs font-semibold border-none cursor-pointer hover:bg-emerald-500">
                     + Ajouter ces lignes au devis
                   </button>
@@ -518,14 +518,14 @@ export default function DevisPage() {
 
             {/* Lignes rapides */}
             <div>
-              <button onClick={() => setShowQuick(!showQuick)}
+              <button type="button" onClick={() => setShowQuick(!showQuick)}
                 className="flex items-center gap-2 font-body text-xs text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100 mb-2">
                 ⚡ Lignes rapides {showQuick ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
               </button>
               {showQuick && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {quickLines.map(q => (
-                    <button key={q.label} onClick={() => setItems(prev => [...prev.filter(i => i.label), { label: q.label, qty: 1, priceTTC: q.priceTTC, tva: q.tva }])}
+                    <button type="button" key={q.label} onClick={() => setItems(prev => [...prev.filter(i => i.label), { label: q.label, qty: 1, priceTTC: q.priceTTC, tva: q.tva }])}
                       className="px-3 py-1.5 rounded-lg border border-blue-200 bg-white font-body text-xs text-blue-700 cursor-pointer hover:bg-blue-50">
                       {q.label} — {q.priceTTC}€
                     </button>
@@ -555,7 +555,7 @@ export default function DevisPage() {
                       <option value={10}>10%</option>
                       <option value={20}>20%</option>
                     </select>
-                    <button onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
+                    <button type="button" onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
                       className="col-span-1 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer flex justify-center">
                       <Trash2 size={14}/>
                     </button>
@@ -566,7 +566,7 @@ export default function DevisPage() {
                   <span className="col-span-2 text-right">Prix TTC</span><span className="col-span-2 text-center">Remise %</span><span className="col-span-2">TVA</span>
                 </div>
               </div>
-              <button onClick={() => setItems(prev => [...prev, { label: "", qty: 1, priceTTC: 0, tva: 5.5 }])}
+              <button type="button" onClick={() => setItems(prev => [...prev, { label: "", qty: 1, priceTTC: 0, tva: 5.5 }])}
                 className="mt-2 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline">
                 + Ajouter une ligne
               </button>
@@ -585,7 +585,7 @@ export default function DevisPage() {
                 <div className="font-body text-xs text-slate-500">Total TTC</div>
                 <div className="font-body text-2xl font-bold text-blue-500">{totalTTC.toFixed(2)}€</div>
               </div>
-              <button onClick={handleSave} disabled={!selFamily || saving || items.every(i => !i.label)}
+              <button type="button" onClick={handleSave} disabled={!selFamily || saving || items.every(i => !i.label)}
                 className={`flex items-center gap-2 px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selFamily || saving || items.every(i => !i.label)) ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
                 {saving ? <Loader2 size={16} className="animate-spin"/> : <Check size={16}/>}
                 Créer le devis
@@ -598,7 +598,7 @@ export default function DevisPage() {
       {/* Filtres */}
       <div className="flex flex-wrap gap-2 mb-4">
         {[["all", "Tous"], ["draft", "Brouillons"], ["sent", "Envoyés"], ["accepted", "Acceptés"], ["converted", "Convertis"], ["refused", "Refusés"]].map(([id, label]) => (
-          <button key={id} onClick={() => setFilterStatus(id)}
+          <button type="button" key={id} onClick={() => setFilterStatus(id)}
             className={`px-4 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer transition-all ${filterStatus === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             {label} {id === "all" ? `(${devisList.length})` : `(${devisList.filter(d => d.status === id).length})`}
           </button>
@@ -645,7 +645,7 @@ export default function DevisPage() {
               </div>
 
               {/* Items dépliables */}
-              <button onClick={() => setExpandedId(expandedId === d.id ? null : d.id!)}
+              <button type="button" onClick={() => setExpandedId(expandedId === d.id ? null : d.id!)}
                 className="flex items-center gap-1 font-body text-xs text-slate-400 mt-2 bg-transparent border-none cursor-pointer hover:text-blue-500">
                 {expandedId === d.id ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
                 {expandedId === d.id ? "Masquer" : "Voir le détail"}
@@ -666,7 +666,7 @@ export default function DevisPage() {
               {/* Actions */}
               <div className="flex gap-2 mt-3 flex-wrap">
                 {(d.status === "draft" || d.status === "sent") && (
-                  <button onClick={() => handleSend(d)} disabled={sendingId === d.id}
+                  <button type="button" onClick={() => handleSend(d)} disabled={sendingId === d.id}
                     className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     {sendingId === d.id ? <Loader2 size={12} className="animate-spin"/> : <Send size={12}/>}
                     {d.status === "sent" ? "Renvoyer" : "Envoyer"}
@@ -678,7 +678,7 @@ export default function DevisPage() {
                       🎓 Forfait annuel — pas de conversion : inscrivez le cavalier via <strong>Planning → mode annuel</strong> (l'inscription crée le forfait, les créneaux et la facturation).
                     </div>
                   ) : (
-                    <button onClick={() => handleConvert(d)}
+                    <button type="button" onClick={() => handleConvert(d)}
                       className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-500 hover:bg-green-600 px-3 py-2 rounded-lg border-none cursor-pointer">
                       <Check size={12}/> Convertir en commande
                     </button>
@@ -686,18 +686,18 @@ export default function DevisPage() {
                 )}
                 {d.status === "sent" && (
                   <>
-                    <button onClick={async () => { await updateDoc(doc(db, "devis", d.id!), { status: "accepted" }); await fetchData(); }}
+                    <button type="button" onClick={async () => { await updateDoc(doc(db, "devis", d.id!), { status: "accepted" }); await fetchData(); }}
                       className="font-body text-xs text-green-600 bg-green-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-green-100">
                       ✓ Marquer accepté
                     </button>
-                    <button onClick={async () => { await updateDoc(doc(db, "devis", d.id!), { status: "refused" }); await fetchData(); }}
+                    <button type="button" onClick={async () => { await updateDoc(doc(db, "devis", d.id!), { status: "refused" }); await fetchData(); }}
                       className="font-body text-xs text-red-400 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
                       ✕ Refusé
                     </button>
                   </>
                 )}
                 {d.status === "draft" && (
-                  <button onClick={() => handleDelete(d)}
+                  <button type="button" onClick={() => handleDelete(d)}
                     className="font-body text-xs text-slate-400 bg-gray-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-gray-100 hover:text-red-400">
                     <Trash2 size={12} className="inline mr-1"/>Supprimer
                   </button>

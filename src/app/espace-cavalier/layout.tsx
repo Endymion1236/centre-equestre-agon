@@ -375,7 +375,8 @@ function CavalierSidebar({ pathname }: { pathname: string }) {
 }
 
 function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) {
-  const { user, loading, signOut, isAdmin, isMoniteur } = useAuth();
+  const { user, loading, signOut, isAdmin, isMoniteur, emailAConfirmer, renvoyerConfirmation } = useAuth();
+  const [renvoi, setRenvoi] = useState<"" | "envoi" | "ok" | "err">("");
   const pathname = usePathname();
   const router = useRouter();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -510,6 +511,30 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
             <button type="button" onClick={signOut} className="md:hidden w-9 h-9 rounded-xl bg-red-50 text-red-500 flex items-center justify-center border-none cursor-pointer" aria-label="Se déconnecter"><LogOut size={16} /></button>
           </div>
         </header>
+
+        {/* Fiche trouvée mais adresse non confirmée : sans ce bandeau, la
+            famille voit un espace vide sans comprendre pourquoi. */}
+        {emailAConfirmer && (
+          <div className="mx-4 md:mx-8 mt-4 p-4 rounded-xl bg-orange-50 border border-orange-200">
+            <div className="font-body text-sm text-orange-900 font-bold mb-1">Confirmez votre adresse e-mail</div>
+            <div className="font-body text-xs text-orange-800 leading-relaxed">
+              Vos informations existent bien au club, mais nous ne pouvons pas les afficher
+              tant que votre adresse n’est pas confirmée. Ouvrez le lien envoyé à{" "}
+              <strong>{user.email}</strong> (pensez aux indésirables), puis reconnectez-vous.
+            </div>
+            <button type="button" disabled={renvoi === "envoi"}
+              onClick={async () => {
+                setRenvoi("envoi");
+                try { await renvoyerConfirmation(); setRenvoi("ok"); } catch { setRenvoi("err"); }
+              }}
+              className="mt-2 px-3 py-1.5 rounded-lg bg-orange-600 font-body text-xs font-bold text-white border-none cursor-pointer disabled:opacity-50">
+              {renvoi === "envoi" ? "Envoi..." : renvoi === "ok" ? "Lien renvoyé" : "Renvoyer le lien"}
+            </button>
+            {renvoi === "err" && (
+              <div className="font-body text-xs text-red-600 mt-1">Envoi impossible pour le moment — réessayez dans quelques minutes.</div>
+            )}
+          </div>
+        )}
 
         <main className="p-4 md:p-8 max-w-[940px] pb-28 md:pb-10">{children}</main>
       </div>

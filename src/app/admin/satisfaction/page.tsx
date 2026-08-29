@@ -439,15 +439,15 @@ export default function SatisfactionPage() {
 
       {/* Onglets */}
       <div className="flex gap-2 mb-5">
-        <button onClick={() => setView("global")}
+        <button type="button" onClick={() => setView("global")}
           className={`px-4 py-2 rounded-xl font-body text-sm font-semibold ${view === "global" ? "bg-[#1e3a5f] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>
           Vue d'ensemble
         </button>
-        <button onClick={() => setView("enseignant")}
+        <button type="button" onClick={() => setView("enseignant")}
           className={`px-4 py-2 rounded-xl font-body text-sm font-semibold inline-flex items-center gap-1.5 ${view === "enseignant" ? "bg-[#1e3a5f] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>
           <Users size={15} /> Par enseignant
         </button>
-        <button onClick={() => setView("avis")}
+        <button type="button" onClick={() => setView("avis")}
           className={`px-4 py-2 rounded-xl font-body text-sm font-semibold inline-flex items-center gap-1.5 ${view === "avis" ? "bg-[#1e3a5f] text-white" : "bg-white text-slate-600 border border-slate-200"}`}>
           <MessageSquare size={15} /> Avis détaillés ({avis.length})
         </button>
@@ -469,7 +469,7 @@ export default function SatisfactionPage() {
                 {periodesStage.map(p => <option key={p} value={p}>{labelPeriode(p)}</option>)}
               </select>
               {filterPeriode && (
-                <button onClick={() => setFilterPeriode("")} className="font-body text-xs text-blue-500 hover:underline">Réinitialiser</button>
+                <button type="button" onClick={() => setFilterPeriode("")} className="font-body text-xs text-blue-500 hover:underline">Réinitialiser</button>
               )}
             </div>
           )}
@@ -564,14 +564,14 @@ export default function SatisfactionPage() {
               <input value={genChild} onChange={e => setGenChild(e.target.value)} placeholder="Prénom de l'enfant" className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
               <input value={genMoniteurs} onChange={e => setGenMoniteurs(e.target.value)} placeholder="Moniteurs (séparés par ,)" className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
             </div>
-            <button onClick={genererLienTest} disabled={genBusy}
+            <button type="button" onClick={genererLienTest} disabled={genBusy}
               className="px-3 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold disabled:opacity-50">
               {genBusy ? "Création…" : "Créer le lien"}
             </button>
             {genLink && (
               <div className="mt-3 flex items-center gap-2 bg-white border border-slate-200 rounded-lg p-2">
                 <a href={genLink} target="_blank" rel="noreferrer" className="font-body text-xs text-blue-600 truncate flex-1">{genLink}</a>
-                <button onClick={() => navigator.clipboard?.writeText(genLink)} className="text-slate-400 hover:text-slate-700" title="Copier"><Copy size={14} /></button>
+                <button type="button" onClick={() => navigator.clipboard?.writeText(genLink)} className="text-slate-400 hover:text-slate-700" title="Copier"><Copy size={14} /></button>
               </div>
             )}
           </div>
@@ -585,13 +585,13 @@ export default function SatisfactionPage() {
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <input type="date" value={testDate} onChange={e => setTestDate(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white" />
-              <button onClick={() => lancerCron()} disabled={testBusy}
+              <button type="button" onClick={() => lancerCron()} disabled={testBusy}
                 className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu</button>
-              <button onClick={() => lancerCron({ envoyer: true })} disabled={testBusy}
+              <button type="button" onClick={() => lancerCron({ envoyer: true })} disabled={testBusy}
                 className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
-              <button onClick={() => lancerCron({ force: true })} disabled={testBusy}
+              <button type="button" onClick={() => lancerCron({ force: true })} disabled={testBusy}
                 className="px-3 py-2 rounded-lg bg-white border border-amber-300 text-amber-700 font-body text-sm font-semibold disabled:opacity-50" title="Aperçu en ignorant les invitations déjà créées — montre TOUS les inscrits">Forcer l'aperçu</button>
-              <button onClick={() => lancerCron({ force: true, reel: true })} disabled={testBusy}
+              <button type="button" onClick={() => lancerCron({ force: true, reel: true })} disabled={testBusy}
                 className="px-3 py-2 rounded-lg bg-amber-600 text-white font-body text-sm font-semibold disabled:opacity-50" title="Renvoie à toutes les familles, même déjà invitées">Forcer le renvoi</button>
             </div>
             <p className="font-body text-xs text-slate-400 mt-2">
@@ -605,13 +605,13 @@ export default function SatisfactionPage() {
                 Même mécanique, pour les <strong>balades</strong> terminées à la date choisie (ou hier). Utilise la même date ci-dessus.
               </p>
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => lancerCron({ type: "promenade" })} disabled={testBusy}
+                <button type="button" onClick={() => lancerCron({ type: "promenade" })} disabled={testBusy}
                   className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu balades</button>
-                <button onClick={() => lancerCron({ type: "promenade", envoyer: true })} disabled={testBusy}
+                <button type="button" onClick={() => lancerCron({ type: "promenade", envoyer: true })} disabled={testBusy}
                   className="px-3 py-2 rounded-lg bg-emerald-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
-                <button onClick={() => lancerCron({ type: "promenade", force: true })} disabled={testBusy}
+                <button type="button" onClick={() => lancerCron({ type: "promenade", force: true })} disabled={testBusy}
                   className="px-3 py-2 rounded-lg bg-white border border-amber-300 text-amber-700 font-body text-sm font-semibold disabled:opacity-50" title="Aperçu balades en ignorant les invitations déjà créées">Forcer l'aperçu</button>
-                <button onClick={() => lancerCron({ type: "promenade", force: true, reel: true })} disabled={testBusy}
+                <button type="button" onClick={() => lancerCron({ type: "promenade", force: true, reel: true })} disabled={testBusy}
                   className="px-3 py-2 rounded-lg bg-amber-600 text-white font-body text-sm font-semibold disabled:opacity-50" title="Renvoie à toutes les familles des balades">Forcer le renvoi</button>
               </div>
             </div>
@@ -648,13 +648,13 @@ export default function SatisfactionPage() {
               <select value={anneeSaison} onChange={e => setAnneeSaison(Number(e.target.value))} className="px-3 py-2 rounded-lg border border-slate-200 font-body text-sm bg-white">
                 {(() => { const y = new Date().getFullYear(); const arr = []; for (let s = y; s >= y - 4; s--) arr.push(s); return arr.map(s => <option key={s} value={s}>Saison {s}–{s + 1}</option>); })()}
               </select>
-              <button onClick={() => lancerAnnee(false)} disabled={anneeBusy}
+              <button type="button" onClick={() => lancerAnnee(false)} disabled={anneeBusy}
                 className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-700 font-body text-sm font-semibold disabled:opacity-50">Aperçu</button>
-              <button onClick={() => lancerAnnee(true)} disabled={anneeBusy}
+              <button type="button" onClick={() => lancerAnnee(true)} disabled={anneeBusy}
                 className="px-3 py-2 rounded-lg bg-indigo-600 text-white font-body text-sm font-semibold disabled:opacity-50">M'envoyer un test</button>
-              <button onClick={envoyerAnneeTous} disabled={anneeBusy}
+              <button type="button" onClick={envoyerAnneeTous} disabled={anneeBusy}
                 className="px-3 py-2 rounded-lg bg-rose-600 text-white font-body text-sm font-semibold disabled:opacity-50">Envoyer à toutes les familles</button>
-              <button onClick={resetAnnee} disabled={anneeBusy}
+              <button type="button" onClick={resetAnnee} disabled={anneeBusy}
                 className="px-3 py-2 rounded-lg bg-white border border-slate-300 text-slate-600 font-body text-sm font-semibold disabled:opacity-50">Réinitialiser (avant envoi)</button>
             </div>
             {anneeLinks.length > 0 && (
@@ -754,7 +754,7 @@ export default function SatisfactionPage() {
               {[5, 4, 3, 2, 1].map(n => <option key={n} value={n}>{n} étoile{n > 1 ? "s" : ""}</option>)}
             </select>
             {(filterActivite || filterNote > 0) && (
-              <button
+              <button type="button"
                 onClick={() => { setFilterActivite(""); setFilterNote(0); }}
                 className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline"
               >
@@ -831,7 +831,7 @@ export default function SatisfactionPage() {
                         {a.motMoniteurs && (
                           <p className="font-body text-xs text-violet-900 mt-1">« {a.motMoniteurs} »</p>
                         )}
-                        <button onClick={() => partager(a.id, false)} disabled={partageBusy === a.id}
+                        <button type="button" onClick={() => partager(a.id, false)} disabled={partageBusy === a.id}
                           className="mt-1.5 font-body text-[11px] text-violet-500 bg-transparent border-none cursor-pointer hover:underline p-0">
                           Ne plus partager
                         </button>
@@ -842,18 +842,18 @@ export default function SatisfactionPage() {
                           placeholder="Un mot pour accompagner (facultatif) — utile surtout quand le retour est dur"
                           className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-body text-sm bg-white focus:outline-none focus:border-violet-400" />
                         <div className="mt-2 flex items-center gap-2">
-                          <button onClick={() => partager(a.id, true, motMon)} disabled={partageBusy === a.id}
+                          <button type="button" onClick={() => partager(a.id, true, motMon)} disabled={partageBusy === a.id}
                             className="px-3 py-1.5 rounded-lg bg-violet-600 text-white font-body text-xs font-bold border-none cursor-pointer hover:bg-violet-700 disabled:opacity-50">
                             {partageBusy === a.id ? "…" : "Partager"}
                           </button>
-                          <button onClick={() => { setPartageOpen(null); setMotMon(""); }}
+                          <button type="button" onClick={() => { setPartageOpen(null); setMotMon(""); }}
                             className="font-body text-xs text-slate-400 bg-transparent border-none cursor-pointer hover:underline">
                             Annuler
                           </button>
                         </div>
                       </div>
                     ) : (
-                      <button onClick={() => { setPartageOpen(a.id); setMotMon(""); }}
+                      <button type="button" onClick={() => { setPartageOpen(a.id); setMotMon(""); }}
                         className="mt-2 px-3 py-1.5 rounded-lg border border-violet-200 bg-white font-body text-xs font-semibold text-violet-700 cursor-pointer hover:bg-violet-50">
                         Partager avec {a.moniteurs!.map(m => m.nom).join(", ")}
                       </button>
@@ -879,15 +879,15 @@ export default function SatisfactionPage() {
                           className="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
                         />
                         <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <button onClick={() => redigerIA(a.id)} disabled={replyBusy !== null}
+                          <button type="button" onClick={() => redigerIA(a.id)} disabled={replyBusy !== null}
                             className="px-3 py-1.5 rounded-lg bg-violet-100 text-violet-700 font-body text-xs font-semibold border-none cursor-pointer hover:bg-violet-200 disabled:opacity-50">
                             {replyBusy === "ia" ? "Rédaction…" : "✨ Rédiger avec l'IA"}
                           </button>
-                          <button onClick={() => envoyerReponse(a.id)} disabled={replyBusy !== null || !replyText.trim()}
+                          <button type="button" onClick={() => envoyerReponse(a.id)} disabled={replyBusy !== null || !replyText.trim()}
                             className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-body text-xs font-bold border-none cursor-pointer hover:bg-blue-700 disabled:opacity-50">
                             {replyBusy === "send" ? "Envoi…" : "Envoyer à la famille"}
                           </button>
-                          <button onClick={() => { setReplyOpen(null); setReplyText(""); setReplyMsg(null); }}
+                          <button type="button" onClick={() => { setReplyOpen(null); setReplyText(""); setReplyMsg(null); }}
                             className="font-body text-xs text-slate-400 bg-transparent border-none cursor-pointer hover:underline">
                             Annuler
                           </button>
@@ -898,7 +898,7 @@ export default function SatisfactionPage() {
                         <p className="mt-1 font-body text-[10px] text-slate-400">Le brouillon IA est une proposition : relis et modifie avant d'envoyer. L'email part au parent, en texte, avec copie de suivi.</p>
                       </div>
                     ) : (
-                      <button onClick={() => { setReplyOpen(a.id); setReplyText(""); setReplyMsg(null); }}
+                      <button type="button" onClick={() => { setReplyOpen(a.id); setReplyText(""); setReplyMsg(null); }}
                         className="mt-2 px-3 py-1.5 rounded-lg bg-white text-blue-600 font-body text-xs font-semibold border border-blue-200 cursor-pointer hover:bg-blue-50">
                         Répondre
                       </button>

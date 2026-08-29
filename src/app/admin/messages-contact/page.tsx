@@ -91,7 +91,7 @@ export default function MessagesContactPage() {
             Chaque message indique où son email est réellement parti.
           </p>
         </div>
-        <button onClick={load} disabled={loading}
+        <button type="button" onClick={load} disabled={loading}
           className="shrink-0 flex items-center gap-2 font-body text-xs font-semibold text-slate-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
         </button>
@@ -102,11 +102,11 @@ export default function MessagesContactPage() {
       )}
 
       <div className="flex gap-2 mb-4">
-        <button onClick={() => setFiltre("a_traiter")}
+        <button type="button" onClick={() => setFiltre("a_traiter")}
           className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${filtre === "a_traiter" ? "bg-blue-500 text-white" : "bg-blue-50 text-blue-700"}`}>
           À traiter ({nbATraiter})
         </button>
-        <button onClick={() => setFiltre("tous")}
+        <button type="button" onClick={() => setFiltre("tous")}
           className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${filtre === "tous" ? "bg-blue-500 text-white" : "bg-blue-50 text-blue-700"}`}>
           Tous ({messages.length})
         </button>
@@ -122,7 +122,7 @@ export default function MessagesContactPage() {
         <div className="flex flex-col gap-2">
           {visibles.map(m => (
             <div key={m.id} className={`rounded-xl border px-4 py-3 ${m.status === "echec_envoi" ? "border-red-200 bg-red-50/40" : "border-gray-200 bg-white"} ${m.traite ? "opacity-60" : ""}`}>
-              <button onClick={() => setOuvert(ouvert === m.id ? null : m.id)}
+              <button type="button" onClick={() => setOuvert(ouvert === m.id ? null : m.id)}
                 className="w-full flex items-start justify-between gap-3 bg-transparent border-none cursor-pointer p-0 text-left">
                 <div className="min-w-0">
                   <div className="font-body font-semibold text-slate-800 truncate">
@@ -160,7 +160,7 @@ export default function MessagesContactPage() {
                         <Phone size={13} /> {m.phone}
                       </a>
                     )}
-                    <button onClick={() => basculerTraite(m)}
+                    <button type="button" onClick={() => basculerTraite(m)}
                       className="inline-flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 hover:bg-gray-50 px-3 py-1.5 rounded-lg cursor-pointer ml-auto">
                       <Check size={13} /> {m.traite ? "Remettre à traiter" : "Marquer traité"}
                     </button>

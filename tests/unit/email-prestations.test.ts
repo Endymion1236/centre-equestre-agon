@@ -1,0 +1,134 @@
+/**
+ * Tests de src/lib/email-prestations.ts
+ *
+ * Verrouille deux défauts constatés sur un email de confirmation réel
+ * (29/08/2026, cours ponctuel) :
+ *   • « Mode de paiement : {mode} » — marqueur non substitué, parce que la
+ *     route de retour ne passait pas la variable que le gabarit attend ;
+ *   • « Galop de bronze — ambre — ambre » — le prénom recollé sur un titre
+ *     qui le contenait déjà.
+ */
+import assert from "node:assert/strict";
+import {
+  libelleModePaiement,
+  titrePrestation,
+  titreSansEnfant,
+  prestationsCourtes,
+  lignesDetailHtml,
+} from "../../src/lib/email-prestations";
+
+let passes = 0;
+function test(nom: string, fn: () => void) {
+  try {
+    fn();
+    passes++;
+    console.log(`  ✅ ${nom}`);
+  } catch (e: any) {
+    console.error(`  ❌ ${nom}\n     ${e.message}`);
+    process.exitCode = 1;
+  }
+}
+
+console.log("\n── Mode de paiement ──");
+
+test("un mode connu devient un libellé lisible", () => {
+  assert.equal(libelleModePaiement("cb_online"), "Carte bancaire en ligne");
+  assert.equal(libelleModePaiement("cheque"), "Chèque");
+  assert.equal(libelleModePaiement("sepa"), "Prélèvement SEPA");
+});
+
+test("un mode inconnu ou absent ne laisse JAMAIS passer de valeur brute", () => {
+  // Le gabarit affiche cette valeur telle quelle à la famille : « cb_online »
+  // ou une chaîne vide y seraient visibles.
+  for (const entree of [undefined, null, "", "wat"]) {
+    const v = libelleModePaiement(entree as any);
+    assert.ok(v.length > 0, `mode ${JSON.stringify(entree)} → libellé vide`);
+    assert.ok(!v.includes("_"), `mode ${JSON.stringify(entree)} → valeur brute « ${v} »`);
+  }
+});
+
+console.log("\n── Titre de prestation ──");
+
+test("le prénom n'est PAS recollé quand le titre le contient déjà", () => {
+  assert.equal(
+    titrePrestation({ activityTitle: "Découverte / Galop de bronze — ambre", childName: "ambre" }),
+    "Découverte / Galop de bronze — ambre"
+  );
+});
+
+test("le prénom est ajouté quand le titre ne l'a pas (commande admin)", () => {
+  assert.equal(
+    titrePrestation({ activityTitle: "Balade plage", childName: "Eliot" }),
+    "Balade plage — Eliot"
+  );
+});
+
+test("la casse et les accents ne trompent pas la détection", () => {
+  assert.equal(
+    titrePrestation({ activityTitle: "Galop de bronze — Ambre", childName: "ambre" }),
+    "Galop de bronze — Ambre"
+  );
+  assert.equal(
+    titrePrestation({ activityTitle: "Cours — Éliot", childName: "Eliot" }),
+    "Cours — Éliot"
+  );
+});
+
+test("un titre ou un prénom manquant ne casse rien", () => {
+  assert.equal(titrePrestation({ activityTitle: "Balade" }), "Balade");
+  assert.equal(titrePrestation({ childName: "Eliot" }), "Eliot");
+  assert.equal(titrePrestation({}), "Prestation");
+});
+
+console.log("\n── Titre débarrassé du prénom (gabarit stage) ──");
+
+test("le suffixe « — Prénom » est retiré", () => {
+  assert.equal(
+    titreSansEnfant({ activityTitle: "Stage Poney — ambre", childName: "ambre" }),
+    "Stage Poney"
+  );
+});
+
+test("un prénom au milieu du titre n'est pas tronqué", () => {
+  assert.equal(
+    titreSansEnfant({ activityTitle: "Stage Ambre et compagnie", childName: "Ambre" }),
+    "Stage Ambre et compagnie"
+  );
+});
+
+test("un titre réduit au seul prénom n'est pas vidé", () => {
+  assert.equal(titreSansEnfant({ activityTitle: "Eliot", childName: "Eliot" }), "Eliot");
+});
+
+console.log("\n── Récapitulatifs ──");
+
+test("la liste courte ne répète pas les prénoms", () => {
+  const items = [
+    { activityTitle: "Galop de bronze — ambre", childName: "ambre" },
+    { activityTitle: "Balade plage", childName: "Eliot" },
+  ];
+  assert.equal(prestationsCourtes(items), "Galop de bronze — ambre, Balade plage — Eliot");
+});
+
+test("un panier vide reste lisible", () => {
+  assert.equal(prestationsCourtes([]), "Prestation");
+});
+
+test("le bloc détaillé porte date, horaires et moniteur", () => {
+  const html = lignesDetailHtml([{
+    activityTitle: "Galop de bronze — ambre", childName: "ambre",
+    date: "2026-09-01", startTime: "10:00", endTime: "11:00", monitor: "Nicolas",
+  }]);
+  assert.ok(html.includes("Galop de bronze — ambre"));
+  assert.ok(!html.includes("ambre — ambre"), "le prénom est dupliqué");
+  assert.ok(html.includes("10:00–11:00"));
+  assert.ok(html.includes("avec Nicolas"));
+  assert.ok(html.includes("septembre"));
+});
+
+test("une date invalide n'affiche pas « Invalid Date »", () => {
+  const html = lignesDetailHtml([{ activityTitle: "Cours", date: "pas-une-date" }]);
+  assert.ok(!html.toLowerCase().includes("invalid"));
+});
+
+console.log(`\n✅ ${passes} tests passés\n`);

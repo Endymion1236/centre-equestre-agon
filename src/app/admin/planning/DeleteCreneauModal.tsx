@@ -50,30 +50,30 @@ export default function DeleteCreneauModal({
           )}
 
           <div className="flex flex-col gap-2">
-            <button onClick={() => onConfirm("single")} disabled={deleting}
+            <button type="button" onClick={() => onConfirm("single")} disabled={deleting}
               className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-red-500 hover:bg-red-600 border-none cursor-pointer disabled:opacity-50">
               {deleting ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
               Supprimer ce créneau uniquement
             </button>
             {isStageType(creneau) && deleteWeekCount > 1 && (
-              <button onClick={() => onConfirm("week")} disabled={deleting}
+              <button type="button" onClick={() => onConfirm("week")} disabled={deleting}
                 className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
                 🗓️ Supprimer tout le stage ({deleteWeekCount} créneaux)
               </button>
             )}
             {!isStageType(creneau) && deleteCount > 1 && (
-              <button onClick={() => onConfirm("similar")} disabled={deleting}
+              <button type="button" onClick={() => onConfirm("similar")} disabled={deleting}
                 className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
                 Supprimer les {deleteCount} créneaux similaires (même jour de semaine, sur la saison)
               </button>
             )}
             {!isStageType(creneau) && deleteSerieCount > 1 && (
-              <button onClick={() => onConfirm("serie")} disabled={deleting}
+              <button type="button" onClick={() => onConfirm("serie")} disabled={deleting}
                 className="w-full py-3 rounded-xl font-body text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer disabled:opacity-50">
                 🗑️ Supprimer cette série ({deleteSerieCount} créneaux : même activité, même horaire, dates proches)
               </button>
             )}
-            <button onClick={onClose} disabled={deleting}
+            <button type="button" onClick={onClose} disabled={deleting}
               className="w-full py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
               Annuler
             </button>

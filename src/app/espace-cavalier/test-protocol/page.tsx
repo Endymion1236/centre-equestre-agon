@@ -682,7 +682,7 @@ export default function TestProtocolPage() {
       {/* Filtre */}
       <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1">
         {(["tous", "non_teste", "ok", "ko", "remarque"] as const).map(f => (
-          <button key={f} onClick={() => setFilterStatus(f)}
+          <button type="button" key={f} onClick={() => setFilterStatus(f)}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer transition-all ${filterStatus === f ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             {f === "tous" ? "Tous" : f === "non_teste" ? "⏳ À tester" : f === "ok" ? "✅ OK" : f === "ko" ? "❌ KO" : "⚠️ Remarque"}
           </button>
@@ -706,7 +706,7 @@ export default function TestProtocolPage() {
           return (
             <div key={scenario.id}>
               {/* Header scénario */}
-              <button
+              <button type="button"
                 onClick={() => toggleScenario(scenario.id)}
                 className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-blue-500/8 shadow-sm cursor-pointer text-left">
                 <div className="flex items-center gap-3">
@@ -744,7 +744,7 @@ export default function TestProtocolPage() {
                           </div>
 
                           <div className="flex-1 min-w-0">
-                            <button onClick={() => toggleTest(t.id)}
+                            <button type="button" onClick={() => toggleTest(t.id)}
                               className="w-full text-left bg-transparent border-none cursor-pointer p-0">
                               <div className="font-body text-sm font-semibold text-blue-800">{t.titre}</div>
                               <div className="font-body text-xs text-slate-500 mt-0.5">{t.description}</div>
@@ -777,8 +777,8 @@ export default function TestProtocolPage() {
                                   onKeyDown={e => { if (e.key === "Enter") saveNote(t.id); if (e.key === "Escape") setNoteEditing(null); }}
                                   placeholder="Note..."
                                   className="flex-1 font-body text-xs border border-blue-400 rounded-lg px-2 py-1 focus:outline-none bg-white"/>
-                                <button onClick={() => saveNote(t.id)} className="font-body text-[11px] text-white bg-blue-500 px-2 py-1 rounded-lg border-none cursor-pointer">OK</button>
-                                <button onClick={() => setNoteEditing(null)} className="font-body text-[11px] text-slate-500 bg-white px-2 py-1 rounded-lg border border-gray-200 cursor-pointer">✕</button>
+                                <button type="button" onClick={() => saveNote(t.id)} className="font-body text-[11px] text-white bg-blue-500 px-2 py-1 rounded-lg border-none cursor-pointer">OK</button>
+                                <button type="button" onClick={() => setNoteEditing(null)} className="font-body text-[11px] text-slate-500 bg-white px-2 py-1 rounded-lg border border-gray-200 cursor-pointer">✕</button>
                               </div>
                             )}
                           </div>
@@ -787,23 +787,23 @@ export default function TestProtocolPage() {
                           <div className="flex-shrink-0 flex flex-col gap-1.5 items-end">
                             <div className="flex gap-1">
                               {(["ok", "ko", "remarque"] as Status[]).map(s => (
-                                <button key={s} onClick={() => setStatus(t.id, s)}
+                                <button type="button" key={s} onClick={() => setStatus(t.id, s)}
                                   className={`font-body text-[11px] w-8 h-8 rounded-lg border-none cursor-pointer transition-all ${status === s ? STATUS_CFG[s].btn : "bg-white text-slate-400 hover:bg-gray-100"}`}>
                                   {STATUS_CFG[s].icon}
                                 </button>
                               ))}
                             </div>
                             <div className="flex gap-1">
-                              <button onClick={() => toggleTest(t.id)}
+                              <button type="button" onClick={() => toggleTest(t.id)}
                                 className="font-body text-[9px] text-slate-500 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">
                                 {isExpanded ? "▲" : "▼"} Étapes
                               </button>
-                              <button onClick={() => { setNoteEditing(t.id); setNoteInput(results[t.id]?.note || ""); }}
+                              <button type="button" onClick={() => { setNoteEditing(t.id); setNoteInput(results[t.id]?.note || ""); }}
                                 className="font-body text-[9px] text-slate-500 bg-white px-1.5 py-1 rounded border border-gray-200 cursor-pointer">
                                 💬
                               </button>
                               {status !== "non_teste" && (
-                                <button onClick={() => reset(t.id)}
+                                <button type="button" onClick={() => reset(t.id)}
                                   className="font-body text-[9px] text-red-400 bg-white px-1.5 py-1 rounded border border-gray-200 cursor-pointer">
                                   <RotateCcw size={9}/>
                                 </button>

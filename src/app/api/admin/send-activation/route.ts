@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error("send-activation fatal:", e);
     return NextResponse.json(
-      { error: e?.message || "Erreur interne" },
+      { error: "Erreur interne" },
       { status: 500 },
     );
   }

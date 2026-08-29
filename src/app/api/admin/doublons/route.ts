@@ -92,7 +92,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ total: fams.length, paires, nbPaires: paires.length });
   } catch (e: any) {
     console.error("doublons:", e);
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }
 

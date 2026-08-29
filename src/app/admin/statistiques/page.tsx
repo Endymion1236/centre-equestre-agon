@@ -526,12 +526,12 @@ export default function StatistiquesPage() {
           </p>
         </div>
         <div className="flex items-center gap-1 bg-white rounded-full border border-gray-200 p-1 shadow-[0_1px_3px_rgba(12,26,46,0.04)]">
-          <button onClick={() => setYear(y => y - 1)}
+          <button type="button" onClick={() => setYear(y => y - 1)}
             className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer hover:bg-blue-50 text-gray-500">
             <ChevronLeft size={16} />
           </button>
           <span className="font-display text-base font-bold text-blue-800 min-w-[52px] text-center">{year}</span>
-          <button onClick={() => setYear(y => y + 1)} disabled={year >= new Date().getFullYear()}
+          <button type="button" onClick={() => setYear(y => y + 1)} disabled={year >= new Date().getFullYear()}
             className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer text-gray-500
               ${year >= new Date().getFullYear() ? "opacity-30 cursor-not-allowed" : "hover:bg-blue-50"}`}>
             <ChevronRight size={16} />
@@ -545,7 +545,7 @@ export default function StatistiquesPage() {
           const Icon = t.icon;
           const active = tab === t.id;
           return (
-            <button key={t.id} onClick={() => setTab(t.id)}
+            <button type="button" key={t.id} onClick={() => setTab(t.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-body text-sm font-medium cursor-pointer transition-all whitespace-nowrap border
                 ${active
                   ? "bg-blue-500 text-white border-blue-500 shadow-[0_4px_14px_rgba(32,80,160,0.3)]"

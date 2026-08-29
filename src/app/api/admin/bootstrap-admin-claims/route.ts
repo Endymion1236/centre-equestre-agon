@@ -21,11 +21,10 @@ import { adminAuth } from "@/lib/firebase-admin";
  * token client embarque le nouveau claim.
  */
 
-const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-];
+// Source unique : lib/admin-emails.ts. Ici la liste sert à POSER les
+// custom claims — c'est son usage légitime, et c'est ce qui rend le repli
+// par email inutile partout ailleurs.
+import { ADMIN_EMAILS } from "@/lib/admin-emails";
 
 export const dynamic = "force-dynamic";
 

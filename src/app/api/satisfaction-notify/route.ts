@@ -124,6 +124,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true, messageId: data?.id });
   } catch (e: any) {
     console.error("satisfaction-notify fatal:", e);
-    return NextResponse.json({ error: e?.message || "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

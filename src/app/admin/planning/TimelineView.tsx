@@ -28,7 +28,7 @@ export default function TimelineView({
     <>
       {/* Navigation */}
       <div className="flex items-center justify-between mb-5">
-        <button onClick={onPrev} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+        <button type="button" onClick={onPrev} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
           <ChevronLeft size={16}/>Préc.
         </button>
         <div className="flex flex-col items-center gap-1">
@@ -38,8 +38,8 @@ export default function TimelineView({
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={onToday} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
-          <button onClick={onNext} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+          <button type="button" onClick={onToday} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
+          <button type="button" onClick={onNext} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
             Suiv.<ChevronRight size={16}/>
           </button>
         </div>
@@ -118,7 +118,7 @@ export default function TimelineView({
                       const totalEnrolled = list.reduce((s, c) => s + (c.enrolled?.length || 0), 0);
                       const totalPlaces = list.reduce((s, c) => s + (c.maxPlaces || 0), 0);
                       return (
-                        <button onClick={() => onGoToDay(d)}
+                        <button type="button" onClick={() => onGoToDay(d)}
                           className={`w-full flex items-center gap-1 px-1.5 py-0.5 rounded border font-body cursor-pointer text-left hover:opacity-80 ${bg} ${border}`}>
                           <span className={`w-3 h-3 rounded-full ${dot} text-white text-[7px] flex items-center justify-center flex-shrink-0`}>{list.length}</span>
                           <span className={`text-[9px] font-semibold ${text} truncate flex-1`}>{label}</span>
@@ -144,7 +144,7 @@ export default function TimelineView({
                             ? `${list[0].startTime} ${list[0].activityTitle.slice(0, 12)}`
                             : `${list.length} stages`;
                           return (
-                            <button key={startTime} onClick={() => onGoToDay(d)}
+                            <button type="button" key={startTime} onClick={() => onGoToDay(d)}
                               className="absolute left-0.5 right-0.5 z-[15] flex items-center gap-1 px-1.5 py-1 rounded border font-body cursor-pointer text-left hover:opacity-80 bg-green-100 border-green-300 shadow-sm"
                               style={{ top: yPos }}>
                               <span className="w-4 h-4 rounded-full bg-green-500 text-white text-[8px] flex items-center justify-center flex-shrink-0 font-bold">{list.length}</span>
@@ -255,7 +255,7 @@ export default function TimelineView({
                         })}
 
                         {/* Bouton ajouter */}
-                        <button onClick={() => onAddCreneau(ds)}
+                        <button type="button" onClick={() => onAddCreneau(ds)}
                           className="absolute bottom-2 left-1/2 -translate-x-1/2 w-7 h-7 rounded-full border border-dashed border-gray-300 text-slate-400 hover:border-blue-400 hover:text-blue-400 bg-white cursor-pointer font-body text-sm flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
                           +
                         </button>

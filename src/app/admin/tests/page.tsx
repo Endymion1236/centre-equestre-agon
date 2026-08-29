@@ -1461,10 +1461,10 @@ export default function TestsPage() {
           <div className="flex items-center gap-2">
             {saving && <span className="font-body text-[10px] text-slate-400 animate-pulse">Sauvegarde…</span>}
             {lastSaved && !saving && <span className="font-body text-[10px] text-slate-400">Sauvegardé {lastSaved}</span>}
-            <button onClick={exportCSV} className="flex items-center gap-1 font-body text-xs text-slate-600 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-gray-50">
+            <button type="button" onClick={exportCSV} className="flex items-center gap-1 font-body text-xs text-slate-600 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-gray-50">
               <Download size={13}/> Export CSV
             </button>
-            <button onClick={async () => {
+            <button type="button" onClick={async () => {
               if (!confirm(`Réinitialiser les ${TESTS.length} tests ?\n\nTous les statuts (OK/KO/Remarque) seront effacés.`)) return;
               setResults({});
               await setDoc(doc(db, "settings", "testMatrix"), { results: {}, updatedAt: new Date().toISOString() });
@@ -1618,8 +1618,8 @@ export default function TestsPage() {
                               onKeyDown={e => { if (e.key === "Enter") saveNote(t.id); if (e.key === "Escape") setEditNote(null); }}
                               placeholder="Ajouter une remarque..."
                               className="flex-1 font-body text-xs border border-blue-400 rounded-lg px-2 py-1 focus:outline-none bg-white"/>
-                            <button onClick={() => saveNote(t.id)} className="font-body text-[11px] text-white bg-blue-500 px-2.5 py-1 rounded-lg border-none cursor-pointer">Sauver</button>
-                            <button onClick={() => setEditNote(null)} className="font-body text-[11px] text-slate-500 bg-white px-2 py-1 rounded-lg border border-gray-200 cursor-pointer">✕</button>
+                            <button type="button" onClick={() => saveNote(t.id)} className="font-body text-[11px] text-white bg-blue-500 px-2.5 py-1 rounded-lg border-none cursor-pointer">Sauver</button>
+                            <button type="button" onClick={() => setEditNote(null)} className="font-body text-[11px] text-slate-500 bg-white px-2 py-1 rounded-lg border border-gray-200 cursor-pointer">✕</button>
                           </div>
                         )}
                       </div>
@@ -1631,7 +1631,7 @@ export default function TestsPage() {
                             const c = STATUS_CONFIG[s];
                             const active = status === s;
                             return (
-                              <button key={s} onClick={() => setStatus(t.id, s)}
+                              <button type="button" key={s} onClick={() => setStatus(t.id, s)}
                                 className={`font-body text-[10px] font-bold px-2.5 py-1 rounded-lg border-none cursor-pointer transition-all ${
                                   active ? `${c.color} text-white shadow-sm` : "bg-white text-slate-500 hover:bg-gray-100"
                                 }`}>
@@ -1641,12 +1641,12 @@ export default function TestsPage() {
                           })}
                         </div>
                         <div className="flex gap-1">
-                          <button onClick={() => { setEditNote(t.id); setNoteInput(r?.note || ""); }}
+                          <button type="button" onClick={() => { setEditNote(t.id); setNoteInput(r?.note || ""); }}
                             className="font-body text-[9px] text-slate-500 bg-white hover:bg-gray-100 px-2 py-1 rounded border border-gray-200 cursor-pointer">
                             💬 Note
                           </button>
                           {status !== "non_teste" && (
-                            <button onClick={() => resetTest(t.id)}
+                            <button type="button" onClick={() => resetTest(t.id)}
                               className="font-body text-[9px] text-red-400 bg-white hover:bg-red-50 px-1.5 py-1 rounded border border-gray-200 cursor-pointer">
                               <RotateCcw size={9}/>
                             </button>
@@ -1708,7 +1708,7 @@ function ChargeBalancesTester() {
       <div className="flex flex-wrap items-center gap-2">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 font-body text-sm" />
-        <button onClick={run} disabled={busy || !date}
+        <button type="button" onClick={run} disabled={busy || !date}
           className="rounded-lg bg-amber-600 px-3.5 py-1.5 font-body text-xs font-bold text-white border-none cursor-pointer hover:bg-amber-700 disabled:opacity-50">
           {busy ? "Traitement…" : "Prélever les soldes de cette date"}
         </button>

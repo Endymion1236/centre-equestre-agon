@@ -233,7 +233,7 @@ export default function DashboardPage() {
                 </a>
               ))}
             </div>
-            <button onClick={marquerRejoint}
+            <button type="button" onClick={marquerRejoint}
               className="mt-2 font-body text-xs text-green-700 bg-transparent border-none cursor-pointer hover:underline p-0">
               C&apos;est fait, ne plus afficher
             </button>
@@ -354,7 +354,7 @@ export default function DashboardPage() {
               </Link>
             ))}
             {permission === "default" && (
-              <button onClick={requestPermission} disabled={pushLoading} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-0 cursor-pointer text-left">
+              <button type="button" onClick={requestPermission} disabled={pushLoading} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-0 cursor-pointer text-left">
                 <div className="flex items-center gap-2 font-body text-sm text-orange-800"><Bell size={16} /> Activer les rappels et alertes</div>
                 <span className="font-body text-xs font-semibold text-orange-600">{pushLoading ? "..." : "Activer"}</span>
               </button>
@@ -367,7 +367,7 @@ export default function DashboardPage() {
       {/* 5. WhatsApp compact */}
       {hasWhatsApp && (
         <Card padding="sm" className="mb-5">
-          <button onClick={() => setShowWhatsApp((v) => !v)} className="w-full flex items-center justify-between bg-transparent border-none cursor-pointer p-0 text-left">
+          <button type="button" onClick={() => setShowWhatsApp((v) => !v)} className="w-full flex items-center justify-between bg-transparent border-none cursor-pointer p-0 text-left">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">💬</div>
               <div>

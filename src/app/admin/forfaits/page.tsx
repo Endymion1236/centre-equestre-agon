@@ -987,7 +987,7 @@ export default function ForfaitsPage() {
           <h1 className="font-display text-2xl font-bold text-blue-800">Forfaits annuels</h1>
           <p className="font-body text-xs text-slate-500">Inscriptions à l&apos;année avec choix des créneaux</p>
         </div>
-        <button onClick={() => setShowCreate(!showCreate)}
+        <button type="button" onClick={() => setShowCreate(!showCreate)}
           className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
           <Plus size={16} /> Nouveau forfait
         </button>
@@ -998,7 +998,7 @@ export default function ForfaitsPage() {
         <Card padding="md" className="mb-6 border-blue-500/15">
           <div className="flex justify-between items-center mb-4">
             <h3 className="font-body text-base font-semibold text-blue-800">Nouvelle inscription annuelle</h3>
-            <button onClick={() => setShowCreate(false)} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={18} /></button>
+            <button type="button" onClick={() => setShowCreate(false)} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={18} /></button>
           </div>
 
           <div className="flex flex-col gap-4">
@@ -1024,7 +1024,7 @@ export default function ForfaitsPage() {
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Cavalier</label>
                 <div className="flex flex-wrap gap-2">
                   {children.map((c: any) => (
-                    <button key={c.id} onClick={() => setSelChild(c.id)}
+                    <button type="button" key={c.id} onClick={() => setSelChild(c.id)}
                       className={`px-4 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${
                         selChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
                       }`}>
@@ -1075,7 +1075,7 @@ export default function ForfaitsPage() {
                   { id: "2x" as const, label: "2×/sem", desc: "Compétition" },
                   { id: "3x" as const, label: "3×/sem", desc: "Intensif" },
                 ] as const).map(f => (
-                  <button key={f.id} onClick={() => { setFrequence(f.id); setSelectedSlots([]); }}
+                  <button type="button" key={f.id} onClick={() => { setFrequence(f.id); setSelectedSlots([]); }}
                     className={`flex-1 py-3 rounded-xl border font-body text-sm font-semibold cursor-pointer text-center transition-all ${
                       frequence === f.id ? "border-green-500 bg-green-50 text-green-700" : "border-gray-200 bg-white text-gray-500"
                     }`}>
@@ -1102,7 +1102,7 @@ export default function ForfaitsPage() {
                   {selectedSlotsData.map((s, i) => (
                     <span key={s.key} className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-3 py-1.5 rounded-lg font-body text-xs">
                       <span className="font-semibold">Créneau {i + 1}:</span> {s.activityTitle} — {s.dayLabel} {s.startTime}
-                      <button onClick={() => setSelectedSlots(prev => prev.filter(k => k !== s.key))} className="text-blue-400 hover:text-red-500 bg-transparent border-none cursor-pointer ml-1"><X size={12} /></button>
+                      <button type="button" onClick={() => setSelectedSlots(prev => prev.filter(k => k !== s.key))} className="text-blue-400 hover:text-red-500 bg-transparent border-none cursor-pointer ml-1"><X size={12} /></button>
                     </span>
                   ))}
                 </div>
@@ -1119,7 +1119,7 @@ export default function ForfaitsPage() {
                   const isDisabled = isFull || (!isSelected && selectedSlots.length >= requiredSlots);
 
                   return (
-                    <button key={slot.key} onClick={() => !isDisabled && toggleSlot(slot.key)}
+                    <button type="button" key={slot.key} onClick={() => !isDisabled && toggleSlot(slot.key)}
                       className={`flex items-center justify-between px-3 py-2.5 rounded-lg border text-left text-xs transition-all ${
                         isSelected ? "border-blue-500 bg-blue-50 cursor-pointer" :
                         isDisabled ? "border-gray-100 bg-gray-50 cursor-not-allowed opacity-40" :
@@ -1157,13 +1157,13 @@ export default function ForfaitsPage() {
                 </label>
                 {licenceFFE && (
                   <div className="flex gap-2">
-                    <button onClick={() => setLicenceType("moins18")}
+                    <button type="button" onClick={() => setLicenceType("moins18")}
                       className={`flex-1 py-2 rounded-lg border font-body text-xs font-semibold cursor-pointer ${
                         licenceType === "moins18" ? "bg-green-500 text-white border-green-500" : "bg-white text-gray-500 border-gray-200"
                       }`}>
                       -18 ans ({LICENCE_FFE_MOINS18}€)
                     </button>
-                    <button onClick={() => setLicenceType("plus18")}
+                    <button type="button" onClick={() => setLicenceType("plus18")}
                       className={`flex-1 py-2 rounded-lg border font-body text-xs font-semibold cursor-pointer ${
                         licenceType === "plus18" ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"
                       }`}>
@@ -1179,7 +1179,7 @@ export default function ForfaitsPage() {
               <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Mode de paiement</label>
               <div className="flex gap-3">
                 {(["1x", "3x", "10x"] as const).map(p => (
-                  <button key={p} onClick={() => setPayPlan(p)}
+                  <button type="button" key={p} onClick={() => setPayPlan(p)}
                     className={`flex-1 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer ${
                       payPlan === p ? "border-blue-500 bg-blue-50 text-blue-500 font-semibold" : "border-gray-200 bg-white text-gray-500"
                     }`}>
@@ -1206,7 +1206,7 @@ export default function ForfaitsPage() {
                   </div>
                 )}
               </div>
-              <button onClick={handleCreate} disabled={!selFamily || !selChild || !slotsComplete || creating}
+              <button type="button" onClick={handleCreate} disabled={!selFamily || !selChild || !slotsComplete || creating}
                 className={`px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${
                   !selFamily || !selChild || !slotsComplete || creating ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"
                 }`}>
@@ -1249,7 +1249,7 @@ export default function ForfaitsPage() {
             { id: "completed", label: "Terminés" },
             { id: "cancelled", label: "Résiliés" },
           ].map(f => (
-            <button key={f.id} onClick={() => setFilterStatus(f.id)}
+            <button type="button" key={f.id} onClick={() => setFilterStatus(f.id)}
               className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${
                 filterStatus === f.id ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200"
               }`}>
@@ -1363,7 +1363,7 @@ export default function ForfaitsPage() {
                                     <span className="font-body text-[10px] text-slate-400 shrink-0">{slot.count} séances</span>
                                   </div>
                                   <div className="flex gap-1 shrink-0">
-                                    <button
+                                    <button type="button"
                                       onClick={() => {
                                         const dayNames = ["dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"];
                                         const dow = dayNames.indexOf(slot.dayLabel);
@@ -1383,7 +1383,7 @@ export default function ForfaitsPage() {
                                       Changer
                                     </button>
                                     {slots.length > 1 && (
-                                      <button
+                                      <button type="button"
                                         onClick={() => handleRemoveSlot(f, slot)}
                                         disabled={slotChanging || saving}
                                         title={slot.isPrincipal ? "Retirer le créneau principal (le forfait restera mais sans créneau principal)" : "Retirer ce créneau"}
@@ -1404,31 +1404,31 @@ export default function ForfaitsPage() {
                         );
                       })()}
                       {(f.status === "active" || f.status === "actif") && (
-                        <button onClick={() => handleStatusChange(f.id, "suspended")} disabled={saving}
+                        <button type="button" onClick={() => handleStatusChange(f.id, "suspended")} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-100">
                           <Pause size={12} /> Suspendre
                         </button>
                       )}
                       {f.status === "suspended" && (
-                        <button onClick={() => handleStatusChange(f.id, "active")} disabled={saving}
+                        <button type="button" onClick={() => handleStatusChange(f.id, "active")} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100">
                           <Play size={12} /> Réactiver
                         </button>
                       )}
                       {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
-                        <button onClick={() => { if (confirm(`Résilier le forfait de ${f.childName} ?`)) handleStatusChange(f.id, "cancelled"); }} disabled={saving}
+                        <button type="button" onClick={() => { if (confirm(`Résilier le forfait de ${f.childName} ?`)) handleStatusChange(f.id, "cancelled"); }} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
                           <XCircle size={12} /> Résilier
                         </button>
                       )}
                       {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
-                        <button onClick={() => setSlotChange({ forfait: f, newSlotSearch: "" })} disabled={saving}
+                        <button type="button" onClick={() => setSlotChange({ forfait: f, newSlotSearch: "" })} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                           <RefreshCw size={12} /> Changer de créneau
                         </button>
                       )}
                       {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
-                        <button onClick={() => handleUnenrollAll(f)} disabled={unenrolling === f.id || saving}
+                        <button type="button" onClick={() => handleUnenrollAll(f)} disabled={unenrolling === f.id || saving}
                           className="flex items-center gap-1.5 font-body text-xs text-white bg-red-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-600 disabled:opacity-50">
                           {unenrolling === f.id ? <Loader2 size={12} className="animate-spin" /> : <UserMinus size={12} />}
                           {unenrolling === f.id ? "Désinscription..." : "Désinscrire de tous les cours"}
@@ -1488,7 +1488,7 @@ export default function ForfaitsPage() {
                   <h2 className="font-display text-lg font-bold text-blue-800">Changer de créneau</h2>
                   <p className="font-body text-xs text-slate-500">{f.childName} — actuellement : {f.slotKey}</p>
                 </div>
-                <button onClick={() => setSlotChange(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+                <button type="button" onClick={() => setSlotChange(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
               </div>
               <div className="p-5">
                 <div className="mb-3">
@@ -1502,7 +1502,7 @@ export default function ForfaitsPage() {
                 <div className="flex flex-col gap-2 max-h-[50vh] overflow-auto">
                   {availableSlots.length === 0 && <p className="font-body text-sm text-slate-500 text-center py-4">Aucun créneau disponible</p>}
                   {availableSlots.map(s => (
-                    <button key={s.key} onClick={() => handleSlotChange(f, s, slotChange?.oldSlot)} disabled={slotChanging}
+                    <button type="button" key={s.key} onClick={() => handleSlotChange(f, s, slotChange?.oldSlot)} disabled={slotChanging}
                       className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white hover:bg-blue-50 hover:border-blue-300 cursor-pointer text-left disabled:opacity-50">
                       <div>
                         <div className="font-body text-sm font-semibold text-blue-800">{s.activityTitle}</div>

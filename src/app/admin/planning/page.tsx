@@ -1939,7 +1939,7 @@ export default function PlanningPage() {
           {/* ─── Segmented control : Mois / Semaine / Timeline / Jour ─── */}
           <div className="inline-flex bg-blue-500/[0.06] rounded-full p-[3px] gap-0.5">
             {(["month","week","timeline","day"] as const).map(v => (
-              <button key={v} onClick={() => setViewMode(v)}
+              <button type="button" key={v} onClick={() => setViewMode(v)}
                 className={`px-3 sm:px-4 py-1.5 rounded-full font-body text-xs font-semibold cursor-pointer border-none transition-all whitespace-nowrap ${
                   viewMode === v
                     ? "bg-white text-blue-500 shadow-[0_2px_8px_rgba(32,80,160,0.12)]"
@@ -1952,7 +1952,7 @@ export default function PlanningPage() {
 
           {/* ─── Bouton + Ajouter (principal) avec menu ─── */}
           <div className="relative" data-menu="add">
-            <button
+            <button type="button"
               onClick={(e) => { e.stopPropagation(); setMenuAddOpen(o => !o); setMenuMoreOpen(false); }}
               className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-white px-4 py-2 rounded-full border-none cursor-pointer transition-all hover:-translate-y-px active:scale-[0.96]"
               style={{
@@ -1967,7 +1967,7 @@ export default function PlanningPage() {
             {menuAddOpen && (
               <div className="absolute top-[calc(100%+8px)] right-0 bg-white rounded-2xl shadow-[0_12px_40px_rgba(12,26,46,0.18)] p-2 min-w-[240px] z-50 border border-black/[0.04]">
                 <div className="font-body text-[10px] font-bold text-slate-400 uppercase tracking-[0.8px] px-3.5 pt-2 pb-1">Créer</div>
-                <button
+                <button type="button"
                   onClick={() => { setMenuAddOpen(false); setShowSimple(true); setShowGenerator(false); setSelectedDate(viewMode === "day" ? fmtDate(currentDay) : undefined); }}
                   className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors">
                   <span className="w-8 h-8 rounded-xl bg-blue-50 text-blue-500 inline-flex items-center justify-center flex-shrink-0">
@@ -1978,7 +1978,7 @@ export default function PlanningPage() {
                     <div className="font-body text-[11px] text-slate-400">Un cours, une balade…</div>
                   </div>
                 </button>
-                <button
+                <button type="button"
                   onClick={() => { setMenuAddOpen(false); setShowGenerator(true); setShowSimple(false); }}
                   className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors">
                   <span className="w-8 h-8 rounded-xl bg-gold-400/20 text-amber-700 inline-flex items-center justify-center flex-shrink-0">
@@ -1989,7 +1989,7 @@ export default function PlanningPage() {
                     <div className="font-body text-[11px] text-slate-400">Toute une saison en 1 clic</div>
                   </div>
                 </button>
-                <button
+                <button type="button"
                   onClick={() => { setMenuAddOpen(false); setShowRdvForm(true); }}
                   className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors">
                   <span className="w-8 h-8 rounded-xl bg-orange-50 text-orange-700 inline-flex items-center justify-center flex-shrink-0">
@@ -2006,7 +2006,7 @@ export default function PlanningPage() {
 
           {/* ─── Dupliquer (visible en vue Semaine/Timeline uniquement) ─── */}
           {(viewMode === "week" || viewMode === "timeline") && creneaux.length > 0 && (
-            <button
+            <button type="button"
               onClick={() => setShowDuplicate(!showDuplicate)}
               className="flex items-center gap-1.5 font-body text-xs sm:text-sm font-semibold text-blue-500 bg-blue-500/[0.08] px-4 py-2 rounded-full border-none cursor-pointer transition-all hover:bg-blue-500/[0.14] active:scale-[0.96]">
               <Copy size={14} />
@@ -2016,7 +2016,7 @@ export default function PlanningPage() {
 
           {/* ─── Menu ⋯ (actions secondaires : PDF + IA) ─── */}
           <div className="relative" data-menu="more">
-            <button
+            <button type="button"
               onClick={(e) => { e.stopPropagation(); setMenuMoreOpen(o => !o); setMenuAddOpen(false); }}
               className="w-[38px] h-[38px] rounded-full border-none cursor-pointer flex items-center justify-center bg-gray-100 text-slate-600 transition-all hover:bg-gray-200 hover:text-blue-800 active:scale-[0.96]"
               aria-label="Plus d'actions"
@@ -2025,7 +2025,7 @@ export default function PlanningPage() {
             </button>
             {menuMoreOpen && (
               <div className="absolute top-[calc(100%+8px)] right-0 bg-white rounded-2xl shadow-[0_12px_40px_rgba(12,26,46,0.18)] p-2 min-w-[200px] z-50 border border-black/[0.04]">
-                <button
+                <button type="button"
                   onClick={() => { setMenuMoreOpen(false); exportPDF(); }}
                   disabled={(viewMode === "day" ? dayCreneaux : creneaux).length === 0}
                   className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
@@ -2034,7 +2034,7 @@ export default function PlanningPage() {
                   </span>
                   <span className="font-body text-sm font-medium text-blue-800">Export PDF</span>
                 </button>
-                <button
+                <button type="button"
                   onClick={() => { setMenuMoreOpen(false); analyserPlanning(); }}
                   disabled={iaLoading || (viewMode === "day" ? dayCreneaux : creneaux).length === 0}
                   className="w-full text-left px-3.5 py-2.5 rounded-xl bg-transparent border-none cursor-pointer flex items-center gap-3 hover:bg-sand transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
@@ -2055,7 +2055,7 @@ export default function PlanningPage() {
 
       {showSimple && <SimpleCreneauForm activities={activities} onSave={handleCreate} onCancel={()=>setShowSimple(false)} defaultDate={selectedDate}/>}
       {showGenerator && <PeriodGenerator activities={activities} onGenerate={handleCreate} onCancel={()=>setShowGenerator(false)}/>}
-      {showDuplicate && <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50"><div className="flex justify-between items-center mb-3"><h3 className="font-body text-base font-semibold text-blue-800">📋 Dupliquer semaine</h3><button onClick={()=>setShowDuplicate(false)} className="text-slate-600 bg-transparent border-none cursor-pointer"><X size={18}/></button></div><div className="flex items-center gap-4 mb-3"><label className="font-body text-sm text-blue-800">Semaines:</label><input type="number" min={1} max={20} value={dupWeeks} onChange={e=>setDupWeeks(parseInt(e.target.value)||1)} className="w-20 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white text-center"/></div><button onClick={handleDuplicateWeek} disabled={duplicating} className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${duplicating?"bg-gray-200 text-slate-600":"bg-gold-400 text-blue-800"}`}>{duplicating?<Loader2 size={16} className="animate-spin"/>:<Check size={16}/>} Dupliquer</button></Card>}
+      {showDuplicate && <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50"><div className="flex justify-between items-center mb-3"><h3 className="font-body text-base font-semibold text-blue-800">📋 Dupliquer semaine</h3><button type="button" onClick={()=>setShowDuplicate(false)} className="text-slate-600 bg-transparent border-none cursor-pointer"><X size={18}/></button></div><div className="flex items-center gap-4 mb-3"><label className="font-body text-sm text-blue-800">Semaines:</label><input type="number" min={1} max={20} value={dupWeeks} onChange={e=>setDupWeeks(parseInt(e.target.value)||1)} className="w-20 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-white text-center"/></div><button type="button" onClick={handleDuplicateWeek} disabled={duplicating} className={`flex items-center gap-2 px-6 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${duplicating?"bg-gray-200 text-slate-600":"bg-gold-400 text-blue-800"}`}>{duplicating?<Loader2 size={16} className="animate-spin"/>:<Check size={16}/>} Dupliquer</button></Card>}
 
       {/* ── Panneau suggestions IA ── */}
       {showIaPanel && (
@@ -2074,7 +2074,7 @@ export default function PlanningPage() {
                 )}
               </div>
             </div>
-            <button onClick={() => { setShowIaPanel(false); setIaSuggestions(null); setIaStats(null); }}
+            <button type="button" onClick={() => { setShowIaPanel(false); setIaSuggestions(null); setIaStats(null); }}
               className="text-slate-600 bg-transparent border-none cursor-pointer hover:text-gray-600"><X size={16}/></button>
           </div>
 
@@ -2146,7 +2146,7 @@ export default function PlanningPage() {
 
       {viewMode==="day"&&<>
         <div className="flex items-center justify-between mb-5">
-          <button onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Veille</button>
+          <button type="button" onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Veille</button>
           <div className="flex flex-col items-center gap-1">
             <div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
             <div className="font-body text-xs text-slate-600">{dayCreneaux.length} créneau{dayCreneaux.length>1?"x":""}</div>
@@ -2161,7 +2161,7 @@ export default function PlanningPage() {
                 setDayOffset(Math.round((picked.getTime() - today.getTime()) / 86400000));
               }}/>
           </div>
-          <div className="flex gap-2"><button onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
+          <div className="flex gap-2"><button type="button" onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button type="button" onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
         </div>
         <MareesBandeau date={fmtDate(currentDay)} />
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
@@ -2169,7 +2169,7 @@ export default function PlanningPage() {
         <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
-              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}{(c as any).allowDayBooking&&<span className="ml-1.5 inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 align-middle" title="Ce jour est réservable à l'unité par les familles">📅 journée{(c as any).priceTTCDay>0?` ${Number((c as any).priceTTCDay).toFixed(0)}€`:""}</span>}</div></div></div><div className="flex items-center gap-2">{(()=>{const unpaid=en.filter((e:any)=>{const isCard=e.paymentSource==="card";const isCeleris=e.paymentSource==="celeris";const isForfait=e.paymentSource==="forfait";const isForfaitPaid=isForfait&&isForfaitChildPaye(payments,e.familyId,e.childId);const isForfaitPending=isForfait&&!isForfaitPaid;const matchesThis=(i:any)=>itemMatchesCreneau(i,e,c);const hp=isCard||isCeleris||isForfaitPaid||payments.some((p:any)=>p.familyId===e.familyId&&p.status==="paid"&&(p.items||[]).some(matchesThis));const hpend=!hp&&!isCard&&!isCeleris&&(isForfaitPending||payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial")&&(p.items||[]).some(matchesThis)));return!hp&&!hpend&&!isCard&&!isCeleris;}).length;return unpaid>0?<span className="font-body text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-lg">⚠️ {unpaid} impayé{unpaid>1?"s":""}</span>:null;})()}{waitCounts[c.id]>0&&<span className="font-body text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-1 rounded-lg whitespace-nowrap" title="Enfants en liste d'attente sur ce créneau">🔔 {waitCounts[c.id]} en attente</span>}<Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({date:c.date,activityId:(c as any).activityId||"",activityType:c.activityType,tvaTaux:(c as any).tvaTaux||5.5,activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||"",allowDayBooking:(c as any).allowDayBooking||false,priceTTCDay:(c as any).priceTTCDay||"",themeStage:(c as any).themeStage||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button onClick={e=>{e.stopPropagation();openDelete(c);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
+              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}{(c as any).allowDayBooking&&<span className="ml-1.5 inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 align-middle" title="Ce jour est réservable à l'unité par les familles">📅 journée{(c as any).priceTTCDay>0?` ${Number((c as any).priceTTCDay).toFixed(0)}€`:""}</span>}</div></div></div><div className="flex items-center gap-2">{(()=>{const unpaid=en.filter((e:any)=>{const isCard=e.paymentSource==="card";const isCeleris=e.paymentSource==="celeris";const isForfait=e.paymentSource==="forfait";const isForfaitPaid=isForfait&&isForfaitChildPaye(payments,e.familyId,e.childId);const isForfaitPending=isForfait&&!isForfaitPaid;const matchesThis=(i:any)=>itemMatchesCreneau(i,e,c);const hp=isCard||isCeleris||isForfaitPaid||payments.some((p:any)=>p.familyId===e.familyId&&p.status==="paid"&&(p.items||[]).some(matchesThis));const hpend=!hp&&!isCard&&!isCeleris&&(isForfaitPending||payments.some((p:any)=>p.familyId===e.familyId&&(p.status==="pending"||p.status==="partial")&&(p.items||[]).some(matchesThis)));return!hp&&!hpend&&!isCard&&!isCeleris;}).length;return unpaid>0?<span className="font-body text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-lg">⚠️ {unpaid} impayé{unpaid>1?"s":""}</span>:null;})()}{waitCounts[c.id]>0&&<span className="font-body text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-1 rounded-lg whitespace-nowrap" title="Enfants en liste d'attente sur ce créneau">🔔 {waitCounts[c.id]} en attente</span>}<Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button type="button" onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({date:c.date,activityId:(c as any).activityId||"",activityType:c.activityType,tvaTaux:(c as any).tvaTaux||5.5,activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||"",allowDayBooking:(c as any).allowDayBooking||false,priceTTCDay:(c as any).priceTTCDay||"",themeStage:(c as any).themeStage||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button type="button" onClick={e=>{e.stopPropagation();openDelete(c);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
                 const isCard = e.paymentSource === "card";
                 const isCeleris = e.paymentSource === "celeris";
