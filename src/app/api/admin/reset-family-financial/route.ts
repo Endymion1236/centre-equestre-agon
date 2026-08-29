@@ -101,10 +101,19 @@ export async function POST(req: NextRequest) {
     const email = (famData?.parentEmail || famData?.email || "").trim().toLowerCase();
     if (email) {
       try {
-        const sameEmail = await adminDb.collection("families").where("parentEmail", "==", famData?.parentEmail).get();
-        sameEmail.forEach(d => {
+        // Comparaison en MINUSCULES côté JS, et non par égalité Firestore.
+        // La requête `where("parentEmail", "==", famData.parentEmail)` était
+        // sensible à la casse : deux fiches saisies « Laserbayagon@… » et
+        // « laserbayagon@… » sont la même personne, mais l'égalité ne les
+        // rapprochait pas — et le reset annonçait « 0 document » alors que les
+        // données étaient rattachées à l'autre fiche.
+        const toutes = await adminDb.collection("families").get();
+        toutes.forEach(d => {
+          const f = d.data() as any;
+          const e = String(f?.parentEmail || f?.email || "").trim().toLowerCase();
+          if (e !== email) return;
           if (!idSet.includes(d.id)) idSet.push(d.id);
-          const au = (d.data() as any)?.authUid;
+          const au = f?.authUid;
           if (au && !idSet.includes(au)) idSet.push(au);
         });
       } catch { /* champ absent : ignore */ }

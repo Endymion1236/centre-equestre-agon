@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
     const enrolled: string[] = [];
     const full: string[] = [];
     const notOwned: string[] = [];
+    const missing: string[] = [];
 
     for (const item of items) {
       if (!item?.childId || !Array.isArray(item.creneauIds)) continue;
@@ -184,11 +185,34 @@ export async function POST(req: NextRequest) {
         });
         if (outcome.status === "ok") enrolled.push(...creneauIds);
         else if (outcome.status === "full") full.push(outcome.cid);
-        // "missing" : on ignore (créneau introuvable)
+        else if (outcome.status === "missing") missing.push(outcome.cid);
       } catch (e) {
         console.error(`/api/enroll — échec item (child ${item.childId}):`, e);
         full.push(creneauIds[0]);
       }
+    }
+
+    // ── Créneau introuvable → ÉCHEC, jamais un succès silencieux ──────────
+    // Ce cas était ignoré : la transaction renvoyait "missing", la route n'en
+    // faisait rien, et comme `full` et `notOwned` restaient vides, elle
+    // répondait `{ ok: true, enrolled: [] }` en HTTP 200. Le navigateur, qui
+    // ne teste que `res.ok`, poursuivait : il créait la réservation ET le
+    // paiement pour un cours qui n'existe pas, puis partait vers CAWL.
+    //
+    // C'est exactement le symptôme « ça m'a inscrit sur un cours qui n'existe
+    // pas et ça m'a enregistré le paiement ». Il suffit que la liste des
+    // créneaux du navigateur soit périmée — page ouverte depuis un moment,
+    // créneau supprimé ou base réinitialisée entre-temps.
+    if (missing.length > 0) {
+      console.warn(`/api/enroll — créneaux introuvables pour uid=${uid}:`, missing);
+      return NextResponse.json(
+        {
+          error: "Ce créneau n'existe plus. Rafraîchis la page : le planning a changé depuis que tu l'as ouverte.",
+          code: "CRENEAU_INTROUVABLE",
+          missing, full, notOwned,
+        },
+        { status: 409 }
+      );
     }
 
     // Un item n'a pas pu être inscrit entièrement (complet) → on refuse, pour que
@@ -198,6 +222,17 @@ export async function POST(req: NextRequest) {
     }
     if (enrolled.length === 0 && notOwned.length > 0) {
       return NextResponse.json({ error: "Enfant non autorisé", notOwned }, { status: 403 });
+    }
+
+    // Garde-fou : une demande qui n'inscrit personne ne peut pas être un
+    // succès. Sans lui, tout nouveau cas non prévu retomberait dans le même
+    // piège — répondre 200 à une inscription qui n'a rien fait.
+    if (enrolled.length === 0) {
+      console.error(`/api/enroll — aucune inscription réalisée pour uid=${uid}`, { items: items.length });
+      return NextResponse.json(
+        { error: "Aucune inscription n'a pu être enregistrée. Rafraîchis la page et réessaie.", full, notOwned, missing },
+        { status: 409 }
+      );
     }
 
     return NextResponse.json({ ok: true, enrolled, full, notOwned });
