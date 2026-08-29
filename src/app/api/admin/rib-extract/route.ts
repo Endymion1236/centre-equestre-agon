@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { verifyAuth } from "@/lib/api-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { adminDb } from "@/lib/firebase-admin";
-import { gmailGetAttachment } from "@/lib/gmail";
+import { gmailGetAttachment, driveGetFile } from "@/lib/gmail";
 import { validateIban, validateBic } from "@/lib/sepa-validation";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({} as any));
-    const { messageId, attachmentId, mimeType, base64, from } = body || {};
+    const { messageId, attachmentId, mimeType, base64, from, driveFileId } = body || {};
 
     // Source : pièce jointe Gmail, ou fichier envoyé directement (photo prise
     // au club). Dans les deux cas on travaille sur des octets, jamais une URL.
@@ -77,13 +77,29 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Pièce jointe trop lourde (max 10 Mo)." }, { status: 400 });
       }
       data = buf.toString("base64");
+    } else if (driveFileId) {
+      // RIB « inséré avec Drive » : pas de pièce jointe, juste un lien.
+      try {
+        const f = await driveGetFile(String(driveFileId));
+        data = f.buffer.toString("base64");
+        type = f.mimeType.toLowerCase();
+      } catch (e: any) {
+        if (e?.message === "DRIVE_SCOPE_MANQUANT") {
+          return NextResponse.json({
+            error: "Google Drive n'est pas encore autorisé. Reconnectez le compte Google depuis la Boîte email (bouton Reconnecter), puis réessayez.",
+          }, { status: 200 });
+        }
+        return NextResponse.json({
+          error: "Fichier Drive illisible — il n'est peut-être pas partagé avec le compte du club. Ouvrez le lien, téléchargez le fichier et déposez-le ici.",
+        }, { status: 200 });
+      }
     } else if (base64) {
       data = String(base64).replace(/^data:[^;]+;base64,/, "");
       if (Buffer.byteLength(data, "base64") > 10 * 1024 * 1024) {
         return NextResponse.json({ error: "Fichier trop lourd (max 10 Mo)." }, { status: 400 });
       }
     } else {
-      return NextResponse.json({ error: "messageId + attachmentId, ou base64, requis." }, { status: 400 });
+      return NextResponse.json({ error: "Aucun document fourni (pièce jointe, fichier Drive ou fichier déposé)." }, { status: 400 });
     }
 
     const estPdf = type === "application/pdf";

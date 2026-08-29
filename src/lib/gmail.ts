@@ -7,11 +7,16 @@ import { adminDb } from "@/lib/firebase-admin";
 //   (admin SDK, jamais exposé au client).
 // ═══════════════════════════════════════════════════════════════════
 
+// drive.readonly : les familles envoient souvent leur RIB via « insérer avec
+// Drive » (Gmail mobile le fait seul au-delà d'une certaine taille) — le mail
+// ne porte alors AUCUNE pièce jointe, seulement un lien. Sans ce droit, ces
+// RIB restent illisibles par l'assistant. Lecture seule, compte du club.
 const SCOPE =
-  "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify";
+  "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/drive.readonly";
 const AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
+const DRIVE_API = "https://www.googleapis.com/drive/v3";
 
 export function gmailRedirectUri(): string {
   const base = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
@@ -277,6 +282,50 @@ export async function gmailGetAttachment(
   const data = await res.json();
   if (!data?.data) throw new Error("Pièce jointe vide");
   return Buffer.from(String(data.data).replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
+
+/**
+ * Télécharge un fichier Google Drive partagé avec le compte du club.
+ *
+ * Complète gmailGetAttachment : un RIB « inséré avec Drive » n'est pas une
+ * pièce jointe, seulement un lien dans le corps du mail.
+ *
+ * Nécessite le droit drive.readonly — ajouté au SCOPE, il n'est effectif
+ * qu'après une reconnexion du compte Google.
+ */
+export async function driveGetFile(
+  fileId: string
+): Promise<{ buffer: Buffer; mimeType: string; name: string }> {
+  const token = await getAccessToken();
+  const headers = { Authorization: `Bearer ${token}` };
+  const metaRes = await fetch(
+    `${DRIVE_API}/files/${encodeURIComponent(fileId)}?fields=name,mimeType,size&supportsAllDrives=true`,
+    { headers }
+  );
+  if (!metaRes.ok) {
+    const txt = await metaRes.text();
+    // 403 « insufficient scope » = compte connecté AVANT l'ajout du droit
+    // Drive : le message doit dire quoi faire, pas afficher un code brut.
+    if (metaRes.status === 403 && /insufficient|scope/i.test(txt)) {
+      throw new Error("DRIVE_SCOPE_MANQUANT");
+    }
+    throw new Error(`drive meta ${metaRes.status}: ${txt}`);
+  }
+  const meta = await metaRes.json();
+  if (Number(meta.size || 0) > 10 * 1024 * 1024) {
+    throw new Error("Fichier Drive trop lourd (max 10 Mo).");
+  }
+
+  const fileRes = await fetch(
+    `${DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
+    { headers }
+  );
+  if (!fileRes.ok) throw new Error(`drive file ${fileRes.status}: ${await fileRes.text()}`);
+  return {
+    buffer: Buffer.from(await fileRes.arrayBuffer()),
+    mimeType: String(meta.mimeType || ""),
+    name: String(meta.name || "fichier"),
+  };
 }
 
 /**

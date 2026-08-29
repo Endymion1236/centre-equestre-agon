@@ -25,6 +25,26 @@ function decodeHtml(s: string): string {
  * une pièce jointe audio. Les deux conditions : un mail de facturation
  * StandardFacile ne doit pas déclencher de transcription.
  */
+/**
+ * Fichiers Google Drive cités dans un mail.
+ *
+ * Gmail mobile bascule tout seul en « insérer avec Drive » au-delà d'une
+ * certaine taille : le mail ne porte alors aucune pièce jointe, seulement un
+ * lien. Sans cette détection, le RIB d'une famille passait inaperçu.
+ */
+function liensDrive(body: string): { driveFileId: string; url: string }[] {
+  const vus = new Set<string>();
+  const out: { driveFileId: string; url: string }[] = [];
+  const re = /https:\/\/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?id=)([\w-]{20,})/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body || "")) !== null) {
+    if (vus.has(m[1])) continue;
+    vus.add(m[1]);
+    out.push({ driveFileId: m[1], url: m[0] });
+  }
+  return out;
+}
+
 function estVocal(m: any): boolean {
   const from = String(m?.from || "").toLowerCase();
   return (
@@ -273,7 +293,7 @@ export default function BoiteAssistantPage() {
    * dans Paiements → SEPA, après relecture.
    */
   const lireRib = async (a: any) => {
-    setRibBusy(a.attachmentId);
+    setRibBusy(a.attachmentId || a.driveFileId || "fichier");
     setRib(null);
     setRibErr("");
     try {
@@ -281,9 +301,11 @@ export default function BoiteAssistantPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          messageId: selectedId,
-          attachmentId: a.attachmentId,
-          mimeType: a.mimeType,
+          ...(a.driveFileId
+            ? { driveFileId: a.driveFileId }
+            : a.base64
+              ? { base64: a.base64, mimeType: a.mimeType }
+              : { messageId: selectedId, attachmentId: a.attachmentId, mimeType: a.mimeType }),
           from,
         }),
       });
@@ -700,11 +722,14 @@ export default function BoiteAssistantPage() {
               {mailboxMsg.text}
             </p>
           )}
-          {/* Pièces jointes — lecture assistée d'un RIB (mandat SEPA) */}
-          {attachments.length > 0 && (
+          {/* Documents du mail — lecture assistée d'un RIB (mandat SEPA).
+              Trois provenances : pièce jointe, lien Google Drive (Gmail mobile
+              bascule seul en « insérer avec Drive »), ou fichier déposé à la
+              main quand les deux premières échouent. */}
+          {(attachments.length > 0 || liensDrive(body).length > 0 || selectedId) && (
             <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
               <div className="mb-1.5 flex items-center gap-1.5 font-body text-xs font-semibold text-slate-700">
-                <Paperclip size={13} /> {attachments.length} pièce{attachments.length > 1 ? "s" : ""} jointe{attachments.length > 1 ? "s" : ""}
+                <Paperclip size={13} /> Documents — lecture du RIB
               </div>
               <div className="flex flex-col gap-1.5">
                 {attachments.map((a: any) => (
@@ -720,6 +745,45 @@ export default function BoiteAssistantPage() {
                     </button>
                   </div>
                 ))}
+                {liensDrive(body).map((d) => (
+                  <div key={d.driveFileId} className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate font-body text-[11px] text-slate-600">
+                      <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        Fichier Google Drive
+                      </a>
+                    </span>
+                    <button
+                      onClick={() => lireRib(d)}
+                      disabled={!!ribBusy}
+                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                    >
+                      {ribBusy === d.driveFileId ? <Loader2 size={12} className="animate-spin" /> : <Landmark size={12} />}
+                      Lire le RIB (Drive)
+                    </button>
+                  </div>
+                ))}
+                <label className="flex cursor-pointer items-center gap-2 font-body text-[11px] text-slate-500">
+                  <span className="flex-1">…ou déposer le fichier (PDF ou photo)</span>
+                  <input
+                    type="file"
+                    accept=".pdf,image/*"
+                    className="max-w-[46%] font-body text-[10px]"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!f) return;
+                      if (f.size > 10 * 1024 * 1024) { setRibErr("Fichier trop lourd (max 10 Mo)."); return; }
+                      // FileReader plutôt qu'un btoa(String.fromCharCode(...)) :
+                      // l'étalement d'un tableau de plusieurs Mo fait sauter la
+                      // pile d'appels du navigateur.
+                      const reader = new FileReader();
+                      reader.onload = () =>
+                        lireRib({ base64: String(reader.result || ""), mimeType: f.type || "application/pdf" });
+                      reader.onerror = () => setRibErr("Fichier illisible.");
+                      reader.readAsDataURL(f);
+                    }}
+                  />
+                </label>
               </div>
               {ribErr && <p className="mt-1.5 font-body text-[11px] font-semibold text-red-600">{ribErr}</p>}
             </div>
