@@ -21,7 +21,7 @@ const GROUPS = [
     collections: [
       "encaissements", "payments", "cloturesJournalieres", "fondsDeCaisse",
       "remises", "avoirs", "payment_declarations", "cheques-differes", "devis",
-      "sepa_mandats", "sepa_remises", "sepa_echeances",
+      "remises-sepa", "echeances-sepa",
     ],
   },
   {
@@ -29,7 +29,7 @@ const GROUPS = [
     label: "Inscriptions & réservations",
     description: "Réservations, listes d'attente, rattrapages, cartes/carnets, forfaits",
     tone: "orange" as const,
-    collections: ["reservations", "waitlist", "rattrapages", "cards", "forfaits", "fidelite_transactions"],
+    collections: ["reservations", "waitlist", "rattrapages", "cartes", "forfaits", "fidelite"],
   },
   {
     id: "communications",
@@ -43,7 +43,7 @@ const GROUPS = [
     label: "⚠️ Données métier (prudence)",
     description: "Créneaux planning, familles, équidés, activités, soins",
     tone: "red" as const,
-    collections: ["creneaux", "indispos", "soins", "families", "equides", "activities"],
+    collections: ["creneaux", "indisponibilites", "soins", "families", "equides", "activities"],
   },
 ];
 
@@ -60,16 +60,15 @@ const COLLECTION_LABELS: Record<string, string> = {
   emailsReprise: "Emails de reprise (groupés)",
   payment_declarations: "Déclarations de paiement (espace client)",
   "cheques-differes": "Chèques différés",
-  fidelite_transactions: "Points de fidélité (mouvements)",
+  fidelite: "Fidélité (points et historique)",
   rattrapages: "Rattrapages",
   devis: "Devis",
-  cards: "Cartes / carnets",
-  sepa_mandats: "Mandats SEPA",
-  sepa_remises: "Remises SEPA",
-  sepa_echeances: "Échéances SEPA",
+  cartes: "Cartes / carnets de séances",
+  "remises-sepa": "Remises SEPA",
+  "echeances-sepa": "Échéances SEPA (prélèvements à venir)",
   forfaits: "Forfaits annuels",
   creneaux: "Créneaux du planning",
-  indispos: "Indisponibilités équidés",
+  indisponibilites: "Indisponibilités équidés",
   soins: "Soins équidés",
   families: "Familles (et enfants)",
   equides: "Équidés",
@@ -228,7 +227,11 @@ export default function ResetBasePage() {
   async function handleBackup() {
     try {
       toast("📦 Export en cours...", "info");
-      const res = await authFetch("/api/admin/backup-json");
+      // backup-all et non backup-json : la seconde liste ne couvrait qu'une
+      // trentaine de collections (et trois d'entre elles sous des noms
+      // inexistants). La sauvegarde proposée juste avant un effacement doit
+      // être la COMPLÈTE, sinon elle ne protège de rien.
+      const res = await authFetch("/api/admin/backup-all");
       if (!res.ok) throw new Error("Erreur export");
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -527,6 +530,20 @@ export default function ResetBasePage() {
                         </Badge>
                       </label>
                     ))}
+                    {/* Mandats SEPA : jamais effaçables. Affichés quand même,
+                        pour que leur absence de la liste ne passe pas pour un
+                        oubli — et parce qu'un écran de remise à zéro doit dire
+                        ce qu'il ne touche pas autant que ce qu'il efface. */}
+                    {group.id === "financier" && (
+                      <div className="flex items-center gap-2 px-3 py-2 bg-emerald-50/60">
+                        <ShieldAlert size={14} className="text-emerald-600 flex-shrink-0" />
+                        <span className="font-body text-sm text-emerald-900 flex-1">
+                          Mandats SEPA <span className="text-[11px] text-emerald-700">— protégés, jamais effacés</span>
+                        </span>
+                        <code className="font-mono text-[10px] text-emerald-600/70">mandats-sepa</code>
+                        <Badge color="green">protégé</Badge>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
