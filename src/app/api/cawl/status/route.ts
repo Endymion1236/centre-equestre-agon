@@ -13,6 +13,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
+import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
 
@@ -401,21 +402,11 @@ export async function GET(req: NextRequest) {
           const items = pData.items || [];
           const hasStage = items.some((i: any) => i.activityType === "stage");
 
-          // Construire une description détaillée par article
-          const lignesDetail = items.map((i: any) => {
-            const parts = [i.activityTitle, i.childName].filter(Boolean);
-            const infos = [];
-            if (i.date) {
-              const d = new Date(i.date);
-              const dateStr = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-              infos.push(dateStr);
-            }
-            if (i.startTime && i.endTime) infos.push(`${i.startTime}–${i.endTime}`);
-            if (i.monitor) infos.push(`avec ${i.monitor}`);
-            return `${parts.join(" — ")}${infos.length ? `<br/><span style="color:#888;font-size:12px;">${infos.join(" · ")}</span>` : ""}`;
-          }).join("<br/><br/>");
-
-          const prestations = items.map((i: any) => i.activityTitle).join(", ") || "Prestation";
+          // Libellés construits par lib/email-prestations : le panier intègre
+          // déjà le prénom dans `activityTitle`, le recoller donnait
+          // « Galop de bronze — ambre — ambre » dans l'email reçu.
+          const lignesDetail = lignesDetailHtml(items);
+          const prestations = prestationsCourtes(items);
           // Acompte de stage → template dédié (récap total / acompte / solde).
           // Paiement total → template classique "PAIEMENT CONFIRMÉ".
           const templateKey = hasStage
@@ -427,7 +418,10 @@ export async function GET(req: NextRequest) {
             : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
           const vars: Record<string, string | number> = hasStage ? {
             parentName: pData.familyName || "Client",
-            stageTitle: items[0]?.activityTitle || "Stage",
+            // Sans nettoyage, le titre du stage arrive sous la forme
+            // « Stage Poney — ambre » : le panier y a déjà mis l'enfant, et
+            // les prénoms sont listés juste en dessous.
+            stageTitle: titreSansEnfant(items[0]) || "Stage",
             dates: items.map((i: any) => {
               if (!i.date) return "";
               return new Date(i.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
@@ -444,6 +438,11 @@ export async function GET(req: NextRequest) {
             parentName: pData.familyName || "Client",
             montant: paidAmount.toFixed(2),
             prestations: lignesDetail || prestations,
+            // Le gabarit `confirmationPaiement` attend `mode`. Le webhook le
+            // passait, cette route non : la famille recevait « Mode de
+            // paiement : {mode} », le marqueur brut. Concerne les cours
+            // ponctuels ET les balades — tout ce qui n'est pas un stage.
+            mode: libelleModePaiement("cb_online"),
           };
           const { subject, html } = await loadTemplate(templateKey, vars);
           // Rappel des conditions d'annulation pour les stages. Ajouté ici

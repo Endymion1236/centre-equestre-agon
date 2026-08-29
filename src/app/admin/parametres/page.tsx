@@ -1656,72 +1656,6 @@ export default function ParametresPage() {
                 Le suivi pédagogique sera effacé si vous cochez l'option en bas.
               </p>
 
-              {/* Grille des collections */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
-                {[
-                  { col: "payments",             label: "Paiements & factures",       icon: "💶", danger: true },
-                  { col: "reservations",          label: "Réservations",               icon: "📅", danger: true },
-                  { col: "forfaits",              label: "Forfaits annuels",            icon: "📋", danger: true },
-                  { col: "avoirs",                label: "Avoirs",                     icon: "🎫", danger: true },
-                  { col: "echeances-sepa",        label: "Échéances SEPA",             icon: "🏦", danger: true },
-                  { col: "mandats-sepa",          label: "Mandats SEPA",               icon: "📄", danger: true },
-                  { col: "remises-sepa",          label: "Remises SEPA",               icon: "📤", danger: true },
-                  { col: "encaissements",         label: "Journal encaissements",       icon: "📒", danger: true },
-                  { col: "cartes",                label: "Cartes & tickets",            icon: "🎟️", danger: true },
-                  { col: "passages",              label: "Passages / présences",       icon: "✅", danger: false },
-                  { col: "bonsRecup",             label: "Bons récupération",          icon: "🔄", danger: false },
-                  { col: "waitlist",              label: "Liste d'attente",            icon: "⏳", danger: false },
-                  { col: "payment_declarations",  label: "Déclarations de paiement",   icon: "📝", danger: false },
-                  { col: "remises",               label: "Remises bancaires",          icon: "🏦", danger: false },
-                  { col: "rdv_pro",               label: "RDV professionnels",         icon: "📆", danger: false },
-                  { col: "emailsReprise",         label: "Emails reprise",             icon: "📧", danger: false },
-                ].map(item => (
-                  <div key={item.col} className={`flex items-center justify-between px-3 py-2 rounded-lg ${item.danger ? "bg-red-50" : "bg-sand"}`}>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{item.icon}</span>
-                      <span className="font-body text-sm text-blue-800">{item.label}</span>
-                    </div>
-                    <button type="button" onClick={async () => {
-                      // `encaissements` est scellé par les règles Firestore
-                      // (allow delete: if false) au titre de l'inaltérabilité
-                      // comptable — loi anti-fraude TVA 2018 / NF525 / CGI art.
-                      // 286-I-3°bis. Le bouton promettait un vidage que la base
-                      // refuse : mieux vaut le dire que laisser croire que la
-                      // caisse a été remise à zéro.
-                      if (item.col === "encaissements") {
-                        alert(
-                          "Le journal des encaissements est INALTÉRABLE : les règles Firestore " +
-                          "interdisent toute suppression, y compris à l'administrateur (NF525).\n\n" +
-                          "Pour corriger une écriture, passez par une contre-passation. " +
-                          "Pour repartir d'une base vierge avant la bascule, utilisez « Réinitialiser la base » " +
-                          "(SDK serveur), qui journalise l'opération dans resetLogs."
-                        );
-                        return;
-                      }
-                      if (!confirm(`Supprimer TOUS les documents de "${item.label}" ?\n\nAction irréversible.`)) return;
-                      try {
-                        const snap = await getDocs(collection(db, item.col));
-                        let count = 0, refus = 0;
-                        for (const d of snap.docs) {
-                          try { await deleteDoc(doc(db, item.col, d.id)); count++; }
-                          catch { refus++; }
-                        }
-                        // Suppression document par document depuis le navigateur :
-                        // chaque document passe par les règles, et certaines
-                        // collections en refusent une partie. Sans ce décompte,
-                        // un vidage partiel passait pour un vidage complet.
-                        alert(
-                          `${count} document(s) supprimé(s) dans "${item.label}".` +
-                          (refus > 0 ? `\n\n⚠️ ${refus} refusé(s) par les règles Firestore — collection protégée.` : "")
-                        );
-                      } catch (e) { console.error(e); alert("Erreur."); }
-                    }} className="font-body text-[10px] text-red-500 bg-white border border-red-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-red-100 border-solid">
-                      Vider
-                    </button>
-                  </div>
-                ))}
-              </div>
-
               {/* Vider les inscrits des créneaux */}
               <div className="border-t border-gray-100 pt-4 mb-4 flex flex-col gap-2">
                 <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Créneaux — retirer les inscrits</div>
@@ -1749,8 +1683,13 @@ export default function ParametresPage() {
                 <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-3">Tout nettoyer en une fois</div>
                 <div className="bg-red-50 rounded-xl p-4 mb-3">
                   <p className="font-body text-xs text-red-700 mb-3">
-                    Supprime les 16 collections ci-dessus + vide les inscrits des créneaux.<br/>
-                    <strong>Créneaux, familles, cavaliers, cavalerie, activités, paramètres : conservés.</strong>
+                    Supprime les 16 collections transactionnelles (paiements, réservations, forfaits,
+                    avoirs, SEPA, cartes, passages, bons, liste d'attente, déclarations, remises, RDV pro,
+                    emails de reprise) + vide les inscrits des créneaux.<br/>
+                    <strong>Créneaux, familles, cavaliers, cavalerie, activités, paramètres : conservés.</strong><br/>
+                    <strong>Le journal des encaissements est scellé</strong> (inaltérabilité NF525) : il ne peut pas
+                    être vidé, ici ni ailleurs. Pour repartir d'une base vierge avant la bascule, utiliser
+                    « Réinitialiser la base », qui passe par le serveur et journalise l'opération.
                   </p>
                   <label className="flex items-center gap-2 cursor-pointer mb-3">
                     <input type="checkbox" id="effacerPedaCheck" className="accent-red-500 w-4 h-4"/>
@@ -1764,11 +1703,23 @@ export default function ParametresPage() {
                   if (!confirm("DERNIÈRE CONFIRMATION — action irréversible.\n\nConfirmer le nettoyage ?")) return;
 
                   let total = 0;
-                  const cols = ["payments","reservations","forfaits","avoirs","echeances-sepa","mandats-sepa","remises-sepa","encaissements","cartes","passages","bonsRecup","waitlist","payment_declarations","remises","rdv_pro","emailsReprise"];
+                  const refuses: Record<string, number> = {};
+                  // `encaissements` n'est PAS dans cette liste : les règles
+                  // Firestore le scellent (allow delete: if false) au titre de
+                  // l'inaltérabilité comptable — NF525 / CGI art. 286-I-3°bis.
+                  // L'y laisser ne faisait qu'échouer en silence et gonfler
+                  // l'impression que la caisse avait été remise à zéro.
+                  const cols = ["payments","reservations","forfaits","avoirs","echeances-sepa","mandats-sepa","remises-sepa","cartes","passages","bonsRecup","waitlist","payment_declarations","remises","rdv_pro","emailsReprise"];
                   for (const colName of cols) {
                     try {
                       const snap = await getDocs(collection(db, colName));
-                      for (const d of snap.docs) { await deleteDoc(doc(db, colName, d.id)); total++; }
+                      for (const d of snap.docs) {
+                        // Suppression document par document depuis le navigateur :
+                        // chaque document passe par les règles. Sans ce décompte,
+                        // un nettoyage partiel passait pour un nettoyage complet.
+                        try { await deleteDoc(doc(db, colName, d.id)); total++; }
+                        catch { refuses[colName] = (refuses[colName] || 0) + 1; }
+                      }
                     } catch (e) { console.error(`Erreur sur ${colName}:`, e); }
                   }
 
@@ -1798,7 +1749,14 @@ export default function ParametresPage() {
                     } catch (e) { console.error("Erreur péda:", e); }
                   }
 
-                  alert(`✅ Nettoyage terminé : ${total} documents supprimés.\n\nCréneaux, familles et cavalerie intacts.${effacerPeda ? "\nSuivi pédagogique effacé." : ""}`);
+                  const detailRefus = Object.entries(refuses)
+                    .map(([c, n]) => `${c} : ${n}`).join("\n");
+                  alert(
+                    `✅ Nettoyage terminé : ${total} documents supprimés.\n\n` +
+                    `Créneaux, familles et cavalerie intacts.${effacerPeda ? "\nSuivi pédagogique effacé." : ""}` +
+                    (detailRefus ? `\n\n⚠️ Documents refusés par les règles Firestore :\n${detailRefus}` : "") +
+                    `\n\nLe journal des encaissements n'est pas concerné : il est scellé (NF525).`
+                  );
                 }} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-red-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-red-600">
                   <Trash2 size={16}/> Tout nettoyer (2 confirmations requises)
                 </button>

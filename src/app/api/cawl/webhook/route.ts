@@ -14,6 +14,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
+import { prestationsCourtes, libelleModePaiement, titreSansEnfant } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 
 export const dynamic = "force-dynamic";
@@ -332,7 +333,10 @@ export async function POST(req: NextRequest) {
           await refreshEmailMode();
           if (parentEmail && resendKey && isRecipientAllowed(parentEmail)) {
             try {
-              const prestations = (pData.items || []).map((i: any) => i.activityTitle).join(", ") || "Prestation";
+              // Mêmes libellés que la route de retour (lib/email-prestations) :
+              // le panier intègre déjà le prénom dans `activityTitle`, le
+              // recoller donnait « Galop de bronze — ambre — ambre ».
+              const prestations = prestationsCourtes(pData.items || []);
               const hasStage = (pData.items || []).some((i: any) => i.activityType === "stage");
 
               let templateKey = "confirmationPaiement";
@@ -340,7 +344,7 @@ export async function POST(req: NextRequest) {
                 parentName,
                 montant: paidAmount.toFixed(2),
                 prestations,
-                mode: "Carte bancaire en ligne (CAWL)",
+                mode: libelleModePaiement(pData.paymentMode || "cb_online"),
               };
 
               if (hasStage) {
@@ -359,7 +363,7 @@ export async function POST(req: NextRequest) {
                   : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
                 vars = {
                   parentName,
-                  stageTitle: pData.items?.[0]?.activityTitle || "Stage",
+                  stageTitle: titreSansEnfant(pData.items?.[0]) || "Stage",
                   dates: pData.stageDate || prestations,
                   horaires: pData.items?.[0]?.stageSchedule || "",
                   enfants: enfantsList,
