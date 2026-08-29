@@ -14,7 +14,6 @@ export const maxDuration = 300; // 5 min max — les 4 crons en séquence
  * Enchaîne en séquence les 4 modules d'emails automatiques :
  *   1. rappels-j1                → rappels cours/stages du lendemain
  *   2. daily-notifications       → rappels J-1 parents + planning moniteur + rappels solde stages
- *   3. daily-monitor-recap       → récap planning moniteur
  *   4. charge-stage-balances     → relance solde stage J-7
  *
  * Nettoie aussi les logs emails > 90 jours.
@@ -45,10 +44,17 @@ export async function GET(req: NextRequest) {
     // Rappels J-1 : depuis le soir, on cible bien demain (target par défaut)
     { name: "rappels-j1", path: "/api/cron/rappels-j1" },
     // Daily notifs : depuis le soir, on veut viser le jour suivant.
-    // Inclut DÉJÀ le récap moniteur (push + email) → pas de daily-monitor-recap
-    // séparé, qui envoyait un email moniteur identique (doublon supprimé).
+    // Inclut DÉJÀ le récap moniteur (push + email). La route séparée
+    // daily-monitor-recap, qui envoyait un email moniteur identique, a été
+    // supprimée le 29/08/2026 (elle n'était plus ni planifiée ni appelée,
+    // mais restait déclenchable avec le CRON_SECRET — audit F6).
     { name: "daily-notifications", path: "/api/cron/daily-notifications?target=tomorrow" },
-    // Solde stage J-7 : calcule J-7 depuis la date des stages, pas depuis aujourd'hui → pas de décalage
+    // Solde stage J-7 : calcule J-7 depuis la date des stages, pas depuis
+    // aujourd'hui → pas de décalage.
+    // ⚠️ SEUL point de déclenchement. Une entrée `charge-stage-balances`
+    // existait aussi dans vercel.json (08:00 UTC) : la routine qui DÉBITE les
+    // cartes tournait donc deux fois par jour. Retirée le 29/08/2026 — un seul
+    // planificateur, ici (audit F5).
     { name: "charge-stage-balances", path: "/api/cron/charge-stage-balances" },
     // Balades collectives sous le minimum de participants à J-2 : propose aux
     // familles supplément petit comité / report / avoir. Idempotent
@@ -79,7 +85,7 @@ export async function GET(req: NextRequest) {
         status: 0,
         ok: false,
         durationMs: Date.now() - modStart,
-        error: e?.message || String(e),
+        error: "Erreur interne",
       };
     }
   }

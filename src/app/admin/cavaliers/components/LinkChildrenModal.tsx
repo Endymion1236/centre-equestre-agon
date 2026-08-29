@@ -53,7 +53,7 @@ export default function LinkChildrenModal({ targetFamilyId, families, onClose, o
         <div className="p-5 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-1">
             <h2 className="font-display text-lg font-bold text-blue-800">Lier des cavaliers</h2>
-            <button onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
           </div>
           <p className="font-body text-xs text-slate-500">
             Choisissez les cavaliers que <strong>{targetFamily.parentName}</strong> pourra voir et réserver.
@@ -92,7 +92,7 @@ export default function LinkChildrenModal({ targetFamilyId, families, onClose, o
                     {isLinked ? (
                       <span className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-1 rounded-lg">✓ Lié</span>
                     ) : (
-                      <button onClick={() => handleLink(child, f.firestoreId, f.parentName)} disabled={linkSaving}
+                      <button type="button" onClick={() => handleLink(child, f.firestoreId, f.parentName)} disabled={linkSaving}
                         className="font-body text-xs text-teal-600 bg-teal-50 hover:bg-teal-100 px-3 py-1.5 rounded-lg border-none cursor-pointer font-semibold disabled:opacity-50">
                         + Lier
                       </button>

@@ -1398,7 +1398,7 @@ export default function PaiementsPage() {
         <div className="flex items-center gap-3">
           <h1 className="font-display text-2xl font-bold text-blue-800">Paiements & facturation</h1>
         </div>
-        <button onClick={() => fetchData(true)} disabled={refreshing}
+        <button type="button" onClick={() => fetchData(true)} disabled={refreshing}
           className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50 transition-colors">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={refreshing ? "animate-spin" : ""}><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
           {refreshing ? "Actualisation..." : "Actualiser"}
@@ -1407,7 +1407,7 @@ export default function PaiementsPage() {
 
       <div className="flex gap-1 mb-6 overflow-x-auto pb-1 -mx-1 px-1 hide-scrollbar">
         {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques diff.", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclar.", Receipt]] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setTab(id as any)}
+          <button type="button" key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-body text-[11px] sm:text-xs font-medium cursor-pointer transition-all whitespace-nowrap flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             <Icon size={13} /> {label}
@@ -1562,7 +1562,7 @@ export default function PaiementsPage() {
               {mode === "choose" && (
                 <div className="p-5 flex flex-col gap-3">
                   {/* Mode 1 : pré-remplir le panier */}
-                  <button onClick={() => duplicateToBasket(p)}
+                  <button type="button" onClick={() => duplicateToBasket(p)}
                     className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-blue-200 bg-blue-50 cursor-pointer hover:bg-blue-100 hover:border-blue-400 text-left transition-all">
                     <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center flex-shrink-0">
                       <ShoppingCart size={18} className="text-white" />
@@ -1573,7 +1573,7 @@ export default function PaiementsPage() {
                     </div>
                   </button>
                   {/* Mode 2 : commande à encaisser pour autre famille */}
-                  <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "other_family" })}
+                  <button type="button" onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "other_family" })}
                     className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-purple-200 bg-purple-50 cursor-pointer hover:bg-purple-100 hover:border-purple-400 text-left transition-all">
                     <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center flex-shrink-0">
                       <Plus size={18} className="text-white" />
@@ -1584,7 +1584,7 @@ export default function PaiementsPage() {
                     </div>
                   </button>
                   {/* Mode 3 : diffusion concours */}
-                  <button onClick={() => { setBroadcastSource(duplicateTarget.payment); setDuplicateTarget(null); setBroadcastRows([]); setBroadcastSearch(""); }}
+                  <button type="button" onClick={() => { setBroadcastSource(duplicateTarget.payment); setDuplicateTarget(null); setBroadcastRows([]); setBroadcastSearch(""); }}
                     className="w-full flex items-center gap-4 px-4 py-4 rounded-xl border-2 border-orange-200 bg-orange-50 cursor-pointer hover:bg-orange-100 hover:border-orange-400 text-left transition-all">
                     <div className="w-10 h-10 rounded-lg bg-orange-500 flex items-center justify-center flex-shrink-0">
                       <Copy size={18} className="text-white" />
@@ -1607,7 +1607,7 @@ export default function PaiementsPage() {
                 // Phase A : chercher la famille
                 if (!targetFam) return (
                   <div className="p-5 flex flex-col gap-3">
-                    <button onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
+                    <button type="button" onClick={() => setDuplicateTarget({ ...duplicateTarget, mode: "choose" })}
                       className="flex items-center gap-1 font-body text-xs text-slate-600 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0 mb-1">
                       ← Retour
                     </button>
@@ -1624,7 +1624,7 @@ export default function PaiementsPage() {
                         {filteredFams.length === 0 ? (
                           <p className="font-body text-xs text-slate-600 text-center py-3">Aucune famille trouvée</p>
                         ) : filteredFams.map(f => (
-                          <button key={f.firestoreId}
+                          <button type="button" key={f.firestoreId}
                             onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: f.firestoreId, targetSearch: "" })}
                             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border border-gray-200 bg-white cursor-pointer hover:bg-purple-50 hover:border-purple-200 text-left transition-all">
                             <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center font-body text-xs font-bold text-purple-600 flex-shrink-0">
@@ -1645,7 +1645,7 @@ export default function PaiementsPage() {
                 // Phase B : mapper les enfants
                 return (
                   <div className="p-5 flex flex-col gap-4 overflow-y-auto">
-                    <button onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: "", targetSearch: "" })}
+                    <button type="button" onClick={() => setDuplicateTarget({ ...duplicateTarget, targetFamilyId: "", targetSearch: "" })}
                       className="flex items-center gap-1 font-body text-xs text-slate-600 hover:text-gray-600 bg-transparent border-none cursor-pointer p-0">
                       ← Changer de famille
                     </button>
@@ -1675,7 +1675,7 @@ export default function PaiementsPage() {
                         </div>
                       ))}
                     </div>
-                    <button onClick={async () => {
+                    <button type="button" onClick={async () => {
                       // Lire le mapping depuis les selects
                       const mappedItems = sourceItems.map((item: any, idx: number) => {
                         const sel = document.getElementById(`child-map-${idx}`) as HTMLSelectElement;
@@ -1718,7 +1718,7 @@ export default function PaiementsPage() {
 
               {/* Footer */}
               <div className="p-5 border-t border-gray-100">
-                <button onClick={() => setDuplicateTarget(null)}
+                <button type="button" onClick={() => setDuplicateTarget(null)}
                   className="w-full py-2.5 rounded-lg font-body text-sm text-slate-600 bg-gray-100 border-none cursor-pointer hover:bg-gray-200">Annuler</button>
               </div>
             </div>
@@ -1738,7 +1738,7 @@ export default function PaiementsPage() {
                   <h2 className="font-display text-lg font-bold text-orange-700">Diffusion concours / coaching</h2>
                   <p className="font-body text-xs text-slate-600 mt-0.5">Basé sur : <span className="font-semibold">{(broadcastSource.items || []).map((i: any) => i.activityTitle).join(" · ")}</span></p>
                 </div>
-                <button onClick={() => setBroadcastSource(null)} className="text-slate-600 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+                <button type="button" onClick={() => setBroadcastSource(null)} className="text-slate-600 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
               </div>
               {/* Barre de recherche */}
               <div className="relative mt-3">
@@ -1856,11 +1856,11 @@ export default function PaiementsPage() {
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setBroadcastSource(null)}
+                  <button type="button" onClick={() => setBroadcastSource(null)}
                     className="font-body text-sm text-slate-600 bg-gray-100 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">
                     Annuler
                   </button>
-                  <button onClick={broadcastToFamilies}
+                  <button type="button" onClick={broadcastToFamilies}
                     disabled={broadcastRows.length === 0 || broadcastSending}
                     className={`font-body text-sm font-bold text-white px-5 py-2.5 rounded-lg border-none cursor-pointer transition-all flex items-center gap-2 ${broadcastRows.length === 0 || broadcastSending ? "bg-gray-300 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600"}`}>
                     {broadcastSending ? <><Loader2 size={14} className="animate-spin" /> Envoi...</> : <>Créer {broadcastRows.length > 0 ? broadcastRows.length : ""} commande{broadcastRows.length > 1 ? "s" : ""}</>}
@@ -1909,7 +1909,7 @@ export default function PaiementsPage() {
               <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">Mode de paiement</label>
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {paymentModes.filter(m => ["cheque", "especes", "cb_terminal", "virement", "cheque_vacances", "pass_sport"].includes(m.id)).map(m => (
-                  <button key={m.id} onClick={() => setMultiMode(m.id)}
+                  <button type="button" key={m.id} onClick={() => setMultiMode(m.id)}
                     className={`font-body text-sm py-2 rounded-lg border cursor-pointer ${multiMode === m.id ? "bg-blue-500 text-white border-blue-500 font-semibold" : "bg-white text-slate-600 border-gray-200 hover:border-gray-300"}`}>
                     {m.label}
                   </button>
@@ -1930,9 +1930,9 @@ export default function PaiementsPage() {
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-2 flex-shrink-0">
-              <button onClick={() => setMultiEncaisser(null)} disabled={multiSaving}
+              <button type="button" onClick={() => setMultiEncaisser(null)} disabled={multiSaving}
                 className="flex-1 font-body text-sm text-slate-500 bg-gray-100 py-2.5 rounded-lg border-none cursor-pointer disabled:opacity-50">Annuler</button>
-              <button onClick={handleMultiEncaisser} disabled={multiSaving}
+              <button type="button" onClick={handleMultiEncaisser} disabled={multiSaving}
                 className="flex-1 font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 py-2.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                 {multiSaving ? "Encaissement…" : "💳 Tout encaisser"}
               </button>
@@ -1950,7 +1950,7 @@ export default function PaiementsPage() {
                 <h2 className="font-display text-lg font-bold text-blue-800">Encaisser</h2>
                 <p className="font-body text-xs text-slate-500 mt-0.5">{quickEncaisser.payment.familyName}</p>
               </div>
-              <button onClick={() => setQuickEncaisser(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+              <button type="button" onClick={() => setQuickEncaisser(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
             </div>
             <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1 min-h-0">
               {/* Montant */}
@@ -1968,7 +1968,7 @@ export default function PaiementsPage() {
                   const totalAvoir = quickAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
                   return (
                     <div className="bg-purple-50 border border-purple-200 rounded-xl p-2.5 mb-2">
-                      <button
+                      <button type="button"
                         onClick={() => setQuickMode("avoir")}
                         className={`w-full text-left font-body text-sm font-semibold cursor-pointer border-none bg-transparent ${
                           quickMode === "avoir" ? "text-purple-700" : "text-purple-600"
@@ -1992,7 +1992,7 @@ export default function PaiementsPage() {
                     const isSepa = m.id === "prelevement_sepa";
                     const sepaBlocked = isSepa && quickMandatActif === false;
                     return (
-                      <button key={m.id}
+                      <button type="button" key={m.id}
                         onClick={() => !sepaBlocked && setQuickMode(m.id)}
                         disabled={sepaBlocked}
                         title={sepaBlocked ? "Aucun mandat SEPA actif pour cette famille" : undefined}
@@ -2115,7 +2115,7 @@ export default function PaiementsPage() {
                               className="flex-1 min-w-0 px-2 py-1 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
                             />
                             {quickChequesDiffres.length > 1 && (
-                              <button
+                              <button type="button"
                                 onClick={() => setQuickChequesDiffres(quickChequesDiffres.filter((_, i) => i !== idx))}
                                 className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"
                                 title="Supprimer ce chèque">
@@ -2145,7 +2145,7 @@ export default function PaiementsPage() {
                       ))}
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      <button
+                      <button type="button"
                         onClick={() => {
                           const reste = Math.max(0, Math.round((montantCible - totalChq) * 100) / 100);
                           const lastDate = quickChequesDiffres[quickChequesDiffres.length - 1]?.dateEncaissementPrevue;
@@ -2161,7 +2161,7 @@ export default function PaiementsPage() {
                         + Ajouter
                       </button>
                       {quickChequesDiffres.length > 0 && (
-                        <button
+                        <button type="button"
                           onClick={() => {
                             const n = quickChequesDiffres.length;
                             if (n === 0) return;
@@ -2208,8 +2208,8 @@ export default function PaiementsPage() {
                 </div>
               )}
               <div className="flex gap-3 pt-1">
-                <button onClick={() => setQuickEncaisser(null)} className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
-                <button onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant || (quickMode === "prelevement_sepa" && quickMandatActif !== true)}
+                <button type="button" onClick={() => setQuickEncaisser(null)} className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
+                <button type="button" onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant || (quickMode === "prelevement_sepa" && quickMandatActif !== true)}
                   className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 border-none cursor-pointer disabled:opacity-50">
                   {quickSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : (quickMode === "cheque_differe" ? "📅 " : "💶 ")}
                   {quickMode === "cheque_differe"
@@ -2237,7 +2237,7 @@ export default function PaiementsPage() {
                 <h2 className="font-display text-lg font-bold text-blue-800">Modifier la commande</h2>
                 <p className="font-body text-xs text-slate-500">{editPayment.familyName}</p>
               </div>
-              <button onClick={() => setEditPayment(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+              <button type="button" onClick={() => setEditPayment(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
             </div>
 
             {/* Bandeau de blocage si facture définitive émise */}
@@ -2292,7 +2292,7 @@ export default function PaiementsPage() {
                         className={`w-20 px-2 py-1.5 rounded-lg border border-gray-200 font-body text-sm text-right focus:outline-none focus:border-blue-500 ${isInvoiced ? "opacity-50 cursor-not-allowed bg-gray-100" : ""}`}
                       />
                       <span className="font-body text-xs text-slate-400">€</span>
-                      <button onClick={() => !isInvoiced && setEditItems(prev => prev.filter((_, i) => i !== idx))}
+                      <button type="button" onClick={() => !isInvoiced && setEditItems(prev => prev.filter((_, i) => i !== idx))}
                         disabled={isInvoiced}
                         className={`text-red-400 hover:text-red-600 bg-transparent border-none p-1 ${isInvoiced ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}>
                         <Trash2 size={14}/>
@@ -2302,7 +2302,7 @@ export default function PaiementsPage() {
                 </div>
 
                 {/* Ajouter une ligne libre */}
-                <button onClick={() => setEditItems(prev => [...prev, { activityTitle: "Remise / Ajustement", priceTTC: 0, priceHT: 0, tva: 5.5, childName: "" }])}
+                <button type="button" onClick={() => setEditItems(prev => [...prev, { activityTitle: "Remise / Ajustement", priceTTC: 0, priceHT: 0, tva: 5.5, childName: "" }])}
                   className="mt-2 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline">
                   + Ajouter une ligne
                 </button>
@@ -2327,7 +2327,7 @@ export default function PaiementsPage() {
                       placeholder="ex: 50"
                       className="w-full px-3 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:outline-none focus:border-orange-400" />
                   </div>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       const total = editItems.reduce((s, i) => s + (i.priceTTC || 0), 0);
                       const remise = editRemisePct
@@ -2364,7 +2364,7 @@ export default function PaiementsPage() {
 
               {/* Boutons */}
               <div className="flex gap-3">
-                <button onClick={() => setEditPayment(null)}
+                <button type="button" onClick={() => setEditPayment(null)}
                   className="px-5 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                   {isInvoiced ? "Fermer" : "Annuler"}
                 </button>

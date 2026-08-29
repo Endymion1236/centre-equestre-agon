@@ -86,7 +86,7 @@ export default function MoveChildModal({ child, fromFamilyId, fromFamilyName, fa
         <div className="p-5 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-1">
             <h2 className="font-display text-lg font-bold text-blue-800">Déplacer un cavalier</h2>
-            <button onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer">
+            <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer">
               <X size={20} />
             </button>
           </div>
@@ -119,7 +119,7 @@ export default function MoveChildModal({ child, fromFamilyId, fromFamilyName, fa
             <p className="font-body text-xs text-slate-400 text-center py-6">Aucune famille correspondante.</p>
           )}
           {candidates.map((f) => (
-            <button
+            <button type="button"
               key={f.firestoreId}
               disabled={saving}
               onClick={() => handleMove(f)}

@@ -152,7 +152,7 @@ export default function BaladeChoixPage() {
           <h1 className="text-xl font-bold text-slate-800">{m.titre}</h1>
           <p className="text-slate-500 mt-2">{m.texte}</p>
           {rejouerPaiement && (
-            <button onClick={() => choisir("supplement")} disabled={!!sending}
+            <button type="button" onClick={() => choisir("supplement")} disabled={!!sending}
               className="mt-5 bg-[#1e3a5f] text-white font-semibold rounded-lg py-3 px-6 hover:bg-[#15293f] disabled:opacity-50 inline-flex items-center justify-center gap-2 border-none cursor-pointer">
               {sending && <Loader2 className="animate-spin" size={16} />} Payer le supplément ({eur(inf.supplementTotal)})
             </button>
@@ -203,7 +203,7 @@ export default function BaladeChoixPage() {
           </div>
 
           {inf.supplementParCavalier > 0 && (
-            <button onClick={() => choisir("supplement")} disabled={!!sending}
+            <button type="button" onClick={() => choisir("supplement")} disabled={!!sending}
               className="text-left rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:border-emerald-400 p-4 cursor-pointer disabled:opacity-50 transition-colors w-full">
               <div className="flex items-center gap-2 font-bold text-emerald-800">
                 🐴 Maintenir la balade en petit comité
@@ -216,7 +216,7 @@ export default function BaladeChoixPage() {
             </button>
           )}
 
-          <button onClick={() => choisir("report")} disabled={!!sending}
+          <button type="button" onClick={() => choisir("report")} disabled={!!sending}
             className="text-left rounded-xl border-2 border-blue-200 bg-blue-50 hover:border-blue-400 p-4 cursor-pointer disabled:opacity-50 transition-colors w-full">
             <div className="flex items-center gap-2 font-bold text-blue-800">
               <CalendarClock size={18} /> Reporter à une autre date
@@ -227,7 +227,7 @@ export default function BaladeChoixPage() {
             </p>
           </button>
 
-          <button onClick={() => choisir("avoir")} disabled={!!sending}
+          <button type="button" onClick={() => choisir("avoir")} disabled={!!sending}
             className="text-left rounded-xl border-2 border-slate-200 bg-slate-50 hover:border-slate-400 p-4 cursor-pointer disabled:opacity-50 transition-colors w-full">
             <div className="flex items-center gap-2 font-bold text-slate-700">
               <Coins size={18} /> Annuler avec un avoir
@@ -238,7 +238,7 @@ export default function BaladeChoixPage() {
             </p>
           </button>
 
-          <button onClick={() => choisir("remboursement")} disabled={!!sending}
+          <button type="button" onClick={() => choisir("remboursement")} disabled={!!sending}
             className="text-left rounded-xl border-2 border-rose-200 bg-rose-50 hover:border-rose-400 p-4 cursor-pointer disabled:opacity-50 transition-colors w-full">
             <div className="flex items-center gap-2 font-bold text-rose-700">
               <Undo2 size={18} /> Annuler avec remboursement

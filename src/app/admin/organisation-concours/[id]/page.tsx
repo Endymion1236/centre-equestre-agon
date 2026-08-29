@@ -449,7 +449,7 @@ export default function EditeurConcours() {
     return (
       <div className="max-w-[700px] mx-auto px-4 py-16 text-center">
         <p className="text-gray-500 mb-4">Ce concours est introuvable.</p>
-        <button onClick={() => router.push("/admin/organisation-concours")} className="text-blue-600 font-semibold">
+        <button type="button" onClick={() => router.push("/admin/organisation-concours")} className="text-blue-600 font-semibold">
           ← Retour à la liste
         </button>
       </div>
@@ -480,7 +480,7 @@ export default function EditeurConcours() {
       {/* Barre du haut */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-5 no-print">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => router.push("/admin/organisation-concours")} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 shrink-0" title="Retour">
+          <button type="button" onClick={() => router.push("/admin/organisation-concours")} className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 shrink-0" title="Retour">
             <ArrowLeft size={18} />
           </button>
           <div className="flex-1 min-w-0">
@@ -489,7 +489,7 @@ export default function EditeurConcours() {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <button
+          <button type="button"
             onClick={lancerAttributionAuto}
             disabled={!equipesDeterminees}
             title={equipesDeterminees ? "Attribuer automatiquement les postes manquants" : "Détermine d'abord toutes les équipes (un cavalier au moins par passage)"}
@@ -497,10 +497,10 @@ export default function EditeurConcours() {
           >
             <Wand2 size={15} /> Attribution auto
           </button>
-          <button onClick={() => window.print()} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-500/20 text-blue-700 font-body text-sm font-semibold hover:bg-blue-50">
+          <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-blue-500/20 text-blue-700 font-body text-sm font-semibold hover:bg-blue-50">
             <Printer size={15} /> Imprimer
           </button>
-          <button onClick={enregistrer} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+          <button type="button" onClick={enregistrer} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
             {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />} Enregistrer
           </button>
         </div>
@@ -571,7 +571,7 @@ export default function EditeurConcours() {
             </select>
             <div className="flex gap-2">
               <input className={inp} placeholder="Encadrant / personne libre…" value={nouvPersonne} onChange={(e) => setNouvPersonne(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterPersonne()} />
-              <button onClick={ajouterPersonne} className="px-3 rounded-lg bg-blue-600 text-white shrink-0" title="Ajouter une personne hors base (Nicolas, Emmeline, parent…)"><UserPlus size={16} /></button>
+              <button type="button" onClick={ajouterPersonne} className="px-3 rounded-lg bg-blue-600 text-white shrink-0" title="Ajouter une personne hors base (Nicolas, Emmeline, parent…)"><UserPlus size={16} /></button>
             </div>
           </div>
           <div className="space-y-1.5 max-h-72 overflow-auto">
@@ -585,7 +585,7 @@ export default function EditeurConcours() {
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500"><input type="checkbox" checked={!!p.peutJuger} onChange={() => toggleCap(p.id, "peutJuger")} /> juge</label>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500" title="Peut assurer la détente (échauffement)"><input type="checkbox" checked={!!p.peutDetente} onChange={() => toggleCap(p.id, "peutDetente")} /> détente</label>
                 <label className="inline-flex items-center gap-1 text-xs text-gray-500" title="Peut être responsable de la prépa au camion"><input type="checkbox" checked={!!p.peutResponsableCamion} onChange={() => toggleCap(p.id, "peutResponsableCamion")} /> camion</label>
-                <button onClick={() => supprimerPersonne(p.id)} className="ml-auto text-gray-300 hover:text-red-500 shrink-0"><X size={15} /></button>
+                <button type="button" onClick={() => supprimerPersonne(p.id)} className="ml-auto text-gray-300 hover:text-red-500 shrink-0"><X size={15} /></button>
               </div>
             ))}
             {concours.personnes.length === 0 && <p className="text-xs text-gray-400">Ajoute les cavaliers et l&apos;encadrement.</p>}
@@ -603,7 +603,7 @@ export default function EditeurConcours() {
             </select>
             <div className="flex gap-2">
               <input className={inp} placeholder="Poney hors base…" value={nouvCheval} onChange={(e) => setNouvCheval(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterCheval()} />
-              <button onClick={ajouterCheval} className="px-3 rounded-lg bg-blue-600 text-white shrink-0" title="Ajouter un poney hors base"><Plus size={16} /></button>
+              <button type="button" onClick={ajouterCheval} className="px-3 rounded-lg bg-blue-600 text-white shrink-0" title="Ajouter un poney hors base"><Plus size={16} /></button>
             </div>
           </div>
           <div className="flex flex-wrap gap-1.5 max-h-72 overflow-auto">
@@ -611,7 +611,7 @@ export default function EditeurConcours() {
               <span key={ch.id} className="inline-flex items-center gap-1 text-xs bg-gray-100 rounded-full pl-2.5 pr-1 py-1">
                 {ch.nom}
                 {passagesParPoney[ch.id] ? <span className="text-blue-600 font-semibold">· {passagesParPoney[ch.id]} passage{passagesParPoney[ch.id] > 1 ? "s" : ""}</span> : null}
-                <button onClick={() => supprimerCheval(ch.id)} className="text-gray-400 hover:text-red-500"><X size={13} /></button>
+                <button type="button" onClick={() => supprimerCheval(ch.id)} className="text-gray-400 hover:text-red-500"><X size={13} /></button>
               </span>
             ))}
             {concours.chevaux.length === 0 && <p className="text-xs text-gray-400">Optionnel — pour afficher « Cavalier / Poney ».</p>}
@@ -627,7 +627,7 @@ export default function EditeurConcours() {
         </div>
         <div className="flex gap-2 mb-3 max-w-md">
           <input className={inp} placeholder="Nom de l'équipe…" value={nouvEquipe} onChange={(e) => setNouvEquipe(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterEquipe()} />
-          <button onClick={ajouterEquipe} className="px-3 rounded-lg bg-blue-600 text-white shrink-0 inline-flex items-center gap-1 text-sm font-semibold"><Plus size={15} /> Équipe</button>
+          <button type="button" onClick={ajouterEquipe} className="px-3 rounded-lg bg-blue-600 text-white shrink-0 inline-flex items-center gap-1 text-sm font-semibold"><Plus size={15} /> Équipe</button>
         </div>
         {autresConcours.length > 0 && (
           <div className="mb-3 max-w-md">
@@ -654,7 +654,7 @@ export default function EditeurConcours() {
             <div key={eq.id} className="rounded-lg border border-blue-500/10 p-3">
               <div className="flex items-center gap-2 mb-2">
                 <input className={`${inpSm} flex-1 min-w-0 font-semibold`} value={eq.nom} onChange={(e) => renommerEquipe(eq.id, e.target.value)} />
-                <button onClick={() => supprimerEquipe(eq.id)} className="p-1 text-gray-300 hover:text-red-500"><Trash2 size={15} /></button>
+                <button type="button" onClick={() => supprimerEquipe(eq.id)} className="p-1 text-gray-300 hover:text-red-500"><Trash2 size={15} /></button>
               </div>
               <div className="space-y-1.5">
                 {eq.membres.map((m, idx) => (
@@ -667,11 +667,11 @@ export default function EditeurConcours() {
                       <option value="">— poney —</option>
                       {concours.chevaux.map((ch) => <option key={ch.id} value={ch.id}>{ch.nom}</option>)}
                     </select>
-                    <button onClick={() => supprimerMembre(eq.id, idx)} className="px-1 text-gray-300 hover:text-red-500"><X size={15} /></button>
+                    <button type="button" onClick={() => supprimerMembre(eq.id, idx)} className="px-1 text-gray-300 hover:text-red-500"><X size={15} /></button>
                   </div>
                 ))}
               </div>
-              <button onClick={() => ajouterMembre(eq.id)} className="mt-1.5 text-xs text-blue-600 font-semibold inline-flex items-center gap-1"><Plus size={13} /> membre</button>
+              <button type="button" onClick={() => ajouterMembre(eq.id)} className="mt-1.5 text-xs text-blue-600 font-semibold inline-flex items-center gap-1"><Plus size={13} /> membre</button>
             </div>
           ))}
           {(concours.equipes || []).length === 0 && (
@@ -686,7 +686,7 @@ export default function EditeurConcours() {
           <div key={terrain.id} className="space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-lg font-bold text-blue-900">{terrain.nom}</h2>
-              <button onClick={() => ajouterPassage(terrain.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-semibold hover:bg-blue-100">
+              <button type="button" onClick={() => ajouterPassage(terrain.id)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-semibold hover:bg-blue-100">
                 <Plus size={15} /> Passage
               </button>
             </div>
@@ -696,7 +696,7 @@ export default function EditeurConcours() {
                 <div className="flex items-center gap-2">
                   <input type="number" className={`${inpSm} w-14`} value={p.ordre} onChange={(e) => patchPassage(p.id, { ordre: Number(e.target.value) })} title="Ordre" />
                   <input className={`${inpSm} flex-1 min-w-0`} placeholder="Nom de l'équipe" value={p.nomEquipe} onChange={(e) => patchPassage(p.id, { nomEquipe: e.target.value })} />
-                  <button onClick={() => supprimerPassage(p.id)} className="p-1.5 text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
+                  <button type="button" onClick={() => supprimerPassage(p.id)} className="p-1.5 text-gray-300 hover:text-red-500"><Trash2 size={16} /></button>
                 </div>
 
                 <label className="inline-flex items-center gap-1.5 text-xs text-gray-600">
@@ -748,11 +748,11 @@ export default function EditeurConcours() {
                               <option value="">— poney —</option>
                               {concours.chevaux.map((ch) => <option key={ch.id} value={ch.id}>{ch.nom}</option>)}
                             </select>
-                            <button onClick={() => supprimerParticipant(p.id, idx)} className="px-1.5 text-gray-300 hover:text-red-500"><X size={15} /></button>
+                            <button type="button" onClick={() => supprimerParticipant(p.id, idx)} className="px-1.5 text-gray-300 hover:text-red-500"><X size={15} /></button>
                           </div>
                         ))}
                       </div>
-                      <button onClick={() => ajouterParticipant(p.id)} className="mt-1.5 text-xs text-blue-600 font-semibold inline-flex items-center gap-1"><Plus size={13} /> cavalier</button>
+                      <button type="button" onClick={() => ajouterParticipant(p.id)} className="mt-1.5 text-xs text-blue-600 font-semibold inline-flex items-center gap-1"><Plus size={13} /> cavalier</button>
                     </div>
 
                     {/* Rôles */}
@@ -769,7 +769,7 @@ export default function EditeurConcours() {
                               {r.personneIds.map((pid) => (
                                 <span key={pid} className="inline-flex items-center gap-1 text-xs bg-blue-50 text-blue-700 rounded-full pl-2 pr-1 py-0.5">
                                   {nomPersonne(pid)}
-                                  <button onClick={() => retirerRole(p.id, type, pid)} className="hover:text-red-500"><X size={12} /></button>
+                                  <button type="button" onClick={() => retirerRole(p.id, type, pid)} className="hover:text-red-500"><X size={12} /></button>
                                 </span>
                               ))}
                               <select className={`${inpSm} text-xs w-28 shrink-0`} value="" onChange={(e) => assignerRole(p.id, type, e.target.value)}>

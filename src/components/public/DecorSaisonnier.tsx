@@ -32,7 +32,7 @@ export default function DecorSaisonnier() {
           {lien ? (
             <a href={lien} className="no-underline hover:underline" style={{ color: t.bandeauTexte }}>{contenu}</a>
           ) : contenu}
-          <button onClick={() => setFerme(true)} aria-label="Masquer ce bandeau"
+          <button type="button" onClick={() => setFerme(true)} aria-label="Masquer ce bandeau"
             className="absolute right-3 border-none bg-transparent text-lg leading-none opacity-60 hover:opacity-100"
             style={{ color: t.bandeauTexte, cursor: "pointer" }}>×</button>
         </div>

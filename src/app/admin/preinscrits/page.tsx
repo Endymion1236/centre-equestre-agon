@@ -119,7 +119,7 @@ export default function PreinscritsPage() {
 
       <div className="mt-4 flex gap-2">
         {([["cours", "Cours à l'année"], ["stages", "Stages"]] as const).map(([id, label]) => (
-          <button key={id} onClick={() => setOnglet(id)}
+          <button type="button" key={id} onClick={() => setOnglet(id)}
             className={`px-4 py-2 rounded-xl font-body text-sm font-semibold border cursor-pointer ${
               onglet === id ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-slate-600 border-slate-200"}`}>
             {label}
@@ -177,7 +177,7 @@ export default function PreinscritsPage() {
 
       {onglet === "cours" && (<>
       <div className="mt-4 flex items-center gap-2">
-        <button onClick={load} disabled={loading}
+        <button type="button" onClick={load} disabled={loading}
           className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 font-body text-sm disabled:opacity-50">
           {loading ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} Actualiser
         </button>
@@ -211,12 +211,12 @@ export default function PreinscritsPage() {
             return (
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-4">
-                  <button
+                  <button type="button"
                     onClick={() => setSelection(new Set(nouveaux.map(f => f.familyId)))}
                     className="font-body text-sm font-semibold text-indigo-700 bg-transparent border-none cursor-pointer hover:underline p-0">
                     Cocher les nouveaux ({nouveaux.length})
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => setSelection(toutesCochees ? new Set() : new Set(joignables.map(f => f.familyId)))}
                     className="font-body text-sm font-semibold text-slate-500 bg-transparent border-none cursor-pointer hover:underline p-0">
                     {toutesCochees ? "Tout décocher" : `Tout cocher (${joignables.length})`}
@@ -274,7 +274,7 @@ export default function PreinscritsPage() {
             <p className="mt-1 font-body text-[11px] text-slate-400">
               La liste des places retenues est ajoutée automatiquement sous votre message.
             </p>
-            <button onClick={envoyer} disabled={envoi || selection.size === 0}
+            <button type="button" onClick={envoyer} disabled={envoi || selection.size === 0}
               className="mt-3 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 font-body text-sm font-bold text-white border-none cursor-pointer hover:bg-indigo-700 disabled:opacity-50">
               {envoi ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
               {envoi && progression

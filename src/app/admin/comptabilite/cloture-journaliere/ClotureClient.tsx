@@ -326,7 +326,7 @@ export default function ClotureJournaliereClient() {
               </p>
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={handleCloturer}
             disabled={closing || loading || !!clotureExistante}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-body text-sm font-semibold border-none cursor-pointer">
@@ -375,7 +375,7 @@ export default function ClotureJournaliereClient() {
             <div className="font-body text-[10px] text-slate-600">
               Par {clotureExistante.clotureParEmail}
             </div>
-            <button onClick={() => window.print()}
+            <button type="button" onClick={() => window.print()}
               className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-purple-100 hover:bg-purple-200 border-none px-3 py-1.5 rounded-lg cursor-pointer">
               <Printer size={12} /> Imprimer le ticket Z
             </button>

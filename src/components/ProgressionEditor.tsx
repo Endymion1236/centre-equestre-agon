@@ -293,7 +293,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
               {new Date(galopObtenu.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" })}
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={annulerGalop}
             disabled={validating}
             title="Retirer l'obtention (erreur de saisie)"
@@ -337,7 +337,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
                 </ul>
               )}
             </div>
-            <button
+            <button type="button"
               onClick={validerGalop}
               disabled={validating}
               title={pret ? undefined : "Le galop peut être enregistré même si tout n'est pas coché"}
@@ -358,7 +358,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
           {/* Sous 80 %, aucun bandeau n'est affiche : ce lien reste le seul
               moyen d'enregistrer un galop obtenu ailleurs. */}
           {!galopObtenu && pctFFE < 80 && (
-            <button
+            <button type="button"
               onClick={validerGalop}
               disabled={validating}
               className="bg-transparent border-none cursor-pointer font-body text-[11px] text-slate-400 hover:text-green-700 underline disabled:opacity-40"
@@ -420,7 +420,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
         const acquisDomaine = comps.filter(c => isCompetenceValidated(acquis[c.id], seuilFFE)).length;
         return (
           <div key={domaine} className="border border-gray-100 rounded-xl overflow-hidden">
-            <button
+            <button type="button"
               onClick={() => {
                 const next = new Set(expandedDomaines);
                 isOpen ? next.delete(domaine) : next.add(domaine);
@@ -467,7 +467,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
                             const isSelected = level === n;
                             const isFFE = n >= seuilFFE;
                             return (
-                              <button
+                              <button type="button"
                                 key={n}
                                 onClick={() => setLevel(c.id, n)}
                                 title={`${echelleLabels[n - 1]}${isFFE ? " (validé FFE)" : ""}`}
@@ -489,7 +489,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
 
                   // ─── Compétence binaire (connaissances / soins) ────────────
                   return (
-                    <button
+                    <button type="button"
                       key={c.id}
                       onClick={() => toggle(c.id)}
                       className={`w-full flex items-start gap-3 p-3 cursor-pointer border-none text-left transition-colors ${validated ? "bg-green-50" : "bg-white hover:bg-gray-50"}`}
@@ -511,7 +511,7 @@ export default function ProgressionEditor({ childId, familyId, childName, galopL
       })}
 
       {/* Bouton sauvegarder */}
-      <button
+      <button type="button"
         onClick={save}
         disabled={saving}
         className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all ${
@@ -832,12 +832,12 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
       {/* Boutons */}
       <div className="flex gap-2 flex-wrap mb-3">
         {!recording ? (
-          <button onClick={startRecording} disabled={processing}
+          <button type="button" onClick={startRecording} disabled={processing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-purple-700 bg-white border border-purple-200 cursor-pointer hover:bg-purple-100 disabled:opacity-40">
             🎙️ Dicter
           </button>
         ) : (
-          <button onClick={stopRecording}
+          <button type="button" onClick={stopRecording}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-white bg-red-500 border-none cursor-pointer animate-pulse">
             ⏹️ Arrêter
           </button>
@@ -848,13 +848,13 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
             Analyse IA...
           </span>
         )}
-        <button onClick={analyserNote} disabled={analysing || (!rawTranscript && !noteText.trim())}
+        <button type="button" onClick={analyserNote} disabled={analysing || (!rawTranscript && !noteText.trim())}
           title="Analyse IA de la note : points forts, axes de travail, mot aux parents"
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 cursor-pointer hover:bg-indigo-50 disabled:opacity-40">
           {analysing ? "✨ Analyse…" : "✨ Analyser"}
         </button>
         <div className="flex-1" />
-        <button onClick={saveNote} disabled={saving || !noteText.trim()}
+        <button type="button" onClick={saveNote} disabled={saving || !noteText.trim()}
           className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer ${saved ? "bg-green-500 text-white" : "bg-purple-500 text-white hover:bg-purple-400"} disabled:opacity-40`}>
           {saved ? "✅ Enregistrée !" : saving ? "Enregistrement..." : "💾 Enregistrer la note"}
         </button>
@@ -880,7 +880,7 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
             <div className="font-body text-[10px] font-semibold text-indigo-500 uppercase tracking-wider">
               ✨ Analyse de la note {rawTranscript ? "dictée" : "saisie"}
             </div>
-            <button onClick={() => { setAnalysis(""); setMotParents(null); }}
+            <button type="button" onClick={() => { setAnalysis(""); setMotParents(null); }}
               title="Supprimer l'analyse (elle n'est jamais enregistrée)"
               className="font-body text-xs text-indigo-400 bg-transparent border-none cursor-pointer hover:text-indigo-600 px-1">
               ✕
@@ -893,12 +893,12 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
           </div>
           <div className="flex gap-2 justify-end mt-2 flex-wrap">
             {motParents && (
-              <button onClick={() => { setNoteText(motParents); setAnalysis(""); setMotParents(null); }}
+              <button type="button" onClick={() => { setNoteText(motParents); setAnalysis(""); setMotParents(null); }}
                 className="font-body text-[11px] font-semibold text-white bg-indigo-500 border-none rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-600">
                 ✏️ Utiliser le mot aux parents dans la note
               </button>
             )}
-            <button onClick={async () => { try { await navigator.clipboard.writeText(analysis); } catch {} }}
+            <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(analysis); } catch {} }}
               className="font-body text-[11px] text-indigo-600 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-indigo-100">
               📋 Copier
             </button>
@@ -917,12 +917,12 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
             return (
               <div key={i} className={`rounded px-2 py-1.5 mb-1 border ${n.featured ? "bg-purple-50 border-purple-300" : "bg-white border-purple-100"}`}>
                 <div className="flex items-start gap-2 font-body text-xs text-slate-600">
-                  <button onClick={() => toggleFeatured(i)}
+                  <button type="button" onClick={() => toggleFeatured(i)}
                     className="bg-transparent border-none cursor-pointer p-0 text-sm flex-shrink-0 mt-0.5"
                     title={n.featured ? "Retirer du bilan" : "Afficher dans le bilan PDF"}>
                     {n.featured ? "⭐" : "☆"}
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => setExpandedNoteIdx(isExpanded ? null : i)}
                     className="flex-1 bg-transparent border-none text-left cursor-pointer p-0 font-body text-xs"
                     title={isExpanded ? "Masquer" : "Voir le détail"}>
@@ -932,7 +932,7 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
                       {n.text}
                     </span>
                   </button>
-                  <button onClick={() => deleteNote(i)}
+                  <button type="button" onClick={() => deleteNote(i)}
                     className="bg-transparent border-none cursor-pointer p-0 text-red-300 hover:text-red-500 flex-shrink-0 mt-0.5 text-sm"
                     title="Supprimer cette note">
                     ✕
@@ -949,7 +949,7 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
                       {n.text || <span className="text-slate-400 italic">(note vide)</span>}
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      <button
+                      <button type="button"
                         onClick={() => {
                           setNoteText(n.text || "");
                           setExpandedNoteIdx(null);
@@ -959,7 +959,7 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
                         className="font-body text-[11px] text-purple-700 bg-white border border-purple-300 rounded-lg px-3 py-1.5 cursor-pointer hover:bg-purple-100">
                         ✏️ Reprendre ce texte
                       </button>
-                      <button
+                      <button type="button"
                         onClick={() => setExpandedNoteIdx(null)}
                         className="font-body text-[11px] text-slate-500 bg-transparent border-none cursor-pointer px-2 py-1.5">
                         Fermer

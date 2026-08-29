@@ -151,11 +151,11 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
             <Target size={13} /> Objectifs
           </h4>
           <div className="flex gap-1.5">
-            <button onClick={addDefaultObjectifs}
+            <button type="button" onClick={addDefaultObjectifs}
               className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
               + Type {child.galopLevel || "Bronze"}
             </button>
-            <button onClick={() => setAddingObj(!addingObj)}
+            <button type="button" onClick={() => setAddingObj(!addingObj)}
               className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
               <Plus size={10} className="inline" /> Perso
             </button>
@@ -166,7 +166,7 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
           <div className="flex gap-2 mb-2">
             <input value={newObjLabel} onChange={e => setNewObjLabel(e.target.value)} placeholder="Nouvel objectif..." autoFocus
               className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-xs bg-cream focus:border-blue-500 focus:outline-none" />
-            <button onClick={addObjectif} disabled={!newObjLabel.trim() || saving}
+            <button type="button" onClick={addObjectif} disabled={!newObjLabel.trim() || saving}
               className="px-3 py-2 rounded-lg bg-blue-500 text-white font-body text-[10px] font-semibold border-none cursor-pointer">OK</button>
           </div>
         )}
@@ -181,13 +181,13 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
                   {obj.status === "valide" ? "✓ " : obj.status === "a_revoir" ? "▲ " : "○ "}{obj.label}
                 </span>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => toggleObjStatus(obj.id)}
+                  <button type="button" onClick={() => toggleObjStatus(obj.id)}
                     className={`px-2 py-0.5 rounded border-none cursor-pointer font-body text-[9px] font-semibold ${
                       obj.status === "valide" ? "bg-green-100 text-green-600" : obj.status === "a_revoir" ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-500"
                     }`}>
                     {obj.status === "en_cours" ? "Valider" : obj.status === "valide" ? "À revoir" : "Reprendre"}
                   </button>
-                  <button onClick={() => deleteObjectif(obj.id)} className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"><X size={10} /></button>
+                  <button type="button" onClick={() => deleteObjectif(obj.id)} className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"><X size={10} /></button>
                 </div>
               </div>
             ))}
@@ -204,7 +204,7 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
               <span className="font-body text-[10px] text-slate-400">({(peda.notes || []).length})</span>
             )}
           </h4>
-          <button onClick={() => setAddingNote(!addingNote)}
+          <button type="button" onClick={() => setAddingNote(!addingNote)}
             className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
             <Plus size={10} className="inline" /> Ajouter
           </button>
@@ -215,7 +215,7 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
             <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3}
               placeholder="Observations, progrès, points à travailler..." autoFocus
               className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-xs bg-cream focus:border-blue-500 focus:outline-none resize-y" />
-            <button onClick={addNote} disabled={!noteText.trim() || saving}
+            <button type="button" onClick={addNote} disabled={!noteText.trim() || saving}
               className="mt-1.5 px-4 py-1.5 rounded-lg bg-blue-500 text-white font-body text-[10px] font-semibold border-none cursor-pointer disabled:opacity-50">
               {saving ? <Loader2 size={10} className="inline animate-spin mr-1" /> : <Save size={10} className="inline mr-1" />}Enregistrer
             </button>
@@ -271,8 +271,8 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
                           <textarea value={editingNote.text} onChange={e => setEditingNote({ ...editingNote, text: e.target.value })} rows={4}
                             className="w-full px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-xs bg-white focus:border-blue-500 focus:outline-none resize-y" />
                           <div className="flex gap-2 mt-1.5">
-                            <button onClick={saveEditNote} className="font-body text-[9px] text-white bg-blue-500 px-3 py-1 rounded border-none cursor-pointer">Enregistrer</button>
-                            <button onClick={() => setEditingNote(null)} className="font-body text-[9px] text-slate-600 bg-gray-100 px-3 py-1 rounded border-none cursor-pointer">Annuler</button>
+                            <button type="button" onClick={saveEditNote} className="font-body text-[9px] text-white bg-blue-500 px-3 py-1 rounded border-none cursor-pointer">Enregistrer</button>
+                            <button type="button" onClick={() => setEditingNote(null)} className="font-body text-[9px] text-slate-600 bg-gray-100 px-3 py-1 rounded border-none cursor-pointer">Annuler</button>
                           </div>
                         </div>
                       ) : (
@@ -285,11 +285,11 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
                             </details>
                           )}
                           <div className="flex gap-2 mt-2 pt-1.5 border-t border-gray-50">
-                            <button onClick={() => setEditingNote({ noteIndex: i, text: note.text })}
+                            <button type="button" onClick={() => setEditingNote({ noteIndex: i, text: note.text })}
                               className="font-body text-[9px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100">
                               ✏️ Modifier
                             </button>
-                            <button onClick={() => deleteNote(i)}
+                            <button type="button" onClick={() => deleteNote(i)}
                               className="font-body text-[9px] text-red-400 bg-red-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-red-100">
                               🗑 Supprimer
                             </button>
@@ -303,13 +303,13 @@ export default function PedaSuiviCard({ child, familyId, onRefresh }: Props) {
               );
             })}
             {(peda.notes || []).length > 3 && !showAllNotes && (
-              <button onClick={() => setShowAllNotes(true)}
+              <button type="button" onClick={() => setShowAllNotes(true)}
                 className="font-body text-[10px] text-blue-500 bg-blue-50 py-1.5 rounded-lg border-none cursor-pointer text-center hover:bg-blue-100">
                 ▼ Voir les {(peda.notes || []).length - 3} notes précédentes
               </button>
             )}
             {showAllNotes && (peda.notes || []).length > 3 && (
-              <button onClick={() => setShowAllNotes(false)}
+              <button type="button" onClick={() => setShowAllNotes(false)}
                 className="font-body text-[10px] text-slate-500 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
                 ▲ Réduire
               </button>

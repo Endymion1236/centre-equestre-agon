@@ -571,11 +571,20 @@ export default function InscriptionAnnuellePage() {
           type: "inscription_annuelle",
           forfaitType,
           label: `Inscription annuelle ${forfaitType === "3x" ? "3×/sem" : forfaitType === "2x" ? "2×/sem" : "1×/sem"} — ${(child as any).firstName}`,
+          // `childId` + `creneauIds` sur chaque ligne : c'est ce qui permet à
+          // confirmerPlacesTenues() de retrouver les créneaux à libérer quand
+          // l'encaissement est confirmé. Sans eux, les places tenues posées par
+          // /api/enroll resteraient « pending » et le cron de purge les
+          // supprimerait une demi-heure après le paiement.
           items: [
-            ...calcul.detailLignes.map(l => ({ label: l.label, amount: l.montantTTC })),
+            ...calcul.detailLignes.map(l => ({
+              label: l.label, amount: l.montantTTC,
+              childId: selectedChild, creneauIds: allCreneauIds,
+            })),
             ...slotsPrices.map(sp => ({
               label: `${sp.slot.activityTitle} — ${sp.slot.dayLabel} ${sp.slot.startTime}–${sp.slot.endTime} (${sp.sessions} séances)`,
               amount: 0, // détail informatif ; le prix forfait est déjà dans detailLignes
+              childId: selectedChild, creneauIds: sp.slot.creneauIds,
             })),
           ],
           totalTTC: grandTotal,
@@ -788,6 +797,11 @@ export default function InscriptionAnnuellePage() {
       // Items à la forme attendue par l'admin (TabImpayes, retrait d'item,
       // facture PDF) : childName / activityTitle / priceTTC. On garde label/amount
       // en plus pour rétro-compatibilité avec d'éventuels autres lecteurs.
+      // `creneauIds` porté par chaque ligne : c'est ce qui permet à
+      // confirmerPlacesTenues() de retrouver les créneaux à libérer quand
+      // l'encaissement est confirmé. Sans eux, les places tenues posées par
+      // /api/enroll resteraient « pending » et le cron de purge les
+      // supprimerait une demi-heure après le paiement.
       const paymentItems = items.flatMap(it =>
         it.detailLignes.map(l => ({
           childId: it.childId,
@@ -798,6 +812,7 @@ export default function InscriptionAnnuellePage() {
           tva: 5.5,
           label: `${it.childName} — ${l.label}`,
           amount: l.montantTTC,
+          creneauIds: it.creneauIds,
         }))
       );
       const payDoc = await addDoc(collection(db, "payments"), {
@@ -912,7 +927,7 @@ export default function InscriptionAnnuellePage() {
             </p>
           </div>
           <a href="/espace-cavalier/reservations" className="no-underline">
-            <button className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">
+            <button type="button" className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-600">
               Voir mes inscriptions
             </button>
           </a>
@@ -967,7 +982,7 @@ export default function InscriptionAnnuellePage() {
                   {children.map((c: any) => {
                     const deja = childDejaInscrit(c.id);
                     return (
-                    <button key={c.id} onClick={() => setSelectedChild(c.id)}
+                    <button type="button" key={c.id} onClick={() => setSelectedChild(c.id)}
                       className={`flex items-center justify-between px-5 py-4 rounded-xl border text-left transition-all cursor-pointer
                         ${selectedChild === c.id ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white hover:border-gray-300"}`}>
                       <div className="flex items-center gap-3">
@@ -989,7 +1004,7 @@ export default function InscriptionAnnuellePage() {
                     </button>
                     );
                   })}
-                  <button onClick={() => selectedChild && setStep(mode === "annuel" ? 2 : 2)} disabled={!selectedChild}
+                  <button type="button" onClick={() => selectedChild && setStep(mode === "annuel" ? 2 : 2)} disabled={!selectedChild}
                     className={`mt-3 w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                       ${selectedChild ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
                     Continuer <ChevronRight size={16} className="inline ml-1" />
@@ -1044,13 +1059,13 @@ export default function InscriptionAnnuellePage() {
                 )}
               </div>
               <div className="flex gap-3">
-                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+                <button type="button" onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
                 {(() => {
                   const licencePrereqOK = prereqDejaPris.licence || licenceOK;
                   const adhesionPrereqOK = prereqDejaPris.adhesion || adhesionOK;
                   const prereqOK = licencePrereqOK && adhesionPrereqOK;
                   return (
-                    <button onClick={() => setStep(3)} disabled={!prereqOK}
+                    <button type="button" onClick={() => setStep(3)} disabled={!prereqOK}
                       className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${prereqOK ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
                       Continuer <ChevronRight size={16} className="inline ml-1" />
                     </button>
@@ -1098,7 +1113,7 @@ export default function InscriptionAnnuellePage() {
               ) : (
                 <div className={`grid gap-3 mb-6 ${options.length === 3 ? "grid-cols-3" : options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
                   {options.map(o => (
-                    <button key={o.type} onClick={() => { setForfaitType(o.type); setSelectedSlots([]); }}
+                    <button type="button" key={o.type} onClick={() => { setForfaitType(o.type); setSelectedSlots([]); }}
                       className={`py-5 rounded-xl border font-body text-sm font-semibold cursor-pointer transition-all text-center
                         ${forfaitType === o.type ? "border-blue-500 bg-blue-50 text-blue-500" : "border-gray-200 bg-white text-gray-500"}`}>
                       <span className="text-2xl block mb-1">{o.emoji}</span>
@@ -1109,8 +1124,8 @@ export default function InscriptionAnnuellePage() {
                 </div>
               )}
               <div className="flex gap-3">
-                <button onClick={() => setStep(2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={() => setStep(4)} disabled={freqMaxAjoutable === 0}
+                <button type="button" onClick={() => setStep(2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+                <button type="button" onClick={() => setStep(4)} disabled={freqMaxAjoutable === 0}
                   className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${freqMaxAjoutable === 0 ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white"}`}>
                   Continuer <ChevronRight size={16} className="inline ml-1" />
                 </button>
@@ -1182,7 +1197,7 @@ export default function InscriptionAnnuellePage() {
                     const isDisabled = isFull || (!isSelected && selectedSlots.length >= requiredSlots && forfaitType === "2x");
 
                     return (
-                      <button key={slot.key} onClick={() => !isDisabled && toggleSlot(slot.key)}
+                      <button type="button" key={slot.key} onClick={() => !isDisabled && toggleSlot(slot.key)}
                         className={`flex items-center justify-between px-5 py-4 rounded-xl border text-left transition-all
                           ${isSelected ? "border-blue-500 bg-blue-50 cursor-pointer" :
                             isDisabled ? "border-gray-100 bg-gray-50 cursor-not-allowed opacity-50" :
@@ -1211,8 +1226,8 @@ export default function InscriptionAnnuellePage() {
               )}
 
               <div className="flex gap-3">
-                <button onClick={() => setStep(3)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={() => setStep(5)} disabled={!slotsComplete}
+                <button type="button" onClick={() => setStep(3)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+                <button type="button" onClick={() => setStep(5)} disabled={!slotsComplete}
                   className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                     ${slotsComplete ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
                   Continuer <ChevronRight size={16} className="inline ml-1" />
@@ -1234,7 +1249,7 @@ export default function InscriptionAnnuellePage() {
               ) : (
                 <div className="flex flex-col gap-2 mb-5">
                   {weeklySlots.map(slot => (
-                    <button key={slot.key} onClick={() => setSelectedSlots([slot.key])}
+                    <button type="button" key={slot.key} onClick={() => setSelectedSlots([slot.key])}
                       className={`flex items-center justify-between px-5 py-4 rounded-xl border text-left cursor-pointer transition-all
                         ${selectedSlots[0] === slot.key ? "border-blue-500 bg-blue-50" :
                           slot.spotsAvailable > 0 ? "border-gray-200 bg-white hover:border-gray-300" : "border-gray-100 bg-gray-50 opacity-50"}`}>
@@ -1248,8 +1263,8 @@ export default function InscriptionAnnuellePage() {
                 </div>
               )}
               <div className="flex gap-3">
-                <button onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                <button onClick={() => setStep(3)} disabled={selectedSlots.length === 0}
+                <button type="button" onClick={() => setStep(1)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+                <button type="button" onClick={() => setStep(3)} disabled={selectedSlots.length === 0}
                   className={`flex-1 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                     ${selectedSlots.length > 0 ? "bg-blue-500 text-white" : "bg-gray-200 text-gray-400"}`}>
                   Continuer <ChevronRight size={16} className="inline ml-1" />
@@ -1277,7 +1292,7 @@ export default function InscriptionAnnuellePage() {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="font-body text-sm font-semibold text-green-800">{p.totalAnnuel.toFixed(2)}€</span>
-                        <button onClick={() => retirerDuPanier(p.childId)}
+                        <button type="button" onClick={() => retirerDuPanier(p.childId)}
                           className="font-body text-xs text-red-500 bg-white border border-red-200 px-2 py-1 rounded-lg cursor-pointer hover:bg-red-50">
                           Retirer
                         </button>
@@ -1381,7 +1396,7 @@ export default function InscriptionAnnuellePage() {
                     ["cheque", "📝", "Chèque", "Réglé au club"],
                     ["especes", "💵", "Espèces", "Réglé au club"],
                   ] as const).map(([id, icon, label, sub]) => (
-                    <button key={id} onClick={() => {
+                    <button type="button" key={id} onClick={() => {
                       setMoyenPaiement(id);
                       // La carte débite en une fois : repartir de "1x" évite de
                       // garder un échéancier choisi avant de basculer en CB.
@@ -1424,7 +1439,7 @@ export default function InscriptionAnnuellePage() {
                   </div>
                   <div className="flex gap-3">
                     {([["1x", `${grandTotal.toFixed(0)}€ en 1 fois`], ["3x", `3 × ${(grandTotal / 3).toFixed(0)}€`], ["10x", `10 × ${(grandTotal / 10).toFixed(0)}€`]] as const).map(([id, label]) => (
-                      <button key={id} onClick={() => setPaymentPlan(id)}
+                      <button type="button" key={id} onClick={() => setPaymentPlan(id)}
                         className={`flex-1 py-3 rounded-xl border font-body text-sm font-medium cursor-pointer text-center
                           ${paymentPlan === id ? "border-blue-500 bg-blue-50 text-blue-500 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
                         {label}
@@ -1443,14 +1458,14 @@ export default function InscriptionAnnuellePage() {
 
               <div className="flex flex-col gap-3">
                 {mode === "annuel" && (
-                  <button onClick={ajouterAuPanier} disabled={submitting || !slotsComplete}
+                  <button type="button" onClick={ajouterAuPanier} disabled={submitting || !slotsComplete}
                     className="w-full py-3 rounded-xl font-body text-sm font-semibold text-blue-500 bg-blue-50 border border-blue-200 cursor-pointer hover:bg-blue-100 flex items-center justify-center gap-2 disabled:opacity-50">
                     <Plus size={16} /> Ajouter un autre enfant
                   </button>
                 )}
                 <div className="flex gap-3">
-                  <button onClick={() => setStep(mode === "annuel" ? 4 : 2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
-                  <button onClick={handleEnrollAll} disabled={submitting}
+                  <button type="button" onClick={() => setStep(mode === "annuel" ? 4 : 2)} className="px-6 py-3 rounded-xl font-body text-sm text-gray-500 bg-white border border-gray-200 cursor-pointer">Retour</button>
+                  <button type="button" onClick={handleEnrollAll} disabled={submitting}
                     className="flex-1 py-4 rounded-xl font-body text-base font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300 flex items-center justify-center gap-2 disabled:opacity-50">
                     {submitting ? (
                       <><Loader2 size={18} className="animate-spin" /> Inscription en cours...</>

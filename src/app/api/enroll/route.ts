@@ -17,9 +17,10 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { dateExpirationHold } from "@/lib/places-tenues";
+import { isForfaitActif } from "@/lib/forfaits";
 
 interface EnrollItem {
   childId: string;
@@ -40,6 +41,11 @@ export async function POST(req: NextRequest) {
   const verrou = await bloquerSiReservationsFermees(auth);
   if (verrou) return verrou;
   const uid = auth.uid;
+  // Le staff inscrit au nom du club : une inscription posée depuis le
+  // back-office est ferme par construction (l'admin sait ce qu'il fait et
+  // encaisse au comptoir). Une inscription posée par une FAMILLE, elle, ne
+  // peut être qu'une place TENUE — voir plus bas.
+  const estStaff = isAdminToken(auth) || auth.moniteur === true;
 
   try {
     const body = await req.json();
@@ -69,6 +75,7 @@ export async function POST(req: NextRequest) {
     const enrolled: string[] = [];
     const full: string[] = [];
     const notOwned: string[] = [];
+    const missing: string[] = [];
 
     for (const item of items) {
       if (!item?.childId || !Array.isArray(item.creneauIds)) continue;
@@ -92,6 +99,29 @@ export async function POST(req: NextRequest) {
       } else {
         notOwned.push(item.childId);
         continue;
+      }
+
+      // ── Forfait annoncé : vérifié à la source ──────────────────────────
+      // `paymentSource: "forfait"` et `forfaitId` venaient du client sans
+      // contrôle : n'importe qui pouvait se déclarer couvert par un forfait
+      // inexistant. On n'accepte l'identifiant que s'il désigne un forfait
+      // réel, appartenant à la famille connectée et non clôturé. Sinon on
+      // stocke null — l'inscription reste tenue et devra être payée.
+      let forfaitIdValide: string | null = null;
+      if (item.forfaitId) {
+        try {
+          const fSnap = await adminDb.collection("forfaits").doc(String(item.forfaitId)).get();
+          const f = fSnap.exists ? (fSnap.data() as any) : null;
+          const proprietaire = f?.familyId === uid
+            || (item.sourceFamilyId && f?.familyId === item.sourceFamilyId && linkedMap.has(item.childId));
+          if (f && proprietaire && f.childId === item.childId && isForfaitActif(f.status)) {
+            forfaitIdValide = String(item.forfaitId);
+          } else {
+            console.warn(`/api/enroll — forfaitId ${item.forfaitId} refusé pour uid=${uid}, child=${item.childId}`);
+          }
+        } catch (e) {
+          console.warn(`/api/enroll — vérification forfait ${item.forfaitId} impossible:`, e);
+        }
       }
 
       // ── Inscription ATOMIQUE de l'item : on lit TOUS les créneaux, on vérifie
@@ -126,18 +156,27 @@ export async function POST(req: NextRequest) {
             };
             if (item.sourceFamilyId) entry.sourceFamilyId = item.sourceFamilyId;
             if (item.paymentSource) entry.paymentSource = item.paymentSource;
-            if ("forfaitId" in item) entry.forfaitId = item.forfaitId ?? null;
-            if (item.pending) {
+            if ("forfaitId" in item) entry.forfaitId = forfaitIdValide;
+
+            // ── Place tenue : décidée par le SERVEUR, jamais par le client ──
+            // Auparavant `pending` et `holdUntil` étaient recopiés du corps de
+            // requête. Une famille appelant la route directement pouvait donc
+            // omettre `pending` (place ferme définitive, que rien ne purge, sans
+            // le moindre paiement) ou poser un `holdUntil` à cinq ans. Le
+            // parcours d'inscription annuelle le faisait d'ailleurs nominalement.
+            //
+            // Règle : toute inscription posée par une famille est TENUE. Elle
+            // devient définitive quand l'encaissement est confirmé
+            // (confirmerPlacesTenues, appelé par /api/cawl/status, le webhook et
+            // la validation admin d'une déclaration), et repart sinon via le cron
+            // de purge. Seul le staff pose une inscription ferme.
+            const tenue = estStaff ? !!item.pending : true;
+            if (tenue) {
               entry.pending = true;
-              // Sans date d'expiration, une place tenue le reste pour toujours :
-              // c'est exactement le bug des inscriptions fantômes. On en pose
-              // donc systématiquement une.
-              // La durée dépend du mode : trente minutes pour une CB en ligne,
-              // plusieurs jours pour un chèque ou des espèces, que le bureau
-              // encaissera plus tard.
-              entry.holdUntil = typeof item.holdUntil === "string" && item.holdUntil
-                ? item.holdUntil
-                : dateExpirationHold(new Date(), item.paymentMethod);
+              // Durée calculée côté serveur à partir du mode de règlement :
+              // trente minutes pour une CB en ligne, sept jours pour un chèque
+              // ou des espèces que le bureau encaissera plus tard.
+              entry.holdUntil = dateExpirationHold(new Date(), item.paymentMethod);
               if (item.paymentMethod) entry.paymentMethod = item.paymentMethod;
             }
             tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });
@@ -146,11 +185,34 @@ export async function POST(req: NextRequest) {
         });
         if (outcome.status === "ok") enrolled.push(...creneauIds);
         else if (outcome.status === "full") full.push(outcome.cid);
-        // "missing" : on ignore (créneau introuvable)
+        else if (outcome.status === "missing") missing.push(outcome.cid);
       } catch (e) {
         console.error(`/api/enroll — échec item (child ${item.childId}):`, e);
         full.push(creneauIds[0]);
       }
+    }
+
+    // ── Créneau introuvable → ÉCHEC, jamais un succès silencieux ──────────
+    // Ce cas était ignoré : la transaction renvoyait "missing", la route n'en
+    // faisait rien, et comme `full` et `notOwned` restaient vides, elle
+    // répondait `{ ok: true, enrolled: [] }` en HTTP 200. Le navigateur, qui
+    // ne teste que `res.ok`, poursuivait : il créait la réservation ET le
+    // paiement pour un cours qui n'existe pas, puis partait vers CAWL.
+    //
+    // C'est exactement le symptôme « ça m'a inscrit sur un cours qui n'existe
+    // pas et ça m'a enregistré le paiement ». Il suffit que la liste des
+    // créneaux du navigateur soit périmée — page ouverte depuis un moment,
+    // créneau supprimé ou base réinitialisée entre-temps.
+    if (missing.length > 0) {
+      console.warn(`/api/enroll — créneaux introuvables pour uid=${uid}:`, missing);
+      return NextResponse.json(
+        {
+          error: "Ce créneau n'existe plus. Rafraîchis la page : le planning a changé depuis que tu l'as ouverte.",
+          code: "CRENEAU_INTROUVABLE",
+          missing, full, notOwned,
+        },
+        { status: 409 }
+      );
     }
 
     // Un item n'a pas pu être inscrit entièrement (complet) → on refuse, pour que
@@ -162,9 +224,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Enfant non autorisé", notOwned }, { status: 403 });
     }
 
+    // Garde-fou : une demande qui n'inscrit personne ne peut pas être un
+    // succès. Sans lui, tout nouveau cas non prévu retomberait dans le même
+    // piège — répondre 200 à une inscription qui n'a rien fait.
+    if (enrolled.length === 0) {
+      console.error(`/api/enroll — aucune inscription réalisée pour uid=${uid}`, { items: items.length });
+      return NextResponse.json(
+        { error: "Aucune inscription n'a pu être enregistrée. Rafraîchis la page et réessaie.", full, notOwned, missing },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json({ ok: true, enrolled, full, notOwned });
   } catch (e: any) {
     console.error("/api/enroll — erreur:", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }

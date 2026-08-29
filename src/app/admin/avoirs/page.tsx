@@ -303,7 +303,7 @@ export default function AvoirsPage() {
           { id: "creer" as const, label: "Créer un avoir / avance" },
           { id: "historique" as const, label: `Historique (${usedAvoirs.length + expiredAvoirs.length})` },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button type="button" key={t.id} onClick={() => setTab(t.id)}
             className={`font-body text-sm font-semibold px-5 py-2.5 rounded-xl border-none cursor-pointer transition-colors ${
               tab === t.id ? "bg-blue-500 text-white" : "bg-white text-gray-500 border border-gray-200"}`}>
             {t.label}
@@ -370,17 +370,17 @@ export default function AvoirsPage() {
                         <div className="font-body text-[10px] text-gray-400">restant</div>
                         {a.status === "actif" && (
                           <div className="flex gap-1 mt-2">
-                            <button onClick={() => { setUseAvoirId(a.id); setUseAmount(""); setUseInvoiceRef(""); setShowUseModal(true); }}
+                            <button type="button" onClick={() => { setUseAvoirId(a.id); setUseAmount(""); setUseInvoiceRef(""); setShowUseModal(true); }}
                               className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                               Utiliser
                             </button>
-                            <button onClick={() => { setRembAvoirId(a.id); setRembMode("especes"); setRembRef(""); setShowRembModal(true); }}
+                            <button type="button" onClick={() => { setRembAvoirId(a.id); setRembMode("especes"); setRembRef(""); setShowRembModal(true); }}
                               className="font-body text-xs text-orange-600 bg-orange-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-orange-100">
                               Rembourser
                             </button>
                           </div>
                         )}
-                        <button onClick={() => {
+                        <button type="button" onClick={() => {
                           const d = a.createdAt?.toDate ? a.createdAt.toDate() : new Date();
                           const exp = a.expiryDate?.toDate ? a.expiryDate.toDate() : null;
                           downloadAvoirPdf({
@@ -430,7 +430,7 @@ export default function AvoirsPage() {
               <label className={labelStyle}>Type</label>
               <div className="flex gap-2">
                 {([["avoir", "Avoir (remboursement)"], ["avance", "Avance (acompte)"]] as const).map(([v, l]) => (
-                  <button key={v} onClick={() => setAvoirType(v)}
+                  <button type="button" key={v} onClick={() => setAvoirType(v)}
                     className={`flex-1 py-2.5 rounded-lg font-body text-sm font-medium border cursor-pointer transition-all
                       ${avoirType === v ? "bg-blue-500 text-white border-blue-500" : "bg-white text-gray-500 border-gray-200"}`}>
                     {l}
@@ -466,7 +466,7 @@ export default function AvoirsPage() {
             </div>
           </div>
           <div className="flex justify-end mt-5">
-            <button onClick={createAvoir} disabled={saving || !selFamily || !amount}
+            <button type="button" onClick={createAvoir} disabled={saving || !selFamily || !amount}
               className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600
                 ${(saving || !selFamily || !amount) ? "opacity-50 cursor-not-allowed" : ""}`}>
               {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
@@ -482,7 +482,7 @@ export default function AvoirsPage() {
           <div className="bg-white rounded-2xl w-full max-w-sm mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-5 border-b border-gray-100">
               <h2 className="font-display text-lg font-bold text-blue-800">Utiliser un avoir</h2>
-              <button onClick={() => setShowUseModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+              <button type="button" onClick={() => setShowUseModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
             </div>
             <div className="p-5 space-y-4">
               <div>
@@ -496,9 +496,9 @@ export default function AvoirsPage() {
               </div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button onClick={() => setShowUseModal(false)}
+              <button type="button" onClick={() => setShowUseModal(false)}
                 className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-              <button onClick={handleUseAvoir} disabled={saving || !useAmount}
+              <button type="button" onClick={handleUseAvoir} disabled={saving || !useAmount}
                 className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer
                   ${(saving || !useAmount) ? "opacity-50" : ""}`}>
                 {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Valider
@@ -519,14 +519,14 @@ export default function AvoirsPage() {
                   <h2 className="font-display text-lg font-bold text-blue-800">Rembourser l'avoir</h2>
                   <p className="font-body text-xs text-slate-500 mt-0.5">{avoir.familyName} · {avoir.remainingAmount.toFixed(2)}€ à rembourser</p>
                 </div>
-                <button onClick={() => setShowRembModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
+                <button type="button" onClick={() => setShowRembModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
               </div>
               <div className="p-5 space-y-4">
                 <div>
                   <label className={labelStyle}>Mode de remboursement</label>
                   <div className="flex flex-wrap gap-2">
                     {[["especes","Espèces"],["cheque","Chèque"],["virement","Virement"],["cb","CB"]].map(([v, l]) => (
-                      <button key={v} onClick={() => setRembMode(v)}
+                      <button type="button" key={v} onClick={() => setRembMode(v)}
                         className={`px-3 py-1.5 rounded-lg font-body text-sm border cursor-pointer transition-all
                           ${rembMode === v ? "bg-orange-500 text-white border-orange-500" : "bg-white text-slate-600 border-gray-200 hover:border-orange-300"}`}>
                         {l}
@@ -543,9 +543,9 @@ export default function AvoirsPage() {
                 </div>
               </div>
               <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-                <button onClick={() => setShowRembModal(false)}
+                <button type="button" onClick={() => setShowRembModal(false)}
                   className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-                <button onClick={handleRemboursement} disabled={saving}
+                <button type="button" onClick={handleRemboursement} disabled={saving}
                   className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-lg border-none cursor-pointer ${saving ? "opacity-50" : ""}`}>
                   {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
                   Rembourser {avoir.remainingAmount.toFixed(2)}€

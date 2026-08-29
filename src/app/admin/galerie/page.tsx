@@ -175,7 +175,7 @@ export default function AdminGaleriePage() {
         {CATEGORIES.map((cat) => {
           const isActive = activeCategory === cat.id;
           return (
-            <button
+            <button type="button"
               key={cat.id}
               onClick={() => setActiveCategory(cat.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
@@ -280,11 +280,11 @@ export default function AdminGaleriePage() {
                           if (e.key === "Escape") { setEditingId(null); setEditingCaption(""); }
                         }}
                       />
-                      <button onClick={saveCaption} className="text-green-600 hover:text-green-700 bg-transparent border-none cursor-pointer p-1"><Check size={16} /></button>
-                      <button onClick={() => { setEditingId(null); setEditingCaption(""); }} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-1"><X size={16} /></button>
+                      <button type="button" onClick={saveCaption} className="text-green-600 hover:text-green-700 bg-transparent border-none cursor-pointer p-1"><Check size={16} /></button>
+                      <button type="button" onClick={() => { setEditingId(null); setEditingCaption(""); }} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-1"><X size={16} /></button>
                     </div>
                   ) : (
-                    <button
+                    <button type="button"
                       onClick={() => startEditCaption(photo)}
                       className="flex items-center gap-1.5 text-left bg-transparent border-none cursor-pointer p-0">
                       <span className={`flex-1 font-body text-xs ${photo.caption ? "text-slate-700" : "text-slate-400 italic"}`}>
@@ -296,14 +296,14 @@ export default function AdminGaleriePage() {
 
                   {/* Boutons d'ordre + suppression */}
                   <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100">
-                    <button
+                    <button type="button"
                       onClick={() => handleMove(photo, "up")}
                       disabled={isFirst}
                       title="Déplacer vers le haut"
                       className="flex items-center justify-center w-7 h-7 rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 bg-transparent border-none cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed">
                       <ArrowUp size={14} />
                     </button>
-                    <button
+                    <button type="button"
                       onClick={() => handleMove(photo, "down")}
                       disabled={isLast}
                       title="Déplacer vers le bas"
@@ -313,7 +313,7 @@ export default function AdminGaleriePage() {
                     <span className="flex-1 text-center text-[10px] text-slate-400 font-body">
                       Position {i + 1} / {photos.length}
                     </span>
-                    <button
+                    <button type="button"
                       onClick={() => handleDelete(photo)}
                       title="Supprimer cette photo"
                       className="flex items-center justify-center w-7 h-7 rounded-md text-red-400 hover:text-red-600 hover:bg-red-50 bg-transparent border-none cursor-pointer">

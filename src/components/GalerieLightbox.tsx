@@ -58,7 +58,7 @@ export default function GalerieLightbox({ photos, initialIndex, onClose, categor
           <span className="font-semibold">{categoryLabel}</span>
           <span className="text-white/60 ml-2">{index + 1} / {photos.length}</span>
         </div>
-        <button
+        <button type="button"
           onClick={onClose}
           aria-label="Fermer"
           className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center bg-transparent border-none cursor-pointer text-white">
@@ -69,7 +69,7 @@ export default function GalerieLightbox({ photos, initialIndex, onClose, categor
       {/* Image principale + flèches */}
       <div className="flex-1 flex items-center justify-center relative px-2 sm:px-12 min-h-0">
         {photos.length > 1 && (
-          <button
+          <button type="button"
             onClick={(e) => { e.stopPropagation(); prev(); }}
             aria-label="Précédent"
             className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white border-none cursor-pointer z-10">
@@ -84,7 +84,7 @@ export default function GalerieLightbox({ photos, initialIndex, onClose, categor
           onClick={(e) => e.stopPropagation()}
         />
         {photos.length > 1 && (
-          <button
+          <button type="button"
             onClick={(e) => { e.stopPropagation(); next(); }}
             aria-label="Suivant"
             className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white border-none cursor-pointer z-10">
@@ -105,7 +105,7 @@ export default function GalerieLightbox({ photos, initialIndex, onClose, categor
         <div className="px-4 pb-4 pt-2" onClick={(e) => e.stopPropagation()}>
           <div className="flex gap-2 overflow-x-auto justify-center">
             {photos.map((p, i) => (
-              <button
+              <button type="button"
                 key={p.id}
                 onClick={() => setIndex(i)}
                 className={`flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-all bg-transparent cursor-pointer p-0

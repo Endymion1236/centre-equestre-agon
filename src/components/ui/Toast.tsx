@@ -46,7 +46,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             <div key={t.id} data-testid={`toast-${t.type}`} className={`${colors[t.type]} text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 max-w-sm pointer-events-auto animate-slide-up`}>
               <Icon size={18} className="flex-shrink-0" />
               <span className="font-body text-sm flex-1">{t.message}</span>
-              <button onClick={() => removeToast(t.id)} className="text-white/60 hover:text-white bg-transparent border-none cursor-pointer p-0"><X size={14} /></button>
+              <button type="button" onClick={() => removeToast(t.id)} className="text-white/60 hover:text-white bg-transparent border-none cursor-pointer p-0"><X size={14} /></button>
             </div>
           );
         })}

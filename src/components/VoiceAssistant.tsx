@@ -349,18 +349,18 @@ ${JSON.stringify(context, null, 2)}`;
         <div className="flex items-center gap-2">
           {/* Bouton Stop — visible uniquement quand l'IA parle */}
           {speaking && (
-            <button onClick={stopSpeaking}
+            <button type="button" onClick={stopSpeaking}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-500 hover:bg-red-400 border-none cursor-pointer transition-all animate-pulse">
               <span className="w-2 h-2 rounded-sm bg-white" />
               <span className="font-body text-[11px] font-semibold text-white">Stop</span>
             </button>
           )}
-          <button onClick={() => { setMuted(!muted); if (speaking) stopSpeaking(); }}
+          <button type="button" onClick={() => { setMuted(!muted); if (speaking) stopSpeaking(); }}
             className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center border-none cursor-pointer hover:bg-white/20">
             {muted ? <VolumeX size={14} className="text-white/50" /> : <Volume2 size={14} className="text-white" />}
           </button>
           {onClose && (
-            <button onClick={onClose}
+            <button type="button" onClick={onClose}
               className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center border-none cursor-pointer hover:bg-white/20">
               <X size={14} className="text-white" />
             </button>
@@ -391,7 +391,7 @@ ${JSON.stringify(context, null, 2)}`;
                 "Y a-t-il des places disponibles ?",
                 "Comment inscrire mon enfant ?",
               ]).map(q => (
-                <button key={q} onClick={() => askClaude(q)}
+                <button type="button" key={q} onClick={() => askClaude(q)}
                   className="text-left font-body text-xs px-3 py-2 rounded-xl border border-gray-100 bg-gray-50 hover:bg-blue-50 hover:border-blue-200 cursor-pointer text-gray-600 transition-colors">
                   {q}
                 </button>
@@ -427,11 +427,11 @@ ${JSON.stringify(context, null, 2)}`;
               {/* Boutons confirmation directement sous le message */}
               {needsConfirm && !loading && mode === "admin" && (
                 <div className="flex gap-2">
-                  <button onClick={() => askClaude("Oui, confirme.", true)}
+                  <button type="button" onClick={() => askClaude("Oui, confirme.", true)}
                     className="flex-1 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer">
                     ✓ Confirmer
                   </button>
-                  <button onClick={() => { setPendingAction(null); addMessage("assistant", "Action annulée."); }}
+                  <button type="button" onClick={() => { setPendingAction(null); addMessage("assistant", "Action annulée."); }}
                     className="flex-1 py-2.5 rounded-xl font-body text-sm font-bold text-slate-700 bg-gray-200 hover:bg-gray-300 border-none cursor-pointer">
                     ✕ Annuler
                   </button>
@@ -457,13 +457,13 @@ ${JSON.stringify(context, null, 2)}`;
         {/* Boutons confirmation agent — au-dessus de la saisie */}
         {pendingAction && mode === "admin" && (
           <div className="flex gap-2 mb-3">
-            <button
+            <button type="button"
               onClick={() => askClaude("Oui, confirme.", true)}
               disabled={loading}
               className="flex-1 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50 shadow-sm">
               ✓ Oui, confirmer
             </button>
-            <button
+            <button type="button"
               onClick={() => { setPendingAction(null); addMessage("assistant", "Action annulée."); }}
               disabled={loading}
               className="flex-1 py-3 rounded-xl font-body text-sm font-bold text-slate-700 bg-gray-200 hover:bg-gray-300 border-none cursor-pointer disabled:opacity-50">
@@ -474,7 +474,7 @@ ${JSON.stringify(context, null, 2)}`;
 
         <div className="flex gap-2 items-center">
           {/* Bouton micro */}
-          <button
+          <button type="button"
             onClick={recording ? stopRecording : startRecording}
             disabled={loading}
             className={`w-12 h-12 rounded-xl flex items-center justify-center border-none cursor-pointer flex-shrink-0 transition-all disabled:opacity-40 ${
@@ -494,7 +494,7 @@ ${JSON.stringify(context, null, 2)}`;
           />
           {/* Bouton envoyer */}
           {textInput.trim() && (
-            <button onClick={handleTextSubmit} disabled={loading}
+            <button type="button" onClick={handleTextSubmit} disabled={loading}
               className="w-12 h-12 rounded-xl flex items-center justify-center text-white border-none cursor-pointer flex-shrink-0"
               style={{ background: gradientBg }}>
               ↑

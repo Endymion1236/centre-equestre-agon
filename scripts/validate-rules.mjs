@@ -203,6 +203,75 @@ if (iFOMatches.length > 0) {
   ok("Aucun isFamilyOwner() — performances optimales");
 }
 
+// ─── SECTION 7bis : Champs sensibles fermés à la famille ────────────────────
+// Ces six contrôles verrouillent des trous relevés par l'audit complémentaire
+// du 29/08/2026. Ils portent sur le TEXTE des règles : c'est grossier, mais ça
+// empêche une régression silencieuse au prochain remaniement du fichier.
+section("7️⃣ bis  CHAMPS SENSIBLES FERMÉS À LA FAMILLE");
+{
+  const blocFamilles = rulesContent.slice(
+    rulesContent.indexOf("match /families/"),
+    rulesContent.indexOf("match /creneaux/")
+  );
+
+  // 1. linkedChildren autorise à réserver pour l'enfant d'une AUTRE famille,
+  //    et /api/enroll s'y fie. La famille ne doit jamais pouvoir l'écrire.
+  if (/champsAdminFamille\(\)/.test(blocFamilles) && /linkedChildren/.test(rulesContent)) {
+    ok("families — linkedChildren et champs administratifs fermés à la famille");
+  } else {
+    fail("families — linkedChildren doit être interdit en écriture à la famille");
+  }
+
+  // 2. La création de fiche famille passe par l'Admin SDK.
+  if (/allow create: if isStaff\(\);/.test(blocFamilles)) {
+    ok("families — création réservée au serveur (/api/famille/lier-compte)");
+  } else {
+    fail("families — la création ne doit plus être ouverte au navigateur");
+  }
+
+  // 3. Une déclaration de paiement engage une famille : elle doit être la sienne.
+  const blocDecl = rulesContent.slice(
+    rulesContent.indexOf("match /payment_declarations/"),
+    rulesContent.indexOf("match /payment_declarations/") + 1400
+  );
+  if (/request\.resource\.data\.familyId == request\.auth\.uid/.test(blocDecl)
+      && /hasOnly\(\[/.test(blocDecl)) {
+    ok("payment_declarations — familyId imposé + liste de champs fermée");
+  } else {
+    fail("payment_declarations — doit imposer familyId == auth.uid et une liste de champs");
+  }
+
+  // 4. Un moniteur ne coche que sa propre tâche (quand elle porte l'email).
+  const blocTaches = rulesContent.slice(
+    rulesContent.indexOf("match /taches-planifiees/"),
+    rulesContent.indexOf("match /taches-planifiees/") + 1600
+  );
+  if (/salarieEmail/.test(blocTaches)) {
+    ok("taches-planifiees — appartenance vérifiée quand la tâche porte un email");
+  } else {
+    fail("taches-planifiees — l'appartenance de la tâche n'est pas vérifiée");
+  }
+
+  // 5. La famille doit pouvoir révoquer SON mandat SEPA, et rien d'autre.
+  const blocSepa = rulesContent.slice(
+    rulesContent.indexOf("match /mandats-sepa/"),
+    rulesContent.indexOf("match /mandats-sepa/") + 1400
+  );
+  if (/request\.resource\.data\.status == "revoked"/.test(blocSepa)
+      && /hasOnly\(\['status', 'revokedAt'\]\)/.test(blocSepa)) {
+    ok("mandats-sepa — révocation par la famille autorisée, strictement bornée");
+  } else {
+    fail("mandats-sepa — la famille doit pouvoir révoquer son mandat (et rien d'autre)");
+  }
+
+  // 6. Le compteur de factures ne s'incrémente que côté serveur.
+  if (/docId != 'invoiceCounter'/.test(rulesContent)) {
+    ok("settings — invoiceCounter fermé en écriture directe");
+  } else {
+    fail("settings — invoiceCounter ne doit pas être écrit depuis le navigateur");
+  }
+}
+
 // ─── SECTION 8 : Règles version ─────────────────────────────────────────────
 section("8️⃣  SYNTAXE DE BASE");
 

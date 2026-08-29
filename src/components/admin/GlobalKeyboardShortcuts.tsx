@@ -198,7 +198,7 @@ export default function GlobalKeyboardShortcuts() {
               Actifs hors champs de saisie
             </div>
           </div>
-          <button
+          <button type="button"
             onClick={() => setShowHelp(false)}
             className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer text-xl">
             ×

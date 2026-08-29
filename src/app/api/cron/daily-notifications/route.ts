@@ -583,7 +583,7 @@ export async function GET(req: NextRequest) {
               }
             } catch (e: any) {
               results.saisonRappel.errors++;
-              await logEmail({ to: email, subject: "Rappel saison", context: "cron_saison_rappel", template: "saisonRappel", status: "failed", error: e?.message || String(e), sentBy: "system" });
+              await logEmail({ to: email, subject: "Rappel saison", context: "cron_saison_rappel", template: "saisonRappel", status: "failed", error: "Erreur interne", sentBy: "system" });
             }
           }
           // Marqueur d'idempotence : plus jamais d'envoi pour cette rentrée.

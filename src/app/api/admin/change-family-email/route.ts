@@ -97,7 +97,8 @@ export async function POST(req: NextRequest) {
           authUpdated = false;
         } else {
           console.error("change-family-email updateUser:", e);
-          return NextResponse.json({ error: `Erreur mise a jour compte : ${e.message}` }, { status: 500 });
+          console.error("[change-family-email] mise a jour compte:", e);
+          return NextResponse.json({ error: "Erreur lors de la mise à jour du compte" }, { status: 500 });
         }
       }
     }
@@ -127,6 +128,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("change-family-email fatal:", e);
-    return NextResponse.json({ error: e?.message || "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

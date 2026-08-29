@@ -87,11 +87,11 @@ export default function TestMitPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => run(p, true)} disabled={!!busyId}
+                  <button type="button" onClick={() => run(p, true)} disabled={!!busyId}
                     className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     {busyId === p.id + "-dry" ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />} Simuler
                   </button>
-                  <button onClick={() => run(p, false)} disabled={!!busyId || !hasToken || !hasInit}
+                  <button type="button" onClick={() => run(p, false)} disabled={!!busyId || !hasToken || !hasInit}
                     className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50"
                     title={!hasToken || !hasInit ? "Acompte non tokenisé / non finalisé" : "Lancer le débit réel"}>
                     {busyId === p.id + "-real" ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />} Débiter

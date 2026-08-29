@@ -238,7 +238,7 @@ export async function GET(req: NextRequest) {
           await logEmail({
             to: familyEmail, subject,
             context: "cron_balade_petit_groupe", template: "baladePetitGroupe",
-            status: "failed", error: e?.message || String(e),
+            status: "failed", error: "Erreur interne",
             sentBy: "system", familyId,
           }).catch(() => {});
         }

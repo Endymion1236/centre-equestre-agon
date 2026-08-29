@@ -195,7 +195,7 @@ export default function MareesSection() {
                       <span className="font-body text-xs text-blue-600 bg-white rounded-full px-2 py-0.5">
                         {count}j
                       </span>
-                      <button
+                      <button type="button"
                         onClick={() => handleDeleteMonth(ym)}
                         disabled={deleting}
                         title="Supprimer ce mois"
@@ -207,7 +207,7 @@ export default function MareesSection() {
                 })}
             </div>
             <div className="mt-3">
-              <button
+              <button type="button"
                 onClick={handleDeleteAll}
                 disabled={deleting}
                 className="font-body text-xs text-red-500 bg-transparent border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 cursor-pointer">
@@ -275,14 +275,14 @@ export default function MareesSection() {
           className="w-full px-4 py-3 rounded-xl border border-gray-300 font-mono text-xs resize-y focus:outline-none focus:border-blue-400" />
 
         <div className="flex gap-2 mt-3">
-          <button
+          <button type="button"
             onClick={handlePreview}
             disabled={!pasted.trim()}
             className="font-body text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 cursor-pointer hover:bg-blue-100 disabled:opacity-50">
             👁️ Aperçu
           </button>
           {previewMode && parseResult?.success && (
-            <button
+            <button type="button"
               onClick={handleSave}
               disabled={saving}
               className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 border-none rounded-xl px-5 py-2 cursor-pointer hover:bg-blue-700 disabled:opacity-50">

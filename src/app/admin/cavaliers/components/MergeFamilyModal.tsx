@@ -48,7 +48,7 @@ export default function MergeFamilyModal({ sourceFamilyId, families, onClose, on
             <h2 className="font-display text-lg font-bold text-blue-800">Fusionner des comptes</h2>
             <p className="font-body text-xs text-slate-600">Les données de la source sont rattachées au compte conservé</p>
           </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
+          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none hover:bg-gray-200"><X size={16}/></button>
         </div>
         <div className="p-5 space-y-4">
           <div>
@@ -93,12 +93,12 @@ export default function MergeFamilyModal({ sourceFamilyId, families, onClose, on
           {err && <div className="bg-rose-50 border border-rose-200 rounded-lg p-2 font-body text-xs text-rose-700">{err}</div>}
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-          <button onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-          <button onClick={() => call(true)} disabled={busy || !keepId}
+          <button type="button" onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+          <button type="button" onClick={() => call(true)} disabled={busy || !keepId}
             className="font-body text-sm font-semibold text-slate-700 bg-white border border-slate-300 px-4 py-2.5 rounded-lg cursor-pointer disabled:opacity-50">
             {busy && !preview ? <Loader2 size={16} className="animate-spin"/> : "Prévisualiser"}
           </button>
-          <button onClick={() => call(false)} disabled={busy || !preview}
+          <button type="button" onClick={() => call(false)} disabled={busy || !preview}
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-purple-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-purple-600 disabled:opacity-50">
             {busy && preview ? <Loader2 size={16} className="animate-spin"/> : <GitMerge size={16}/>} Fusionner
           </button>

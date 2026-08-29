@@ -65,7 +65,7 @@ export default function ThemeSaisonnierToggle() {
             <>
               <div className="mt-3 flex flex-wrap gap-2">
                 {THEMES_LISTE.map(t => (
-                  <button key={t.id}
+                  <button type="button" key={t.id}
                     onClick={() => {
                       setThemeId(t.id);
                       const msg = t.id === "aucun" ? "" : (message || t.messageDefaut);

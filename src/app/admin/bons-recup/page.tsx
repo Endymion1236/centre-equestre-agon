@@ -192,7 +192,7 @@ export default function BonsRecupPage() {
           <h1 className="font-display text-2xl font-bold text-blue-800">Bons de récupération</h1>
           <p className="font-body text-xs text-gray-400">Gérer les bons de rattrapage pour les cavaliers absents</p>
         </div>
-        <button onClick={() => window.print()} className="flex items-center gap-2 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+        <button type="button" onClick={() => window.print()} className="flex items-center gap-2 font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
           <Printer size={16} /> Imprimer
         </button>
       </div>
@@ -220,7 +220,7 @@ export default function BonsRecupPage() {
           { id: "generate" as const, l: "Générer depuis le montoir" },
           { id: "history" as const, l: `Historique (${usedBons.length + expiredBons.length})` },
         ].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button type="button" key={t.id} onClick={() => setTab(t.id)}
             className={`font-body text-sm font-semibold px-5 py-2.5 rounded-xl border-none cursor-pointer transition-colors ${tab === t.id ? "text-white bg-blue-500" : "text-gray-500 bg-white border border-gray-200"}`}>
             {t.l}
           </button>
@@ -274,17 +274,17 @@ export default function BonsRecupPage() {
                                 placeholder="Cours mercredi 14h"
                                 className="px-2 py-1 rounded border border-green-300 font-body text-xs w-40 focus:outline-none focus:border-green-500"
                               />
-                              <button onClick={() => markUsed(b.id, usedBon.activity)} disabled={!usedBon.activity.trim()}
+                              <button type="button" onClick={() => markUsed(b.id, usedBon.activity)} disabled={!usedBon.activity.trim()}
                                 className="font-body text-xs font-semibold text-white bg-green-600 px-2 py-1 rounded border-none cursor-pointer disabled:bg-gray-300">OK</button>
-                              <button onClick={() => setUsedBon(null)}
+                              <button type="button" onClick={() => setUsedBon(null)}
                                 className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer">✕</button>
                             </div>
                           ) : (
-                            <button onClick={() => setUsedBon({ id: b.id, activity: "" })} className="font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                            <button type="button" onClick={() => setUsedBon({ id: b.id, activity: "" })} className="font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
                               ✓ Marquer utilisé
                             </button>
                           )}
-                          <button onClick={() => markExpired(b.id)} className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-red-500">
+                          <button type="button" onClick={() => markExpired(b.id)} className="font-body text-xs text-gray-400 bg-transparent border-none cursor-pointer hover:text-red-500">
                             <XCircle size={14} />
                           </button>
                         </>
@@ -308,11 +308,11 @@ export default function BonsRecupPage() {
           </Card>
 
           <div className="flex items-center justify-between mb-4">
-            <button onClick={() => setDayOffset(d => d - 1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">← Veille</button>
+            <button type="button" onClick={() => setDayOffset(d => d - 1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">← Veille</button>
             <div className="font-display text-base font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>
             <div className="flex gap-2">
-              <button onClick={() => setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
-              <button onClick={() => setDayOffset(d => d + 1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain →</button>
+              <button type="button" onClick={() => setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
+              <button type="button" onClick={() => setDayOffset(d => d + 1)} className="font-body text-sm text-gray-500 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain →</button>
             </div>
           </div>
 
@@ -337,7 +337,7 @@ export default function BonsRecupPage() {
                     <div className="flex items-center gap-2">
                       {alreadyGenerated > 0 && <Badge color="green">{alreadyGenerated} bon(s) déjà créé(s)</Badge>}
                       {absents.length > 0 ? (
-                        <button onClick={() => generateBonsForCreneau(c)} disabled={saving}
+                        <button type="button" onClick={() => generateBonsForCreneau(c)} disabled={saving}
                           className="font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-40">
                           {saving ? "..." : `Générer ${absents.length} bon(s)`}
                         </button>

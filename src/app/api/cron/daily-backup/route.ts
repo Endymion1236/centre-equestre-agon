@@ -105,15 +105,30 @@ export async function GET(req: NextRequest) {
         const resend = new Resend(process.env.RESEND_API_KEY);
         const from = process.env.RESEND_FROM_EMAIL || "noreply@ce-agon.fr";
         const to = process.env.RESEND_BCC || "ceagon50@gmail.com";
+        // ── Lien signé, PAS de pièce jointe ────────────────────────────────
+        // L'export nominatif complet (familles, enfants, dates de naissance,
+        // coordonnées, fiches sanitaires) partait chaque semaine en pièce
+        // jointe vers deux boîtes grand public. Une compromission de boîte
+        // livrait l'intégralité du fichier clients, et cette copie échappait à
+        // toute politique de conservation — le cron purge Storage à 30 jours,
+        // rien ne purge une boîte email (audit S8).
+        //
+        // Le lien signé expire avec la rétention Storage : passé ce délai il
+        // ne donne plus rien, même retrouvé dans un vieux message.
+        const [lienSigne] = await bucket.file(filePath).getSignedUrl({
+          action: "read",
+          expires: Date.now() + RETENTION_JOURS * 24 * 60 * 60 * 1000,
+        });
+
         await resend.emails.send({
           from,
           to,
           subject: `Sauvegarde hebdomadaire — ${dateParis} (${totalDocs} docs)`,
           html: `<p>Sauvegarde complète de la base du <strong>${dateParis}</strong>.</p>
 <p>${Object.keys(data).length} collections · ${totalDocs} documents · ${sizeKo} Ko.</p>
-<p>Le fichier est également conservé dans Firebase Storage sous <code>${filePath}</code> (30 derniers jours).</p>
-<p style="color:#888;font-size:12px">Copie de sécurité automatique — à conserver hors-ligne.</p>`,
-          attachments: [{ filename: `sauvegarde-${dateParis}.json`, content: Buffer.from(json).toString("base64") }],
+<p><a href="${lienSigne}" style="display:inline-block;padding:10px 18px;background:#2050A0;color:#fff;text-decoration:none;border-radius:6px">Télécharger la sauvegarde</a></p>
+<p style="color:#888;font-size:12px">Ce lien expire dans ${RETENTION_JOURS} jours. Le fichier est conservé dans Firebase Storage sous <code>${filePath}</code>.</p>
+<p style="color:#888;font-size:12px">Le fichier n'est plus joint à ce message : il contient les données personnelles de toutes les familles. Après téléchargement, conservez-le sur un support chiffré et hors ligne.</p>`,
         });
         emailed = true;
       } catch (e) {
@@ -133,6 +148,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[backup] échec", e);
-    return NextResponse.json({ ok: false, error: e?.message || "Échec de la sauvegarde" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "Échec de la sauvegarde" }, { status: 500 });
   }
 }

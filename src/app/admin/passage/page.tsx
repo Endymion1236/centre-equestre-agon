@@ -165,7 +165,7 @@ export default function PassagePage() {
       {/* Tabs */}
       <div className="flex gap-2 mb-5">
         {[{ id: "form" as const, l: "Inscription rapide" }, { id: "list" as const, l: `Historique (${passages.length})` }].map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button type="button" key={t.id} onClick={() => setTab(t.id)}
             className={`font-body text-sm font-semibold px-5 py-2.5 rounded-xl border-none cursor-pointer transition-colors ${tab === t.id ? "text-white bg-blue-500" : "text-gray-500 bg-white border border-gray-200"}`}>
             {t.l}
           </button>
@@ -242,7 +242,7 @@ export default function PassagePage() {
               <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Mode de paiement</label>
               <div className="flex flex-wrap gap-2">
                 {MODES_PAIEMENT.map(m => (
-                  <button key={m.id} onClick={() => setModePaiement(m.id)}
+                  <button type="button" key={m.id} onClick={() => setModePaiement(m.id)}
                     className={`font-body text-xs font-semibold px-4 py-2 rounded-lg border-none cursor-pointer transition-colors ${modePaiement === m.id ? "text-white bg-blue-500" : "text-gray-600 bg-gray-100 hover:bg-gray-200"}`}>
                     {m.label}
                   </button>
@@ -252,11 +252,11 @@ export default function PassagePage() {
           )}
 
           <div className="flex gap-3">
-            <button onClick={handleSubmit} disabled={!nom || !prenom || saving}
+            <button type="button" onClick={handleSubmit} disabled={!nom || !prenom || saving}
               className="font-body text-sm font-semibold text-white bg-blue-500 px-6 py-3 rounded-xl border-none cursor-pointer disabled:opacity-40 hover:bg-blue-400 transition-colors">
               {saving ? "Enregistrement..." : encaisser ? "Inscrire et facturer" : "Inscrire sans paiement"}
             </button>
-            <button onClick={resetForm} className="font-body text-sm text-gray-500 bg-white px-6 py-3 rounded-xl border border-gray-200 cursor-pointer">Réinitialiser</button>
+            <button type="button" onClick={resetForm} className="font-body text-sm text-gray-500 bg-white px-6 py-3 rounded-xl border border-gray-200 cursor-pointer">Réinitialiser</button>
           </div>
         </Card>
       )}

@@ -176,7 +176,7 @@ export default function BackfillEmailsAnnuelPage() {
           style={{ display: "block", marginBottom: 12 }}
         />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button
+          <button type="button"
             onClick={() => run(true)}
             disabled={loading || !file}
             style={{
@@ -192,7 +192,7 @@ export default function BackfillEmailsAnnuelPage() {
           >
             {loading ? "…" : "Aperçu (dry-run)"}
           </button>
-          <button
+          <button type="button"
             onClick={() => run(false)}
             disabled={loading || !result || (s?.ok ?? 0) === 0}
             style={{
@@ -275,7 +275,7 @@ export default function BackfillEmailsAnnuelPage() {
 
           <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
             {(["all", "ok", "ambigu", "non_trouve"] as Filter[]).map((f) => (
-              <button
+              <button type="button"
                 key={f}
                 onClick={() => setFilter(f)}
                 style={{

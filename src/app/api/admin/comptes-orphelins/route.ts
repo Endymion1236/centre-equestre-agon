@@ -165,7 +165,7 @@ export async function GET(req: NextRequest) {
   } catch (e: any) {
     console.error("[comptes-orphelins]", e);
     return NextResponse.json(
-      { error: e?.message || "Erreur lors de la lecture des comptes" },
+      { error: "Erreur lors de la lecture des comptes" },
       { status: 500 },
     );
   }

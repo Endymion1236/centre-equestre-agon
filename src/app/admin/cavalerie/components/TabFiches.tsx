@@ -201,7 +201,7 @@ export default function TabFiches({
               <h2 className="font-display text-lg font-bold text-blue-800">
                 {editingId ? `Modifier ${form.name}` : "Nouvel équidé"}
               </h2>
-              <button onClick={onCloseForm} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
+              <button type="button" onClick={onCloseForm} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
             </div>
             <div className="p-5 max-h-[70vh] overflow-y-auto space-y-5">
               {/* Identité */}
@@ -431,8 +431,8 @@ export default function TabFiches({
               })()}
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button onClick={onCloseForm} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-              <button onClick={saveEquide} disabled={saving || !form.name.trim()}
+              <button type="button" onClick={onCloseForm} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button type="button" onClick={saveEquide} disabled={saving || !form.name.trim()}
                 className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
                 {saving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>}
                 {editingId ? "Enregistrer" : "Créer l'équidé"}
@@ -505,7 +505,7 @@ export default function TabFiches({
                     )}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={ev => { ev.stopPropagation(); onEdit(e); }}
+                    <button type="button" onClick={ev => { ev.stopPropagation(); onEdit(e); }}
                       className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 cursor-pointer border-none transition-colors">
                       <Edit3 size={14}/>
                     </button>
@@ -566,11 +566,11 @@ export default function TabFiches({
                       </div>
                     )}
                     <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
-                      <button onClick={() => onOpenSoinForm(e.id)}
+                      <button type="button" onClick={() => onOpenSoinForm(e.id)}
                         className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                         💊 Ajouter un soin
                       </button>
-                      <button onClick={() => deleteEquide(e.id, e.name)}
+                      <button type="button" onClick={() => deleteEquide(e.id, e.name)}
                         className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100 ml-auto">
                         <Trash2 size={12} className="inline mr-1"/> Supprimer
                       </button>

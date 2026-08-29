@@ -109,7 +109,7 @@ export default function ResultatPage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
           </Link>
-          <button onClick={load} disabled={loading}
+          <button type="button" onClick={load} disabled={loading}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
           </button>
@@ -120,7 +120,7 @@ export default function ResultatPage() {
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {exercices.map(ex => (
-          <button key={ex} onClick={() => setExercice(ex)}
+          <button type="button" key={ex} onClick={() => setExercice(ex)}
             className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer ${exercice === ex ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-slate-600 border-gray-200 hover:bg-emerald-50"}`}>
             Exercice {ex}
           </button>

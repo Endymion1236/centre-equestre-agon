@@ -108,7 +108,7 @@ export default function RestoreCreneauxPage() {
           </p>
         </div>
 
-        <button onClick={previsualiser} disabled={busy || !date || !from || !to}
+        <button type="button" onClick={previsualiser} disabled={busy || !date || !from || !to}
           className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 font-body text-sm font-semibold text-white border-none cursor-pointer disabled:opacity-50">
           {busy ? <Loader2 size={15} className="animate-spin" /> : <RotateCcw size={15} />}
           Voir ce qui manque
@@ -140,7 +140,7 @@ export default function RestoreCreneauxPage() {
                 </div>
               ))}
             </div>
-            <button onClick={restaurer} disabled={busy}
+            <button type="button" onClick={restaurer} disabled={busy}
               className="mt-3 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 font-body text-sm font-bold text-white border-none cursor-pointer disabled:opacity-50">
               {busy ? <Loader2 size={15} className="animate-spin" /> : <RotateCcw size={15} />}
               Restaurer ces {apercu.nb} créneau(x)

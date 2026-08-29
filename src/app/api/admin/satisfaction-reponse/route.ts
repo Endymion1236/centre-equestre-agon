@@ -127,6 +127,6 @@ Règles :
     return NextResponse.json({ ok: true, email });
   } catch (e: any) {
     console.error("[satisfaction-reponse]", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur", status: "error" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur", status: "error" }, { status: 500 });
   }
 }

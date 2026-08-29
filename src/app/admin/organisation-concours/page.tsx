@@ -95,7 +95,7 @@ export default function OrganisationConcoursAccueil() {
             signale les conflits en direct.
           </p>
         </div>
-        <button
+        <button type="button"
           onClick={() => setShowForm((v) => !v)}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 transition shrink-0"
         >
@@ -120,14 +120,14 @@ export default function OrganisationConcoursAccueil() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2 pt-1">
-            <button
+            <button type="button"
               onClick={creer}
               disabled={creating}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 transition disabled:opacity-50"
             >
               {creating ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Créer et éditer
             </button>
-            <button
+            <button type="button"
               onClick={chargerExemple}
               disabled={creating}
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-200 font-body text-sm font-semibold hover:bg-purple-100 transition disabled:opacity-50"
@@ -169,13 +169,13 @@ export default function OrganisationConcoursAccueil() {
                   <span>{c.personnes.length} personne(s)</span>
                 </div>
               </div>
-              <button
+              <button type="button"
                 onClick={() => router.push(`/admin/organisation-concours/${c.id}`)}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-50 text-blue-700 font-body text-sm font-semibold hover:bg-blue-100 transition"
               >
                 <PencilLine size={15} /> Éditer
               </button>
-              <button
+              <button type="button"
                 onClick={() => supprimer(c)}
                 className="p-2 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
                 title="Supprimer"

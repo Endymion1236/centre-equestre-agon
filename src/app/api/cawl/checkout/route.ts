@@ -76,6 +76,16 @@ export async function POST(req: NextRequest) {
     //                    borne basse autoritaire (uniquement si audit fiable)
     // (functions non-bloquantes : ne lèvent jamais)
     const ENFORCE = process.env.CAWL_PRICING_ENFORCE === "true";
+    if (!ENFORCE) {
+      // Visible dans les Function Logs Vercel : sans cette trace, le mode
+      // silencieux est indétectable depuis l'application, et un sous-paiement
+      // n'est découvert qu'en relisant `pricing_audit` à la main.
+      console.warn(
+        "⚠️ CAWL_PRICING_ENFORCE absent — le contrôle serveur des prix OBSERVE " +
+        "sans bloquer. Un montant inférieur au tarif dû sera accepté. " +
+        "Poser CAWL_PRICING_ENFORCE=true dans Vercel."
+      );
+    }
     if (paymentId) {
       const audit = await auditPaymentPricing({
         paymentId,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { FieldValue } from "firebase-admin/firestore";
 
@@ -411,9 +412,12 @@ async function executeTool(name: string, input: any): Promise<string> {
         return `❌ Outil inconnu : ${name}`;
     }
   } catch (e: any) {
+    // Le détail reste dans les logs serveur ; l'agent ne renvoie que le nom de
+    // l'outil. Le message d'exception peut contenir des chemins internes ou des
+    // noms de collections, et il finit dans la conversation affichée à l'écran.
     console.error(`[Agent] Erreur outil "${name}":`, e?.message || e);
     console.error(`[Agent] Input:`, JSON.stringify(input));
-    return `❌ Erreur technique (${name}): ${e?.message || "inconnue"}`;
+    return `❌ L'outil « ${name} » a échoué. Le détail est dans les journaux serveur.`;
   }
 }
 
@@ -423,6 +427,20 @@ export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire — route admin (agent IA avec écriture Firestore)
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
+
+  // Limitation de débit — cette route appelle Anthropic ET peut envoyer des
+  // emails et écrire dans Firestore. C'était la seule route à coût variable
+  // qui n'en avait pas (/api/ia, /api/tts, /api/whisper, /api/borne et
+  // /api/admin/rib-extract sont toutes limitées — audit Q8). Être admin ne
+  // protège ni d'une session compromise ni d'une boucle côté client.
+  // 20/min : très au-dessus d'un usage humain, très en-dessous d'une boucle.
+  const rl = await checkRateLimit({
+    uid: auth.uid,
+    routeKey: "agent",
+    limit: 20,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) return rateLimitResponse(rl);
 
   try {
     const { question, context, confirmed, pendingAction, history = [] } = await req.json();
@@ -552,10 +570,13 @@ RÈGLES IMPORTANTES :
     return NextResponse.json({ type: "answer", message: text?.text || "Je n'ai pas pu répondre." });
 
   } catch (error: any) {
-    console.error("[Agent] Erreur route:", error?.message || error);
+    // Détail dans les journaux serveur uniquement : le message d'exception
+    // peut nommer des collections Firestore ou des chemins internes, et il
+    // s'affiche ici directement dans la conversation avec l'agent.
+    console.error("[Agent] Erreur route:", error);
     return NextResponse.json({
       type: "answer",
-      message: `❌ Erreur technique : ${error?.message || "inconnue"}. Vérifie les logs Vercel.`,
+      message: "❌ Erreur technique. Le détail est dans les journaux Vercel.",
     });
   }
 }

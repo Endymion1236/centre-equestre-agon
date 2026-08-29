@@ -189,7 +189,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
 
   if (!open) {
     return (
-      <button
+      <button type="button"
         onClick={() => setOpen(true)}
         className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 transition-colors"
       >
@@ -213,7 +213,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
               <p className="font-body text-xs text-slate-500">{creneau.activityTitle} · {creneau.enrolled.length} cavalier(s)</p>
             </div>
           </div>
-          <button onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none text-slate-500">✕</button>
+          <button type="button" onClick={() => setOpen(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none text-slate-500">✕</button>
         </div>
 
         {/* Onglets */}
@@ -223,7 +223,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
             { id: "detail", label: "👥 Par cavalier" },
             { id: "themes", label: "📋 Thèmes" },
           ].map(t => (
-            <button key={t.id} onClick={() => setTab(t.id as any)}
+            <button type="button" key={t.id} onClick={() => setTab(t.id as any)}
               className={`flex-1 py-2.5 font-body text-xs font-semibold border-none cursor-pointer transition-all ${tab === t.id ? "text-purple-600 border-b-2 border-purple-500 bg-purple-50/30" : "text-slate-500 bg-white hover:bg-gray-50"}`}>
               {t.label}
             </button>
@@ -240,7 +240,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
                 <div className="text-center py-8"><Loader2 size={24} className="animate-spin text-purple-500 mx-auto" /></div>
               ) : (
                 <>
-                  <button onClick={analyserAvecIA} disabled={iaLoading || themes.length === 0}
+                  <button type="button" onClick={analyserAvecIA} disabled={iaLoading || themes.length === 0}
                     className="flex items-center justify-center gap-2 w-full py-3 rounded-xl font-body text-sm font-semibold text-white border-none cursor-pointer disabled:opacity-50"
                     style={{ background: "linear-gradient(135deg,#7c3aed,#2050A0)" }}>
                     {iaLoading ? <><Loader2 size={15} className="animate-spin" /> Analyse en cours...</> : <><Sparkles size={15} /> Analyser avec l'IA</>}
@@ -292,7 +292,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
                           <option value="">Choisir un thème...</option>
                           {themes.map(t => <option key={t.id} value={t.label}>{t.label}</option>)}
                         </select>
-                        <button onClick={confirmerTheme} disabled={!themeChoisi}
+                        <button type="button" onClick={confirmerTheme} disabled={!themeChoisi}
                           className="w-full py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2">
                           <Check size={16} /> Enregistrer "{themeChoisi}" pour ce stage
                         </button>
@@ -358,7 +358,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
                   {themes.map(t => (
                     <div key={t.id} className="flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
                       <span className="font-body text-sm text-blue-800">🎭 {t.label}</span>
-                      <button onClick={() => supprimerTheme(t.id, t.label)}
+                      <button type="button" onClick={() => supprimerTheme(t.id, t.label)}
                         className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-red-50 text-red-400 hover:bg-red-100">
                         <Trash2 size={13} />
                       </button>
@@ -373,7 +373,7 @@ export default function ThemeSuggestion({ creneau, families }: Props) {
                   onKeyDown={e => e.key === "Enter" && ajouterTheme()}
                   placeholder="Ex: Vikings, Médiéval..."
                   className="flex-1 px-3 py-2 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-purple-400" />
-                <button onClick={ajouterTheme} disabled={!newTheme.trim() || addingTheme}
+                <button type="button" onClick={ajouterTheme} disabled={!newTheme.trim() || addingTheme}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-xl font-body text-sm font-semibold text-white bg-purple-500 border-none cursor-pointer hover:bg-purple-600 disabled:opacity-50">
                   {addingTheme ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />} Ajouter
                 </button>

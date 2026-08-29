@@ -119,7 +119,7 @@ export default function TabSoins({ equides, soins, showForm, onCloseForm, onRefr
             onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center p-5 border-b border-gray-100 flex-shrink-0">
               <h2 className="font-display text-lg font-bold text-blue-800">Enregistrer un soin</h2>
-              <button onClick={() => { onCloseForm(); setEditingSoin(null); }} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
+              <button type="button" onClick={() => { onCloseForm(); setEditingSoin(null); }} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
             </div>
             <div className="p-5 space-y-4 overflow-y-auto flex-1">
               {/* Sélection équidés */}
@@ -191,8 +191,8 @@ export default function TabSoins({ equides, soins, showForm, onCloseForm, onRefr
               </div>
             </div>
             <div className="flex justify-end gap-3 p-5 border-t border-gray-100 flex-shrink-0">
-              <button onClick={() => { onCloseForm(); setEditingSoin(null); }} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-              <button onClick={saveSoin} disabled={saving || form.equideIds.length === 0}
+              <button type="button" onClick={() => { onCloseForm(); setEditingSoin(null); }} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+              <button type="button" onClick={saveSoin} disabled={saving || form.equideIds.length === 0}
                 className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
                 {saving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>}
                 Enregistrer{form.equideIds.length > 1 ? ` (${form.equideIds.length})` : ""}
@@ -277,7 +277,7 @@ export default function TabSoins({ equides, soins, showForm, onCloseForm, onRefr
                   {s.observations && <div className="font-body text-xs text-gray-300 mt-0.5">{s.observations}</div>}
                 </div>
                 <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button onClick={() => deleteSoin(s.id)}
+                  <button type="button" onClick={() => deleteSoin(s.id)}
                     className="w-7 h-7 rounded-lg bg-red-50 text-red-300 hover:text-red-500 hover:bg-red-100 flex items-center justify-center border-none cursor-pointer">
                     <Trash2 size={12}/>
                   </button>

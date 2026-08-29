@@ -184,7 +184,7 @@ async function handle(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("reinscriptions:", e);
-    return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }
 

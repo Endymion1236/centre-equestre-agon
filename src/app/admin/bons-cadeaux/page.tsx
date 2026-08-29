@@ -93,7 +93,7 @@ export default function BonsCadeauxPage() {
                       <td className="py-2 pr-3 text-right font-semibold">{solde.toFixed(2)}€</td>
                       <td className="py-2 pr-3"><span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badge}`}>{b.statut || "actif"}</span></td>
                       <td className="py-2 text-right">
-                        <button onClick={() => imprimerBon(b)} title="Imprimer / voir le bon avec son code"
+                        <button type="button" onClick={() => imprimerBon(b)} title="Imprimer / voir le bon avec son code"
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300">
                           <Printer size={14} /> Imprimer
                         </button>

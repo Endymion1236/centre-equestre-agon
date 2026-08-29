@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     }));
     return NextResponse.json(list);
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }
 
@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     await adminDb.collection("challenges").doc(id).set(data);
     return NextResponse.json({ id, ...data });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }
 
@@ -75,6 +75,6 @@ export async function PUT(req: NextRequest) {
     await adminDb.collection("challenges").doc(id).update(update);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }

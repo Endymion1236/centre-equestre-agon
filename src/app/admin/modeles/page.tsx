@@ -518,10 +518,10 @@ export default function ModelesPage() {
           <p className="font-body text-xs text-gray-400">Créez des semaines types ou des stages multi-jours réutilisables</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={startNew} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-blue-400">
+          <button type="button" onClick={startNew} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-blue-400">
             <Plus size={16} /> Nouvelle reprise
           </button>
-          <button onClick={() => openStageForm()} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-orange-400">
+          <button type="button" onClick={() => openStageForm()} className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-orange-400">
             <Plus size={16} /> Nouveau stage
           </button>
         </div>
@@ -569,18 +569,18 @@ export default function ModelesPage() {
                 <input type="number" value={c.maxPlaces} onChange={e => updateCreneau(i, "maxPlaces", Number(e.target.value))}
                   className="px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-white w-16 text-center" min={1} max={20} />
                 <span className="font-body text-[10px] text-gray-400">pl.</span>
-                <button onClick={() => removeCreneau(i)} className="text-red-400 bg-transparent border-none cursor-pointer hover:text-red-600"><Trash2 size={14} /></button>
+                <button type="button" onClick={() => removeCreneau(i)} className="text-red-400 bg-transparent border-none cursor-pointer hover:text-red-600"><Trash2 size={14} /></button>
               </div>
             ))}
           </div>
-          <button onClick={addCreneau} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer mb-4">+ Ajouter un créneau</button>
+          <button type="button" onClick={addCreneau} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer mb-4">+ Ajouter un créneau</button>
 
           <div className="flex gap-2">
-            <button onClick={handleSave} disabled={!formName || saving}
+            <button type="button" onClick={handleSave} disabled={!formName || saving}
               className="font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-xl border-none cursor-pointer disabled:opacity-40">
               {saving ? "..." : editingId ? "Mettre à jour" : "Créer le modèle"}
             </button>
-            <button onClick={() => setShowForm(false)} className="font-body text-sm text-gray-500 bg-white px-6 py-2.5 rounded-xl border border-gray-200 cursor-pointer">Annuler</button>
+            <button type="button" onClick={() => setShowForm(false)} className="font-body text-sm text-gray-500 bg-white px-6 py-2.5 rounded-xl border border-gray-200 cursor-pointer">Annuler</button>
           </div>
         </Card>
       )}
@@ -608,11 +608,11 @@ export default function ModelesPage() {
             </div>
           )}
           <div className="flex gap-2">
-            <button onClick={handleApply} disabled={!applyStart || !applyEnd || saving}
+            <button type="button" onClick={handleApply} disabled={!applyStart || !applyEnd || saving}
               className="font-body text-sm font-semibold text-white bg-gold-500 px-6 py-2.5 rounded-xl border-none cursor-pointer disabled:opacity-40">
               {saving ? "Génération..." : `Générer ${applyPreview} créneaux`}
             </button>
-            <button onClick={() => setApplyingId(null)} className="font-body text-sm text-gray-500 bg-white px-6 py-2.5 rounded-xl border border-gray-200 cursor-pointer">Annuler</button>
+            <button type="button" onClick={() => setApplyingId(null)} className="font-body text-sm text-gray-500 bg-white px-6 py-2.5 rounded-xl border border-gray-200 cursor-pointer">Annuler</button>
           </div>
         </Card>
       )}
@@ -623,7 +623,7 @@ export default function ModelesPage() {
         <Card padding="lg" className="text-center">
           <span className="text-4xl block mb-3">📋</span>
           <p className="font-body text-sm text-gray-500 mb-3">Aucun modèle de reprise. Créez votre premier modèle de semaine type !</p>
-          <button onClick={startNew} className="font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-xl border-none cursor-pointer">Créer un modèle</button>
+          <button type="button" onClick={startNew} className="font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-xl border-none cursor-pointer">Créer un modèle</button>
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
@@ -639,16 +639,16 @@ export default function ModelesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge color={m.status === "active" ? "green" : "gray"}>{m.status === "active" ? "Actif" : "Inactif"}</Badge>
-                  <button onClick={() => toggleStatus(m)} className="text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500" title={m.status === "active" ? "Désactiver" : "Activer"}>
+                  <button type="button" onClick={() => toggleStatus(m)} className="text-gray-400 bg-transparent border-none cursor-pointer hover:text-blue-500" title={m.status === "active" ? "Désactiver" : "Activer"}>
                     {m.status === "active" ? <Pause size={16} /> : <Play size={16} />}
                   </button>
-                  <button onClick={() => startEdit(m)} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                  <button type="button" onClick={() => startEdit(m)} className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">
                     <Edit2 size={14} />
                   </button>
-                  <button onClick={() => setApplyingId(m.id)} className="font-body text-xs font-semibold text-gold-600 bg-gold-50 px-4 py-1.5 rounded-lg border-none cursor-pointer">
+                  <button type="button" onClick={() => setApplyingId(m.id)} className="font-body text-xs font-semibold text-gold-600 bg-gold-50 px-4 py-1.5 rounded-lg border-none cursor-pointer">
                     Appliquer
                   </button>
-                  <button onClick={() => handleDelete(m.id)} className="text-gray-300 bg-transparent border-none cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
+                  <button type="button" onClick={() => handleDelete(m.id)} className="text-gray-300 bg-transparent border-none cursor-pointer hover:text-red-500"><Trash2 size={14} /></button>
                 </div>
               </div>
               {/* Preview creneaux */}
@@ -701,7 +701,7 @@ export default function ModelesPage() {
               <h4 className="font-body text-xs font-semibold text-slate-700 uppercase tracking-wide">
                 Stages ({stageFormStages.length})
               </h4>
-              <button onClick={addStageItem}
+              <button type="button" onClick={addStageItem}
                 className="flex items-center gap-1 font-body text-xs font-semibold text-orange-700 bg-orange-50 px-3 py-1.5 rounded-lg border border-orange-200 cursor-pointer hover:bg-orange-100">
                 <Plus size={13}/> Ajouter un stage
               </button>
@@ -749,7 +749,7 @@ export default function ModelesPage() {
                             onChange={e => updateStageItem(idx, "maxPlaces", Math.max(1, parseInt(e.target.value, 10) || 8))}
                             title="Places max"
                             className="col-span-2 px-2 py-2 rounded-lg border border-gray-200 font-body text-sm text-center focus:border-orange-500 focus:outline-none" />
-                          <button onClick={() => removeStageItem(idx)} title="Supprimer ce stage"
+                          <button type="button" onClick={() => removeStageItem(idx)} title="Supprimer ce stage"
                             className="col-span-1 text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer p-1 flex justify-center">
                             <Trash2 size={14}/>
                           </button>
@@ -802,12 +802,12 @@ export default function ModelesPage() {
           </p>
 
           <div className="flex gap-2">
-            <button onClick={handleStageSave} disabled={saving || !stageFormName || stageFormStages.length === 0}
+            <button type="button" onClick={handleStageSave} disabled={saving || !stageFormName || stageFormStages.length === 0}
               className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-orange-400 disabled:opacity-50">
               {saving ? <Loader2 size={16} className="animate-spin"/> : <Plus size={16}/>}
               {editingStageId ? "Enregistrer" : "Créer le modèle"}
             </button>
-            <button onClick={() => setShowStageForm(false)}
+            <button type="button" onClick={() => setShowStageForm(false)}
               className="font-body text-sm text-slate-600 bg-slate-100 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-slate-200">
               Annuler
             </button>
@@ -844,19 +844,19 @@ export default function ModelesPage() {
                       {s.description && <p className="font-body text-xs text-slate-400 italic mt-1">{s.description}</p>}
                     </div>
                     <div className="flex gap-2 items-center">
-                      <button onClick={() => toggleStageStatus(s)} title={s.status === "active" ? "Désactiver" : "Activer"}
+                      <button type="button" onClick={() => toggleStageStatus(s)} title={s.status === "active" ? "Désactiver" : "Activer"}
                         className="font-body text-sm bg-slate-100 text-slate-600 p-2 rounded-lg border-none cursor-pointer hover:bg-slate-200">
                         {s.status === "active" ? <Pause size={14}/> : <Play size={14}/>}
                       </button>
-                      <button onClick={() => openStageForm(s)} title="Modifier"
+                      <button type="button" onClick={() => openStageForm(s)} title="Modifier"
                         className="font-body text-sm bg-blue-50 text-blue-600 p-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                         <Edit2 size={14}/>
                       </button>
-                      <button onClick={() => setApplyingStageId(s.id)}
+                      <button type="button" onClick={() => setApplyingStageId(s.id)}
                         className="font-body text-sm font-semibold text-white bg-orange-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-orange-400">
                         Appliquer
                       </button>
-                      <button onClick={() => handleStageDelete(s.id)} title="Supprimer"
+                      <button type="button" onClick={() => handleStageDelete(s.id)} title="Supprimer"
                         className="font-body text-sm bg-red-50 text-red-600 p-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
                         <Trash2 size={14}/>
                       </button>
@@ -947,11 +947,11 @@ export default function ModelesPage() {
                 </div>
               )}
               <div className="flex gap-2">
-                <button onClick={handleStageApply} disabled={saving || !stageApplyStart}
+                <button type="button" onClick={handleStageApply} disabled={saving || !stageApplyStart}
                   className="flex-1 font-body text-sm font-semibold text-white bg-orange-500 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-orange-400 disabled:opacity-50">
                   {saving ? "Création..." : "Appliquer"}
                 </button>
-                <button onClick={() => { setApplyingStageId(null); setStageApplyStart(""); }}
+                <button type="button" onClick={() => { setApplyingStageId(null); setStageApplyStart(""); }}
                   className="font-body text-sm text-slate-600 bg-slate-100 px-5 py-2.5 rounded-xl border-none cursor-pointer hover:bg-slate-200">
                   Annuler
                 </button>

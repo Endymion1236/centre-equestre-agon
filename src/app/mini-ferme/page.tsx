@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Heart, PawPrint, Sparkles, TreePine } from "lucide-react";
@@ -37,7 +38,7 @@ export default function MiniFermePage() {
             </div>
 
             <div className="relative min-h-[390px] overflow-hidden rounded-[32px] border border-white/12 bg-white/[0.06] shadow-[0_30px_85px_rgba(0,0,0,0.22)]">
-              <img src="/images/vitrine/choices/baby-poney.webp" alt="Un jeune enfant découvre un poney avec douceur" className="absolute inset-0 h-full w-full object-cover" />
+              <Image src="/images/vitrine/choices/baby-poney.webp" alt="Un jeune enfant découvre un poney avec douceur" fill sizes="100vw" className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/54 via-transparent to-white/5" />
               <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-white/14 bg-emerald-950/56 p-5 backdrop-blur-md">
                 <div className="font-body text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">Pour les petits comme les grands</div>

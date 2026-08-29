@@ -12,6 +12,9 @@ import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
+import { deciderConfirmation } from "@/lib/cawl-confirmation";
+import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant } from "@/lib/email-prestations";
+import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -108,7 +111,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(`/espace-cavalier/reserver?cancelled=true`, req.nextUrl.origin));
     }
 
-    const sessionData = sessionSnap.data() as any;
+    const sessionData = sessionSnap.data() as SessionCawl;
     const storedReturnMac = sessionData?.returnMac || "";
     sessionPaymentId = sessionData?.paymentId || "";
     // Montant DEMANDÉ à la création du checkout (écrit côté serveur) —
@@ -191,49 +194,49 @@ export async function GET(req: NextRequest) {
     // CAWL (cawl_sessions stocke le paymentId au moment du checkout) puis sur
     // la référence marchand. Sans ça, le paiement resterait "pending".
     let payRef = null;
-    let pData: any = null;
+    let pData: Paiement | null = null;
     const effectivePaymentId = paymentId || sessionPaymentId || "";
 
     if (effectivePaymentId) {
       const snap = await adminDb.collection("payments").doc(effectivePaymentId).get();
-      if (snap.exists) { payRef = snap.ref; pData = snap.data(); }
+      if (snap.exists) { payRef = snap.ref; pData = snap.data() as Paiement; }
     }
 
     if (!payRef && ref) {
       const snap = await adminDb.collection("payments").where("cawlRef", "==", ref).limit(1).get();
-      if (!snap.empty) { payRef = snap.docs[0].ref; pData = snap.docs[0].data(); }
+      if (!snap.empty) { payRef = snap.docs[0].ref; pData = snap.docs[0].data() as Paiement; }
     }
 
     if (payRef && pData && pData.status !== "paid") {
       const totalTTC = pData.totalTTC || 0;
-      // Montant réellement encaissé sur CE checkout : montant CAWL si fourni,
-      // sinon montant demandé à la session, sinon fallback historique.
-      const montantPaye =
-        totalEuros ||
-        sessionAmountEuros ||
-        (isDeposit
-          ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
-          : totalTTC);
+
+      // ── Décision partagée avec /api/cawl/webhook ──────────────────────
+      // Montant attendu, cumul et attribution de facture sont calculés par
+      // lib/cawl-confirmation.ts, pour que les deux chemins de confirmation ne
+      // puissent plus diverger (cf. l'en-tête de ce module).
+      const decisionConf = deciderConfirmation({
+        montantEncaisseEuros: totalEuros,
+        montantSessionEuros: sessionAmountEuros,
+        totalTTC,
+        dejaPaye: pData.paidAmount || 0,
+        estAcompte: !!isDeposit,
+        acompteAttendu: pData.acompteAmount ?? null,
+        depositPercent,
+        aDejaUneFacture: !!pData.invoiceNumber,
+      });
+
+      const montantPaye = decisionConf.montantCredite;
       const paidAmount = montantPaye; // encaissement de CE paiement (journal NF525)
 
-      // ── Sécurité : contrôle du montant réellement payé ────────────────
-      // Référentiel = montant DEMANDÉ à la création de la session (serveur),
-      // qui gère nativement les liens de paiement PARTIELS (acompte 30€ sur
-      // une commande de 175€). Fallback : acompte attendu ou total.
-      const expectedAmount =
-        sessionAmountEuros ??
-        (isDeposit
-          ? (pData.acompteAmount || Math.round(totalTTC * depositPercent / 100 * 100) / 100)
-          : totalTTC);
-      if (totalCents > 0 && expectedAmount > 0 && totalEuros < expectedAmount - 0.02) {
+      if (!decisionConf.accepte) {
         console.error(
-          `⚠️ CAWL montant incohérent — payé ${totalEuros}€ < attendu ${expectedAmount}€ ` +
+          `⚠️ CAWL montant incohérent — payé ${totalEuros}€ < attendu ${decisionConf.montantAttendu}€ ` +
           `(payment=${payRef.id}, hc=${hostedCheckoutId}). Confirmation refusée.`
         );
         await payRef.update({
           amountMismatch: true,
           amountPaidReported: totalEuros,
-          amountExpected: expectedAmount,
+          amountExpected: decisionConf.montantAttendu,
           needsReview: true,
           updatedAt: FieldValue.serverTimestamp(),
         });
@@ -289,14 +292,14 @@ export async function GET(req: NextRequest) {
       // ── Cumul : paidAmount s'ADDITIONNE (acompte puis solde, ou liens
       //    partiels successifs). Statut "paid" uniquement quand le total est
       //    atteint — un paiement partiel quelconque reste "partial".
-      const newPaidTotal = Math.round(((pData.paidAmount || 0) + montantPaye) * 100) / 100;
-      const isFullyPaid = totalTTC > 0 && newPaidTotal >= totalTTC - 0.02;
+      const newPaidTotal = decisionConf.nouveauCumul;
+      const isFullyPaid = decisionConf.statut === "paid";
 
       // Une vente intégralement réglée doit avoir sa FACTURE : numérotation
       // séquentielle attribuée ici aussi (le flux UI le fait déjà — sans ça,
       // les paiements soldés en ligne restaient des proformas PF-…).
       let newInvoiceNumber: string | null = null;
-      if (isFullyPaid && !pData.invoiceNumber) {
+      if (decisionConf.attribuerFacture) {
         try {
           const { attribuerNumeroFacture } = await import("@/lib/invoice-number");
           newInvoiceNumber = (await attribuerNumeroFacture({ paymentId: payRef.id, attributedBy: "system:cawl-status" })).invoiceNumber;
@@ -306,7 +309,7 @@ export async function GET(req: NextRequest) {
       }
 
       await payRef.update({
-        status: isFullyPaid ? "paid" : "partial",
+        status: decisionConf.statut,
         paidAmount: newPaidTotal,
         ...(newInvoiceNumber ? { invoiceNumber: newInvoiceNumber, invoiceDate: FieldValue.serverTimestamp() } : {}),
         paymentMode: "cb_online",
@@ -399,21 +402,11 @@ export async function GET(req: NextRequest) {
           const items = pData.items || [];
           const hasStage = items.some((i: any) => i.activityType === "stage");
 
-          // Construire une description détaillée par article
-          const lignesDetail = items.map((i: any) => {
-            const parts = [i.activityTitle, i.childName].filter(Boolean);
-            const infos = [];
-            if (i.date) {
-              const d = new Date(i.date);
-              const dateStr = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
-              infos.push(dateStr);
-            }
-            if (i.startTime && i.endTime) infos.push(`${i.startTime}–${i.endTime}`);
-            if (i.monitor) infos.push(`avec ${i.monitor}`);
-            return `${parts.join(" — ")}${infos.length ? `<br/><span style="color:#888;font-size:12px;">${infos.join(" · ")}</span>` : ""}`;
-          }).join("<br/><br/>");
-
-          const prestations = items.map((i: any) => i.activityTitle).join(", ") || "Prestation";
+          // Libellés construits par lib/email-prestations : le panier intègre
+          // déjà le prénom dans `activityTitle`, le recoller donnait
+          // « Galop de bronze — ambre — ambre » dans l'email reçu.
+          const lignesDetail = lignesDetailHtml(items);
+          const prestations = prestationsCourtes(items);
           // Acompte de stage → template dédié (récap total / acompte / solde).
           // Paiement total → template classique "PAIEMENT CONFIRMÉ".
           const templateKey = hasStage
@@ -425,7 +418,10 @@ export async function GET(req: NextRequest) {
             : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
           const vars: Record<string, string | number> = hasStage ? {
             parentName: pData.familyName || "Client",
-            stageTitle: items[0]?.activityTitle || "Stage",
+            // Sans nettoyage, le titre du stage arrive sous la forme
+            // « Stage Poney — ambre » : le panier y a déjà mis l'enfant, et
+            // les prénoms sont listés juste en dessous.
+            stageTitle: titreSansEnfant(items[0]) || "Stage",
             dates: items.map((i: any) => {
               if (!i.date) return "";
               return new Date(i.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
@@ -442,6 +438,11 @@ export async function GET(req: NextRequest) {
             parentName: pData.familyName || "Client",
             montant: paidAmount.toFixed(2),
             prestations: lignesDetail || prestations,
+            // Le gabarit `confirmationPaiement` attend `mode`. Le webhook le
+            // passait, cette route non : la famille recevait « Mode de
+            // paiement : {mode} », le marqueur brut. Concerne les cours
+            // ponctuels ET les balades — tout ce qui n'est pas un stage.
+            mode: libelleModePaiement("cb_online"),
           };
           const { subject, html } = await loadTemplate(templateKey, vars);
           // Rappel des conditions d'annulation pour les stages. Ajouté ici
@@ -470,7 +471,7 @@ export async function GET(req: NextRequest) {
               }
             })
             .catch(async (e) => {
-              await logEmail({ to: parentEmail, subject, context: "cawl_status_check", template: templateKey, status: "failed", error: e?.message || String(e), sentBy: "system", paymentId: payRef?.id, familyId: pData.familyId });
+              await logEmail({ to: parentEmail, subject, context: "cawl_status_check", template: templateKey, status: "failed", error: "Erreur interne", sentBy: "system", paymentId: payRef?.id, familyId: pData.familyId });
               console.error("Email CAWL error:", e);
             });
         } catch (e) { console.error("Email template error:", e); }

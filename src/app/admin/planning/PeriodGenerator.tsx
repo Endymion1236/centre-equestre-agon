@@ -193,7 +193,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
 
   return (
     <Card padding="md" className="mb-6 border-gold-400/20 bg-gold-50/30">
-      <div className="flex justify-between items-center mb-4"><h3 className="font-body text-base font-semibold text-blue-800 flex items-center gap-2"><Calendar size={18}/>Générateur de séances (périodes)</h3><button onClick={onCancel} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={20}/></button></div>
+      <div className="flex justify-between items-center mb-4"><h3 className="font-body text-base font-semibold text-blue-800 flex items-center gap-2"><Calendar size={18}/>Générateur de séances (périodes)</h3><button type="button" onClick={onCancel} className="text-gray-400 bg-transparent border-none cursor-pointer"><X size={20}/></button></div>
       <p className="font-body text-xs text-gray-500 mb-4">Comme dans Celeris : définissez les périodes de cours et les plages horaires, tout sera généré automatiquement.</p>
 
       {/* ─── Gestion des saisons ─────────────────────────────────────── */}
@@ -219,14 +219,14 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
 
           {selectedSaisonId && (
             <>
-              <button
+              <button type="button"
                 onClick={() => saveSaison()}
                 disabled={savingSaison}
                 title="Mettre à jour la saison sélectionnée avec la configuration actuelle"
                 className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:bg-gray-300">
                 <Save size={12}/>{savingSaison ? "..." : "Mettre à jour"}
               </button>
-              <button
+              <button type="button"
                 onClick={deleteSaison}
                 title="Supprimer cette saison"
                 className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-red-500 bg-red-50 hover:bg-red-100 border-none cursor-pointer">
@@ -236,7 +236,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
           )}
 
           {!showNewSaisonInput ? (
-            <button
+            <button type="button"
               onClick={() => setShowNewSaisonInput(true)}
               className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-blue-700 bg-blue-100 hover:bg-blue-200 border-none cursor-pointer">
               <Plus size={12}/>Nouvelle saison
@@ -250,13 +250,13 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
                 placeholder="Nom (ex: 2026-2027)"
                 autoFocus
                 className={`${inp} w-44`} />
-              <button
+              <button type="button"
                 onClick={() => saveSaison(newSaisonName)}
                 disabled={!newSaisonName.trim() || savingSaison}
                 className="flex items-center gap-1 px-3 py-2 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:bg-gray-300">
                 <Save size={12}/>Enregistrer
               </button>
-              <button
+              <button type="button"
                 onClick={() => { setShowNewSaisonInput(false); setNewSaisonName(""); }}
                 className="text-gray-400 bg-transparent border-none cursor-pointer">
                 <X size={16}/>
@@ -284,10 +284,10 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
               <input type="date" value={p.startDate} onChange={e => updatePeriod(i, "startDate", e.target.value)} className={`${inp} flex-1`}/>
               <span className="font-body text-xs text-gray-400">→</span>
               <input type="date" value={p.endDate} onChange={e => updatePeriod(i, "endDate", e.target.value)} className={`${inp} flex-1`}/>
-              <button onClick={() => removePeriod(i)} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"><Trash2 size={14}/></button>
+              <button type="button" onClick={() => removePeriod(i)} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"><Trash2 size={14}/></button>
             </div>
           ))}
-          <button onClick={addPeriod} className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer mt-1">+ Ajouter une période</button>
+          <button type="button" onClick={addPeriod} className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer mt-1">+ Ajouter une période</button>
         </div>
       </div>
       
@@ -299,7 +299,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
             <div key={i} className="bg-white rounded-lg p-3 border border-blue-500/8">
               <div className="flex items-center gap-2 mb-2">
                 <span className="font-body text-xs font-bold text-gold-500">Cours {i+1}</span>
-                {slots.length > 1 && <button onClick={() => removeSlot(i)} className="ml-auto text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"><Trash2 size={12}/></button>}
+                {slots.length > 1 && <button type="button" onClick={() => removeSlot(i)} className="ml-auto text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"><Trash2 size={12}/></button>}
               </div>
               <div className="flex flex-wrap gap-2">
                 <div className="flex-1 min-w-[200px]">
@@ -332,7 +332,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
               </div>
             </div>
           ))}
-          <button onClick={addSlot} className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer">+ Ajouter un cours</button>
+          <button type="button" onClick={addSlot} className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer">+ Ajouter un cours</button>
         </div>
       </div>
       
@@ -366,7 +366,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
         </div>
       )}
       
-      <button onClick={handleGenerate} disabled={allCreneaux.length === 0 || saving}
+      <button type="button" onClick={handleGenerate} disabled={allCreneaux.length === 0 || saving}
         className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${allCreneaux.length === 0 || saving ? "bg-gray-200 text-gray-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
         {saving ? <><Loader2 size={16} className="inline animate-spin mr-2"/>Génération...</> : `Générer ${allCreneaux.length} séances`}
       </button>

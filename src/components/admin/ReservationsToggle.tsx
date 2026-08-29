@@ -70,7 +70,7 @@ export default function ReservationsToggle() {
             </div>
           </div>
         </div>
-        <button
+        <button type="button"
           onClick={() => ouvert !== null && !saving && enregistrer({ ouvert: !ouvert })}
           disabled={ouvert === null || saving}
           className={`flex-shrink-0 rounded-xl px-4 py-2 font-body text-xs font-semibold border-none cursor-pointer transition-colors disabled:opacity-50 ${

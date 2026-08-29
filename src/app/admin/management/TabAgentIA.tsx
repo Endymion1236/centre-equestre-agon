@@ -305,7 +305,7 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
       </div>
 
       {/* Bouton générer */}
-      <button onClick={genererPlanning} disabled={loading||salaries.filter(s=>s.actif).length===0||tachesType.length===0}
+      <button type="button" onClick={genererPlanning} disabled={loading||salaries.filter(s=>s.actif).length===0||tachesType.length===0}
         className="flex items-center justify-center gap-2 w-full py-3.5 rounded-xl font-body text-sm font-semibold text-white border-none cursor-pointer disabled:opacity-50"
         style={{background:"linear-gradient(135deg,#7c3aed,#2050A0)"}}>
         {loading ? <><Loader2 size={16} className="animate-spin"/> Génération en cours...</> : <><Sparkles size={16}/> Générer le planning de la semaine</>}
@@ -353,12 +353,12 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={importerPlanning} disabled={importing}
+            <button type="button" onClick={importerPlanning} disabled={importing}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50">
               {importing?<Loader2 size={15} className="animate-spin"/>:<Check size={15}/>}
               Importer dans le planning
             </button>
-            <button onClick={genererPlanning} disabled={loading}
+            <button type="button" onClick={genererPlanning} disabled={loading}
               className="px-4 py-3 rounded-xl font-body text-sm font-semibold text-purple-600 bg-purple-50 hover:bg-purple-100 border-none cursor-pointer flex items-center gap-2">
               <RefreshCw size={14}/> Régénérer
             </button>
@@ -373,13 +373,13 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
           <textarea value={command} onChange={e => setCommand(e.target.value)} rows={2}
             placeholder='Ex : "Ajoute la check-list du soir à Emmeline mardi et jeudi", "Supprime les écuries du matin de samedi"'
             className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-purple-400 resize-y" />
-          <button onClick={() => recording ? stopRec() : startRec()} disabled={transcribing}
+          <button type="button" onClick={() => recording ? stopRec() : startRec()} disabled={transcribing}
             title="Dicter"
             className={`px-3 py-2.5 rounded-xl border-none cursor-pointer disabled:opacity-50 flex items-center justify-center ${recording ? "bg-red-500 text-white" : "bg-purple-100 text-purple-700 hover:bg-purple-200"}`}>
             {transcribing ? <Loader2 size={16} className="animate-spin" /> : recording ? <MicOff size={16} /> : <Mic size={16} />}
           </button>
         </div>
-        <button onClick={interpreter} disabled={cmdLoading || !command.trim()}
+        <button type="button" onClick={interpreter} disabled={cmdLoading || !command.trim()}
           className="mt-2 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-purple-500 hover:bg-purple-600 border-none cursor-pointer disabled:opacity-50">
           {cmdLoading ? <><Loader2 size={15} className="animate-spin" /> Interprétation…</> : <><Sparkles size={15} /> Interpréter la commande</>}
         </button>
@@ -406,11 +406,11 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={appliquerActions} disabled={applying}
+                  <button type="button" onClick={appliquerActions} disabled={applying}
                     className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-green-500 hover:bg-green-600 border-none cursor-pointer disabled:opacity-50">
                     {applying ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Appliquer
                   </button>
-                  <button onClick={() => { setCmdActions(null); setCmdMessage(""); }} disabled={applying}
+                  <button type="button" onClick={() => { setCmdActions(null); setCmdMessage(""); }} disabled={applying}
                     className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-slate-500 bg-white border border-gray-200 cursor-pointer">Annuler</button>
                 </div>
               </>
@@ -427,7 +427,7 @@ export default function TabAgentIA({ semaine, tachesType, salaries, tachesExista
             onKeyDown={e=>e.key==="Enter"&&poserQuestion()}
             placeholder="Ex: Qui est disponible mercredi après-midi ? Quelle est la charge d'Emmeline ?"
             className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-purple-400"/>
-          <button onClick={poserQuestion} disabled={qLoading||!question.trim()}
+          <button type="button" onClick={poserQuestion} disabled={qLoading||!question.trim()}
             className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-purple-500 hover:bg-purple-600 border-none cursor-pointer disabled:opacity-50 flex items-center gap-2">
             {qLoading?<Loader2 size={14} className="animate-spin"/>:<Sparkles size={14}/>}
           </button>

@@ -28,7 +28,7 @@
     "test:api": "./scripts/run-tests.sh api",
     "test:rapport": "./scripts/run-tests.sh rapport",
     "test:all": "./scripts/run-tests.sh all",
-    "test:unit": "npx tsx tests/unit/sepa-validation.test.ts && npx tsx tests/unit/search-normalize.test.ts && npx tsx tests/unit/journee-management.test.ts && npx tsx tests/unit/horse-history.test.ts && npx tsx tests/unit/stage-deroule.test.ts && npx tsx tests/unit/waitlist-cleanup.test.ts && npx tsx tests/unit/public-activities.test.ts && npx tsx tests/unit/cawl-status.test.ts && npx tsx tests/unit/remboursement.test.ts && npx tsx tests/unit/transcription-params.test.ts && npx tsx tests/unit/rythme.test.ts && npx tsx tests/unit/forfait-frequence.test.ts && npx tsx tests/unit/audit-metier.test.ts && npx tsx tests/unit/date-saisie.test.ts",
+    "test:unit": "node scripts/run-unit-tests.mjs",
     "validate:rules": "node scripts/validate-rules.mjs"
   },
   "dependencies": {
@@ -44,7 +44,7 @@
     "isomorphic-dompurify": "^3.22.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.460.0",
-    "next": "^15.0.0",
+    "next": "^15.5.24",
     "onlinepayments-sdk-nodejs": "^7.4.0",
     "openai": "^6.33.0",
     "pdf-lib": "^1.17.1",

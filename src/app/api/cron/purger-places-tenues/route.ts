@@ -154,6 +154,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[purge-places] échec:", e);
-    return NextResponse.json({ error: e?.message || "Erreur" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur" }, { status: 500 });
   }
 }
