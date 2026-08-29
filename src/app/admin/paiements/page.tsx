@@ -30,6 +30,7 @@ import { TabDeclarations } from "./TabDeclarations";
 import { TabChequesDiffres } from "./TabChequesDiffres";
 import { authFetch } from "@/lib/auth-fetch";
 import { enregistrerEncaissement as enregistrerEncaissementPartage } from "@/lib/encaissement";
+import { maskIban } from "@/lib/sepa-validation";
 
 /**
  * Retire des points de fidelite d'une famille lors d'un avoir/remboursement.
@@ -152,6 +153,11 @@ export default function PaiementsPage() {
     setMultiSaving(false);
   };
   const [quickMandatActif, setQuickMandatActif] = useState<boolean | null>(null);
+  // Mandats actifs de la famille + celui retenu. Une famille peut en avoir
+  // deux légitimement (compte du père, compte de la mère) : prélever sur le
+  // mauvais compte ne se rattrape pas d'un clic, donc on fait choisir.
+  const [quickMandats, setQuickMandats] = useState<any[]>([]);
+  const [quickMandatId, setQuickMandatId] = useState<string>("");
   // Saisie multi-chèques pour le mode "cheque_differe" dans la modale rapide
   const [quickChequesDiffres, setQuickChequesDiffres] = useState<
     { numero: string; banque: string; montant: string; dateEncaissementPrevue: string }[]
@@ -254,12 +260,22 @@ export default function PaiementsPage() {
   // ═══ ENCAISSEMENT RAPIDE DEPUIS L'ONGLET IMPAYÉS ═══
   // Charger le mandat SEPA dès que la modale s'ouvre
   useEffect(() => {
-    if (!quickEncaisser) { setQuickMandatActif(null); return; }
+    if (!quickEncaisser) { setQuickMandatActif(null); setQuickMandats([]); setQuickMandatId(""); return; }
     setQuickMandatActif(null);
+    setQuickMandats([]); setQuickMandatId("");
     getDocs(query(collection(db, "mandats-sepa"),
       where("familyId", "==", quickEncaisser.payment.familyId),
       where("status", "==", "active")
-    )).then(snap => setQuickMandatActif(!snap.empty)).catch(() => setQuickMandatActif(false));
+    )).then(snap => {
+      // Le plus récent d'abord : c'est le choix par défaut le plus sûr quand
+      // un RIB vient d'être renouvelé.
+      const liste = snap.docs
+        .map(d => ({ id: d.id, ...(d.data() as any) }))
+        .sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setQuickMandats(liste);
+      setQuickMandatId(liste[0]?.id || "");
+      setQuickMandatActif(liste.length > 0);
+    }).catch(() => setQuickMandatActif(false));
   }, [quickEncaisser]);
 
   // ── Avoirs actifs de la famille (pour permettre encaissement par avoir) ──
@@ -392,9 +408,15 @@ export default function PaiementsPage() {
           return;
         }
 
-        // Trouver le mandat SEPA de cette famille
-        const mandatSnap = await getDocs(collection(db, "mandats-sepa"));
-        const mandat = mandatSnap.docs.find(d => d.data().familyId === p.familyId && d.data().status === "active");
+        // Mandat retenu : celui choisi dans la modale (le plus récent par
+        // défaut). Sans ce choix explicite, une famille à deux mandats se
+        // faisait prélever sur un compte tiré au hasard.
+        const mandatSnap = await getDocs(query(
+          collection(db, "mandats-sepa"),
+          where("familyId", "==", p.familyId),
+          where("status", "==", "active"),
+        ));
+        const mandat = mandatSnap.docs.find(d => d.id === quickMandatId) || mandatSnap.docs[0];
         if (!mandat) {
           toast("⚠️ Aucun mandat SEPA actif pour cette famille. Créez-en un dans Prélèvements SEPA.", "error");
           setQuickSaving(false);
@@ -1985,6 +2007,30 @@ export default function PaiementsPage() {
                   })}
                 </div>
               </div>
+              {/* Compte à débiter — affiché dès qu'un mandat existe, et
+                  OBLIGATOIREMENT choisi quand la famille en a plusieurs
+                  (compte du père / de la mère, ou RIB renouvelé). */}
+              {quickMode === "prelevement_sepa" && quickMandats.length > 0 && (
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">
+                    Compte à débiter {quickMandats.length > 1 && <span className="text-orange-600">({quickMandats.length} mandats actifs)</span>}
+                  </label>
+                  {quickMandats.length > 1 ? (
+                    <select value={quickMandatId} onChange={e => setQuickMandatId(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
+                      {quickMandats.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.libelle ? `${m.libelle} — ` : ""}{m.titulaire} · {maskIban(m.iban || "")} · {m.mandatId}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="font-body text-xs text-slate-600 bg-slate-50 rounded-xl px-3 py-2.5">
+                      {quickMandats[0].titulaire} · <span className="font-mono">{maskIban(quickMandats[0].iban || "")}</span> · {quickMandats[0].mandatId}
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Échéancier SEPA */}
               {quickMandatActif === false && quickMode === "prelevement_sepa" && (
                 <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
