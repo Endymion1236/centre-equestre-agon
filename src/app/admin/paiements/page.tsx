@@ -539,6 +539,12 @@ export default function PaiementsPage() {
           .filter((s) => s.exists())
           .map((s) => normalizePayment({ id: s.id, ...s.data() })) as any[];
         const updatedIds = new Set(updated.map((p) => p.id));
+        // Paiement SUPPRIMÉ : son document n'existe plus, il était donc écarté
+        // par le filtre ci-dessus et la ligne restait affichée jusqu'à un
+        // rechargement manuel de la page. On le retire explicitement.
+        const supprimes = new Set(
+          changedPaymentIds.filter((_, i) => !paySnaps[i].exists())
+        );
 
         // 2. Relire les encaissements de ces paiements
         const encSnap = await getDocs(
@@ -558,8 +564,9 @@ export default function PaiementsPage() {
 
         // 4. Mise à jour locale du state (sans tout relire)
         setPayments((prev: any[]) => {
-          const next = prev.map((p) => (updatedIds.has(p.id) ? updated.find((u) => u.id === p.id) : p));
-          for (const u of updated) if (!prev.some((p) => p.id === u.id)) next.unshift(u);
+          const restants = prev.filter((p) => !supprimes.has(p.id));
+          const next = restants.map((p) => (updatedIds.has(p.id) ? updated.find((u) => u.id === p.id) : p));
+          for (const u of updated) if (!restants.some((p) => p.id === u.id)) next.unshift(u);
           next.sort((a: any, b: any) => (b.date?.seconds || 0) - (a.date?.seconds || 0));
           return next as any;
         });
@@ -756,6 +763,8 @@ export default function PaiementsPage() {
       }
 
       await deleteDoc(doc(db, "payments", payment.id));
+      // Tous les documents supprimés, pour les retirer de l'affichage d'un coup.
+      const supprimes: string[] = [payment.id];
 
       // Annuler les autres échéances liées si c'est un paiement échelonné
       if ((payment as any).echeancesTotal > 1) {
@@ -768,10 +777,15 @@ export default function PaiementsPage() {
           for (const d of echeancesSnap.docs) {
             if (d.id !== payment.id && d.data().status !== "paid") {
               await deleteDoc(doc(db, "payments", d.id));
+              supprimes.push(d.id);
             }
           }
         } catch (e) { console.error("Erreur suppression échéances:", e); }
       }
+
+      // Sans ça, la facture supprimée restait à l'écran jusqu'à un
+      // rechargement manuel de la page.
+      await refreshAll(supprimes);
 
       toast(`${payment.familyName} — inscription annulée et cavaliers désinscrits`, "success");
     } else {
