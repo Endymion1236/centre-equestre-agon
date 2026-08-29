@@ -143,21 +143,29 @@ export async function POST(req: NextRequest) {
     // L'expéditeur du mail d'abord (le plus fiable), le nom du titulaire
     // ensuite. On PROPOSE : c'est l'admin qui tranche.
     const emailExp = String(from || "").toLowerCase().trim();
-    const titulaireNorm = norm(String(lu.titulaire || ""));
+    // Rapprochement par nom : MOT ENTIER, jamais un fragment. Un compte joint
+    // écrit « MLLE PERONDI MAUD OU M ANDRIEU CHRISTOPHE » : une comparaison par
+    // sous-chaîne y trouvait la famille « PERON » (⊂ PERONDI) et la proposait à
+    // côté de la bonne — un clic de travers aurait posé le mandat, donc l'IBAN,
+    // sur la mauvaise famille.
+    const motsDe = (s: string) => norm(s).split(" ").filter(w => w.length >= 4);
+    const motsTitulaire = new Set(motsDe(String(lu.titulaire || "")));
     const famSnap = await adminDb.collection("families").get();
     const candidats: { familyId: string; parentName: string; parentEmail: string; motif: string }[] = [];
     famSnap.docs.forEach(d => {
       const f = d.data() as any;
       if (f.status === "merged") return;
       const mail = String(f.parentEmail || "").toLowerCase().trim();
-      const nom = norm(f.parentName || "");
       if (emailExp && mail && mail === emailExp) {
         candidats.push({ familyId: d.id, parentName: f.parentName || "", parentEmail: f.parentEmail || "", motif: "email de l'expéditeur" });
-      } else if (titulaireNorm && nom && (nom.includes(titulaireNorm) || titulaireNorm.includes(nom))) {
-        candidats.push({ familyId: d.id, parentName: f.parentName || "", parentEmail: f.parentEmail || "", motif: "nom du titulaire" });
+        return;
+      }
+      const commun = motsDe(f.parentName || "").find(w => motsTitulaire.has(w));
+      if (commun) {
+        candidats.push({ familyId: d.id, parentName: f.parentName || "", parentEmail: f.parentEmail || "", motif: `« ${commun} » sur le RIB` });
       }
     });
-    // L'email prime sur le nom, et on ne noie pas l'admin sous les homonymes.
+    // L'email prime sur le nom : c'est le rapprochement le plus sûr.
     candidats.sort((a, b) => (a.motif === "email de l'expéditeur" ? -1 : 0) - (b.motif === "email de l'expéditeur" ? -1 : 0));
 
     return NextResponse.json({
