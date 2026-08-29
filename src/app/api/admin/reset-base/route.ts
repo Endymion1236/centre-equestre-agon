@@ -22,12 +22,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { assertResetAllowed, isProdEnvironment, getActiveProjectId, PROD_UNLOCK_PHRASE } from "@/lib/reset-guard";
+import { isAdminToken } from "@/lib/api-auth";
 
-// Emails admin reconnus sans custom claim (aligne avec api-auth.ts).
-// Permet le reset sur une base sans claims (ex: base de test).
-const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
+// Autorité = custom claim `admin`. Le repli par email (source unique dans
+// lib/admin-emails.ts) ne vaut qu'hors production et sur une adresse vérifiée
+// — cet outil efface des collections entières, il ne peut pas s'ouvrir sur une
+// adresse simplement déclarée à l'inscription.
 function isAdmin(d: any): boolean {
-  return d.admin === true || ADMIN_EMAILS.includes(d.email || "");
+  return isAdminToken(d);
 }
 
 export const dynamic = "force-dynamic";
@@ -44,7 +46,14 @@ export const maxDuration = 300; // 5 minutes (Pro Vercel plan) pour laisser le t
 // Pour être complet, l'idéal est de SUPPRIMER entièrement ce fichier après
 // usage (voir docs/PROCEDURE_BASCULE_PROD.md). Cette date butoir est une
 // protection supplémentaire au cas où la suppression serait oubliée.
-const DATE_BUTOIR = new Date("2026-09-01T00:00:00Z");
+//
+// 29/08/2026 — la date butoir était fixée au 1er septembre, soit le jour même
+// de la fenêtre de bascule qu'elle est censée servir : l'outil se serait
+// désactivé au moment précis où il devient utile. Repoussée au 1er octobre,
+// pour couvrir la bascule et le mois qui suit. Après cette date, SUPPRIMER
+// ce fichier plutôt que de repousser à nouveau — une base de production n'a
+// aucune raison de garder un outil d'effacement en ligne.
+const DATE_BUTOIR = new Date("2026-10-01T00:00:00Z");
 // ═════════════════════════════════════════════════════════════════════════
 
 // Collections que l'utilisateur peut choisir d'effacer
@@ -239,7 +248,7 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error("[reset-base] erreur:", e);
     return NextResponse.json({
-      error: e?.message || "Erreur interne",
+      error: "Erreur interne",
     }, { status: 500 });
   }
 }
@@ -286,6 +295,6 @@ export async function GET(req: NextRequest) {
       prodUnlockPhrase: PROD_UNLOCK_PHRASE,
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Erreur" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur" }, { status: 500 });
   }
 }

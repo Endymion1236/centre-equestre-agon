@@ -125,7 +125,7 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
             <h2 className="font-display text-lg font-bold text-blue-800">Envoyer un email</h2>
             <p className="font-body text-xs text-slate-500 mt-0.5">{emailModal.email}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+          <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
         </div>
         <div className="p-5 flex flex-col gap-4">
           <div>
@@ -172,7 +172,7 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
                 {attachments.map((a, i) => (
                   <div key={i} className="flex items-center justify-between bg-sand rounded-lg px-3 py-1.5">
                     <span className="font-body text-xs text-slate-600 truncate flex items-center gap-1.5"><Paperclip size={11} /> {a.filename}</span>
-                    <button onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
+                    <button type="button" onClick={() => setAttachments(prev => prev.filter((_, j) => j !== i))}
                       className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5" title="Retirer">
                       <X size={13} />
                     </button>
@@ -183,8 +183,8 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
           </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-          <button onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-          <button disabled={!emailSubject.trim() || !emailBody.trim() || emailSending} onClick={handleSend}
+          <button type="button" onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+          <button type="button" disabled={!emailSubject.trim() || !emailBody.trim() || emailSending} onClick={handleSend}
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-green-600 disabled:opacity-50">
             {emailSending ? <Loader2 size={14} className="animate-spin"/> : <Mail size={14}/>}
             Envoyer

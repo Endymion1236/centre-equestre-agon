@@ -64,7 +64,7 @@ export default function MouvementModal({ equides, defaultEquideId, onClose, onDo
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100 flex-shrink-0">
           <h2 className="font-display text-lg font-bold text-blue-800">Nouveau mouvement</h2>
-          <button onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
+          <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
           <div className="grid grid-cols-2 gap-3">
@@ -141,8 +141,8 @@ export default function MouvementModal({ equides, defaultEquideId, onClose, onDo
           </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-gray-100 flex-shrink-0">
-          <button onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-          <button onClick={handleSave} disabled={saving}
+          <button type="button" onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+          <button type="button" onClick={handleSave} disabled={saving}
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
             {saving ? <Loader2 size={14} className="animate-spin"/> : <Save size={14}/>} Enregistrer
           </button>

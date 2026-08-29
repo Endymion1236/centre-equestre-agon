@@ -122,7 +122,7 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                 <input placeholder="Nom, prestation, référence…" value={journalSearch} onChange={e => setJournalSearch(e.target.value)} className={`${inputCls} !pl-9`} />
               </div>
               {(journalDateFrom || journalDateTo || journalMontantMin || journalMontantMax || journalMode !== "all" || journalSearch) && (
-                <button onClick={() => { setJournalDateFrom(""); setJournalDateTo(""); setJournalMontantMin(""); setJournalMontantMax(""); setJournalMode("all"); setJournalSearch(""); }}
+                <button type="button" onClick={() => { setJournalDateFrom(""); setJournalDateTo(""); setJournalMontantMin(""); setJournalMontantMax(""); setJournalMode("all"); setJournalSearch(""); }}
                   className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">Effacer</button>
               )}
               <span className="font-body text-xs text-slate-600">{filtered.length} mouvement{filtered.length > 1 ? "s" : ""}</span>
@@ -160,7 +160,7 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                           <td className="px-2 py-2.5 font-body text-xs text-slate-600 max-w-[120px] truncate" title={enc.ref || ""}>{enc.ref || "—"}</td>
                           <td className="px-2 py-2.5 whitespace-nowrap">
                             {!enc.id?.startsWith("fallback_") && (enc.montant || 0) > 0 && !enc.correctionDe && (
-                              <button onClick={() => { setCorrectionEnc(enc); setCorrectionMontant(enc.montant?.toString() || ""); setCorrectionMode(enc.mode || ""); setCorrectionRef(enc.ref || ""); setCorrectionRaison(""); }}
+                              <button type="button" onClick={() => { setCorrectionEnc(enc); setCorrectionMontant(enc.montant?.toString() || ""); setCorrectionMode(enc.mode || ""); setCorrectionRef(enc.ref || ""); setCorrectionRaison(""); }}
                                 className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100">Corriger</button>
                             )}
                           </td>
@@ -209,9 +209,9 @@ export function TabJournal({ loading, payments, encaissements, avoirs, toast, re
                     className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream mb-4" />
                 </div>
                 <div className="p-5 border-t border-gray-100 flex gap-3">
-                  <button onClick={() => setCorrectionEnc(null)}
+                  <button type="button" onClick={() => setCorrectionEnc(null)}
                     className="flex-1 py-2.5 rounded-lg font-body text-sm text-slate-600 bg-gray-100 border-none cursor-pointer">Annuler</button>
-                  <button onClick={async () => {
+                  <button type="button" onClick={async () => {
                     if (!correctionRaison) { toast("Indiquez la raison de la correction.", "warning"); return; }
                     const newMontant = safeNumber(correctionMontant);
 

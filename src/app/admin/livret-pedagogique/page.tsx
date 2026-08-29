@@ -116,7 +116,7 @@ export default function LivretPedagogiquePage() {
 
         {error && <p className="font-body text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</p>}
 
-        <button onClick={generate} disabled={!monitor || generating}
+        <button type="button" onClick={generate} disabled={!monitor || generating}
           className="w-full flex items-center justify-center gap-2 font-body text-sm font-semibold text-white bg-blue-600 px-4 py-3 rounded-xl border-none cursor-pointer hover:bg-blue-500 disabled:opacity-50">
           {generating ? <><Loader2 size={16} className="animate-spin" /> Génération du livret…</> : <><FileText size={16} /> Générer le livret PDF</>}
         </button>

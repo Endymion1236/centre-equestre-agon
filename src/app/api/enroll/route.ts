@@ -17,9 +17,10 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { dateExpirationHold } from "@/lib/places-tenues";
+import { isForfaitActif } from "@/lib/forfaits";
 
 interface EnrollItem {
   childId: string;
@@ -40,6 +41,11 @@ export async function POST(req: NextRequest) {
   const verrou = await bloquerSiReservationsFermees(auth);
   if (verrou) return verrou;
   const uid = auth.uid;
+  // Le staff inscrit au nom du club : une inscription posée depuis le
+  // back-office est ferme par construction (l'admin sait ce qu'il fait et
+  // encaisse au comptoir). Une inscription posée par une FAMILLE, elle, ne
+  // peut être qu'une place TENUE — voir plus bas.
+  const estStaff = isAdminToken(auth) || auth.moniteur === true;
 
   try {
     const body = await req.json();
@@ -94,6 +100,29 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
+      // ── Forfait annoncé : vérifié à la source ──────────────────────────
+      // `paymentSource: "forfait"` et `forfaitId` venaient du client sans
+      // contrôle : n'importe qui pouvait se déclarer couvert par un forfait
+      // inexistant. On n'accepte l'identifiant que s'il désigne un forfait
+      // réel, appartenant à la famille connectée et non clôturé. Sinon on
+      // stocke null — l'inscription reste tenue et devra être payée.
+      let forfaitIdValide: string | null = null;
+      if (item.forfaitId) {
+        try {
+          const fSnap = await adminDb.collection("forfaits").doc(String(item.forfaitId)).get();
+          const f = fSnap.exists ? (fSnap.data() as any) : null;
+          const proprietaire = f?.familyId === uid
+            || (item.sourceFamilyId && f?.familyId === item.sourceFamilyId && linkedMap.has(item.childId));
+          if (f && proprietaire && f.childId === item.childId && isForfaitActif(f.status)) {
+            forfaitIdValide = String(item.forfaitId);
+          } else {
+            console.warn(`/api/enroll — forfaitId ${item.forfaitId} refusé pour uid=${uid}, child=${item.childId}`);
+          }
+        } catch (e) {
+          console.warn(`/api/enroll — vérification forfait ${item.forfaitId} impossible:`, e);
+        }
+      }
+
       // ── Inscription ATOMIQUE de l'item : on lit TOUS les créneaux, on vérifie
       // que chacun a de la place (ou l'enfant déjà inscrit), puis on inscrit
       // PARTOUT ou NULLE PART. Évite qu'un stage soit inscrit à moitié mais
@@ -126,18 +155,27 @@ export async function POST(req: NextRequest) {
             };
             if (item.sourceFamilyId) entry.sourceFamilyId = item.sourceFamilyId;
             if (item.paymentSource) entry.paymentSource = item.paymentSource;
-            if ("forfaitId" in item) entry.forfaitId = item.forfaitId ?? null;
-            if (item.pending) {
+            if ("forfaitId" in item) entry.forfaitId = forfaitIdValide;
+
+            // ── Place tenue : décidée par le SERVEUR, jamais par le client ──
+            // Auparavant `pending` et `holdUntil` étaient recopiés du corps de
+            // requête. Une famille appelant la route directement pouvait donc
+            // omettre `pending` (place ferme définitive, que rien ne purge, sans
+            // le moindre paiement) ou poser un `holdUntil` à cinq ans. Le
+            // parcours d'inscription annuelle le faisait d'ailleurs nominalement.
+            //
+            // Règle : toute inscription posée par une famille est TENUE. Elle
+            // devient définitive quand l'encaissement est confirmé
+            // (confirmerPlacesTenues, appelé par /api/cawl/status, le webhook et
+            // la validation admin d'une déclaration), et repart sinon via le cron
+            // de purge. Seul le staff pose une inscription ferme.
+            const tenue = estStaff ? !!item.pending : true;
+            if (tenue) {
               entry.pending = true;
-              // Sans date d'expiration, une place tenue le reste pour toujours :
-              // c'est exactement le bug des inscriptions fantômes. On en pose
-              // donc systématiquement une.
-              // La durée dépend du mode : trente minutes pour une CB en ligne,
-              // plusieurs jours pour un chèque ou des espèces, que le bureau
-              // encaissera plus tard.
-              entry.holdUntil = typeof item.holdUntil === "string" && item.holdUntil
-                ? item.holdUntil
-                : dateExpirationHold(new Date(), item.paymentMethod);
+              // Durée calculée côté serveur à partir du mode de règlement :
+              // trente minutes pour une CB en ligne, sept jours pour un chèque
+              // ou des espèces que le bureau encaissera plus tard.
+              entry.holdUntil = dateExpirationHold(new Date(), item.paymentMethod);
               if (item.paymentMethod) entry.paymentMethod = item.paymentMethod;
             }
             tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });
@@ -165,6 +203,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, enrolled, full, notOwned });
   } catch (e: any) {
     console.error("/api/enroll — erreur:", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }

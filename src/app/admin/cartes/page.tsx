@@ -204,7 +204,7 @@ export default function CartesPage() {
 
       <div className="flex gap-2 mb-6">
         {([["active", "Cartes actives", Ticket], ["create", "Nouvelle carte", Plus], ["history", "Historique", History]] as const).map(([id, label, Icon]) => (
-          <button key={id} onClick={() => setTab(id)}
+          <button type="button" key={id} onClick={() => setTab(id)}
             className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border font-body text-sm font-medium cursor-pointer transition-all
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             <Icon size={16} /> {label}
@@ -226,7 +226,7 @@ export default function CartesPage() {
             <Card padding="lg" className="text-center">
               <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><Ticket size={28} className="text-blue-300" /></div>
               <p className="font-body text-sm text-slate-600 mb-3">{search ? "Aucune carte trouvée." : "Aucune carte active."}</p>
-              <button onClick={() => setTab("create")} className="font-body text-sm font-semibold text-blue-500 bg-transparent border-none cursor-pointer">+ Créer une carte</button>
+              <button type="button" onClick={() => setTab("create")} className="font-body text-sm font-semibold text-blue-500 bg-transparent border-none cursor-pointer">+ Créer une carte</button>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -273,17 +273,17 @@ export default function CartesPage() {
                         <div className="flex gap-2">
                           <input value={debitActivity} onChange={e => setDebitActivity(e.target.value)}
                             placeholder="Activité (optionnel)" className={`${inp} flex-1 !text-xs`} />
-                          <button onClick={() => handleDebit(card.id)} disabled={debiting}
+                          <button type="button" onClick={() => handleDebit(card.id)} disabled={debiting}
                             className="px-4 py-2 rounded-lg font-body text-xs font-semibold text-white bg-gold-400 border-none cursor-pointer hover:bg-gold-300">
                             {debiting ? "..." : "−1"}
                           </button>
-                          <button onClick={() => setDebitCardId(null)}
+                          <button type="button" onClick={() => setDebitCardId(null)}
                             className="px-2 py-2 rounded-lg text-slate-500 bg-transparent border border-gray-200 cursor-pointer">
                             <X size={14} />
                           </button>
                         </div>
                       ) : (
-                        <button onClick={() => setDebitCardId(card.id)}
+                        <button type="button" onClick={() => setDebitCardId(card.id)}
                           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold text-gold-500 bg-gold-50 border border-gold-400/20 cursor-pointer hover:bg-gold-100 transition-colors">
                           <Minus size={14} /> Débiter une séance
                         </button>
@@ -291,7 +291,7 @@ export default function CartesPage() {
                     )}
 
                     {/* Bouton détail + historique replié */}
-                    <button onClick={() => setOpenCardId(openCardId === card.id ? null : card.id)}
+                    <button type="button" onClick={() => setOpenCardId(openCardId === card.id ? null : card.id)}
                       className="w-full flex items-center justify-between mt-2 pt-2 border-t border-gray-100 font-body text-xs text-slate-500 hover:text-blue-500 bg-transparent border-none cursor-pointer px-0 pb-0">
                       <span>{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length} séance{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""} utilisée{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""}</span>
                       <span>{openCardId === card.id ? "▲ Masquer" : "▼ Voir le détail"}</span>
@@ -362,7 +362,7 @@ export default function CartesPage() {
                     <div className="font-body text-sm font-semibold text-blue-800">Carte familiale</div>
                     <div className="font-body text-xs text-slate-500 mt-0.5">Utilisable par tous les enfants de la famille</div>
                   </div>
-                  <button onClick={() => { setCarteFamiliale(!carteFamiliale); setSelChild(""); }}
+                  <button type="button" onClick={() => { setCarteFamiliale(!carteFamiliale); setSelChild(""); }}
                     className={`w-12 h-6 rounded-full transition-all border-none cursor-pointer flex-shrink-0 ${carteFamiliale ? "bg-blue-500" : "bg-gray-200"}`}>
                     <div className={`w-5 h-5 rounded-full bg-white shadow transition-all mx-0.5 ${carteFamiliale ? "translate-x-6" : "translate-x-0"}`} />
                   </button>
@@ -371,7 +371,7 @@ export default function CartesPage() {
                 {!carteFamiliale && (
                   <div className="flex flex-wrap gap-2">
                     {children.map((c: any) => (
-                      <button key={c.id} onClick={() => setSelChild(c.id)}
+                      <button type="button" key={c.id} onClick={() => setSelChild(c.id)}
                         className={`px-4 py-2 rounded-lg border font-body text-sm cursor-pointer ${selChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                         🧒 {c.firstName}
                       </button>
@@ -395,7 +395,7 @@ export default function CartesPage() {
               <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Valable pour</label>
               <div className="flex gap-2">
                 {([["cours", "🐴 Cours"], ["balade", "🌿 Balades"]] as const).map(([val, label]) => (
-                  <button key={val} onClick={() => setSelActivityType(val)}
+                  <button type="button" key={val} onClick={() => setSelActivityType(val)}
                     className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${selActivityType === val ? "border-blue-500 bg-blue-50 text-blue-800 font-semibold" : "border-gray-200 bg-white text-slate-600"}`}>
                     {label}
                   </button>
@@ -408,7 +408,7 @@ export default function CartesPage() {
               <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Type de carte</label>
               <div className="flex gap-3">
                 {cardTemplates.map((t, i) => (
-                  <button key={i} onClick={() => setSelTemplate(i)}
+                  <button type="button" key={i} onClick={() => setSelTemplate(i)}
                     className={`flex-1 p-4 rounded-xl border text-center cursor-pointer transition-all ${selTemplate === i ? "border-blue-500 bg-blue-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-2xl font-bold text-blue-800">{t.sessions}</div>
                     <div className="font-body text-xs text-slate-600">séances</div>
@@ -439,11 +439,11 @@ export default function CartesPage() {
               <div className="flex-1">
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Encaissement</label>
                 <div className="flex gap-2">
-                  <button onClick={() => setEncaisserMaintenant(true)}
+                  <button type="button" onClick={() => setEncaisserMaintenant(true)}
                     className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${encaisserMaintenant ? "border-green-500 bg-green-50 text-green-800 font-semibold" : "border-gray-200 bg-white text-slate-600"}`}>
                     ✅ Encaisser
                   </button>
-                  <button onClick={() => setEncaisserMaintenant(false)}
+                  <button type="button" onClick={() => setEncaisserMaintenant(false)}
                     className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${!encaisserMaintenant ? "border-orange-400 bg-orange-50 text-orange-800 font-semibold" : "border-gray-200 bg-white text-slate-600"}`}>
                     ⏳ Impayé
                   </button>
@@ -483,7 +483,7 @@ export default function CartesPage() {
               </div>
             </div>
 
-            <button onClick={handleCreate} disabled={!selFamily || (!carteFamiliale && !selChild) || creating}
+            <button type="button" onClick={handleCreate} disabled={!selFamily || (!carteFamiliale && !selChild) || creating}
               className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer
                 ${!selFamily || !selChild || creating ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
               {creating ? "Création..." : encaisserMaintenant ? `Créer la carte ${template.sessions} séances + Encaisser ${totalTTC.toFixed(2)}€` : `Créer la carte ${template.sessions} séances (impayé ${totalTTC.toFixed(2)}€)`}

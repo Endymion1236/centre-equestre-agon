@@ -99,7 +99,7 @@ export default function RegistrePersonnelPage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Équipe
           </Link>
-          <button onClick={() => window.print()}
+          <button type="button" onClick={() => window.print()}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none px-3 py-2 rounded-lg cursor-pointer">
             <Printer size={14} /> Imprimer / PDF
           </button>

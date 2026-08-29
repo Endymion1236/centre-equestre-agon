@@ -13,6 +13,8 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
+import { deciderConfirmation } from "@/lib/cawl-confirmation";
+import type { Paiement, SessionCawl } from "@/types/argent";
 
 export const dynamic = "force-dynamic";
 
@@ -124,7 +126,7 @@ export async function POST(req: NextRequest) {
 
       // Chercher le payment par cawlRef (merchantReference)
       let payRef = null;
-      let pData: any = null;
+      let pData: Paiement | null = null;
 
       if (merchantRef) {
         const snap = await adminDb.collection("payments")
@@ -133,7 +135,7 @@ export async function POST(req: NextRequest) {
           .get();
         if (!snap.empty) {
           payRef = snap.docs[0].ref;
-          pData = snap.docs[0].data();
+          pData = snap.docs[0].data() as Paiement;
         }
       }
 
@@ -145,7 +147,7 @@ export async function POST(req: NextRequest) {
           .get();
         if (!snap.empty) {
           payRef = snap.docs[0].ref;
-          pData = snap.docs[0].data();
+          pData = snap.docs[0].data() as Paiement;
         }
       }
 
@@ -157,6 +159,13 @@ export async function POST(req: NextRequest) {
         // comme un acompte. Supprimée.
         let isDeposit = false;
         let sessionDepositPercent = 0;
+        // Montant DEMANDÉ à la création du checkout. C'est le référentiel du
+        // contrôle de cohérence : un lien de paiement partiel (acompte de 30 €
+        // sur une commande de 175 €) attend 30 €, pas le total. Le webhook
+        // comparait au `totalTTC` du paiement et rejetait donc en
+        // `needsReview` tout règlement partiel dont la famille n'était pas
+        // revenue sur le site — audit 29/08/2026.
+        let sessionAmountEuros: number | null = null;
         try {
           if (hostedCheckoutId) {
             const sessSnap = await adminDb.collection("cawl_sessions").doc(hostedCheckoutId).get();
@@ -164,26 +173,39 @@ export async function POST(req: NextRequest) {
               const s = sessSnap.data() as any;
               isDeposit = !!s?.isDeposit;
               sessionDepositPercent = s?.depositPercent || 0;
+              sessionAmountEuros =
+                typeof s?.totalCents === "number" && s.totalCents > 0
+                  ? Math.round(s.totalCents) / 100
+                  : null;
             }
           }
         } catch (e) { console.warn("CAWL webhook: lecture cawl_sessions impossible:", e); }
 
-        // ── Sécurité : contrôle du montant réellement payé (audit P0 #1) ──
-        // Même logique que la route /status. Si CAWL renvoie un montant (>0) et
-        // qu'il est nettement inférieur à l'attendu, on NE confirme PAS.
-        const expectedAmount = isDeposit
-          ? (pData.acompteAmount || Math.round((pData.totalTTC || 0) * (sessionDepositPercent || 0) / 100 * 100) / 100)
-          : (pData.totalTTC || 0);
-        if (totalCents > 0 && expectedAmount > 0 && totalEuros < expectedAmount - 0.02) {
+        // ── Décision partagée avec /api/cawl/status ───────────────────────
+        // Montant attendu, cumul et attribution de facture sont calculés par
+        // lib/cawl-confirmation.ts, pour que les deux chemins ne puissent plus
+        // diverger (cf. l'en-tête de ce module).
+        const decisionConf = deciderConfirmation({
+          montantEncaisseEuros: totalEuros,
+          montantSessionEuros: sessionAmountEuros,
+          totalTTC: pData.totalTTC || totalEuros,
+          dejaPaye: pData.paidAmount || 0,
+          estAcompte: isDeposit,
+          acompteAttendu: pData.acompteAmount ?? null,
+          depositPercent: sessionDepositPercent,
+          aDejaUneFacture: !!pData.invoiceNumber,
+        });
+
+        if (!decisionConf.accepte) {
           console.error(
-            `⚠️ CAWL webhook montant incohérent — payé ${totalEuros}€ < attendu ${expectedAmount}€ ` +
+            `⚠️ CAWL webhook montant incohérent — payé ${totalEuros}€ < attendu ${decisionConf.montantAttendu}€ ` +
             `(payment=${payRef.id}). Confirmation refusée.`
           );
           try {
             await payRef.update({
               amountMismatch: true,
               amountPaidReported: totalEuros,
-              amountExpected: expectedAmount,
+              amountExpected: decisionConf.montantAttendu,
               needsReview: true,
               updatedAt: FieldValue.serverTimestamp(),
             });
@@ -212,10 +234,28 @@ export async function POST(req: NextRequest) {
         }
 
         if (pData.status !== "paid") {
-          const totalTTC = pData.totalTTC || totalEuros;
-          // Montant réellement encaissé : pour un acompte, c'est le montant CAWL
-          // (jamais le total dû). Pour un paiement total, totalTTC comme avant.
-          const paidAmount = isDeposit ? (totalEuros || pData.acompteAmount || 0) : totalTTC;
+          // Montant crédité sur CE passage, et cumul — calculés par le module
+          // partagé. Le webhook ÉCRASAIT auparavant `paidAmount` avec le total
+          // dû : un acompte suivi d'un solde perdait la trace du premier
+          // versement.
+          const paidAmount = decisionConf.montantCredite;
+
+          // Une vente intégralement réglée doit avoir sa FACTURE : numérotation
+          // séquentielle continue (CGI art. 242 nonies A). Le webhook ne
+          // l'attribuait jamais — une famille ayant fermé son navigateur après
+          // avoir payé gardait une proforma PF-… (audit 29/08/2026).
+          let newInvoiceNumber: string | null = null;
+          if (decisionConf.attribuerFacture) {
+            try {
+              const { attribuerNumeroFacture } = await import("@/lib/invoice-number");
+              newInvoiceNumber = (await attribuerNumeroFacture({
+                paymentId: payRef.id,
+                attributedBy: "system:cawl-webhook",
+              })).invoiceNumber;
+            } catch (e) {
+              console.error("CAWL webhook: attribution numéro facture échouée (non-bloquant):", e);
+            }
+          }
 
           // Token Card On File + référence du paiement initial : indispensables
           // pour le prélèvement automatique du solde (MIT). Le webhook est le
@@ -226,8 +266,12 @@ export async function POST(req: NextRequest) {
           const cofSchemeTxId = payment.paymentOutput?.cardPaymentMethodSpecificOutput?.schemeTransactionId || "";
 
           await payRef.update({
-            status: isDeposit ? "partial" : "paid",
-            paidAmount,
+            // Statut décidé sur le CUMUL réellement encaissé, pas sur le seul
+            // marqueur acompte : un règlement partiel quelconque reste
+            // « partial » jusqu'à ce que le total soit atteint.
+            status: decisionConf.statut,
+            paidAmount: decisionConf.nouveauCumul,
+            ...(newInvoiceNumber ? { invoiceNumber: newInvoiceNumber, invoiceDate: FieldValue.serverTimestamp() } : {}),
             paymentMode: "cb_online",
             paymentRef: `CAWL-${payment.id}`,
             ...(cofToken ? { cofToken, cawlTokenizedAt: FieldValue.serverTimestamp() } : {}),
@@ -306,7 +350,10 @@ export async function POST(req: NextRequest) {
                 templateKey = isDeposit ? "confirmationStageAcompte" : "confirmationStage";
                 const enfantsList = (pData.items || [])
                   .map((i: any) => i.childName).filter(Boolean).join(", ") || "Cavalier(s)";
-                const soldeRestant = Math.max(0, +(((pData.totalTTC || 0)) - paidAmount).toFixed(2));
+                // Sur le CUMUL encaissé, pas sur le seul versement de ce
+                // passage : sinon un solde annoncé après un acompte déjà versé
+                // réclamerait une seconde fois ce qui est déjà payé.
+                const soldeRestant = Math.max(0, +(((pData.totalTTC || 0)) - decisionConf.nouveauCumul).toFixed(2));
                 const soldePhrase = cofToken
                   ? `Le solde de ${soldeRestant.toFixed(2)}€ sera prélevé automatiquement sur votre carte enregistrée environ une semaine avant le début du stage. Aucune action n'est requise.`
                   : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
@@ -353,7 +400,7 @@ export async function POST(req: NextRequest) {
                   }
                 })
                 .catch(async (e) => {
-                  await logEmail({ to: parentEmail, subject, context: "cawl_webhook", template: templateKey, status: "failed", error: e?.message || String(e), sentBy: "system", paymentId: merchantRef, familyId: pData.familyId });
+                  await logEmail({ to: parentEmail, subject, context: "cawl_webhook", template: templateKey, status: "failed", error: "Erreur interne", sentBy: "system", paymentId: merchantRef, familyId: pData.familyId });
                   console.error("Email webhook CAWL error:", e);
                 });
             } catch (emailErr) {

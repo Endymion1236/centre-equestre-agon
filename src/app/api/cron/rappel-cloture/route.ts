@@ -118,6 +118,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, mois, aFaire, depassements: depassements.length, emailSent });
   } catch (e: any) {
     console.error("rappel-cloture:", e);
-    return NextResponse.json({ error: (e?.message || String(e)).slice(0, 300) }, { status: 500 });
+    console.error("[rappel-cloture]", e);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

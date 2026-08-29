@@ -170,7 +170,7 @@ export default function SatisfactionPage() {
             </div>
           )}
 
-          <button onClick={resetForm}
+          <button type="button" onClick={resetForm}
             className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">
             Donner un autre avis
           </button>
@@ -232,7 +232,7 @@ export default function SatisfactionPage() {
               className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400 resize-none"/>
           </div>
 
-          <button onClick={handleSubmit} disabled={globalNote === 0 || sending}
+          <button type="button" onClick={handleSubmit} disabled={globalNote === 0 || sending}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
             {sending ? <Loader2 size={16} className="animate-spin"/> : <Send size={16}/>}
             Envoyer mon avis

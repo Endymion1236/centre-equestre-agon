@@ -671,7 +671,7 @@ export default function SepaPage() {
           { id: "echeancier" as const, label: `Échéancier (${totalEcheancesPending})`, icon: Calendar },
           { id: "remises" as const, label: `Remises (${remises.length})`, icon: Download },
         ]).map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button type="button" key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 font-body text-sm font-semibold px-5 py-2.5 rounded-xl border-none cursor-pointer transition-colors ${
               tab === t.id ? "text-white bg-blue-500" : "text-gray-500 bg-white border border-gray-200 hover:bg-gray-50"
             }`}>
@@ -697,7 +697,7 @@ export default function SepaPage() {
           />
         </div>
         {(search || dateFilter) && (
-          <button
+          <button type="button"
             onClick={() => { setSearch(""); setDateFilter(""); }}
             className="flex items-center gap-1.5 font-body text-xs text-slate-500 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-xl border-none cursor-pointer flex-shrink-0"
           >
@@ -713,7 +713,7 @@ export default function SepaPage() {
             <div>
               <div className="flex justify-between items-center mb-4">
                 <div className="font-body text-sm text-gray-400">Mandats de prélèvement SEPA signés par les familles</div>
-                <button onClick={() => setShowNewMandat(!showNewMandat)}
+                <button type="button" onClick={() => setShowNewMandat(!showNewMandat)}
                   className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-xl border-none cursor-pointer hover:bg-blue-400">
                   <Plus size={16} /> Nouveau mandat
                 </button>
@@ -780,11 +780,11 @@ export default function SepaPage() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={handleCreateMandat} disabled={saving || !newMandat.familyId || !newMandat.iban}
+                    <button type="button" onClick={handleCreateMandat} disabled={saving || !newMandat.familyId || !newMandat.iban}
                       className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                       {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Enregistrer
                     </button>
-                    <button onClick={() => setShowNewMandat(false)} className="font-body text-sm text-gray-500 bg-gray-100 px-4 py-2 rounded-lg border-none cursor-pointer">Annuler</button>
+                    <button type="button" onClick={() => setShowNewMandat(false)} className="font-body text-sm text-gray-500 bg-gray-100 px-4 py-2 rounded-lg border-none cursor-pointer">Annuler</button>
                   </div>
                 </Card>
               )}
@@ -823,11 +823,11 @@ export default function SepaPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge color={m.status === "active" ? "green" : "gray"}>{m.status === "active" ? "Actif" : "Révoqué"}</Badge>
-                            <button onClick={() => { setShowNewEcheancier(true); setNewEcheancier({ ...newEcheancier, mandatId: m.id }); setTab("echeancier"); }}
+                            <button type="button" onClick={() => { setShowNewEcheancier(true); setNewEcheancier({ ...newEcheancier, mandatId: m.id }); setTab("echeancier"); }}
                               className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                               + Échéancier
                             </button>
-                            <button onClick={() => handleDeleteMandat(m.id)}
+                            <button type="button" onClick={() => handleDeleteMandat(m.id)}
                               className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
                               <Trash2 size={14} />
                             </button>
@@ -858,11 +858,11 @@ export default function SepaPage() {
               <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
                 <div className="font-body text-sm text-gray-400">Échéances en attente de prélèvement</div>
                 <div className="flex gap-2">
-                  <button onClick={selectCurrentMonth}
+                  <button type="button" onClick={selectCurrentMonth}
                     className="flex items-center gap-1 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                     <Calendar size={14} /> Sélectionner ce mois
                   </button>
-                  <button onClick={() => setShowNewEcheancier(!showNewEcheancier)}
+                  <button type="button" onClick={() => setShowNewEcheancier(!showNewEcheancier)}
                     className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-xl border-none cursor-pointer hover:bg-blue-400">
                     <Plus size={16} /> Nouvel échéancier
                   </button>
@@ -948,11 +948,11 @@ export default function SepaPage() {
                     </div>
                   )}
                   <div className="flex gap-2">
-                    <button onClick={handleCreateEcheancier} disabled={saving || !newEcheancier.mandatId || !newEcheancier.montantTotal || !newEcheancier.dateDebut || (repartir && (!newEcheancier.mandatId2 || !newEcheancier.montant2))}
+                    <button type="button" onClick={handleCreateEcheancier} disabled={saving || !newEcheancier.mandatId || !newEcheancier.montantTotal || !newEcheancier.dateDebut || (repartir && (!newEcheancier.mandatId2 || !newEcheancier.montant2))}
                       className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                       {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Créer {newEcheancier.nbEcheances} échéances
                     </button>
-                    <button onClick={() => { setShowNewEcheancier(false); setRepartir(false); }} className="font-body text-sm text-gray-500 bg-gray-100 px-4 py-2 rounded-lg border-none cursor-pointer">Annuler</button>
+                    <button type="button" onClick={() => { setShowNewEcheancier(false); setRepartir(false); }} className="font-body text-sm text-gray-500 bg-gray-100 px-4 py-2 rounded-lg border-none cursor-pointer">Annuler</button>
                   </div>
                 </Card>
               )}
@@ -969,7 +969,7 @@ export default function SepaPage() {
                       <div className="font-body text-xs text-green-600">Prêt à créer une remise bancaire</div>
                     </div>
                   </div>
-                  <button onClick={handleCreateRemise} disabled={saving}
+                  <button type="button" onClick={handleCreateRemise} disabled={saving}
                     className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 px-5 py-2.5 rounded-xl border-none cursor-pointer disabled:opacity-50">
                     {saving ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
                     Créer la remise XML
@@ -987,7 +987,7 @@ export default function SepaPage() {
                 <Card className="!p-0 overflow-hidden">
                   {/* Header */}
                   <div className="px-4 py-3 bg-sand border-b border-blue-500/8 flex items-center font-body text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                    <button onClick={selectAll} className="w-8 flex-shrink-0 bg-transparent border-none cursor-pointer text-gray-400">
+                    <button type="button" onClick={selectAll} className="w-8 flex-shrink-0 bg-transparent border-none cursor-pointer text-gray-400">
                       {selectedEcheances.size === filteredEcheances.length ? <CheckSquare size={16} className="text-green-500" /> : <Square size={16} />}
                     </button>
                     <span className="flex-1">Famille</span>
@@ -998,7 +998,7 @@ export default function SepaPage() {
                   </div>
                   {filteredEcheances.map(ech => (
                     <div key={ech.id} className={`px-4 py-3 border-b border-gray-100 flex items-center hover:bg-blue-50/30 ${selectedEcheances.has(ech.id) ? "bg-green-50/50" : ""}`}>
-                      <button onClick={() => toggleEcheance(ech.id)} className="w-8 flex-shrink-0 bg-transparent border-none cursor-pointer">
+                      <button type="button" onClick={() => toggleEcheance(ech.id)} className="w-8 flex-shrink-0 bg-transparent border-none cursor-pointer">
                         {selectedEcheances.has(ech.id) ? <CheckSquare size={16} className="text-green-500" /> : <Square size={16} className="text-gray-300" />}
                       </button>
                       <div className="flex-1 min-w-0">
@@ -1027,14 +1027,14 @@ export default function SepaPage() {
                       <div className="w-36 font-body text-xs text-gray-500 truncate pl-3">{ech.description}</div>
                       {/* Bouton "Décaler la série" uniquement sur la 1ere échéance d'une série multi */}
                       {ech.echeance === 1 && (ech.echeancesTotal || 0) > 1 && (
-                        <button
+                        <button type="button"
                           onClick={() => handleShiftSeries(ech)}
                           title={`Décaler les ${ech.echeancesTotal} échéances de cette série`}
                           className="w-8 flex justify-center text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer">
                           📅
                         </button>
                       )}
-                      <button onClick={() => handleDeleteEcheance(ech.id)} className="w-10 flex justify-end text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
+                      <button type="button" onClick={() => handleDeleteEcheance(ech.id)} className="w-10 flex justify-end text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
                         <Trash2 size={13} />
                       </button>
                     </div>
@@ -1100,12 +1100,12 @@ export default function SepaPage() {
                           <Badge color={r.status === "deposited" ? "green" : r.status === "generated" ? "blue" : "gray"}>
                             {r.status === "deposited" ? "Déposée" : r.status === "generated" ? "Générée" : "Brouillon"}
                           </Badge>
-                          <button onClick={() => downloadRemise(r)}
+                          <button type="button" onClick={() => downloadRemise(r)}
                             className="flex items-center gap-1 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                             <Download size={12} /> XML
                           </button>
                           {r.status === "generated" && (
-                            <button onClick={() => markDeposited(r.id)}
+                            <button type="button" onClick={() => markDeposited(r.id)}
                               className="flex items-center gap-1 font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100">
                               <Check size={12} /> Déposée
                             </button>

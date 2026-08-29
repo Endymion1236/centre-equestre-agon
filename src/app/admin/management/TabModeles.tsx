@@ -185,7 +185,7 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
           </p>
         </div>
         {!showCreate && (
-          <button
+          <button type="button"
             onClick={() => { resetForm(); setShowCreate(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg border-none cursor-pointer font-body text-sm font-medium hover:bg-blue-400"
           >
@@ -201,7 +201,7 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
             <h3 className="font-body text-base font-semibold text-blue-800">
               {editId ? "Modifier le modèle" : "Nouveau modèle"}
             </h3>
-            <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer">
+            <button type="button" onClick={resetForm} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer">
               <X size={18} />
             </button>
           </div>
@@ -233,7 +233,7 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
               <label className="font-body text-xs text-gray-500 mb-1 block">Couleur</label>
               <div className="flex gap-2 mt-1">
                 {COULEURS.map(c => (
-                  <button
+                  <button type="button"
                     key={c}
                     onClick={() => setForm(p => ({ ...p, couleur: c }))}
                     className={`w-7 h-7 rounded-full border-2 cursor-pointer ${form.couleur === c ? "border-gray-800 scale-110" : "border-transparent"}`}
@@ -266,7 +266,7 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
                 <div key={jour} className="bg-slate-50 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="font-body text-xs font-semibold text-blue-800">{JOURS_LABELS[jour]}</span>
-                    <button
+                    <button type="button"
                       onClick={() => setAddJour(addJour === jour ? null : jour)}
                       className="text-blue-500 bg-transparent border-none cursor-pointer hover:text-blue-400"
                     >
@@ -288,7 +288,7 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
                           <div className="font-body font-medium text-gray-800 truncate">{t.tacheLabel}</div>
                           <div className="font-body text-gray-400">{t.heureDebut} · {fmtDuree(t.dureeMinutes)} · {t.salarieName}</div>
                         </div>
-                        <button
+                        <button type="button"
                           onClick={() => removeTacheFromForm(realIdx)}
                           className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0"
                         >
@@ -340,14 +340,14 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
                         </select>
                       </div>
                       <div className="flex gap-2">
-                        <button
+                        <button type="button"
                           onClick={addTacheToForm}
                           disabled={!addForm.tacheTypeId || !addForm.salarieId}
                           className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-blue-500 text-white rounded font-body text-xs font-medium border-none cursor-pointer disabled:opacity-40"
                         >
                           <Plus size={12} /> Ajouter
                         </button>
-                        <button
+                        <button type="button"
                           onClick={() => setAddJour(null)}
                           className="px-2 py-1.5 bg-gray-200 text-gray-600 rounded font-body text-xs border-none cursor-pointer"
                         >
@@ -363,14 +363,14 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
 
           {/* Boutons sauvegarder */}
           <div className="flex gap-3 mt-4">
-            <button
+            <button type="button"
               onClick={handleSave}
               disabled={saving || !form.nom.trim()}
               className="flex items-center gap-2 px-5 py-2.5 bg-blue-500 text-white rounded-lg font-body text-sm font-medium border-none cursor-pointer hover:bg-blue-400 disabled:opacity-40"
             >
               <Save size={16} /> {saving ? "Enregistrement..." : editId ? "Mettre à jour" : "Créer le modèle"}
             </button>
-            <button
+            <button type="button"
               onClick={resetForm}
               className="px-5 py-2.5 bg-gray-100 text-gray-600 rounded-lg font-body text-sm border-none cursor-pointer hover:bg-gray-200"
             >
@@ -385,7 +385,7 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
         <div className="text-center py-16 bg-slate-50 rounded-xl">
           <span className="text-4xl block mb-3">📋</span>
           <p className="font-body text-sm text-gray-500 mb-4">Aucun modèle de planning créé.</p>
-          <button
+          <button type="button"
             onClick={() => { resetForm(); setShowCreate(true); }}
             className="px-5 py-2.5 bg-blue-500 text-white rounded-lg font-body text-sm font-medium border-none cursor-pointer hover:bg-blue-400"
           >
@@ -424,21 +424,21 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button
+                  <button type="button"
                     onClick={e => { e.stopPropagation(); openEdit(m); }}
                     className="p-2 text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer"
                     title="Modifier"
                   >
                     <Edit2 size={15} />
                   </button>
-                  <button
+                  <button type="button"
                     onClick={e => { e.stopPropagation(); handleDuplicate(m); }}
                     className="p-2 text-gray-400 hover:text-green-500 bg-transparent border-none cursor-pointer"
                     title="Dupliquer"
                   >
                     <Copy size={15} />
                   </button>
-                  <button
+                  <button type="button"
                     onClick={e => { e.stopPropagation(); handleDelete(m.id); }}
                     className="p-2 text-gray-400 hover:text-red-500 bg-transparent border-none cursor-pointer"
                     title="Supprimer"

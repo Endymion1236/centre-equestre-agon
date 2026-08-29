@@ -119,6 +119,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[facturx-pdf]", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
   }
 }

@@ -147,6 +147,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[offres/cible]", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur", status: "error" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur", status: "error" }, { status: 500 });
   }
 }

@@ -13,10 +13,6 @@
       "schedule": "0 8 1 * *"
     },
     {
-      "path": "/api/cron/charge-stage-balances",
-      "schedule": "0 8 * * *"
-    },
-    {
       "path": "/api/cron/echeances-sepa-reminder",
       "schedule": "0 8 25 * *"
     },

@@ -221,7 +221,7 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
         </div>
         {/* Toggle retards */}
         {hasOverdue && (
-          <button
+          <button type="button"
             onClick={() => setOnlyOverdue(v => !v)}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${onlyOverdue ? "bg-red-500 text-white" : "bg-red-50 text-red-600"}`}>
             <AlertTriangle size={14} />
@@ -252,7 +252,7 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
       <Card padding="lg" className="text-center">
         <Search size={28} className="text-slate-400 mx-auto mb-3" />
         <p className="font-body text-sm text-slate-600">Aucune famille ne correspond à votre recherche.</p>
-        <button
+        <button type="button"
           onClick={() => { setSearch(""); setOnlyOverdue(false); }}
           className="mt-3 font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded border-none cursor-pointer hover:bg-blue-100">
           Réinitialiser les filtres
@@ -282,7 +282,7 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
                     <div className="font-body text-[10px] text-slate-600">{nbPayes}/{nbTotal} échéances payées</div>
                   </div>
                   {nbPayes < nbTotal && (
-                    <button
+                    <button type="button"
                       onClick={async () => {
                         // Récupérer les enfants liés à ce forfait pour la désinscription
                         // (on regarde tous les items de toutes les échéances pour être exhaustif)

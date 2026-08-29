@@ -78,6 +78,6 @@ export async function GET(req: NextRequest) {
       recentes,
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }

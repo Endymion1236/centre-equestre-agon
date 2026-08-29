@@ -45,6 +45,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Aucun compte Firebase Auth avec cet email" }, { status: 404 });
     }
     console.error("diag-claims error:", error);
-    return NextResponse.json({ error: error?.message || "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

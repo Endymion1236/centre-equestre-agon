@@ -94,6 +94,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, items });
   } catch (e: any) {
     console.error("[offres/creneaux]", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur", status: "error" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur", status: "error" }, { status: 500 });
   }
 }

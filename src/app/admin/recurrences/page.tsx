@@ -177,11 +177,11 @@ export default function RecurrencesPage() {
           <p className="font-body text-sm text-slate-600">Prestations mensuelles automatiques (pensions, cotisations, abonnements…)</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setFacturationOpen(true)}
+          <button type="button" onClick={() => setFacturationOpen(true)}
             className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-body text-sm font-semibold px-4 py-2 rounded-lg border-none cursor-pointer">
             <FileText size={14}/> Générer factures du mois
           </button>
-          <button onClick={() => setCreating(true)}
+          <button type="button" onClick={() => setCreating(true)}
             className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white font-body text-sm font-semibold px-4 py-2 rounded-lg border-none cursor-pointer">
             <Plus size={14}/> Nouvelle récurrence
           </button>
@@ -200,7 +200,7 @@ export default function RecurrencesPage() {
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div className="flex gap-1 bg-white p-1 rounded-lg border border-gray-200">
           {(["actif", "suspendu", "resilie", "tous"] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
+            <button type="button" key={f} onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-md font-body text-xs font-semibold cursor-pointer border-none ${filter === f ? "bg-blue-500 text-white" : "bg-transparent text-slate-600"}`}>
               {f === "actif" ? "Actives" : f === "suspendu" ? "Suspendues" : f === "resilie" ? "Résiliées" : "Toutes"}
             </button>
@@ -222,7 +222,7 @@ export default function RecurrencesPage() {
       ) : filtered.length === 0 ? (
         <Card padding="md" className="text-center">
           <p className="font-body text-sm text-slate-500">Aucune récurrence {filter !== "tous" ? `(${filter})` : ""}</p>
-          <button onClick={() => setCreating(true)} className="mt-3 text-blue-500 underline cursor-pointer font-body text-sm bg-transparent border-none">Créer la première</button>
+          <button type="button" onClick={() => setCreating(true)} className="mt-3 text-blue-500 underline cursor-pointer font-body text-sm bg-transparent border-none">Créer la première</button>
         </Card>
       ) : (
         <div className="flex flex-col gap-2">
@@ -289,15 +289,15 @@ function RecurrenceRow({ recurrence, onEdit, onSuspend, onResume, onResilier }: 
           </div>
           <div className="flex gap-1">
             {recurrence.statut === "actif" && (
-              <button onClick={onSuspend} title="Suspendre" className="w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 border-none cursor-pointer flex items-center justify-center"><Pause size={14} className="text-orange-600"/></button>
+              <button type="button" onClick={onSuspend} title="Suspendre" className="w-8 h-8 rounded-lg bg-orange-50 hover:bg-orange-100 border-none cursor-pointer flex items-center justify-center"><Pause size={14} className="text-orange-600"/></button>
             )}
             {recurrence.statut === "suspendu" && (
-              <button onClick={onResume} title="Réactiver" className="w-8 h-8 rounded-lg bg-green-50 hover:bg-green-100 border-none cursor-pointer flex items-center justify-center"><Play size={14} className="text-green-600"/></button>
+              <button type="button" onClick={onResume} title="Réactiver" className="w-8 h-8 rounded-lg bg-green-50 hover:bg-green-100 border-none cursor-pointer flex items-center justify-center"><Play size={14} className="text-green-600"/></button>
             )}
             {recurrence.statut !== "resilie" && (
-              <button onClick={onResilier} title="Résilier" className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 border-none cursor-pointer flex items-center justify-center"><XCircle size={14} className="text-red-500"/></button>
+              <button type="button" onClick={onResilier} title="Résilier" className="w-8 h-8 rounded-lg bg-red-50 hover:bg-red-100 border-none cursor-pointer flex items-center justify-center"><XCircle size={14} className="text-red-500"/></button>
             )}
-            <button onClick={onEdit} title="Modifier" className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 border-none cursor-pointer flex items-center justify-center"><Edit2 size={14} className="text-blue-500"/></button>
+            <button type="button" onClick={onEdit} title="Modifier" className="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 border-none cursor-pointer flex items-center justify-center"><Edit2 size={14} className="text-blue-500"/></button>
           </div>
         </div>
       </div>
@@ -376,7 +376,7 @@ function RecurrenceModal({ recurrence, families, onClose, onSaved }: {
               <h2 className="font-display text-lg font-bold text-blue-800 flex items-center gap-2"><RotateCw size={18}/> {isEdit ? "Modifier la récurrence" : "Nouvelle récurrence"}</h2>
               {isEdit && <p className="font-body text-xs text-slate-500 mt-1">{recurrence!.label} · {recurrence!.familyName}</p>}
             </div>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={20}/></button>
           </div>
         </div>
 
@@ -459,8 +459,8 @@ function RecurrenceModal({ recurrence, families, onClose, onSaved }: {
         </div>
 
         <div className="p-5 border-t border-gray-100 flex justify-end gap-2">
-          <button onClick={onClose} disabled={saving} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-slate-700 font-body text-sm font-semibold border-none cursor-pointer">Annuler</button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-body text-sm font-semibold border-none cursor-pointer disabled:opacity-50">
+          <button type="button" onClick={onClose} disabled={saving} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-slate-700 font-body text-sm font-semibold border-none cursor-pointer">Annuler</button>
+          <button type="button" onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-500 hover:bg-blue-600 text-white font-body text-sm font-semibold border-none cursor-pointer disabled:opacity-50">
             {saving && <Loader2 size={14} className="animate-spin"/>}
             {isEdit ? "Enregistrer" : "Créer la récurrence"}
           </button>
@@ -584,7 +584,7 @@ function FacturationModal({ recurrences, onClose, onDone }: {
               <h2 className="font-display text-lg font-bold text-blue-800 flex items-center gap-2"><FileText size={18}/> Générer les factures du mois</h2>
               <p className="font-body text-xs text-slate-500 mt-1">Crée un paiement <strong>pending</strong> par récurrence sélectionnée. Les récurrences déjà facturées pour ce mois sont décochées par défaut.</p>
             </div>
-            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer"><X size={20}/></button>
           </div>
         </div>
 
@@ -630,8 +630,8 @@ function FacturationModal({ recurrences, onClose, onDone }: {
             <span className="ml-2 text-slate-400 text-xs">({selected.size} récurrence{selected.size > 1 ? "s" : ""})</span>
           </div>
           <div className="flex gap-2">
-            <button onClick={onClose} disabled={generating} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-slate-700 font-body text-sm font-semibold border-none cursor-pointer">Annuler</button>
-            <button onClick={handleGenerate} disabled={generating || selected.size === 0} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-body text-sm font-semibold border-none cursor-pointer disabled:opacity-50">
+            <button type="button" onClick={onClose} disabled={generating} className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-slate-700 font-body text-sm font-semibold border-none cursor-pointer">Annuler</button>
+            <button type="button" onClick={handleGenerate} disabled={generating || selected.size === 0} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-body text-sm font-semibold border-none cursor-pointer disabled:opacity-50">
               {generating && <Loader2 size={14} className="animate-spin"/>}
               <Euro size={14}/> Générer
             </button>

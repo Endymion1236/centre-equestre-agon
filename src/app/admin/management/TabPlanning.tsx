@@ -1432,10 +1432,10 @@ Réponds de façon concise et pratique, en français.`,
                                 </div>
                               )}
                             </div>
-                            <button onClick={()=>toggleDone(t)} style={{width:18,height:18,borderRadius:4,border:"1px solid "+(t.done?"#16a34a":"#d1d5db"),background:t.done?"#16a34a":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}>
+                            <button type="button" onClick={()=>toggleDone(t)} style={{width:18,height:18,borderRadius:4,border:"1px solid "+(t.done?"#16a34a":"#d1d5db"),background:t.done?"#16a34a":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}>
                               {t.done && <Check size={10} color="white"/>}
                             </button>
-                            <button onClick={()=>delTache(t)} style={{width:16,height:16,borderRadius:3,border:"none",background:"transparent",cursor:"pointer",color:"#cbd5e1",padding:0,fontSize:12,lineHeight:1}}>✕</button>
+                            <button type="button" onClick={()=>delTache(t)} style={{width:16,height:16,borderRadius:3,border:"none",background:"transparent",cursor:"pointer",color:"#cbd5e1",padding:0,fontSize:12,lineHeight:1}}>✕</button>
                           </div>
                         );
                       })}
@@ -1478,7 +1478,7 @@ Réponds de façon concise et pratique, en français.`,
                             return (
                               <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
                                 {horaires.map(h => (
-                                  <button key={h} onClick={() => setAddForm({...addForm, heureDebut: h})}
+                                  <button type="button" key={h} onClick={() => setAddForm({...addForm, heureDebut: h})}
                                     style={{padding:"3px 8px",borderRadius:6,border: addForm.heureDebut===h ? "2px solid #f59e0b" : "1px solid #e5e7eb",
                                       background: addForm.heureDebut===h ? "#fffbeb" : "white",
                                       fontFamily:"sans-serif",fontSize:11,fontWeight: addForm.heureDebut===h ? 700 : 500,
@@ -1486,7 +1486,7 @@ Réponds de façon concise et pratique, en français.`,
                                     {h}
                                   </button>
                                 ))}
-                                <button onClick={() => {
+                                <button type="button" onClick={() => {
                                   const el = document.getElementById("_custom_hour_select") as HTMLSelectElement;
                                   if (el) el.style.display = el.style.display === "none" ? "block" : "none";
                                 }}
@@ -1522,7 +1522,7 @@ Réponds de façon concise et pratique, en français.`,
                               const last = prev[prev.length - 1];
                               const finLast = minToHeure(heureToMin(last.heureDebut) + last.dureeMinutes);
                               return (
-                                <button onClick={() => setAddForm({...addForm, heureDebut: finLast})}
+                                <button type="button" onClick={() => setAddForm({...addForm, heureDebut: finLast})}
                                   title={`Démarrer à ${finLast} (après ${last.tacheLabel})`}
                                   style={{padding:"3px 6px",borderRadius:6,border:"1px solid #c4b5fd",background: addForm.heureDebut === finLast ? "#ede9fe" : "white",
                                     fontFamily:"sans-serif",fontSize:9,color:"#7c3aed",cursor:"pointer",whiteSpace:"nowrap",fontWeight:600}}>
@@ -1541,7 +1541,7 @@ Réponds de façon concise et pratique, en français.`,
                           <div>
                             <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:4}}>
                               <span style={{fontFamily:"sans-serif",fontSize:9,color:"#475569",fontWeight:600}}>Jours :</span>
-                              <button onClick={() => {
+                              <button type="button" onClick={() => {
                                 const allDays = JOURS.slice(0, nbJours) as JourSemaine[];
                                 const allSelected = allDays.every(j => addForm.joursSelectionnes.includes(j));
                                 setAddForm({...addForm, joursSelectionnes: allSelected ? [] : [...allDays]});
@@ -1555,7 +1555,7 @@ Réponds de façon concise et pratique, en français.`,
                                 const selected = addForm.joursSelectionnes.includes(j as JourSemaine);
                                 const isCurrent = j === addCell?.jour;
                                 return (
-                                  <button key={j} onClick={() => {
+                                  <button type="button" key={j} onClick={() => {
                                     const curr = addForm.joursSelectionnes;
                                     setAddForm({...addForm, joursSelectionnes: selected ? curr.filter(x => x !== j) : [...curr, j as JourSemaine]});
                                   }}
@@ -1621,7 +1621,7 @@ Réponds de façon concise et pratique, en français.`,
                                   {otherSals.map(s => {
                                     const selected = addForm.binomeIds.includes(s.id);
                                     return (
-                                      <button key={s.id}
+                                      <button type="button" key={s.id}
                                         onClick={() => {
                                           const curr = addForm.binomeIds;
                                           setAddForm({...addForm, binomeIds: selected ? curr.filter(x => x !== s.id) : [...curr, s.id]});
@@ -1648,13 +1648,13 @@ Réponds de façon concise et pratique, en français.`,
                             );
                           })()}
                           <div style={{display:"flex",gap:4}}>
-                            <button onClick={addTache} disabled={saving||!addForm.tacheTypeId}
+                            <button type="button" onClick={addTache} disabled={saving||!addForm.tacheTypeId}
                               style={{flex:1,padding:"4px 0",borderRadius:6,border:"none",
                                 background: addForm.joursSelectionnes.length > 1 ? "#16a34a" : "#3b82f6",
                                 color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:600,cursor:"pointer"}}>
                               {saving ? "..." : addForm.joursSelectionnes.length > 1 ? `✓ Ajouter (${addForm.joursSelectionnes.length}j)` : "✓ Ajouter"}
                             </button>
-                            <button onClick={()=>setAddCell(null)}
+                            <button type="button" onClick={()=>setAddCell(null)}
                               style={{padding:"4px 8px",borderRadius:6,border:"none",background:"#f1f5f9",color:"#64748b",fontFamily:"sans-serif",fontSize:11,cursor:"pointer"}}>
                               ✕
                             </button>
@@ -1662,7 +1662,7 @@ Réponds de façon concise et pratique, en français.`,
                         </div>
                       ) : (
                         <div style={{display:"flex", gap:3}}>
-                          <button onClick={()=>openAdd(sal.id,jour)}
+                          <button type="button" onClick={()=>openAdd(sal.id,jour)}
                             style={{flex:1, padding:"3px 0",borderRadius:6,border:"1px dashed #cbd5e1",background:"transparent",color:"#94a3b8",fontFamily:"sans-serif",fontSize:11,cursor:"pointer"}}>
                             + Ajouter
                           </button>
@@ -1670,7 +1670,7 @@ Réponds de façon concise et pratique, en français.`,
                               Sert à tasser les tâches manuelles et combler les trous, en
                               respectant les cours/stages comme ancres temporelles fixes. */}
                           {cellTaches.length >= 2 && (
-                            <button onClick={() => compacterJournee(sal.id, jour)}
+                            <button type="button" onClick={() => compacterJournee(sal.id, jour)}
                               disabled={compactingKey === `${sal.id}|${jour}`}
                               title="Compacter la journée (tasser les tâches sans toucher aux cours)"
                               style={{padding:"3px 6px", borderRadius:6, border:"1px dashed #cbd5e1", background:"transparent", color:"#64748b", fontFamily:"sans-serif", fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", gap:2}}>
@@ -1678,7 +1678,7 @@ Réponds de façon concise et pratique, en français.`,
                             </button>
                           )}
                           {cellTaches.length > 0 && (
-                            <button onClick={() => viderCellule(sal.id, jour)}
+                            <button type="button" onClick={() => viderCellule(sal.id, jour)}
                               title={`Vider — supprimer les ${cellTaches.length} tâche${cellTaches.length>1?"s":""} de ${sal.nom} le ${JOURS_LABELS[jour]}`}
                               style={{padding:"3px 6px", borderRadius:6, border:"1px dashed #fecaca", background:"transparent", color:"#dc2626", fontFamily:"sans-serif", fontSize:11, cursor:"pointer", display:"flex", alignItems:"center", gap:2}}>
                               <Trash2 size={11}/>
@@ -1762,7 +1762,7 @@ Réponds de façon concise et pratique, en français.`,
                                     {t.salarieName} · {fmtDuree(t.dureeMinutes)}
                                   </div>
                                 </div>
-                                <button onClick={()=>toggleDone(t)} style={{width:14,height:14,borderRadius:3,border:"1px solid "+(t.done?"#16a34a":"#d1d5db"),background:t.done?"#16a34a":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}>
+                                <button type="button" onClick={()=>toggleDone(t)} style={{width:14,height:14,borderRadius:3,border:"1px solid "+(t.done?"#16a34a":"#d1d5db"),background:t.done?"#16a34a":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,padding:0}}>
                                   {t.done && <Check size={8} color="white"/>}
                                 </button>
                               </div>
@@ -1830,7 +1830,7 @@ Réponds de façon concise et pratique, en français.`,
         {/* Sélecteur salarié */}
         <div className="flex items-center gap-3 flex-wrap">
           {activeSalaries.map(s => (
-            <button key={s.id} onClick={() => setSelectedSalarieId(s.id)}
+            <button type="button" key={s.id} onClick={() => setSelectedSalarieId(s.id)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all
                 ${selectedSalarieId === s.id || (!selectedSalarieId && s.id === sal.id)
                   ? "text-white border-transparent"
@@ -1847,7 +1847,7 @@ Réponds de façon concise et pratique, en français.`,
           <div className="font-display text-lg font-bold text-blue-800">
             Planning de {sal.nom}
           </div>
-          <button onClick={printFiche}
+          <button type="button" onClick={printFiche}
             className="flex items-center gap-2 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-4 py-2 rounded-lg cursor-pointer hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors">
             <Printer size={14}/> Imprimer la fiche
           </button>
@@ -2007,7 +2007,7 @@ Réponds de façon concise et pratique, en français.`,
         {/* ── NAVIGATION SEMAINE + JOURS ── */}
         <Card padding="sm">
           <div className="flex items-center justify-between px-2 mb-3">
-            <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
+            <button type="button" onClick={prevWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
               <ChevronLeft size={16}/>Préc.
             </button>
             <div className="flex flex-col items-center gap-0.5">
@@ -2045,9 +2045,9 @@ Réponds de façon concise et pratique, en français.`,
                 />
                 Dim.
               </label>
-              <button onClick={() => setSemaine(getISOWeek(new Date()))}
+              <button type="button" onClick={() => setSemaine(getISOWeek(new Date()))}
                 className="font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 transition-colors">Auj.</button>
-              <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
+              <button type="button" onClick={nextWeek} className="flex items-center gap-1 font-body text-sm font-semibold text-blue-800 bg-transparent border-none cursor-pointer hover:text-blue-500 transition-colors px-2 py-1">
                 Suiv.<ChevronRight size={16}/>
               </button>
             </div>
@@ -2121,7 +2121,7 @@ Réponds de façon concise et pratique, en français.`,
           {/* ① Switcher de vue — toujours visible */}
           <div className="flex bg-gray-100 rounded-2xl p-1.5 gap-1 flex-shrink-0">
             {(["tableau","horaire","fiche"] as const).map(v => (
-              <button key={v} onClick={()=>setView(v)}
+              <button type="button" key={v} onClick={()=>setView(v)}
                 className={`flex flex-col items-center gap-1 px-4 py-3 rounded-xl font-body text-xs font-semibold border-none cursor-pointer transition-all min-w-[72px]
                   ${view===v ? "bg-white text-blue-700 shadow-sm" : "bg-transparent text-gray-400 hover:text-blue-700 hover:bg-white/60"}`}>
                 <span className="text-lg">{v === "tableau" ? "📊" : v === "horaire" ? "🕐" : "📋"}</span>
@@ -2131,7 +2131,7 @@ Réponds de façon concise et pratique, en français.`,
           </div>
 
           {/* ② Bouton Planning */}
-          <button
+          <button type="button"
             onClick={() => setOpenPanel(openPanel === "planning" ? null : "planning")}
             className={`flex-1 flex items-center gap-4 px-5 py-4 rounded-2xl border-2 cursor-pointer transition-all text-left
               ${openPanel === "planning"
@@ -2151,7 +2151,7 @@ Réponds de façon concise et pratique, en français.`,
           </button>
 
           {/* ③ Bouton Partager */}
-          <button
+          <button type="button"
             onClick={() => setOpenPanel(openPanel === "partager" ? null : "partager")}
             className={`flex-1 flex items-center gap-4 px-5 py-4 rounded-2xl border-2 cursor-pointer transition-all text-left
               ${openPanel === "partager"
@@ -2177,7 +2177,7 @@ Réponds de façon concise et pratique, en français.`,
             <div className="grid grid-cols-3 gap-4">
 
               {/* Importer cours/stages */}
-              <button onClick={() => { handleImportCreneaux(); setOpenPanel(null); }} disabled={importing}
+              <button type="button" onClick={() => { handleImportCreneaux(); setOpenPanel(null); }} disabled={importing}
                 className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-purple-100 bg-purple-50 hover:border-purple-300 hover:bg-purple-100 cursor-pointer text-left transition-all disabled:opacity-50 group">
                 <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-xl shadow-sm group-hover:shadow">
                   {importing ? <div className="w-5 h-5 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" /> : "📅"}
@@ -2202,7 +2202,7 @@ Réponds de façon concise et pratique, en français.`,
                 ) : (
                   <div className="flex flex-col gap-1 max-h-[140px] overflow-y-auto">
                     {modeles.map(m => (
-                      <button key={m.id} onClick={() => { handleApplyModele(m); }}
+                      <button type="button" key={m.id} onClick={() => { handleApplyModele(m); }}
                         className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-green-50 cursor-pointer border border-green-200 hover:border-green-400 text-left transition-colors">
                         <span className="text-sm">{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
                         <div className="flex-1 min-w-0">
@@ -2233,14 +2233,14 @@ Réponds de façon concise et pratique, en français.`,
                       className="w-full px-3 py-2 rounded-xl border border-blue-200 font-body text-xs focus:outline-none focus:ring-2 focus:ring-blue-400/30 text-blue-800 bg-white" />
                     <div className="flex gap-1">
                       {([["scolaire","📚","Scolaire"],["vacances","☀️","Vacances"],["autre","📌","Autre"]] as const).map(([id, emoji, label]) => (
-                        <button key={id} onClick={() => setSaveModeleType(id)}
+                        <button type="button" key={id} onClick={() => setSaveModeleType(id)}
                           className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-xl border font-body text-[10px] font-semibold cursor-pointer transition-all
                             ${saveModeleType === id ? "bg-blue-500 text-white border-blue-500 shadow-sm" : "bg-white text-blue-800 border-blue-200 hover:border-blue-400"}`}>
                           {emoji} {label}
                         </button>
                       ))}
                     </div>
-                    <button onClick={handleSaveAsModele}
+                    <button type="button" onClick={handleSaveAsModele}
                       className="w-full py-2 rounded-xl bg-blue-500 text-white font-body text-xs font-semibold cursor-pointer border-none hover:bg-blue-400 shadow-md shadow-blue-500/20 transition-colors">
                       Créer le modèle ({taches.length} tâches)
                     </button>
@@ -2265,7 +2265,7 @@ Réponds de façon concise et pratique, en français.`,
                   </div>
                   <div className="flex flex-col gap-1 max-h-[140px] overflow-y-auto">
                     {importsDeLaSemaine.map(imp => (
-                      <button
+                      <button type="button"
                         key={imp.batchId}
                         onClick={() => handleUndoImport(imp.batchId, imp.nom)}
                         disabled={applyingModele}
@@ -2295,7 +2295,7 @@ Réponds de façon concise et pratique, en français.`,
             <div className="grid grid-cols-2 gap-4">
 
               {/* Imprimer */}
-              <button onClick={() => { window.print(); setOpenPanel(null); }} disabled={taches.length === 0}
+              <button type="button" onClick={() => { window.print(); setOpenPanel(null); }} disabled={taches.length === 0}
                 className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-gray-200 bg-gray-50 hover:border-blue-300 hover:bg-blue-50 cursor-pointer text-left transition-all disabled:opacity-40 group">
                 <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm group-hover:shadow">
                   <Printer size={20} className="text-blue-800" />
@@ -2307,7 +2307,7 @@ Réponds de façon concise et pratique, en français.`,
               </button>
 
               {/* Email équipe */}
-              <button onClick={() => { handleNotifyEquipe(); setOpenPanel(null); }} disabled={notifying || taches.length === 0}
+              <button type="button" onClick={() => { handleNotifyEquipe(); setOpenPanel(null); }} disabled={notifying || taches.length === 0}
                 className="flex flex-col gap-3 p-4 rounded-2xl border-2 border-blue-100 bg-blue-50 hover:border-blue-400 hover:bg-blue-100 cursor-pointer text-left transition-all disabled:opacity-40 group">
                 <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-xl shadow-sm group-hover:shadow">
                   {notifying ? <div className="w-5 h-5 border-2 border-blue-300 border-t-blue-600 rounded-full animate-spin" /> : "📧"}
@@ -2356,7 +2356,7 @@ Réponds de façon concise et pratique, en français.`,
                 {conflits.length} conflit{conflits.length > 1 ? "s" : ""} masqué{conflits.length > 1 ? "s" : ""}
               </span>
             )}
-            <button onClick={() => setShowConflits(!showConflits)}
+            <button type="button" onClick={() => setShowConflits(!showConflits)}
               style={{flexShrink:0,padding:"4px 10px",borderRadius:6,border:"1px solid #e2e8f0",background:"white",fontFamily:"sans-serif",fontSize:10,color:"#64748b",cursor:"pointer",fontWeight:600}}>
               {showConflits ? "Masquer" : "Afficher"}
             </button>
@@ -2381,7 +2381,7 @@ Réponds de façon concise et pratique, en français.`,
                 )}
               </div>
             </div>
-            <button onClick={handleIACheck} disabled={iaChecking}
+            <button type="button" onClick={handleIACheck} disabled={iaChecking}
               style={{flexShrink:0,padding:"6px 14px",borderRadius:8,border:"none",background:"#7c3aed",color:"white",fontFamily:"sans-serif",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               {iaChecking ? <div style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.3)",borderTopColor:"white",borderRadius:"50%",animation:"spin 0.8s linear infinite"}} /> : <span>🤖</span>}
               {iaChecking ? "Analyse…" : "Vérifier avec l'IA"}
@@ -2396,7 +2396,7 @@ Réponds de façon concise et pratique, en français.`,
               Toutes les tâches obligatoires sont assignées cette semaine
             </span>
             <div style={{flex:1}} />
-            <button onClick={handleIACheck} disabled={iaChecking}
+            <button type="button" onClick={handleIACheck} disabled={iaChecking}
               style={{padding:"5px 12px",borderRadius:8,border:"1px solid #d4d4d8",background:"white",color:"#7c3aed",fontFamily:"sans-serif",fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               {iaChecking ? "Analyse…" : "🤖 Check complet IA"}
             </button>
@@ -2405,7 +2405,7 @@ Réponds de façon concise et pratique, en français.`,
 
         {iaResult && isAdmin && (
           <div style={{background:"#faf5ff",border:"1px solid #e9d5ff",borderRadius:12,padding:"14px 18px",position:"relative"}}>
-            <button onClick={() => setIaResult(null)}
+            <button type="button" onClick={() => setIaResult(null)}
               style={{position:"absolute",top:8,right:10,background:"transparent",border:"none",cursor:"pointer",color:"#a78bfa",fontSize:16}}>✕</button>
             <div style={{fontFamily:"sans-serif",fontSize:12,fontWeight:700,color:"#7c3aed",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
               🤖 Analyse IA du planning
@@ -2650,11 +2650,11 @@ Réponds de façon concise et pratique, en français.`,
 
             {/* Boutons */}
             <div style={{display:"flex", gap:8}}>
-              <button onClick={saveEditTache} disabled={saving || !editForm.tacheTypeId}
+              <button type="button" onClick={saveEditTache} disabled={saving || !editForm.tacheTypeId}
                 style={{flex:1, padding:"10px 16px", background:"#3b82f6", color:"white", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:600, cursor:"pointer", opacity: (saving || !editForm.tacheTypeId) ? 0.5 : 1}}>
                 {saving ? "Enregistrement…" : "Enregistrer"}
               </button>
-              <button onClick={() => setEditingTache(null)}
+              <button type="button" onClick={() => setEditingTache(null)}
                 style={{padding:"10px 16px", background:"#f1f5f9", color:"#475569", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:500, cursor:"pointer"}}>
                 Annuler
               </button>
@@ -2701,7 +2701,7 @@ Réponds de façon concise et pratique, en français.`,
                     Modèle « {conflictDialog.modele.nom} » · semaine {semaine}
                   </div>
                 </div>
-                <button
+                <button type="button"
                   onClick={conflictAnnuler}
                   style={{
                     background: "transparent", border: "none", padding: 4,
@@ -2755,7 +2755,7 @@ Réponds de façon concise et pratique, en français.`,
 
             {/* Actions */}
             <div style={{ padding: "14px 22px 20px", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: 8 }}>
-              <button
+              <button type="button"
                 onClick={conflictRemplacer}
                 disabled={applyingModele}
                 style={{
@@ -2773,7 +2773,7 @@ Réponds de façon concise et pratique, en français.`,
                 Recommandé · les tâches existantes sont supprimées puis recréées
               </div>
 
-              <button
+              <button type="button"
                 onClick={conflictAjouterQuandMeme}
                 disabled={applyingModele}
                 style={{
@@ -2787,7 +2787,7 @@ Réponds de façon concise et pratique, en français.`,
                 Ajouter quand même (créera des doublons)
               </button>
 
-              <button
+              <button type="button"
                 onClick={conflictAnnuler}
                 disabled={applyingModele}
                 style={{
@@ -2844,11 +2844,11 @@ Réponds de façon concise et pratique, en français.`,
             ))}
 
             <div style={{display:"flex", gap:8, marginTop:14}}>
-              <button onClick={() => ecrireTaches(pendingSplit.newTasks, pendingSplit.decoupes)} disabled={saving}
+              <button type="button" onClick={() => ecrireTaches(pendingSplit.newTasks, pendingSplit.decoupes)} disabled={saving}
                 style={{flex:1, padding:"12px 14px", background:"#16a34a", color:"white", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:600, cursor:saving?"not-allowed":"pointer", opacity:saving?0.6:1}}>
                 Appliquer
               </button>
-              <button onClick={() => setPendingSplit(null)} disabled={saving}
+              <button type="button" onClick={() => setPendingSplit(null)} disabled={saving}
                 style={{padding:"12px 18px", background:"#f1f5f9", color:"#475569", border:"none", borderRadius:10, fontFamily:"sans-serif", fontSize:13, fontWeight:500, cursor:"pointer"}}>
                 Annuler
               </button>

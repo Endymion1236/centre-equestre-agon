@@ -6,10 +6,20 @@ service cloud.firestore {
     function isAuth() {
       return request.auth != null;
     }
+    // L'autorité est le custom claim `admin`. Le repli par email exige que
+    // l'adresse soit VÉRIFIÉE : un jeton porte l'adresse déclarée au compte,
+    // pas une adresse prouvée, et l'inscription par email/mot de passe est
+    // active sur ce projet. Sans `email_verified`, créer un compte avec l'une
+    // de ces adresses suffisait à hériter de l'administration complète — la
+    // seule barrière étant un réglage de la console Firebase (audit 29/08/2026).
+    //
+    // ⚠️ Cette liste est la copie « règles » de lib/admin-emails.ts (les règles
+    // ne savent pas importer). Toute modification doit être faite des deux côtés.
     function isAdmin() {
       return isAuth() && (
         request.auth.token.admin == true
-        || request.auth.token.email in ['ceagon@orange.fr', 'ceagon50@gmail.com', 'emmelinelagy@gmail.com']
+        || (request.auth.token.email_verified == true
+            && request.auth.token.email in ['ceagon@orange.fr', 'ceagon50@gmail.com', 'emmelinelagy@gmail.com'])
       );
     }
     function isMoniteur() {
@@ -238,7 +248,13 @@ service cloud.firestore {
         'degressivite', 'fidelite', 'inscription', 'progression_labels',
         'whatsapp', 'email', 'reservations', 'theme', 'stageDeroule'
       ] || isAdmin();
-      allow write: if isAdmin();
+      // `invoiceCounter` est le compteur de numérotation des factures. Il ne
+      // doit être incrémenté QUE par attribuerNumeroFacture() (Admin SDK, en
+      // transaction, avec trace dans `invoice_audit`) — la numérotation
+      // séquentielle continue exigée par le CGI art. 242 nonies A ne survit
+      // pas à un lire-puis-écrire depuis un navigateur. L'écriture directe est
+      // donc fermée, y compris à l'admin.
+      allow write: if isAdmin() && docId != 'invoiceCounter';
     }
 
     // ── Périodes de vacances scolaires ────────────────────────────────────

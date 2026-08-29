@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { SITE_CONFIG } from "@/lib/config";
 import { ArrowUpRight, Facebook, Gift, MapPin, Phone } from "lucide-react";
@@ -27,7 +28,7 @@ export function Footer() {
         <div className="grid gap-10 border-b border-white/[0.07] pb-12 md:grid-cols-2 lg:grid-cols-[1.35fr_0.8fr_0.8fr_1fr]">
           <div>
             <Link href="/accueil" className="flex items-center gap-3 no-underline">
-              <img src="/images/logo-ce-agon.png" alt="Centre Équestre d’Agon-Coutainville" className="h-12 w-12 rounded-xl object-contain" />
+              <Image src="/images/logo-ce-agon.png" alt="Centre Équestre d’Agon-Coutainville" width={48} height={48} className="h-12 w-12 rounded-xl object-contain" />
               <div>
                 <div className="font-display text-lg font-bold text-white">Centre Équestre</div>
                 <div className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Agon-Coutainville</div>

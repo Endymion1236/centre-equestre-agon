@@ -115,7 +115,7 @@ export default function EditCreneauModal({
             <h2 className="font-display text-lg font-bold text-blue-800">Modifier le créneau</h2>
             <p className="font-body text-xs text-slate-500 mt-0.5">{creneau.date} · {creneau.activityTitle}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+          <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
         </div>
         {/* Contenu scrollable */}
         <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1">
@@ -154,7 +154,7 @@ export default function EditCreneauModal({
                 className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
               <div className="flex flex-wrap gap-1.5">
                 {PRESET_COLORS.map(color => (
-                  <button key={color} onClick={() => onFormChange({...form, color})}
+                  <button type="button" key={color} onClick={() => onFormChange({...form, color})}
                     className={`w-6 h-6 rounded-full border-2 cursor-pointer ${form.color === color ? "border-blue-500 scale-125" : "border-white"}`}
                     style={{background: color}}/>
                 ))}
@@ -185,7 +185,7 @@ export default function EditCreneauModal({
                     const isSelected = selected.some(s => norm(s) === norm(m));
                     const isNew = isSelected && !initialMoniteurs.some(s => norm(s) === norm(m));
                     return (
-                      <button key={m} onClick={() => toggleMoniteur(m)}
+                      <button type="button" key={m} onClick={() => toggleMoniteur(m)}
                         className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border-none cursor-pointer transition-all
                           ${isNew ? "bg-green-500 text-white ring-2 ring-green-300" : isSelected ? "bg-blue-500 text-white" : "bg-gray-100 text-slate-500 hover:bg-blue-50"}`}>
                         {isSelected ? "✓ " : ""}{m}
@@ -195,7 +195,7 @@ export default function EditCreneauModal({
                   {/* Moniteurs stockés mais VRAIMENT absents de la liste
                       (ex. ancien moniteur supprimé), comparaison normalisée. */}
                   {selected.filter(s => !moniteurs.some(m => m.trim().toLowerCase() === s.trim().toLowerCase())).map(m => (
-                    <button key={m} onClick={() => toggleMoniteur(m)}
+                    <button type="button" key={m} onClick={() => toggleMoniteur(m)}
                       className="px-3 py-1.5 rounded-lg font-body text-xs font-semibold bg-orange-100 text-orange-600 border-none cursor-pointer">
                       ✓ {m}
                     </button>
@@ -215,7 +215,7 @@ export default function EditCreneauModal({
                   📋 Appliquer ce changement de moniteur à…
                 </div>
                 <div className="flex gap-2">
-                  <button
+                  <button type="button"
                     onClick={() => { setMoniteurPortee("single"); onApplyAllChange(false); }}
                     className={`flex-1 py-2.5 px-3 rounded-xl font-body text-xs font-semibold border-2 cursor-pointer transition-all text-left
                       ${moniteurPortee === "single"
@@ -226,7 +226,7 @@ export default function EditCreneauModal({
                       {creneau.date} · {creneau.startTime}
                     </div>
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => { setMoniteurPortee("all"); onApplyAllChange(true); }}
                     className={`flex-1 py-2.5 px-3 rounded-xl font-body text-xs font-semibold border-2 cursor-pointer transition-all text-left
                       ${moniteurPortee === "all"
@@ -407,15 +407,15 @@ export default function EditCreneauModal({
         </div>
         {/* Footer fixe avec les boutons */}
         <div className="flex gap-3 p-5 border-t border-gray-100 flex-shrink-0">
-          <button onClick={onClose}
+          <button type="button" onClick={onClose}
             className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
           {onDuplicate && (
-            <button onClick={onDuplicate}
+            <button type="button" onClick={onDuplicate}
               className="px-4 py-3 rounded-xl font-body text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border-none cursor-pointer flex items-center gap-1.5">
               <Copy size={14}/>Dupliquer
             </button>
           )}
-          <button onClick={onSave} disabled={saving}
+          <button type="button" onClick={onSave} disabled={saving}
             className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 border-none cursor-pointer disabled:opacity-50">
             {saving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : null}
             Enregistrer

@@ -168,7 +168,7 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
         <div className="font-body text-sm font-semibold text-sky-900 flex items-center gap-2">
           <FolderLock size={15} /> {salarie.nom} — documents personnels
         </div>
-        <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-white text-slate-400 hover:text-slate-600">
+        <button type="button" onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-white text-slate-400 hover:text-slate-600">
           <X size={14} />
         </button>
       </div>
@@ -234,7 +234,7 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
               <input key={inputKey} type="file" accept=".pdf,image/*" multiple
                 onChange={e => setFiles(Array.from(e.target.files || []))}
                 className="font-body text-xs text-slate-600" />
-              <button onClick={upload} disabled={uploading || files.length === 0}
+              <button type="button" onClick={upload} disabled={uploading || files.length === 0}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-body text-xs font-semibold text-white bg-sky-600 border-none cursor-pointer hover:bg-sky-700 disabled:opacity-50">
                 {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
                 {files.length > 1 ? `Déposer ${files.length} pages` : "Déposer"}
@@ -267,7 +267,7 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
                     className="w-7 h-7 rounded-lg flex items-center justify-center bg-slate-50 text-slate-400 hover:bg-sky-50 hover:text-sky-600 no-underline">
                     <Download size={13} />
                   </a>
-                  <button onClick={() => supprimer(d)} disabled={deletingId === d.id} title="Supprimer"
+                  <button type="button" onClick={() => supprimer(d)} disabled={deletingId === d.id} title="Supprimer"
                     className="w-7 h-7 rounded-lg flex items-center justify-center border-none cursor-pointer bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-50">
                     {deletingId === d.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
                   </button>

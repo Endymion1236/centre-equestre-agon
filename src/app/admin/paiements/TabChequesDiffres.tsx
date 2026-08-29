@@ -5,6 +5,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, CheckCircle, AlertTriangle, Calendar, Search, X, Trash2 } from "lucide-react";
 import { safeNumber } from "@/lib/utils";
+import { useConfirm } from "@/components/ui/Confirm";
 
 interface TabChequesDiffresProps {
   enregistrerEncaissement: (
@@ -32,6 +33,7 @@ interface ChequeDifferE {
 }
 
 export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, payments }: TabChequesDiffresProps) {
+  const confirmer = useConfirm();
   const [cheques, setCheques] = useState<ChequeDifferE[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -88,7 +90,16 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
   });
 
   const handleDeposit = async (chq: ChequeDifferE) => {
-    if (!confirm(`Marquer le chèque n°${chq.numero || "—"} de ${chq.familyName} comme déposé en banque ?\n\nMontant : ${chq.montant.toFixed(2)}€\nDate d'encaissement : ${new Date().toLocaleDateString("fr-FR")}\n\nCela créera un encaissement comptable.`)) return;
+    if (!(await confirmer({
+      titre: `Déposer en banque le chèque n°${chq.numero || "—"} — ${chq.familyName} ?`,
+      details: [
+        `Montant : ${chq.montant.toFixed(2)}€`,
+        `Date d'encaissement : ${new Date().toLocaleDateString("fr-FR")}`,
+        "Un encaissement comptable sera créé. Il est inaltérable : seule une contre-passation peut le corriger.",
+      ],
+      libelleConfirmer: "Déposer",
+      danger: true,
+    }))) return;
     setProcessing(chq.id);
     try {
       // Trouver le payment lié
@@ -196,7 +207,7 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
               { id: "overdue", label: `En retard${overdueCheques.length ? ` (${overdueCheques.length})` : ""}` },
               { id: "deposited", label: "Déposés" },
             ].map(f => (
-              <button key={f.id} onClick={() => setStatusFilter(f.id as any)}
+              <button type="button" key={f.id} onClick={() => setStatusFilter(f.id as any)}
                 className={`font-body text-xs px-3 py-2 rounded-lg border cursor-pointer ${statusFilter === f.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
                 {f.label}
               </button>
@@ -259,14 +270,14 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
                           <span className="font-body text-base font-bold text-blue-500">{chq.montant.toFixed(2)}€</span>
                           {chq.status === "pending" && (
                             <>
-                              <button
+                              <button type="button"
                                 onClick={() => handleDeposit(chq)}
                                 disabled={processing === chq.id}
                                 className="font-body text-xs font-semibold text-white bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50 flex items-center gap-1">
                                 {processing === chq.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
                                 Déposer
                               </button>
-                              <button
+                              <button type="button"
                                 onClick={() => handleCancel(chq)}
                                 disabled={processing === chq.id}
                                 title="Annuler ce chèque (chèque rendu/détruit)"

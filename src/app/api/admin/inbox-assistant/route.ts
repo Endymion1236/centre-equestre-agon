@@ -484,6 +484,6 @@ ${JSON.stringify(activitesDispo)}`;
     });
   } catch (e: any) {
     console.error("[inbox-assistant]", e);
-    return NextResponse.json({ error: e?.message || "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

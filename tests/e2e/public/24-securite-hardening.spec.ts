@@ -137,7 +137,6 @@ test.describe("SEC-HARDENING · Sécurité post-hardening", () => {
     const cronRoutes = [
       "/api/cron/rappels-j1",
       "/api/cron/daily-notifications",
-      "/api/cron/daily-monitor-recap",
       "/api/cron/charge-stage-balances",
     ];
 

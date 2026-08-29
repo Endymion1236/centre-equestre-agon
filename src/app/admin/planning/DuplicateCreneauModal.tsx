@@ -83,7 +83,7 @@ export default function DuplicateCreneauModal({ creneau, onDuplicate, onClose }:
               Cliquez sur les jours où répéter ce créneau
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer ml-3 flex-shrink-0">
+          <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer ml-3 flex-shrink-0">
             <X size={20}/>
           </button>
         </div>
@@ -92,13 +92,13 @@ export default function DuplicateCreneauModal({ creneau, onDuplicate, onClose }:
         <div className="p-4 flex-1 overflow-y-auto">
           {/* Nav mois */}
           <div className="flex items-center justify-between mb-3">
-            <button onClick={prevMonth} className="w-8 h-8 rounded-lg bg-sand border-none cursor-pointer flex items-center justify-center text-slate-600 hover:bg-blue-50">
+            <button type="button" onClick={prevMonth} className="w-8 h-8 rounded-lg bg-sand border-none cursor-pointer flex items-center justify-center text-slate-600 hover:bg-blue-50">
               <ChevronLeft size={16}/>
             </button>
             <span className="font-body text-sm font-semibold text-blue-800 capitalize">
               {MONTHS_FR[month]} {year}
             </span>
-            <button onClick={nextMonth} className="w-8 h-8 rounded-lg bg-sand border-none cursor-pointer flex items-center justify-center text-slate-600 hover:bg-blue-50">
+            <button type="button" onClick={nextMonth} className="w-8 h-8 rounded-lg bg-sand border-none cursor-pointer flex items-center justify-center text-slate-600 hover:bg-blue-50">
               <ChevronRight size={16}/>
             </button>
           </div>
@@ -119,7 +119,7 @@ export default function DuplicateCreneauModal({ creneau, onDuplicate, onClose }:
               const isSel = selected.includes(dateStr);
               const isPast = dateStr < fmtDate(today);
               return (
-                <button key={dateStr}
+                <button type="button" key={dateStr}
                   onClick={() => !isPast && toggle(dateStr)}
                   disabled={isOriginal || isPast}
                   title={isOriginal ? "Créneau original" : isPast ? "Date passée" : dateStr}
@@ -168,7 +168,7 @@ export default function DuplicateCreneauModal({ creneau, onDuplicate, onClose }:
                 {[...selected].sort().map(d => (
                   <span key={d} className="font-body text-[10px] bg-white border border-blue-200 text-blue-700 px-2 py-0.5 rounded-full flex items-center gap-1">
                     {new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
-                    <button onClick={() => toggle(d)} className="text-blue-400 hover:text-red-400 bg-transparent border-none cursor-pointer leading-none p-0 ml-0.5">×</button>
+                    <button type="button" onClick={() => toggle(d)} className="text-blue-400 hover:text-red-400 bg-transparent border-none cursor-pointer leading-none p-0 ml-0.5">×</button>
                   </span>
                 ))}
               </div>
@@ -178,11 +178,11 @@ export default function DuplicateCreneauModal({ creneau, onDuplicate, onClose }:
 
         {/* Footer */}
         <div className="flex gap-3 p-4 border-t border-gray-100 flex-shrink-0">
-          <button onClick={onClose}
+          <button type="button" onClick={onClose}
             className="px-4 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
             Annuler
           </button>
-          <button onClick={handleSave} disabled={selected.length === 0 || saving}
+          <button type="button" onClick={handleSave} disabled={selected.length === 0 || saving}
             className="flex-1 py-2.5 rounded-xl font-body text-sm font-semibold text-white border-none cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
             style={{ background: selected.length === 0 ? "#ccc" : col }}>
             {saving ? <Loader2 size={16} className="animate-spin"/> : <Copy size={16}/>}

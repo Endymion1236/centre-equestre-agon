@@ -177,7 +177,7 @@ export default function ProgressionCavalierPage() {
   if (error || !resolvedFamilyId || !child) {
     return (
       <div className="max-w-2xl mx-auto p-6">
-        <button
+        <button type="button"
           onClick={goBack}
           className="flex items-center gap-2 text-blue-500 bg-transparent border-none cursor-pointer mb-4 font-body text-sm">
           <ArrowLeft size={16} /> Retour
@@ -185,7 +185,7 @@ export default function ProgressionCavalierPage() {
         <div className="bg-white rounded-2xl border border-orange-200 p-8 text-center">
           <div className="text-4xl mb-3">⚠️</div>
           <p className="font-body text-sm text-slate-500 mb-4">{error || "Données introuvables"}</p>
-          <button
+          <button type="button"
             onClick={() => {
               // Forcer un reload complet de la page (utile si auth pas prête au premier essai)
               if (typeof window !== "undefined") window.location.reload();
@@ -200,7 +200,7 @@ export default function ProgressionCavalierPage() {
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-6 flex flex-col gap-4">
-      <button
+      <button type="button"
         onClick={goBack}
         className="flex items-center gap-2 text-blue-500 bg-transparent border-none cursor-pointer font-body text-sm hover:text-blue-700 self-start">
         <ArrowLeft size={16} /> Retour au planning

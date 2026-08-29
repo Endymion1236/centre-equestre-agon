@@ -132,6 +132,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
     console.error("echeances-sepa-reminder:", e);
-    return NextResponse.json({ error: (e?.message || String(e)).slice(0, 300) }, { status: 500 });
+    console.error("[echeances-sepa-reminder]", e);
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

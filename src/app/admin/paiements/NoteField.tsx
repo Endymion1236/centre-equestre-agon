@@ -21,7 +21,7 @@ export function NoteField({ paymentId, initialNote, onSave }: {
   };
 
   if (!editing && !val) return (
-    <button onClick={() => setEditing(true)}
+    <button type="button" onClick={() => setEditing(true)}
       className="font-body text-[10px] text-slate-400 bg-transparent border-none cursor-pointer hover:text-blue-500 flex items-center gap-1 py-0.5">
       + Ajouter un commentaire
     </button>
@@ -30,7 +30,7 @@ export function NoteField({ paymentId, initialNote, onSave }: {
   if (!editing) return (
     <div className="flex items-start gap-2 group">
       <span className="font-body text-xs text-slate-500 italic flex-1">📝 {val}</span>
-      <button onClick={() => setEditing(true)} className="opacity-0 group-hover:opacity-100 font-body text-[10px] text-blue-400 bg-transparent border-none cursor-pointer">Modifier</button>
+      <button type="button" onClick={() => setEditing(true)} className="opacity-0 group-hover:opacity-100 font-body text-[10px] text-blue-400 bg-transparent border-none cursor-pointer">Modifier</button>
     </div>
   );
 
@@ -40,11 +40,11 @@ export function NoteField({ paymentId, initialNote, onSave }: {
         placeholder="Commentaire interne, conditions particulières..."
         className="flex-1 px-3 py-2 rounded-lg border border-blue-300 font-body text-xs bg-white focus:outline-none resize-none" />
       <div className="flex flex-col gap-1">
-        <button onClick={save} disabled={saving}
+        <button type="button" onClick={save} disabled={saving}
           className="px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50">
           {saving ? "..." : "✓"}
         </button>
-        <button onClick={() => { setVal(initialNote); setEditing(false); }}
+        <button type="button" onClick={() => { setVal(initialNote); setEditing(false); }}
           className="px-3 py-1.5 rounded-lg font-body text-xs text-slate-500 bg-gray-100 border-none cursor-pointer">
           ✕
         </button>

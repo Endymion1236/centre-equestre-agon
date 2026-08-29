@@ -81,7 +81,7 @@ export default function ManuelPage() {
               const Icon = ICONS[ch.icon] || Sparkles;
               const isActive = ch.id === (currentChapter?.id || "");
               return (
-                <button
+                <button type="button"
                   key={ch.id}
                   onClick={() => { setActiveChapter(ch.id); window.history.replaceState(null, "", `#${ch.id}`); }}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border-none cursor-pointer text-left font-body text-sm transition-colors ${
@@ -152,7 +152,7 @@ function SectionView({ section, chapterId }: { section: ManualSection; chapterId
         </h3>
         <div className="flex items-center gap-2">
           {section.tourId && (
-            <button
+            <button type="button"
               onClick={() => startTour(section.tourId!)}
               className="flex items-center gap-1.5 font-body text-xs text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer">
               <Play size={12} />

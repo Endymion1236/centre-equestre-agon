@@ -125,7 +125,7 @@ export default function OffresPage() {
       <div className="mb-4 flex items-center gap-2">
         <Megaphone size={20} className="text-blue-600" />
         <h1 className="font-display text-xl font-bold text-blue-950">Offres last-minute</h1>
-        <button onClick={loadItems} className="ml-auto inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 font-body text-xs text-slate-600 border border-gray-200 cursor-pointer">
+        <button type="button" onClick={loadItems} className="ml-auto inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 font-body text-xs text-slate-600 border border-gray-200 cursor-pointer">
           <RefreshCw size={12} /> Actualiser
         </button>
       </div>
@@ -229,7 +229,7 @@ export default function OffresPage() {
               « rareté » (places libérées, premier arrivé) plutôt que promo.
             </p>
             <div className="mt-2 flex items-center gap-2">
-              <button
+              <button type="button"
                 onClick={envoyer}
                 disabled={sending || nbCoches === 0 || !subject.trim() || !message.trim()}
                 className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3.5 py-2 font-body text-xs font-bold text-white border-none cursor-pointer hover:bg-blue-700 disabled:opacity-50"

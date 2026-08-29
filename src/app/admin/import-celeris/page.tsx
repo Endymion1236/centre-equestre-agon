@@ -200,7 +200,7 @@ export default function ImportCelerisPage() {
         <p className="font-body text-xs text-gray-400 mt-1">
           Seules les familles taguées pour cette semaine seront importées. Les familles déjà en base sont ignorées.
         </p>
-        <button onClick={listerStages} disabled={loading}
+        <button type="button" onClick={listerStages} disabled={loading}
           className="mt-2 px-3 py-2 rounded-xl font-body text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "🔎 Lister les créneaux-stages de cette semaine (diagnostic)"}
         </button>
@@ -233,15 +233,15 @@ export default function ImportCelerisPage() {
       )}
 
       <div className="flex gap-3 mb-6 flex-wrap">
-        <button onClick={() => lancer(false)} disabled={loading}
+        <button type="button" onClick={() => lancer(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "1. Aperçu de la semaine (sans rien écrire)"}
         </button>
-        <button onClick={() => { if (confirm(`Créer réellement les familles de la ${SEMAINES.find(s => s.value === semaine)?.label} sur la base TEST ?`)) lancer(true); }} disabled={loading}
+        <button type="button" onClick={() => { if (confirm(`Créer réellement les familles de la ${SEMAINES.find(s => s.value === semaine)?.label} sur la base TEST ?`)) lancer(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "2. Importer cette semaine pour de vrai"}
         </button>
-        <button onClick={exporter} disabled={loading}
+        <button type="button" onClick={exporter} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-gray-700 bg-gray-100 border border-gray-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Exporter les familles (JSON)"}
         </button>
@@ -252,11 +252,11 @@ export default function ImportCelerisPage() {
           🐴 Étape 2 — Inscrit les enfants de la semaine dans leurs stages, <strong>sans créer de paiement</strong>
           (marqués « réglé via Celeris », exclus des impayés). À faire APRÈS l'import des fiches ci-dessus.
         </span>
-        <button onClick={() => inscrireStages(false)} disabled={loading}
+        <button type="button" onClick={() => inscrireStages(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-teal-700 bg-teal-50 border border-teal-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu inscription aux stages"}
         </button>
-        <button onClick={() => { if (confirm(`Inscrire les enfants de la ${SEMAINES.find(s => s.value === semaine)?.label} dans leurs stages (sans paiement) sur la base TEST ?`)) inscrireStages(true); }} disabled={loading}
+        <button type="button" onClick={() => { if (confirm(`Inscrire les enfants de la ${SEMAINES.find(s => s.value === semaine)?.label} dans leurs stages (sans paiement) sur la base TEST ?`)) inscrireStages(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-teal-600 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Inscrire aux stages pour de vrai"}
         </button>
@@ -294,11 +294,11 @@ export default function ImportCelerisPage() {
 
       <div className="flex gap-3 mb-6 flex-wrap border-t border-gray-100 pt-4">
         <span className="font-body text-xs text-gray-400 w-full">Copie du snapshot PROD vers la base TEST (pour tester en conditions réelles) :</span>
-        <button onClick={() => copierProd(false)} disabled={loading}
+        <button type="button" onClick={() => copierProd(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-purple-700 bg-purple-50 border border-purple-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu copie prod→test"}
         </button>
-        <button onClick={() => { if (confirm("Copier les familles PROD dans la base TEST ?")) copierProd(true); }} disabled={loading}
+        <button type="button" onClick={() => { if (confirm("Copier les familles PROD dans la base TEST ?")) copierProd(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-purple-500 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Copier prod→test pour de vrai"}
         </button>
@@ -306,7 +306,7 @@ export default function ImportCelerisPage() {
 
       <div className="flex gap-3 mb-6 flex-wrap border-t border-green-100 pt-4">
         <span className="font-body text-xs text-green-600 w-full">💾 Sauvegarde complète de toutes les collections (à faire AVANT toute remise à zéro). Télécharge un fichier JSON à conserver.</span>
-        <button onClick={sauvegarder} disabled={loading}
+        <button type="button" onClick={sauvegarder} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-green-700 bg-green-50 border border-green-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "💾 Sauvegarde complète (JSON)"}
         </button>
@@ -314,11 +314,11 @@ export default function ImportCelerisPage() {
 
       <div className="flex gap-3 mb-6 flex-wrap border-t border-red-100 pt-4">
         <span className="font-body text-xs text-red-400 w-full">⚠️ Efface uniquement le FINANCIER (paiements, SEPA, encaissements, compta, cartes, fidélité, avoirs, forfaits, remises, CAWL). Conserve : familles, progression, péda, présences, réservations, planning, structure. Effacement réel protégé par mot-clé.</span>
-        <button onClick={() => resetDonnees(false)} disabled={loading}
+        <button type="button" onClick={() => resetDonnees(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-red-700 bg-red-50 border border-red-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu remise à zéro (comptage)"}
         </button>
-        <button onClick={() => { if (confirm("EFFACER toutes les données (familles, paiements, etc.) sur TEST ?\n\nLa structure est conservée. Action irréversible.") && confirm("DERNIÈRE CONFIRMATION — effacer les données de la base test ?")) resetDonnees(true); }} disabled={loading}
+        <button type="button" onClick={() => { if (confirm("EFFACER toutes les données (familles, paiements, etc.) sur TEST ?\n\nLa structure est conservée. Action irréversible.") && confirm("DERNIÈRE CONFIRMATION — effacer les données de la base test ?")) resetDonnees(true); }} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-red-500 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Remettre à zéro (2 confirmations)"}
         </button>
@@ -328,11 +328,11 @@ export default function ImportCelerisPage() {
         <span className="font-body text-xs text-blue-500 w-full">♻️ Restauration depuis un fichier de sauvegarde (en cas de pépin). Sélectionne le fichier JSON téléchargé, puis aperçu avant restauration réelle.</span>
         <input type="file" accept="application/json,.json" onChange={e => setRestoreFile(e.target.files?.[0] || null)}
           className="font-body text-xs text-gray-600 w-full" />
-        <button onClick={() => restoreFile && restaurer(restoreFile, false)} disabled={loading || !restoreFile}
+        <button type="button" onClick={() => restoreFile && restaurer(restoreFile, false)} disabled={loading || !restoreFile}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-700 bg-blue-50 border border-blue-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu restauration"}
         </button>
-        <button onClick={() => restoreFile && restaurer(restoreFile, true)} disabled={loading || !restoreFile}
+        <button type="button" onClick={() => restoreFile && restaurer(restoreFile, true)} disabled={loading || !restoreFile}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-600 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Restaurer (mot-clé)"}
         </button>

@@ -94,7 +94,7 @@ export default function StagesImpayesAlert() {
       <div className={`flex items-center justify-between px-4 py-3 ${
         isUrgent ? "bg-red-100" : "bg-amber-100"
       }`}>
-        <button
+        <button type="button"
           onClick={() => setExpanded(e => !e)}
           className="flex items-center gap-3 flex-1 bg-transparent border-none cursor-pointer text-left"
         >
@@ -119,7 +119,7 @@ export default function StagesImpayesAlert() {
             : <ChevronDown size={16} className={isUrgent ? "text-red-500" : "text-amber-500"} />
           }
         </button>
-        <button
+        <button type="button"
           onClick={() => setDismissed(true)}
           className="ml-3 bg-transparent border-none cursor-pointer p-1 rounded hover:bg-black/10"
           title="Masquer jusqu'au prochain chargement"
@@ -167,7 +167,7 @@ export default function StagesImpayesAlert() {
                   {alert.totalTTC.toFixed(2)}€
                 </span>
                 <Link href={`/admin/paiements?tab=impayes${alert.familyId ? `&family=${encodeURIComponent(alert.familyId)}` : `&search=${encodeURIComponent(alert.familyName)}`}`}>
-                  <button className="font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
+                  <button type="button" className="font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
                     Voir
                   </button>
                 </Link>
@@ -189,7 +189,7 @@ export default function StagesImpayesAlert() {
             }
           </p>
           <Link href="/admin/paiements">
-            <button className={`font-body text-xs font-semibold border-none cursor-pointer bg-transparent hover:underline ${
+            <button type="button" className={`font-body text-xs font-semibold border-none cursor-pointer bg-transparent hover:underline ${
               isUrgent ? "text-red-600" : "text-amber-600"
             }`}>
               Voir tous les paiements →

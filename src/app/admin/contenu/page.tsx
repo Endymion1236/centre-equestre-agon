@@ -189,7 +189,7 @@ export default function ContenuPage() {
             className="flex items-center gap-1.5 font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             <ExternalLink size={13} /> Voir le site
           </a>
-          <button onClick={save} disabled={saving}
+          <button type="button" onClick={save} disabled={saving}
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400 disabled:opacity-50">
             {saving ? <Loader2 size={15} className="animate-spin" /> : saved ? <CheckCircle2 size={15} /> : <Save size={15} />}
             {saving ? "Enregistrement..." : saved ? "Enregistré !" : "Enregistrer"}
@@ -200,7 +200,7 @@ export default function ContenuPage() {
       {/* Tabs */}
       <div className="flex gap-2 mb-6">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button type="button" key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-body text-sm font-medium border-none cursor-pointer transition-all ${tab === t.id ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200 hover:bg-gray-50"}`}>
             {t.icon} {t.label}
           </button>
@@ -392,7 +392,7 @@ export default function ContenuPage() {
           <Card padding="md">
             <div className="flex items-center justify-between mb-4">
               <div className="font-body text-sm font-semibold text-blue-800">📅 Tarifs cours à l'année</div>
-              <button onClick={addCoursAnnuel} className="font-body text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+              <button type="button" onClick={addCoursAnnuel} className="font-body text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border-none cursor-pointer">
                 + Ajouter un forfait
               </button>
             </div>
@@ -412,7 +412,7 @@ export default function ContenuPage() {
                       <input type="number" value={c.price} onChange={e => setCoursAnnuel(idx, "price", e.target.value)} className={inp} /></div>
                     <div><label className={label}>Fréquence</label>
                       <input value={c.freq} onChange={e => setCoursAnnuel(idx, "freq", e.target.value)} className={inp} placeholder="Trimestre, Année, Mois..." /></div>
-                    <button
+                    <button type="button"
                       onClick={() => removeCoursAnnuel(idx)}
                       className="font-body text-xs font-semibold text-red-600 hover:text-red-800 bg-white hover:bg-red-50 px-3 py-2 rounded-lg border border-red-200 cursor-pointer self-end">
                       Supprimer
@@ -486,7 +486,7 @@ export default function ContenuPage() {
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center">
             <p className="font-body text-xs text-slate-500">Gérez les animaux et leurs photos. Ajoutez ou supprimez des animaux.</p>
-            <button onClick={() => setMiniferme(prev => ({ ...prev, animals: [...prev.animals, { name: "", type: "", color: "", description: "", photo: "" }] }))}
+            <button type="button" onClick={() => setMiniferme(prev => ({ ...prev, animals: [...prev.animals, { name: "", type: "", color: "", description: "", photo: "" }] }))}
               className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
               + Ajouter un animal
             </button>
@@ -499,7 +499,7 @@ export default function ContenuPage() {
                   {animal.photo ? (
                     <div className="relative group">
                       <img src={animal.photo} alt={animal.name} className="w-32 h-32 rounded-xl object-cover" />
-                      <button onClick={() => {
+                      <button type="button" onClick={() => {
                         const updated = [...miniferme.animals];
                         updated[idx] = { ...updated[idx], photo: "" };
                         setMiniferme({ ...miniferme, animals: updated });
@@ -552,7 +552,7 @@ export default function ContenuPage() {
                     <textarea value={animal.description} onChange={e => { const a = [...miniferme.animals]; a[idx] = { ...a[idx], description: e.target.value }; setMiniferme({ ...miniferme, animals: a }); }} rows={2} className={ta} /></div>
                 </div>
                 {/* Supprimer */}
-                <button onClick={() => { if (confirm(`Supprimer ${animal.name || "cet animal"} ?`)) { const a = miniferme.animals.filter((_, i) => i !== idx); setMiniferme({ ...miniferme, animals: a }); } }}
+                <button type="button" onClick={() => { if (confirm(`Supprimer ${animal.name || "cet animal"} ?`)) { const a = miniferme.animals.filter((_, i) => i !== idx); setMiniferme({ ...miniferme, animals: a }); } }}
                   className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer mt-6"><Trash2 size={16} /></button>
               </div>
             </Card>
@@ -565,7 +565,7 @@ export default function ContenuPage() {
         <div className="flex flex-col gap-4">
           <div className="flex justify-between items-center">
             <p className="font-body text-xs text-slate-500">Gérez les actualités et événements affichés sur la page d&apos;accueil.</p>
-            <button onClick={() => setActus([...actus, { id: Date.now().toString(), type: "event", title: "", date: new Date().toISOString().split("T")[0], description: "", emoji: "📅", active: true }])}
+            <button type="button" onClick={() => setActus([...actus, { id: Date.now().toString(), type: "event", title: "", date: new Date().toISOString().split("T")[0], description: "", emoji: "📅", active: true }])}
               className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
               + Ajouter
             </button>
@@ -610,11 +610,11 @@ export default function ContenuPage() {
                   </div>
                 </div>
                 <div className="flex flex-col gap-1.5 pt-5">
-                  <button onClick={() => { const a = [...actus]; a[idx] = { ...a[idx], active: !a[idx].active }; setActus(a); }}
+                  <button type="button" onClick={() => { const a = [...actus]; a[idx] = { ...a[idx], active: !a[idx].active }; setActus(a); }}
                     className={`font-body text-[10px] px-2.5 py-1 rounded-lg border-none cursor-pointer ${actu.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
                     {actu.active ? "Visible" : "Masqué"}
                   </button>
-                  <button onClick={() => { if (confirm("Supprimer cette actu ?")) setActus(actus.filter((_, i) => i !== idx)); }}
+                  <button type="button" onClick={() => { if (confirm("Supprimer cette actu ?")) setActus(actus.filter((_, i) => i !== idx)); }}
                     className="font-body text-[10px] text-red-400 bg-red-50 px-2.5 py-1 rounded-lg border-none cursor-pointer hover:bg-red-100">
                     Supprimer
                   </button>

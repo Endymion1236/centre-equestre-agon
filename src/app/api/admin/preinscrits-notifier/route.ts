@@ -292,7 +292,7 @@ export async function POST(req: NextRequest) {
       console.error("[preinscrits]", f.email, e);
       await logEmail({
         to: f.email, subject, context: "preinscrits_notifier",
-        status: "failed", error: e?.message || String(e),
+        status: "failed", error: "Erreur interne",
         familyId: f.familyId,
       }).catch(() => {});
     }

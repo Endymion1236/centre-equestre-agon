@@ -136,7 +136,7 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
     <div className="mb-4 print:bg-transparent">
       {/* En-tête repliable + accès rapide au plan */}
       <div className="flex items-center gap-2 bg-blue-50/60 border-l-4 border-blue-300 rounded-r-lg px-3 py-2">
-        <button onClick={() => setOpen(o => !o)}
+        <button type="button" onClick={() => setOpen(o => !o)}
           className="flex-1 min-w-0 bg-transparent border-none cursor-pointer text-left p-0">
           <div className="font-body text-[10px] font-semibold text-blue-600 uppercase tracking-wider">📝 Notes de séance</div>
           {creneau.themeStage && (
@@ -154,12 +154,12 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
                 className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg no-underline hover:bg-purple-100 flex-shrink-0">
                 <FileText size={13} /> Plan (PDF)
               </a>
-            : <button onClick={() => setLightbox(true)}
+            : <button type="button" onClick={() => setLightbox(true)}
                 className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex-shrink-0">
                 <Eye size={13} /> Plan
               </button>
         )}
-        <button onClick={() => setOpen(o => !o)} className="bg-transparent border-none cursor-pointer flex-shrink-0 p-0">
+        <button type="button" onClick={() => setOpen(o => !o)} className="bg-transparent border-none cursor-pointer flex-shrink-0 p-0">
           {open ? <ChevronUp size={16} className="text-blue-500" /> : <ChevronDown size={16} className="text-blue-500" />}
         </button>
       </div>
@@ -176,7 +176,7 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
                   <FileText size={15} /> Ouvrir le plan (PDF)
                 </a>
               ) : (
-                <button onClick={() => setLightbox(true)} className="block w-full bg-transparent border border-purple-100 rounded-lg p-0 cursor-pointer overflow-hidden">
+                <button type="button" onClick={() => setLightbox(true)} className="block w-full bg-transparent border border-purple-100 rounded-lg p-0 cursor-pointer overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={planUrl} alt="Plan de séance" className="w-full max-h-64 object-contain bg-slate-50" />
                   <div className="font-body text-[10px] text-purple-500 py-1">Toucher pour agrandir</div>
@@ -192,7 +192,7 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
               placeholder="Ce que tu prévois pour la séance (objectifs, exercices…)"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400 resize-y" />
             <div className="flex items-center gap-2 mt-1">
-              <button onClick={savePrep} disabled={prepSaving}
+              <button type="button" onClick={savePrep} disabled={prepSaving}
                 className="font-body text-xs font-semibold text-white bg-orange-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-400 disabled:opacity-50">
                 {prepSaving ? "Enregistrement…" : "Enregistrer"}
               </button>
@@ -207,12 +207,12 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
               placeholder="Ressenti, comportement de groupe, exercices à refaire…"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400 resize-y" />
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <button onClick={() => recording ? stopRec() : startRec()} disabled={transcribing}
+              <button type="button" onClick={() => recording ? stopRec() : startRec()} disabled={transcribing}
                 className={`flex items-center gap-1.5 font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50 ${recording ? "bg-red-500 text-white hover:bg-red-400" : "bg-blue-100 text-blue-700 hover:bg-blue-200"}`}>
                 {recording ? <><MicOff size={13} /> Arrêter la dictée</> : <><Mic size={13} /> Dicter</>}
               </button>
               {transcribing && <span className="font-body text-xs text-slate-500 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Transcription…</span>}
-              <button onClick={saveFin} disabled={finSaving || !fin.trim()}
+              <button type="button" onClick={saveFin} disabled={finSaving || !fin.trim()}
                 className="font-body text-xs font-semibold text-white bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-500 disabled:opacity-50">
                 {finSaving ? "Enregistrement…" : "Enregistrer la note"}
               </button>
@@ -230,7 +230,7 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
                       <p className="font-body text-sm text-slate-700 whitespace-pre-wrap">{n.texte}</p>
                       <span className="font-body text-[10px] text-slate-400">{fmtDate(n.createdAt)}{n.createdByName ? ` · ${n.createdByName}` : ""}</span>
                     </div>
-                    <button onClick={() => deleteJournal(n.id)} className="text-slate-300 hover:text-red-500 bg-transparent border-none cursor-pointer flex-shrink-0"><Trash2 size={14} /></button>
+                    <button type="button" onClick={() => deleteJournal(n.id)} className="text-slate-300 hover:text-red-500 bg-transparent border-none cursor-pointer flex-shrink-0"><Trash2 size={14} /></button>
                   </div>
                 ))}
               </div>
@@ -244,13 +244,13 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
           {/* Barre d'outils */}
           <div className="fixed top-0 left-0 right-0 z-[61] flex items-center justify-between px-3 py-2 bg-black/40" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-2">
-              <button onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))}
+              <button type="button" onClick={() => setZoom(z => Math.max(1, +(z - 0.5).toFixed(1)))}
                 className="text-white bg-white/15 rounded-lg p-2 border-none cursor-pointer disabled:opacity-40" disabled={zoom <= 1}><ZoomOut size={20} /></button>
               <span className="font-body text-xs text-white w-10 text-center">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom(z => Math.min(5, +(z + 0.5).toFixed(1)))}
+              <button type="button" onClick={() => setZoom(z => Math.min(5, +(z + 0.5).toFixed(1)))}
                 className="text-white bg-white/15 rounded-lg p-2 border-none cursor-pointer disabled:opacity-40" disabled={zoom >= 5}><ZoomIn size={20} /></button>
             </div>
-            <button onClick={() => setLightbox(false)} className="text-white bg-white/15 rounded-lg p-2 border-none cursor-pointer"><X size={20} /></button>
+            <button type="button" onClick={() => setLightbox(false)} className="text-white bg-white/15 rounded-lg p-2 border-none cursor-pointer"><X size={20} /></button>
           </div>
           {/* Image (toucher = zoom avant/arrière) */}
           <div className="min-h-full min-w-full flex items-center justify-center p-2 pt-14">

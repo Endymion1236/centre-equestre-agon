@@ -158,6 +158,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[voicemail]", e?.message || e);
-    return NextResponse.json({ error: e?.message || "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }

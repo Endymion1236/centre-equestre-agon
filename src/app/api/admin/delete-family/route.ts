@@ -131,7 +131,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
         error: "Aucun compte Firebase Auth pour cet email",
       });
     } else {
-      report.errors.push({ step: "firebase-auth-lookup", error: e.message });
+      report.errors.push({ step: "firebase-auth-lookup", error: "Erreur interne"});
     }
     // On continue quand même — on peut avoir un doc families sans compte Auth
   }
@@ -167,7 +167,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
     report.familyDocId = familyDocId;
     report.familyName = familyData?.parentName || null;
   } catch (e: any) {
-    report.errors.push({ step: "families-lookup", error: e.message });
+    report.errors.push({ step: "families-lookup", error: "Erreur interne"});
   }
 
   // Le familyId utilisé dans les docs liés est soit l'uid, soit le firestoreId
@@ -210,7 +210,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
       } catch (e: any) {
         report.errors.push({
           step: `delete-${collName}`,
-          error: e.message,
+          error: "Erreur interne",
         });
       }
     }
@@ -240,7 +240,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
       } catch (e: any) {
         report.errors.push({
           step: `delete-${collName}`,
-          error: e.message,
+          error: "Erreur interne",
         });
       }
     }
@@ -284,7 +284,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
       }
     }
   } catch (e: any) {
-    report.errors.push({ step: "creneaux-cleanup", error: e.message });
+    report.errors.push({ step: "creneaux-cleanup", error: "Erreur interne"});
   }
 
   // ── 6. Supprimer le doc families ────────────────────────────────────
@@ -298,7 +298,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
       // bien familyDocId (visible côté user), ce qui suffit à comprendre
       // qu'il sera supprimé.
     } catch (e: any) {
-      report.errors.push({ step: "families-delete", error: e.message });
+      report.errors.push({ step: "families-delete", error: "Erreur interne"});
     }
   }
 
@@ -310,7 +310,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
         report.firebaseAuthDeleted = true;
       }
     } catch (e: any) {
-      report.errors.push({ step: "firebase-auth-delete", error: e.message });
+      report.errors.push({ step: "firebase-auth-delete", error: "Erreur interne"});
     }
   }
 

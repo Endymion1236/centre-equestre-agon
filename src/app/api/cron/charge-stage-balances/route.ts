@@ -7,6 +7,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 import { addDaysParis } from "@/lib/date-local";
 import { chargeWithToken, logMitAttempt } from "@/lib/cawl-mit";
+import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { emailLayout, emailButton } from "@/lib/email-templates";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,25 @@ export async function GET(req: NextRequest) {
       // échouerait et enverrait un email d'échec anxiogène) — on retombe
       // directement sur l'email de rappel classique.
       if (cofToken && p.cofInitialPaymentId) {
+        // ── Verrou posé AVANT le débit ────────────────────────────────────
+        // L'idempotence reposait sur `soldeReminderSentAt`, écrit APRÈS le
+        // prélèvement réussi. Si la carte était débitée et que l'écriture
+        // Firestore qui suit échouait, la passe suivante re-débitait la
+        // famille. Le verrou est désormais acquis avant l'appel : une seconde
+        // tentative sur le même paiement ne peut plus partir (audit F5).
+        const verrouMit = await acquireCawlConfirmationLock({
+          hostedCheckoutId: `mit-${payDoc.id}`,
+          stage: "balance",
+          source: "cron-mit",
+          paymentId: payDoc.id,
+          amountCents: Math.round(solde * 100),
+        });
+        if (!verrouMit) {
+          results.skipped++;
+          results.details.push(`${familyName}: prélèvement du solde déjà engagé`);
+          continue;
+        }
+
         const mit = await chargeWithToken({
           paymentId: payDoc.id,
           familyId: p.familyId,

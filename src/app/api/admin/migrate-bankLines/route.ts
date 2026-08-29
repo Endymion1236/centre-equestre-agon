@@ -14,14 +14,10 @@
  * Auth admin obligatoire (claim ou email admin connu).
  */
 
+import { isAdminToken } from "@/lib/api-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 
-const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-];
 
 const CONFIRM_TOKEN = "MIGRATE-BANKLINES";
 
@@ -33,7 +29,7 @@ async function checkAdmin(req: NextRequest): Promise<{ ok: boolean; email?: stri
   if (!token) return { ok: false, error: "Token manquant" };
   try {
     const decoded = await adminAuth.verifyIdToken(token);
-    const isAdmin = decoded.admin === true || ADMIN_EMAILS.includes(decoded.email || "");
+    const isAdmin = isAdminToken(decoded);
     if (!isAdmin) return { ok: false, error: "Réservé admin" };
     return { ok: true, email: decoded.email };
   } catch (e) {
@@ -175,7 +171,7 @@ export async function POST(req: NextRequest) {
       });
       nbDocsModifies++;
     } catch (e: any) {
-      errors.push({ ym, error: e?.message || String(e) });
+      errors.push({ ym, error: "Erreur interne"});
     }
   }
 
@@ -197,7 +193,7 @@ export async function POST(req: NextRequest) {
         });
         nbDocsModifies++;
       } catch (e: any) {
-        errors.push({ ym: oldId, error: e?.message || String(e) });
+        errors.push({ ym: oldId, error: "Erreur interne"});
       }
     }
   }

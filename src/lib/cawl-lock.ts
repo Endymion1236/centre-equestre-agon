@@ -30,7 +30,7 @@ import { FieldValue } from "firebase-admin/firestore";
 export async function acquireCawlConfirmationLock(params: {
   hostedCheckoutId: string;
   stage: "full" | "deposit" | "balance";
-  source: "webhook" | "status";
+  source: "webhook" | "status" | "cron-mit";
   paymentId?: string;
   amountCents?: number;
 }): Promise<boolean> {

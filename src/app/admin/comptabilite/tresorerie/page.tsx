@@ -326,7 +326,7 @@ export default function TresoreriePage() {
             <input type="file" accept=".pdf,application/pdf" multiple className="hidden"
               onChange={e => { if (e.target.files?.length) lireReleve(e.target.files); e.target.value = ""; }} />
           </label>
-          <button onClick={() => setComptesEdit(comptesEdit === null ? comptes.map(c => ({ nom: c, compte: !horsTotal.includes(c) })) : null)}
+          <button type="button" onClick={() => setComptesEdit(comptesEdit === null ? comptes.map(c => ({ nom: c, compte: !horsTotal.includes(c) })) : null)}
             title="Régler la liste des comptes bancaires suivis"
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50">
             <Settings2 size={14} /> Comptes
@@ -337,7 +337,7 @@ export default function TresoreriePage() {
             <input type="file" accept=".json,application/json" className="hidden" disabled={importing}
               onChange={e => { const f = e.target.files?.[0]; if (f) importer(f); e.target.value = ""; }} />
           </label>
-          <button onClick={load} disabled={loading}
+          <button type="button" onClick={load} disabled={loading}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
           </button>
@@ -360,7 +360,7 @@ export default function TresoreriePage() {
                 {p.creditsClients != null ? ` · encaissements clients lus : ${eur(p.creditsClients)} (enregistrés avec le solde, pour le rapprochement)` : ""}
               </span>
             </div>
-            <button onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
+            <button type="button" onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
               className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-2 py-1 rounded-lg cursor-pointer">✕ retirer</button>
           </div>
           {p.lectureIncomplete && (
@@ -386,7 +386,7 @@ export default function TresoreriePage() {
             {p.soldeEnregistre ? (
               <span className="flex items-center gap-1 text-green-700 font-semibold"><Check size={13} /> enregistré</span>
             ) : (
-              <button onClick={() => enregistrerSoldeReleve(idx)}
+              <button type="button" onClick={() => enregistrerSoldeReleve(idx)}
                 disabled={saving || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)}
                 className="font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                 Enregistrer le solde
@@ -438,7 +438,7 @@ export default function TresoreriePage() {
                   <span className="font-body text-[11px] text-slate-500">
                     {gardees.length} cochée(s) — {eur(gardees.reduce((s, o) => s + o.montant, 0))} · montants TTC du relevé
                   </span>
-                  <button onClick={() => ajouterDepensesReleve(idx)} disabled={saving || gardees.length === 0}
+                  <button type="button" onClick={() => ajouterDepensesReleve(idx)} disabled={saving || gardees.length === 0}
                     className="font-body text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     Ajouter {gardees.length} dépense(s)
                   </button>
@@ -469,22 +469,22 @@ export default function TresoreriePage() {
                     className="accent-blue-500 w-4 h-4" />
                   compté dans le total
                 </label>
-                <button onClick={() => setComptesEdit(prev => prev!.filter((_, xi) => xi !== i))}
+                <button type="button" onClick={() => setComptesEdit(prev => prev!.filter((_, xi) => xi !== i))}
                   title="Retirer de la liste (les relevés déjà saisis restent en base)"
                   className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer px-1">✕</button>
               </div>
             ))}
           </div>
           <div className="flex gap-2 mt-2">
-            <button onClick={() => setComptesEdit(prev => [...(prev || []), { nom: "", compte: true }])}
+            <button type="button" onClick={() => setComptesEdit(prev => [...(prev || []), { nom: "", compte: true }])}
               className="font-body text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-blue-100">
               + Ajouter un compte
             </button>
-            <button onClick={enregistrerComptes} disabled={saving}
+            <button type="button" onClick={enregistrerComptes} disabled={saving}
               className="font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
               Enregistrer
             </button>
-            <button onClick={() => setComptesEdit(null)}
+            <button type="button" onClick={() => setComptesEdit(null)}
               className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Annuler</button>
           </div>
         </Card>
@@ -563,11 +563,11 @@ export default function TresoreriePage() {
                 ))}
               </div>
               <div className="flex gap-2 mt-2 items-center">
-                <button onClick={enregistrerCellule} disabled={saving}
+                <button type="button" onClick={enregistrerCellule} disabled={saving}
                   className="font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                   {saving ? "…" : "Enregistrer"}
                 </button>
-                <button onClick={() => setCellEdit(null)}
+                <button type="button" onClick={() => setCellEdit(null)}
                   className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Annuler</button>
                 <span className="font-body text-[11px] text-slate-400">Un champ vidé efface le relevé du compte.</span>
               </div>

@@ -59,7 +59,7 @@ export default function TabResume({ semaine, setSemaine, taches, salaries }: Pro
     <div className="flex flex-col gap-6">
       {/* Navigation semaine */}
       <div className="flex items-center justify-between">
-        <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
+        <button type="button" onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
           <ChevronLeft size={16} />Préc.
         </button>
         <div className="text-center">
@@ -71,8 +71,8 @@ export default function TabResume({ semaine, setSemaine, taches, salaries }: Pro
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">Auj.</button>
-          <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
+          <button type="button" onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">Auj.</button>
+          <button type="button" onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer hover:border-blue-300">
             Suiv.<ChevronRight size={16} />
           </button>
         </div>

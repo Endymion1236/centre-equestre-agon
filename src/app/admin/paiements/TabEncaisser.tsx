@@ -568,7 +568,7 @@ export function TabEncaisser({
             <div className="font-body text-xs font-semibold text-slate-600 mb-1">Cavalier</div>
             <div className="flex flex-wrap gap-2">
               {children.map((c: any) => (
-                <button key={c.id} onClick={() => setSelectedChild(c.id)}
+                <button type="button" key={c.id} onClick={() => setSelectedChild(c.id)}
                   className={`px-3 py-1.5 rounded-lg border font-body text-xs font-medium cursor-pointer transition-all
                     ${selectedChild === c.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                   🧒 {c.firstName}
@@ -662,7 +662,7 @@ export function TabEncaisser({
                       <span className="text-purple-700 font-semibold">Avoir disponible</span>
                       <span className="text-purple-700 font-bold">{totalAvoir.toFixed(2)}€</span>
                     </div>
-                    <button onClick={async () => {
+                    <button type="button" onClick={async () => {
                       const toUse = Math.min(totalAvoir, totalPending);
                       if (!confirm(`Utiliser ${toUse.toFixed(2)}€ d'avoir pour cette famille ?`)) return;
                       try {
@@ -705,7 +705,7 @@ export function TabEncaisser({
                   <div className="flex gap-2">
                     <input value={codeBon} onChange={e => setCodeBon(e.target.value.toUpperCase())} placeholder="Code (ex. BON-XXXX)"
                       className="flex-1 px-2 py-1.5 rounded-lg border border-emerald-200 font-mono text-xs bg-white focus:outline-none focus:border-emerald-500" />
-                    <button disabled={bonBusy || !codeBon.trim()} onClick={async () => {
+                    <button type="button" disabled={bonBusy || !codeBon.trim()} onClick={async () => {
                       const code = codeBon.trim().toUpperCase();
                       setBonBusy(true);
                       try {
@@ -758,13 +758,13 @@ export function TabEncaisser({
                 {appliedPromo && (
                   <div className="bg-green-50 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
                     <span className="font-body text-xs text-green-800">{appliedPromo.label} ({appliedPromo.discountMode === "percent" ? `-${appliedPromo.discountValue}%` : `-${appliedPromo.discountValue}€`})</span>
-                    <button onClick={() => setAppliedPromo(null)} className="font-body text-[10px] text-red-500 bg-transparent border-none cursor-pointer">Retirer</button>
+                    <button type="button" onClick={() => setAppliedPromo(null)} className="font-body text-[10px] text-red-500 bg-transparent border-none cursor-pointer">Retirer</button>
                   </div>
                 )}
                 <div className="flex gap-1.5 mb-1.5">
                   <input value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())} placeholder="Code promo"
                     className="flex-1 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream font-mono uppercase focus:border-blue-500 focus:outline-none" />
-                  <button onClick={applyPromoCode} disabled={!promoCode}
+                  <button type="button" onClick={applyPromoCode} disabled={!promoCode}
                     className={`px-3 py-1.5 rounded font-body text-xs font-semibold border-none cursor-pointer ${!promoCode ? "bg-gray-200 text-slate-600" : "bg-blue-500 text-white"}`}>
                     OK
                   </button>
@@ -803,7 +803,7 @@ export function TabEncaisser({
               <div className="font-body text-xs font-semibold text-slate-600 mb-2">Mode de paiement</div>
               <div className="flex flex-wrap gap-1.5 mb-3">
                 {manualPaymentModes.map(m => (
-                  <button key={m.id} onClick={() => setPaymentMode(m.id)}
+                  <button type="button" key={m.id} onClick={() => setPaymentMode(m.id)}
                     className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer transition-all ${
                       paymentMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"
                     }`}>
@@ -830,7 +830,7 @@ export function TabEncaisser({
                 <p className="font-body text-[10px] text-slate-400 mt-1">Modifiable si encaissement différé</p>
               </div>
 
-              <button onClick={async () => {
+              <button type="button" onClick={async () => {
                 const montant = paidAmount ? safeNumber(paidAmount) : totalPendingAfterDiscount;
                 if (montant <= 0) return;
                 try {
@@ -926,7 +926,7 @@ export function TabEncaisser({
                     className={`${inputCls} pl-9`}
                   />
                   {selectedActivity && (
-                    <button
+                    <button type="button"
                       onClick={() => { setSelectedActivity(""); setActivitySearch(""); }}
                       title="Effacer la sélection"
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-1">
@@ -950,7 +950,7 @@ export function TabEncaisser({
                         const ttc = (a as any).priceTTC || (a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100);
                         const isSelected = selectedActivity === a.firestoreId;
                         return (
-                          <button
+                          <button type="button"
                             key={`${a.firestoreId}-${idx}`}
                             onMouseDown={(e) => { e.preventDefault(); setSelectedActivity(a.firestoreId); setActivitySearch(""); setActivityDropdownOpen(false); }}
                             className={`w-full text-left px-3 py-2 border-none cursor-pointer flex items-center justify-between gap-2 font-body text-sm ${isSelected ? "bg-blue-50 text-blue-800" : "bg-white text-slate-700 hover:bg-slate-50"}`}>
@@ -970,7 +970,7 @@ export function TabEncaisser({
                   </div>
                 )}
               </div>
-              <button onClick={addToBasket} disabled={!selectedActivity}
+              <button type="button" onClick={addToBasket} disabled={!selectedActivity}
                 className={`px-3 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0 self-start
                   ${selectedActivity ? "bg-blue-500 text-white" : "bg-gray-200 text-slate-600"}`}>
                 <Plus size={16} />
@@ -1003,14 +1003,14 @@ export function TabEncaisser({
                 <option value="20">20%</option>
               </select>
             </div>
-            <button onClick={addToBasket} disabled={!customLabel || !customPrice}
+            <button type="button" onClick={addToBasket} disabled={!customLabel || !customPrice}
               className={`px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer flex-shrink-0
                 ${customLabel && customPrice ? "bg-gold-400 text-blue-800" : "bg-gray-200 text-slate-600"}`}>
               <Plus size={16} className="inline mr-1" /> Ajouter
             </button>
           </div>
           <div className="mt-3 pt-3 border-t border-blue-500/8">
-            <button onClick={vendreBonCadeau}
+            <button type="button" onClick={vendreBonCadeau}
               className="px-4 py-2 rounded-lg font-body text-sm font-semibold border-none cursor-pointer bg-emerald-600 text-white hover:bg-emerald-500">
               🎁 Vendre un bon cadeau
             </button>
@@ -1025,7 +1025,7 @@ export function TabEncaisser({
           <h3 className="font-body text-sm font-semibold text-blue-800 mb-3">3. Mode de paiement</h3>
           <div className="flex flex-wrap gap-2 mb-4">
             {manualPaymentModes.map((m) => (
-              <button key={m.id} onClick={() => setPaymentMode(m.id)}
+              <button type="button" key={m.id} onClick={() => setPaymentMode(m.id)}
                 className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border font-body text-xs font-medium cursor-pointer transition-all
                   ${paymentMode === m.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                 {m.label}
@@ -1101,7 +1101,7 @@ export function TabEncaisser({
                         className="w-36 px-2 py-1.5 rounded border border-gray-200 font-body text-xs focus:outline-none focus:border-orange-400"
                       />
                       {chequesDiffres.length > 1 && (
-                        <button
+                        <button type="button"
                           onClick={() => setChequesDiffres(chequesDiffres.filter((_, i) => i !== idx))}
                           className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1">
                           <X size={14} />
@@ -1111,7 +1111,7 @@ export function TabEncaisser({
                   ))}
                 </div>
                 <div className="flex gap-2 mt-3">
-                  <button
+                  <button type="button"
                     onClick={() => {
                       // Ajouter un chèque en pré-remplissant le montant avec le solde restant
                       const reste = Math.max(0, Math.round((basketTotal - totalChq) * 100) / 100);
@@ -1128,7 +1128,7 @@ export function TabEncaisser({
                     className="font-body text-xs text-orange-700 bg-white border border-orange-300 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-orange-100">
                     + Ajouter un chèque
                   </button>
-                  <button
+                  <button type="button"
                     onClick={() => {
                       // Répartir le total en N chèques égaux (prochain mois par mois)
                       const n = chequesDiffres.length;
@@ -1179,7 +1179,7 @@ export function TabEncaisser({
             )}
           </div>
 
-          <button onClick={handlePayment} disabled={saving}
+          <button type="button" onClick={handlePayment} disabled={saving}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-body text-base font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 transition-colors">
             {saving ? <Loader2 size={18} className="animate-spin" /> : <Check size={18} />}
             {(() => {
@@ -1194,7 +1194,7 @@ export function TabEncaisser({
             })()}
           </button>
 
-          <button onClick={handleSaveWithoutPayment} disabled={saving}
+          <button type="button" onClick={handleSaveWithoutPayment} disabled={saving}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-semibold text-orange-700 bg-orange-50 border border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors mt-2 disabled:opacity-50">
             <CalendarClock size={16} />
             Enregistrer sans encaisser — paiement ultérieur
@@ -1234,7 +1234,7 @@ export function TabEncaisser({
                   </div>
                   <div className="flex items-center gap-2 ml-2">
                     <span className="font-body text-sm font-bold text-blue-500">{item.priceTTC.toFixed(2)}€</span>
-                    <button onClick={() => removeFromBasket(item.id)}
+                    <button type="button" onClick={() => removeFromBasket(item.id)}
                       className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer">
                       <X size={14} />
                     </button>
@@ -1250,13 +1250,13 @@ export function TabEncaisser({
                 {appliedPromo && (
                   <div className="bg-green-50 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
                     <span className="font-body text-xs text-green-800">{appliedPromo.label} ({appliedPromo.discountMode === "percent" ? `-${appliedPromo.discountValue}%` : `-${appliedPromo.discountValue}€`})</span>
-                    <button onClick={() => setAppliedPromo(null)} className="font-body text-[10px] text-red-500 bg-transparent border-none cursor-pointer">Retirer</button>
+                    <button type="button" onClick={() => setAppliedPromo(null)} className="font-body text-[10px] text-red-500 bg-transparent border-none cursor-pointer">Retirer</button>
                   </div>
                 )}
                 <div className="flex gap-1.5 mb-1.5">
                   <input value={promoCode} onChange={e => setPromoCode(e.target.value.toUpperCase())} placeholder="Code promo"
                     className="flex-1 px-2 py-1.5 rounded border border-blue-500/8 font-body text-xs bg-cream font-mono uppercase focus:border-blue-500 focus:outline-none" />
-                  <button onClick={applyPromoCode} disabled={!promoCode}
+                  <button type="button" onClick={applyPromoCode} disabled={!promoCode}
                     className={`px-3 py-1.5 rounded font-body text-xs font-semibold border-none cursor-pointer ${!promoCode ? "bg-gray-200 text-slate-600" : "bg-blue-500 text-white"}`}>
                     OK
                   </button>
@@ -1296,7 +1296,7 @@ export function TabEncaisser({
             </div>
 
             <div className="mt-3 flex gap-2">
-              <button onClick={() => { setBasket([]); setAppliedPromo(null); setManualDiscount(""); setPromoCode(""); }}
+              <button type="button" onClick={() => { setBasket([]); setAppliedPromo(null); setManualDiscount(""); setPromoCode(""); }}
                 className="flex-1 py-2 rounded-lg font-body text-xs font-medium text-red-500 bg-red-50 border-none cursor-pointer hover:bg-red-100">
                 Vider le panier
               </button>

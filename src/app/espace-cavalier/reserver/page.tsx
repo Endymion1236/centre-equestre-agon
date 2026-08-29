@@ -1021,7 +1021,7 @@ export default function ReserverPage() {
         (coordonnées + cavaliers) pour pouvoir réserver.
       </p>
       <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`}>
-        <button className="font-body text-sm font-semibold text-white bg-blue-500 px-6 py-3 rounded-xl border-none cursor-pointer hover:bg-blue-400 transition-colors">
+        <button type="button" className="font-body text-sm font-semibold text-white bg-blue-500 px-6 py-3 rounded-xl border-none cursor-pointer hover:bg-blue-400 transition-colors">
           Compléter mon profil →
         </button>
       </a>
@@ -1084,7 +1084,7 @@ export default function ReserverPage() {
                   : fmt(c.date)} · {c.startTime}–{c.endTime}.
                 À confirmer avant le {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric" })} à {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
               </div>
-              <button
+              <button type="button"
                 onClick={() => { jours.forEach((j: any) => addCoursToCart(j, hold.childId, { viaHold: true })); setShowCart(true); }}
                 className="w-full mt-3 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
                 ✓ J&apos;accepte {jours.length > 1 ? "ces places" : "cette place"} — passer au paiement
@@ -1102,7 +1102,7 @@ export default function ReserverPage() {
             {filter === "balade" ? "Balades et promenades à cheval" : "Stages, cours ponctuels et activités"}
           </p>
         </div>
-        <button onClick={async () => {
+        <button type="button" onClick={async () => {
           setShowCart(true); setCartPaySuccess(false); setCartPayMode("cb");
           // Rafraîchit au cas où un avoir aurait été créé depuis l'arrivée.
           if (user?.uid) await rechargerAvoirs(user.uid);
@@ -1921,7 +1921,7 @@ export default function ReserverPage() {
                       Vous serez notifié par email si une place se libère.
                     </p>
                     {selCavaliers.size > 0 && (
-                      <button
+                      <button type="button"
                         onClick={() => {
                           selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
                           setBookingCreneau(null);
@@ -1935,7 +1935,7 @@ export default function ReserverPage() {
                       className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
                       + Ajouter un nouveau membre de la famille
                     </a>
-                    <button onClick={() => setBookingCreneau(null)}
+                    <button type="button" onClick={() => setBookingCreneau(null)}
                       className="w-full py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-400">
                       Fermer
                     </button>
@@ -1958,7 +1958,7 @@ export default function ReserverPage() {
                               <span className="font-semibold flex items-center gap-2"><Check size={14} /> {ch.firstName} — en liste d&apos;attente</span>
                             </div>
                           ) : (
-                            <button key={ch.id}
+                            <button type="button" key={ch.id}
                               onClick={() => addToWaitlist(bookingCreneau, ch.id)}
                               disabled={waitlistLoading === bookingCreneau.id}
                               className="flex items-center justify-between px-4 py-3 rounded-xl border border-orange-200 bg-orange-50 font-body text-sm text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
@@ -1984,7 +1984,7 @@ export default function ReserverPage() {
                   ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
                       )}
                     </div>
-                    <button onClick={() => { setSelCavaliers(new Set()); setBookingCreneau(null); }}
+                    <button type="button" onClick={() => { setSelCavaliers(new Set()); setBookingCreneau(null); }}
                       className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                       Annuler
                     </button>
@@ -2010,7 +2010,7 @@ export default function ReserverPage() {
                     const dejaAuPanier = cart.some((i) =>
                       i.childId === ch.id && i.creneauIds.includes(bookingCreneau.id));
                     return (
-                      <button key={ch.id}
+                      <button type="button" key={ch.id}
                         onClick={() => {
                           if (dejaAuPanier) return;
                           if (tooYoung) {
@@ -2054,7 +2054,7 @@ export default function ReserverPage() {
                     « silencieux » (il coche au lieu d'ajouter) — sans bouton
                     visible en permanence, la famille croit que rien ne se
                     passe. Desactive tant que rien n'est coche. */}
-                <button
+                <button type="button"
                   disabled={selCavaliers.size === 0}
                   onClick={() => {
                     selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
@@ -2088,7 +2088,7 @@ export default function ReserverPage() {
                 className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
                 + Ajouter un nouveau membre de la famille
               </a>
-              <button onClick={() => setBookingCreneau(null)}
+              <button type="button" onClick={() => setBookingCreneau(null)}
                 className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
                 Annuler
               </button>
@@ -2106,7 +2106,7 @@ export default function ReserverPage() {
             <div className="p-5 border-b border-gray-100">
               <div className="flex justify-between items-center mb-3">
                 <h2 className="font-display text-lg font-bold text-blue-800"><ShoppingCart size={18} className="inline mr-2" />Mon panier</h2>
-                <button onClick={() => setShowCart(false)} className="text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+                <button type="button" onClick={() => setShowCart(false)} className="text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
               </div>
             </div>
             <div className="p-5">
@@ -2127,7 +2127,7 @@ export default function ReserverPage() {
                             {item.remiseEuros > 0 && <div className="font-body text-xs text-gray-600 line-through">{item.prixBase.toFixed(0)}€</div>}
                             <div className="font-body text-sm font-bold text-blue-500">{item.prixFinal.toFixed(2)}€</div>
                           </div>
-                          <button onClick={() => removeFromCart(idx)} className="text-red-400 bg-transparent border-none cursor-pointer p-1 hover:text-red-600"><X size={14} /></button>
+                          <button type="button" onClick={() => removeFromCart(idx)} className="text-red-400 bg-transparent border-none cursor-pointer p-1 hover:text-red-600"><X size={14} /></button>
                         </div>
                       </div>
                     ))}
@@ -2179,7 +2179,7 @@ export default function ReserverPage() {
                         ["especes", "💵 Espèces"],
                         ["virement", "🏦 Virement"],
                       ] as const).map(([mode, label]) => (
-                        <button key={mode} onClick={() => setCartPayMode(mode)}
+                        <button type="button" key={mode} onClick={() => setCartPayMode(mode)}
                           className={`py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500 hover:border-blue-300"}`}>
                           {label}
                         </button>
@@ -2189,7 +2189,7 @@ export default function ReserverPage() {
                     {familyAvoirs.length > 0 && (() => {
                       const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
                       return (
-                        <button onClick={() => setCartPayMode("avoir")}
+                        <button type="button" onClick={() => setCartPayMode("avoir")}
                           className={`w-full mt-2 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === "avoir" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-amber-600 hover:border-amber-300"}`}>
                           💜 Utiliser mon avoir ({totalAvoir.toFixed(2)}€ disponible)
                         </button>
@@ -2215,7 +2215,7 @@ export default function ReserverPage() {
                     </label>
                   )}
 
-                  <button
+                  <button type="button"
                     onClick={() => setShowCart(false)}
                     className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl py-2.5 px-4 cursor-pointer transition-colors mb-3"
                   >
@@ -2226,7 +2226,7 @@ export default function ReserverPage() {
                   {/* Bouton CB → CAWL */}
                   {cartPayMode === "cb" && (
                     <>
-                      <button onClick={handlePay} disabled={paying || (cartHasStage && !cgvAccepted)}
+                      <button type="button" onClick={handlePay} disabled={paying || (cartHasStage && !cgvAccepted)}
                         className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying || (cartHasStage && !cgvAccepted) ? "bg-gray-200 text-gray-600 cursor-not-allowed" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
                         {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
                         {paying ? "Paiement en cours..." : depositMode === "deposit" ? (soldeFixe > 0 ? `Payer l'acompte ${acompteFixe.toFixed(2)}€` : `Payer ${acompteFixe.toFixed(2)}€`) : `Payer ${cartTotal.toFixed(2)}€`}
@@ -2256,7 +2256,7 @@ export default function ReserverPage() {
                             </p>
                           </div>
                         )}
-                        <button onClick={async () => {
+                        <button type="button" onClick={async () => {
                           if (!user || !family) return;
                           setPaying(true);
                           try {

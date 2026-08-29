@@ -46,7 +46,7 @@ function CavalierRow({ c, onRelance }: { c: Cavalier; onRelance: (c: Cavalier) =
         {c.email && <a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 text-blue-600 hover:underline"><Mail size={12} />{c.email}</a>}
         {c.phone && <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 text-slate-500"><Phone size={12} />{c.phone}</a>}
         {c.email && (
-          <button onClick={() => onRelance(c)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500">
+          <button type="button" onClick={() => onRelance(c)} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-500">
             <Mail size={12} /> Relancer
           </button>
         )}
@@ -90,7 +90,7 @@ function RelanceModal({ c, prochaine, user, onClose }: { c: Cavalier; prochaine:
       <div className="bg-white rounded-2xl max-w-lg w-full p-5 max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-display text-lg font-bold text-slate-900">Relancer {prenom}</h2>
-          <button onClick={onClose} disabled={busy} className="text-slate-400 text-xl leading-none">×</button>
+          <button type="button" onClick={onClose} disabled={busy} className="text-slate-400 text-xl leading-none">×</button>
         </div>
         <div className="font-body text-xs text-slate-500 mb-3">Destinataire : <span className="text-slate-700 font-medium">{c.email}</span></div>
         <label className="font-body text-[11px] font-semibold text-slate-500 block mb-1">Objet</label>
@@ -99,9 +99,9 @@ function RelanceModal({ c, prochaine, user, onClose }: { c: Cavalier; prochaine:
         <textarea value={body} onChange={e => setBody(e.target.value)} rows={12} className="w-full px-3 py-2 rounded-lg border border-slate-200 font-body text-sm mb-3 resize-y" />
         {msg && <div className={`rounded-lg p-2 font-body text-xs mb-3 ${msg.ok ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>{msg.text}</div>}
         <div className="flex items-center justify-end gap-2">
-          <button onClick={onClose} disabled={busy} className="px-3 py-2 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-600">Fermer</button>
+          <button type="button" onClick={onClose} disabled={busy} className="px-3 py-2 rounded-lg border border-slate-200 bg-white font-body text-xs font-semibold text-slate-600">Fermer</button>
           {!(msg && msg.ok) && (
-            <button onClick={send} disabled={busy} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold disabled:opacity-50">
+            <button type="button" onClick={send} disabled={busy} className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-xs font-semibold disabled:opacity-50">
               {busy ? <Loader2 size={13} className="animate-spin" /> : <Mail size={13} />} Envoyer
             </button>
           )}

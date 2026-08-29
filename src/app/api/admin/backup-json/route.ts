@@ -5,10 +5,10 @@
  * Réservé admin.
  */
 
+import { isAdminToken } from "@/lib/api-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 
-const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
     }
     const idToken = authHeader.slice(7);
     const decoded = await adminAuth.verifyIdToken(idToken);
-    if (!decoded.admin && !ADMIN_EMAILS.includes(decoded.email || "")) {
+    if (!isAdminToken(decoded)) {
       return NextResponse.json({ error: "Admin requis" }, { status: 403 });
     }
 
@@ -69,6 +69,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[backup-json] erreur:", e);
-    return NextResponse.json({ error: e?.message || "Erreur" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur" }, { status: 500 });
   }
 }

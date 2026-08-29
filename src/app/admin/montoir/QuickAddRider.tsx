@@ -186,7 +186,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
             <h2 className="font-display text-lg font-bold text-blue-800">Ajouter un cavalier</h2>
             <p className="font-body text-xs text-slate-500 mt-0.5">{creneau.activityTitle} · {creneau.startTime} · {placesLeft} place{placesLeft > 1 ? "s" : ""} restante{placesLeft > 1 ? "s" : ""}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+          <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20} /></button>
         </div>
 
         <div className="p-5 flex flex-col gap-4 overflow-y-auto flex-1">
@@ -205,7 +205,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
               ) : (
                 <div className="flex flex-col gap-1">
                   {results.map(r => (
-                    <button key={r.childId} onClick={() => { setSel(r); setError(""); }}
+                    <button type="button" key={r.childId} onClick={() => { setSel(r); setError(""); }}
                       className="text-left px-3 py-2.5 rounded-lg border border-gray-100 bg-sand hover:bg-blue-50 cursor-pointer">
                       <span className="font-body text-sm font-semibold text-blue-800">{r.childName}</span>
                       <span className="font-body text-xs text-slate-500 ml-2">{r.familyName}</span>
@@ -221,7 +221,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
                   <div className="font-body text-sm font-semibold text-blue-800">{sel.childName}</div>
                   <div className="font-body text-xs text-slate-500">{sel.familyName}</div>
                 </div>
-                <button onClick={() => { setSel(null); setError(""); }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">Changer</button>
+                <button type="button" onClick={() => { setSel(null); setError(""); }} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer">Changer</button>
               </div>
 
               {dejaInscrit && <p className="font-body text-sm text-orange-600 bg-orange-50 rounded-lg px-3 py-2">⚠️ Déjà inscrit sur ce créneau.</p>}
@@ -233,27 +233,27 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
               ) : (
                 <div className="flex flex-col gap-2">
                   {rattrapage && (
-                    <button disabled={saving || dejaInscrit} onClick={() => enroll("rattrapage")}
+                    <button type="button" disabled={saving || dejaInscrit} onClick={() => enroll("rattrapage")}
                       className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 cursor-pointer disabled:opacity-50">
                       <span className="text-xl">🔄</span>
                       <div><div className="font-body text-sm font-bold text-purple-700">Rattrapage</div><div className="font-body text-xs text-purple-600">Consomme un rattrapage en attente</div></div>
                     </button>
                   )}
                   {carteActive && (
-                    <button disabled={saving || dejaInscrit} onClick={() => enroll("carte")}
+                    <button type="button" disabled={saving || dejaInscrit} onClick={() => enroll("carte")}
                       className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-gold-300 bg-gold-50 hover:bg-gold-100 cursor-pointer disabled:opacity-50">
                       <span className="text-xl">🎟️</span>
                       <div><div className="font-body text-sm font-bold text-gold-700">Carte de séances</div><div className="font-body text-xs text-gold-600">{carteActive.remainingSessions} séance{carteActive.remainingSessions > 1 ? "s" : ""} restante{carteActive.remainingSessions > 1 ? "s" : ""} · débitée à la clôture</div></div>
                     </button>
                   )}
                   {forfaitActif && (
-                    <button disabled={saving || dejaInscrit} onClick={() => enroll("forfait")}
+                    <button type="button" disabled={saving || dejaInscrit} onClick={() => enroll("forfait")}
                       className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-green-200 bg-green-50 hover:bg-green-100 cursor-pointer disabled:opacity-50">
                       <span className="text-xl">🎫</span>
                       <div><div className="font-body text-sm font-bold text-green-700">Forfait</div><div className="font-body text-xs text-green-600">Cours couvert par le forfait annuel</div></div>
                     </button>
                   )}
-                  <button disabled={saving || dejaInscrit} onClick={() => enroll("regler")}
+                  <button type="button" disabled={saving || dejaInscrit} onClick={() => enroll("regler")}
                     className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-gray-200 bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-50">
                     <span className="text-xl">💶</span>
                     <div><div className="font-body text-sm font-bold text-slate-700">À régler</div><div className="font-body text-xs text-slate-500">À encaisser ensuite dans Paiements</div></div>
@@ -261,14 +261,14 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
 
                   {/* Établissement : facturé à l'établissement, pas aux parents,
                       et ne compte pas comme séance offerte */}
-                  <button disabled={saving || dejaInscrit} onClick={() => enroll("etablissement")}
+                  <button type="button" disabled={saving || dejaInscrit} onClick={() => enroll("etablissement")}
                     className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-purple-200 bg-purple-50 hover:bg-purple-100 cursor-pointer disabled:opacity-50">
                     <span className="text-xl">🏫</span>
                     <div><div className="font-body text-sm font-bold text-purple-700">Établissement</div><div className="font-body text-xs text-purple-600">Facturé à l'établissement, sans facture aux parents</div></div>
                   </button>
 
                   {!offertMode ? (
-                    <button disabled={saving || dejaInscrit} onClick={() => setOffertMode(true)}
+                    <button type="button" disabled={saving || dejaInscrit} onClick={() => setOffertMode(true)}
                       className="flex items-center gap-3 text-left px-3 py-3 rounded-xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 cursor-pointer disabled:opacity-50">
                       <span className="text-xl">🎁</span>
                       <div><div className="font-body text-sm font-bold text-emerald-700">Offert</div><div className="font-body text-xs text-emerald-600">Gratuit, avec motif (pas de facturation)</div></div>
@@ -282,11 +282,11 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
                         {OFFERT_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                       </select>
                       <div className="flex gap-2">
-                        <button disabled={saving} onClick={() => enroll("offert")}
+                        <button type="button" disabled={saving} onClick={() => enroll("offert")}
                           className="flex-1 font-body text-sm font-semibold text-white bg-emerald-600 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-emerald-500 disabled:opacity-50">
                           Confirmer l'inscription offerte
                         </button>
-                        <button disabled={saving} onClick={() => setOffertMode(false)}
+                        <button type="button" disabled={saving} onClick={() => setOffertMode(false)}
                           className="font-body text-sm text-slate-500 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer">Annuler</button>
                       </div>
                     </div>

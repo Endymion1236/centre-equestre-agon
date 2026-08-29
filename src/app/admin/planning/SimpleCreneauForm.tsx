@@ -153,7 +153,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     <Card padding="md" className="mb-6 border-blue-500/15">
       <div className="flex justify-between items-center mb-4">
         <h3 className="font-body text-base font-semibold text-blue-800">Créer des créneaux</h3>
-        <button onClick={onCancel} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+        <button type="button" onClick={onCancel} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
       </div>
       <div className="flex flex-col gap-3">
         <ActivityPicker activities={activities} value={actId} onChange={setActId}/>
@@ -257,7 +257,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
             <input type="color" value={color || "#2050A0"} onChange={e => setColor(e.target.value)}
               className="w-9 h-9 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
             {["","#2050A0","#27ae60","#e67e22","#7c3aed","#D63031","#F0A010","#0ea5e9","#db2777","#64748b"].map(c => (
-              <button key={c||"default"} onClick={() => setColor(c)}
+              <button type="button" key={c||"default"} onClick={() => setColor(c)}
                 className={`w-6 h-6 rounded-full border-2 cursor-pointer flex-shrink-0 ${color===c?"border-blue-500 scale-125":"border-white shadow-sm"}`}
                 style={{background: c || "#e2e8f0"}}
                 title={c ? c : "Couleur par défaut"}/>
@@ -291,7 +291,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                       }}
                       className={`flex-1 px-2 py-1 rounded-lg border font-body text-xs bg-white focus:outline-none focus:border-blue-500 ${isDateCustom ? "border-orange-300 font-semibold text-orange-700" : "border-blue-200 text-blue-700"}`}/>
                     {isCustom && (
-                      <button onClick={() => {
+                      <button type="button" onClick={() => {
                         setCustomDates(prev => { const n = {...prev}; delete n[idx]; return n; });
                         setCustomHours(prev => ({ ...prev, [idx]: { st, et } }));
                         setCustomMonitors(prev => { const n = {...prev}; delete n[idx]; return n; });
@@ -344,7 +344,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                         })}
                       </div>
                     </div>
-                    <button onClick={() => {
+                    <button type="button" onClick={() => {
                       const monValue = customMonitors[idx] ?? mon;
                       const newMonitors: Record<number, string> = {};
                       previewDates.forEach((_, i) => { newMonitors[i] = monValue; });
@@ -355,7 +355,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                       ↓ Tous
                     </button>
                     {isMonitorCustom && (
-                      <button onClick={() => setCustomMonitors(prev => { const n = {...prev}; delete n[idx]; return n; })}
+                      <button type="button" onClick={() => setCustomMonitors(prev => { const n = {...prev}; delete n[idx]; return n; })}
                         title="Réinitialiser" className="text-slate-400 hover:text-red-400 bg-transparent border-none cursor-pointer text-sm flex-shrink-0">↺</button>
                     )}
                   </div>
@@ -365,7 +365,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
           </div>
         )}
 
-        <button onClick={sub} disabled={!actId || saving}
+        <button type="button" onClick={sub} disabled={!actId || saving}
           className={`flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${!actId || saving ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
           {saving ? <Loader2 size={16} className="animate-spin"/> : <Check size={16}/>}
           {multiDay ? `Créer ${previewDates.length} créneaux`

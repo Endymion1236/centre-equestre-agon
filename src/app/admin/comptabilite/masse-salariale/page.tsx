@@ -260,7 +260,7 @@ export default function MasseSalarialePage() {
             className="font-body text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-3 py-2 rounded-lg no-underline hover:bg-purple-100">
             📋 Registre du personnel
           </Link>
-          <button onClick={load} disabled={loading}
+          <button type="button" onClick={load} disabled={loading}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
           </button>
@@ -315,12 +315,12 @@ export default function MasseSalarialePage() {
                       onChange={e => setPropositionsCharge(prev => prev.map((x, i) => i === idx ? { ...x, decaissement: e.target.value === "" ? null : Number(e.target.value.replace(",", ".")) || 0 } : x))}
                       className="border border-gray-200 rounded px-2 py-1 w-24 text-right font-semibold" />
                   </label>
-                  <button onClick={() => enregistrerPropositionCharge(p, idx)}
+                  <button type="button" onClick={() => enregistrerPropositionCharge(p, idx)}
                     disabled={saving || !p.libelle || !/^\d{4}-\d{2}$/.test(p.mois) || (p.montant == null && p.decaissement == null)}
                     className="ml-auto font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     Enregistrer la charge
                   </button>
-                  <button onClick={() => setPropositionsCharge(prev => prev.filter((_, i) => i !== idx))}
+                  <button type="button" onClick={() => setPropositionsCharge(prev => prev.filter((_, i) => i !== idx))}
                     className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
                 </div>
               </div>
@@ -333,7 +333,7 @@ export default function MasseSalarialePage() {
             {propositions.map((p, idx) => p.etat === "erreur" ? (
               <div key={idx} className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-body text-xs text-red-700 flex items-center justify-between gap-2">
                 <span><strong>{p.fichier}</strong> : {p.message}</span>
-                <button onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
+                <button type="button" onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
                   className="text-red-500 bg-transparent border-none cursor-pointer font-semibold">retirer</button>
               </div>
             ) : (
@@ -352,7 +352,7 @@ export default function MasseSalarialePage() {
                         className="border border-gray-200 rounded px-2 py-1 w-20 text-right" />
                     </label>
                   ))}
-                  <button onClick={() => enregistrerProposition(p, idx)}
+                  <button type="button" onClick={() => enregistrerProposition(p, idx)}
                     disabled={saving || !p.salarie || !/^\d{4}-\d{2}$/.test(p.mois) || p.brut == null}
                     className="ml-auto font-semibold text-white bg-purple-600 hover:bg-purple-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     Enregistrer
@@ -433,7 +433,7 @@ export default function MasseSalarialePage() {
           {/* ── Bascule Brut / Coût entreprise ── */}
           <div className="flex items-center gap-2 mb-2">
             {([["brut", "Brut"], ["cout", "Coût total entreprise"]] as const).map(([id, lab]) => (
-              <button key={id} onClick={() => setMode(id)}
+              <button type="button" key={id} onClick={() => setMode(id)}
                 className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer ${mode === id ? "bg-purple-600 text-white border-purple-600" : "bg-white text-slate-600 border-gray-200 hover:bg-purple-50"}`}>
                 {lab}
               </button>
@@ -496,7 +496,7 @@ export default function MasseSalarialePage() {
               <h2 className="font-display text-base font-bold text-blue-800">
                 Détail — {NOMS_MOIS[moisDetail.slice(5)]} {moisDetail.slice(0, 4)}
               </h2>
-              <button onClick={() => setForm({ salarie: "", brut: "", net: "", coutEmployeur: "", heures: "" })}
+              <button type="button" onClick={() => setForm({ salarie: "", brut: "", net: "", coutEmployeur: "", heures: "" })}
                 className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-purple-100">
                 <Plus size={13} /> Ajouter une ligne
               </button>
@@ -513,9 +513,9 @@ export default function MasseSalarialePage() {
                       className="border border-gray-200 rounded px-2 py-1 w-20 text-right" />
                   </label>
                 ))}
-                <button onClick={enregistrerForm} disabled={saving || !form.salarie || !form.brut}
+                <button type="button" onClick={enregistrerForm} disabled={saving || !form.salarie || !form.brut}
                   className="ml-auto font-semibold text-white bg-purple-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">Enregistrer</button>
-                <button onClick={() => setForm(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
+                <button type="button" onClick={() => setForm(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
               </div>
             )}
 
@@ -545,9 +545,9 @@ export default function MasseSalarialePage() {
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.coutEmployeur != null ? eur(l.coutEmployeur) : "—"}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.heures != null ? hrs(l.heures) : "—"}</td>
                       <td className="px-2 py-1.5 text-right">
-                        <button onClick={() => setForm({ salarie: l.salarie, brut: String(l.brut), net: l.net != null ? String(l.net) : "", coutEmployeur: l.coutEmployeur != null ? String(l.coutEmployeur) : "", heures: l.heures != null ? String(l.heures) : "" })}
+                        <button type="button" onClick={() => setForm({ salarie: l.salarie, brut: String(l.brut), net: l.net != null ? String(l.net) : "", coutEmployeur: l.coutEmployeur != null ? String(l.coutEmployeur) : "", heures: l.heures != null ? String(l.heures) : "" })}
                           title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={13} /></button>
-                        <button onClick={() => supprimer(l)} title="Retirer"
+                        <button type="button" onClick={() => supprimer(l)} title="Retirer"
                           className="text-slate-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={13} /></button>
                       </td>
                     </tr>
@@ -569,7 +569,7 @@ export default function MasseSalarialePage() {
                 <div className="font-body text-xs font-semibold text-amber-800 uppercase tracking-wider">
                   Charges patronales versées à part (saisonniers TESA, MSA…)
                 </div>
-                <button onClick={() => setFormCharge({ libelle: "Charges MSA (TESA saisonniers)", montant: "", decaissement: "" })}
+                <button type="button" onClick={() => setFormCharge({ libelle: "Charges MSA (TESA saisonniers)", montant: "", decaissement: "" })}
                   className="flex items-center gap-1 font-body text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-amber-100">
                   <Plus size={11} /> Ajouter une charge
                 </button>
@@ -586,9 +586,9 @@ export default function MasseSalarialePage() {
                     <input value={formCharge.decaissement} inputMode="decimal" onChange={e => setFormCharge({ ...formCharge, decaissement: e.target.value })}
                       className="border border-gray-200 rounded px-2 py-1 w-24 text-right" />
                   </label>
-                  <button onClick={enregistrerFormCharge} disabled={saving || !formCharge.libelle || (!formCharge.montant && !formCharge.decaissement)}
+                  <button type="button" onClick={enregistrerFormCharge} disabled={saving || !formCharge.libelle || (!formCharge.montant && !formCharge.decaissement)}
                     className="ml-auto font-semibold text-white bg-amber-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">Enregistrer</button>
-                  <button onClick={() => setFormCharge(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
+                  <button type="button" onClick={() => setFormCharge(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">✕</button>
                 </div>
               )}
               {chargesDuMois.length === 0 ? (
@@ -605,9 +605,9 @@ export default function MasseSalarialePage() {
                         {c.decaissement != null && (
                           <span className="font-body text-[11px] text-slate-500" title="Le virement fait à l'organisme ce mois-là">· payé {eur(c.decaissement)}</span>
                         )}
-                        <button onClick={() => setFormCharge({ libelle: c.libelle, montant: c.montant != null ? String(c.montant) : "", decaissement: c.decaissement != null ? String(c.decaissement) : "" })}
+                        <button type="button" onClick={() => setFormCharge({ libelle: c.libelle, montant: c.montant != null ? String(c.montant) : "", decaissement: c.decaissement != null ? String(c.decaissement) : "" })}
                           title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={12} /></button>
-                        <button onClick={() => supprimerCharge(c)} title="Retirer"
+                        <button type="button" onClick={() => supprimerCharge(c)} title="Retirer"
                           className="text-slate-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={12} /></button>
                       </span>
                     </div>

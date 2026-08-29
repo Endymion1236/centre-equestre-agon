@@ -22,8 +22,16 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
+      # `npm ci` et non `npm install` : il installe EXACTEMENT le contenu du
+      # fichier de verrouillage et échoue s'il est désynchronisé, au lieu de le
+      # réécrire en silence. Sans ça, chaque build (local, CI, Vercel) pouvait
+      # résoudre des versions différentes — on perdait la seule propriété qui
+      # rend un lockfile utile : ce qui est testé est ce qui est déployé.
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
 
       - name: Run validation tests
         run: npm run validate:all

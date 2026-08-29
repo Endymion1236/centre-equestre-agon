@@ -261,8 +261,8 @@ export default function PedagogiePage() {
                     <div className="flex justify-between items-center mb-3">
                       <h3 className="font-body text-sm font-semibold text-blue-800 flex items-center gap-2"><Target size={14} /> Objectifs</h3>
                       <div className="flex gap-2">
-                        <button onClick={() => addDefaultObjectifs(child)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer">+ Objectifs type {child.galopLevel || "Bronze"}</button>
-                        <button onClick={() => setAddingObj(addingObj === uniqueKey ? null : child.id)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Perso</button>
+                        <button type="button" onClick={() => addDefaultObjectifs(child)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer">+ Objectifs type {child.galopLevel || "Bronze"}</button>
+                        <button type="button" onClick={() => setAddingObj(addingObj === uniqueKey ? null : child.id)} className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Perso</button>
                       </div>
                     </div>
 
@@ -270,7 +270,7 @@ export default function PedagogiePage() {
                       <div className="flex gap-2 mb-3">
                         <input value={newObjLabel} onChange={e => setNewObjLabel(e.target.value)} placeholder="Nouvel objectif..." autoFocus
                           className="flex-1 px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
-                        <button onClick={() => addObjectif(child)} disabled={!newObjLabel.trim() || saving}
+                        <button type="button" onClick={() => addObjectif(child)} disabled={!newObjLabel.trim() || saving}
                           className="px-4 py-2 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold border-none cursor-pointer"><Save size={12} className="inline mr-1" />OK</button>
                       </div>
                     )}
@@ -285,13 +285,13 @@ export default function PedagogiePage() {
                               {obj.status === "valide" ? "● " : obj.status === "a_revoir" ? "▲ " : "○ "} {obj.label}
                             </span>
                             <div className="flex items-center gap-1">
-                              <button onClick={() => toggleObjStatus(child, obj.id)}
+                              <button type="button" onClick={() => toggleObjStatus(child, obj.id)}
                                 className={`px-2.5 py-1 rounded-lg border-none cursor-pointer font-body text-[10px] font-semibold ${
                                   obj.status === "valide" ? "bg-green-100 text-green-600" : obj.status === "a_revoir" ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-500"
                                 }`}>
                                 {obj.status === "en_cours" ? "Valider" : obj.status === "valide" ? "À revoir" : "Reprendre"}
                               </button>
-                              <button onClick={() => deleteObjectif(child, obj.id)} className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"><X size={12} /></button>
+                              <button type="button" onClick={() => deleteObjectif(child, obj.id)} className="text-red-300 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"><X size={12} /></button>
                             </div>
                           </div>
                         ))}
@@ -310,7 +310,7 @@ export default function PedagogiePage() {
                           </span>
                         )}
                       </h3>
-                      <button onClick={() => setAddingNote(addingNote === uniqueKey ? null : child.id)}
+                      <button type="button" onClick={() => setAddingNote(addingNote === uniqueKey ? null : child.id)}
                         className="font-body text-[11px] text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer"><Plus size={12} className="inline" /> Ajouter</button>
                     </div>
 
@@ -318,7 +318,7 @@ export default function PedagogiePage() {
                       <div className="mb-3">
                         <textarea value={noteText} onChange={e => setNoteText(e.target.value)} rows={3} placeholder="Observations, progrès, points à travailler..." autoFocus
                           className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none resize-vertical" />
-                        <button onClick={() => addNote(child)} disabled={!noteText.trim() || saving}
+                        <button type="button" onClick={() => addNote(child)} disabled={!noteText.trim() || saving}
                           className="mt-2 px-4 py-2 rounded-lg bg-blue-500 text-white font-body text-xs font-semibold border-none cursor-pointer"><Save size={12} className="inline mr-1" />Enregistrer</button>
                       </div>
                     )}
@@ -388,8 +388,8 @@ export default function PedagogiePage() {
                                       <textarea value={editingNote.text} onChange={e => setEditingNote({ ...editingNote, text: e.target.value })} rows={5}
                                         className="w-full px-2 py-1.5 rounded-lg border border-blue-500/8 font-body text-sm bg-white focus:border-blue-500 focus:outline-none resize-vertical" />
                                       <div className="flex gap-2 mt-2">
-                                        <button onClick={() => saveEditNote(child)} className="font-body text-[10px] text-white bg-blue-500 px-3 py-1.5 rounded border-none cursor-pointer">Enregistrer</button>
-                                        <button onClick={() => setEditingNote(null)} className="font-body text-[10px] text-slate-600 bg-gray-100 px-3 py-1.5 rounded border-none cursor-pointer">Annuler</button>
+                                        <button type="button" onClick={() => saveEditNote(child)} className="font-body text-[10px] text-white bg-blue-500 px-3 py-1.5 rounded border-none cursor-pointer">Enregistrer</button>
+                                        <button type="button" onClick={() => setEditingNote(null)} className="font-body text-[10px] text-slate-600 bg-gray-100 px-3 py-1.5 rounded border-none cursor-pointer">Annuler</button>
                                       </div>
                                     </div>
                                   ) : (
@@ -404,11 +404,11 @@ export default function PedagogiePage() {
                                       )}
                                       {/* Actions */}
                                       <div className="flex gap-2 mt-3 pt-2 border-t border-gray-50">
-                                        <button onClick={() => setEditingNote({ childId: child.id, noteIndex: i, text: note.text })}
+                                        <button type="button" onClick={() => setEditingNote({ childId: child.id, noteIndex: i, text: note.text })}
                                           className="font-body text-[10px] text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                                           ✏️ Modifier
                                         </button>
-                                        <button onClick={() => { deleteNote(child, i); setOpenNoteKey(null); }}
+                                        <button type="button" onClick={() => { deleteNote(child, i); setOpenNoteKey(null); }}
                                           className="font-body text-[10px] text-red-400 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
                                           🗑 Supprimer
                                         </button>
@@ -421,12 +421,12 @@ export default function PedagogiePage() {
                           );
                         })}
                         {(peda.notes || []).length > 5 && showAllNotes !== uniqueKey && (
-                          <button onClick={() => setShowAllNotes(uniqueKey)} className="font-body text-xs text-blue-500 bg-blue-50 py-1.5 rounded-lg border-none cursor-pointer text-center">
+                          <button type="button" onClick={() => setShowAllNotes(uniqueKey)} className="font-body text-xs text-blue-500 bg-blue-50 py-1.5 rounded-lg border-none cursor-pointer text-center">
                             ▼ Voir les {(peda.notes || []).length - 5} notes antérieures
                           </button>
                         )}
                         {showAllNotes === uniqueKey && (peda.notes || []).length > 5 && (
-                          <button onClick={() => setShowAllNotes(null)} className="font-body text-xs text-slate-600 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
+                          <button type="button" onClick={() => setShowAllNotes(null)} className="font-body text-xs text-slate-600 bg-sand py-1.5 rounded-lg border-none cursor-pointer text-center">
                             ▲ Réduire
                           </button>
                         )}

@@ -123,6 +123,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, envoyes: sent.length, ignores: skipped });
   } catch (e: any) {
     console.error("[offres/envoyer]", e);
-    return NextResponse.json({ error: e?.message || "Erreur serveur", status: "error" }, { status: 500 });
+    return NextResponse.json({ error: "Erreur serveur", status: "error" }, { status: 500 });
   }
 }

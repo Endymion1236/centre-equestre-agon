@@ -172,7 +172,7 @@ export default function ClotureMoisPage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
           </Link>
-          <button onClick={load} disabled={loading}
+          <button type="button" onClick={load} disabled={loading}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
           </button>
@@ -182,14 +182,14 @@ export default function ClotureMoisPage() {
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">{error}</div>}
 
       <div className="flex items-center justify-center gap-3 mb-4">
-        <button onClick={() => setMois(m => moisDecale(m, -1))}
+        <button type="button" onClick={() => setMois(m => moisDecale(m, -1))}
           className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-50">
           <ChevronLeft size={15} className="text-slate-500" />
         </button>
         <div className="font-display text-lg font-bold text-blue-800 w-52 text-center">
           {NOMS_MOIS[mois.slice(5)]} {mois.slice(0, 4)}
         </div>
-        <button onClick={() => setMois(m => moisDecale(m, 1))} disabled={mois >= moisCourant()}
+        <button type="button" onClick={() => setMois(m => moisDecale(m, 1))} disabled={mois >= moisCourant()}
           className="w-8 h-8 rounded-lg bg-white border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-50 disabled:opacity-40">
           <ChevronRight size={15} className="text-slate-500" />
         </button>

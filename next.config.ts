@@ -18,6 +18,59 @@ const nextConfig: NextConfig = {
     ];
   },
 
+  // ─── En-têtes de sécurité ──────────────────────────────────────────
+  // L'application manipule des fiches sanitaires de mineurs, des IBAN de
+  // mandats SEPA et une caisse soumise à l'inaltérabilité NF525, et n'envoyait
+  // jusqu'ici AUCUN en-tête de sécurité (audit 29/08/2026).
+  //
+  // La CSP est volontairement en `Report-Only` pour l'instant : la passer en
+  // mode bloquant sans observation casserait Firebase, le tunnel Sentry
+  // (/monitoring) ou les polices Google. Relever les violations dans la
+  // console du navigateur pendant quelques jours, ajuster, PUIS renommer
+  // l'en-tête en `Content-Security-Policy`.
+  async headers() {
+    const csp = [
+      "default-src 'self'",
+      // Next.js injecte des scripts inline (hydratation, chunks) : 'unsafe-inline'
+      // reste nécessaire tant qu'on n'a pas branché les nonces.
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://apis.google.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "img-src 'self' data: blob: https://firebasestorage.googleapis.com https://storage.googleapis.com https://images.unsplash.com https://*.googleusercontent.com",
+      "media-src 'self' data: blob: https://firebasestorage.googleapis.com https://storage.googleapis.com",
+      // Firebase (Auth, Firestore, Storage, FCM) + CAWL + le tunnel Sentry.
+      "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.cloudfunctions.net https://securetoken.googleapis.com https://identitytoolkit.googleapis.com",
+      // Fenêtre de connexion Google/Facebook.
+      "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://www.facebook.com",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'self'",
+      "upgrade-insecure-requests",
+    ].join("; ");
+
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          // HTTPS obligatoire pendant deux ans, sous-domaines compris.
+          { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+          // Interdit au navigateur de deviner un type MIME : une image piégée
+          // ne peut pas être réinterprétée en script.
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // Anti-clickjacking (doublé par frame-ancestors dans la CSP).
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // Ne fuite pas l'URL complète (qui contient des identifiants de
+          // paiement et de famille) vers les sites tiers.
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // Aucune page n'a besoin de la caméra, du micro ni de la géoloc.
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+          { key: "Content-Security-Policy-Report-Only", value: csp },
+        ],
+      },
+    ];
+  },
+
   // ─── Images ────────────────────────────────────────────────────────
   images: {
     remotePatterns: [

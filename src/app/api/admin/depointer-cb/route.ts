@@ -19,14 +19,10 @@
  * Auth admin obligatoire (claim admin=true ou email admin).
  */
 
+import { isAdminToken } from "@/lib/api-auth";
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb, adminAuth } from "@/lib/firebase-admin";
 
-const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-];
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +32,7 @@ async function checkAdmin(req: NextRequest): Promise<{ ok: boolean; email?: stri
   if (!token) return { ok: false, error: "Token manquant" };
   try {
     const decoded = await adminAuth.verifyIdToken(token);
-    const isAdmin = decoded.admin === true || ADMIN_EMAILS.includes(decoded.email || "");
+    const isAdmin = isAdminToken(decoded);
     if (!isAdmin) return { ok: false, error: "Réservé admin" };
     return { ok: true, email: decoded.email };
   } catch (e) {

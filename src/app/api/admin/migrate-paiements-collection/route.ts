@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
         console.error(`Migration échouée pour paiements/${item.sourceId}:`, e);
         errors.push({
           sourceId: item.sourceId,
-          error: e.message || String(e),
+          error: "Erreur interne",
         });
       }
     }
@@ -149,6 +149,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("migrate-paiements-collection error:", e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
+    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
   }
 }

@@ -377,7 +377,7 @@ export default function GlobalSearch() {
             className="flex-1 bg-transparent border-none outline-none font-body text-base text-blue-800 placeholder:text-slate-400"
           />
           {loading && <Loader2 size={16} className="animate-spin text-blue-500 flex-shrink-0" />}
-          <button
+          <button type="button"
             onClick={() => setOpen(false)}
             className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer">
             <X size={18} />
@@ -417,7 +417,7 @@ export default function GlobalSearch() {
                   const globalIdx = results.indexOf(r);
                   const isSelected = globalIdx === selectedIdx;
                   return (
-                    <button
+                    <button type="button"
                       key={`${r.type}-${r.id}`}
                       onClick={() => go(r)}
                       onMouseEnter={() => setSelectedIdx(globalIdx)}

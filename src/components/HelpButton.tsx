@@ -32,7 +32,7 @@ export function HelpButton({
 
   return (
     <div className="relative inline-block">
-      <button
+      <button type="button"
         onClick={() => setOpen(o => !o)}
         title="Aide sur cette page"
         aria-label="Aide"
@@ -49,13 +49,13 @@ export function HelpButton({
           <div className="absolute right-0 top-11 z-50 bg-white border border-gray-200 rounded-xl shadow-xl w-64 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-slate-50">
               <span className="font-body text-xs font-semibold text-slate-700 uppercase tracking-wider">Aide</span>
-              <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer">
+              <button type="button" onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer">
                 <X size={14} />
               </button>
             </div>
             <div className="p-2 flex flex-col gap-1">
               {tourId && (
-                <button
+                <button type="button"
                   onClick={() => { setOpen(false); startTour(tourId); }}
                   className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-white hover:bg-blue-50 border-none cursor-pointer text-left">
                   <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">

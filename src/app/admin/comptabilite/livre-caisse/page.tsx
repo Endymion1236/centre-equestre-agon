@@ -284,15 +284,15 @@ export default function LivreCaissePage() {
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
           </Link>
-          <button onClick={() => setShowApportModal(true)}
+          <button type="button" onClick={() => setShowApportModal(true)}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-green-600 hover:bg-green-700 border-none px-3 py-2 rounded-lg cursor-pointer">
             <PiggyBank size={14} /> Apport en caisse
           </button>
-          <button onClick={() => setShowVersementModal(true)}
+          <button type="button" onClick={() => setShowVersementModal(true)}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 border-none px-3 py-2 rounded-lg cursor-pointer">
             <Building2 size={14} /> Versement banque
           </button>
-          <button onClick={exportPDF}
+          <button type="button" onClick={exportPDF}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none px-3 py-2 rounded-lg cursor-pointer">
             <Printer size={14} /> Imprimer / PDF
           </button>
@@ -313,11 +313,11 @@ export default function LivreCaissePage() {
       <Card padding="md" className="mb-4 print:shadow-none">
         <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
           <div className="flex items-center gap-2 print:hidden">
-            <button onClick={prevMonth} className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <button type="button" onClick={prevMonth} className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 cursor-pointer">
               <ChevronLeft size={14} />
             </button>
             <div className="font-display text-lg font-bold text-blue-800 capitalize min-w-[180px] text-center">{monthLabel}</div>
-            <button onClick={nextMonth} className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <button type="button" onClick={nextMonth} className="p-2 rounded-lg bg-white border border-gray-200 hover:bg-gray-50 cursor-pointer">
               <ChevronRight size={14} />
             </button>
           </div>
@@ -448,7 +448,7 @@ export default function LivreCaissePage() {
                   <p className="font-body text-xs text-slate-500">Mise en place du fonds de caisse ou appoint de monnaie</p>
                 </div>
               </div>
-              <button onClick={() => !savingApport && setShowApportModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">
+              <button type="button" onClick={() => !savingApport && setShowApportModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">
                 <X size={14} />
               </button>
             </div>
@@ -528,13 +528,13 @@ export default function LivreCaissePage() {
             </div>
 
             <div className="flex justify-end gap-2 p-4 border-t border-gray-100">
-              <button
+              <button type="button"
                 onClick={() => setShowApportModal(false)}
                 disabled={savingApport}
                 className="font-body text-sm text-slate-600 bg-white border border-gray-200 rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
                 Annuler
               </button>
-              <button
+              <button type="button"
                 onClick={creerApportCaisse}
                 disabled={savingApport || !apportMontant}
                 className="font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 border-none rounded-lg px-4 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
@@ -559,7 +559,7 @@ export default function LivreCaissePage() {
                   <p className="font-body text-xs text-slate-500">Sortie d'espèces de la caisse physique</p>
                 </div>
               </div>
-              <button onClick={() => !savingVersement && setShowVersementModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">
+              <button type="button" onClick={() => !savingVersement && setShowVersementModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none">
                 <X size={14} />
               </button>
             </div>
@@ -628,13 +628,13 @@ export default function LivreCaissePage() {
             </div>
 
             <div className="flex justify-end gap-2 p-4 border-t border-gray-100">
-              <button
+              <button type="button"
                 onClick={() => setShowVersementModal(false)}
                 disabled={savingVersement}
                 className="font-body text-sm text-slate-600 bg-white border border-gray-200 rounded-lg px-4 py-2 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
                 Annuler
               </button>
-              <button
+              <button type="button"
                 onClick={creerVersementBanque}
                 disabled={savingVersement || !versementMontant}
                 className="font-body text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 border-none rounded-lg px-4 py-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">

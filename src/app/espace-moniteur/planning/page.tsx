@@ -87,7 +87,7 @@ export default function EspaceMoniteurPlanning() {
 
       {/* Navigation semaine */}
       <div className="flex items-center justify-between">
-        <button onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+        <button type="button" onClick={prevWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
           <ChevronLeft size={16} />Préc.
         </button>
         <div className="text-center">
@@ -99,8 +99,8 @@ export default function EspaceMoniteurPlanning() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
-          <button onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
+          <button type="button" onClick={() => setSemaine(getISOWeek(new Date()))} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button>
+          <button type="button" onClick={nextWeek} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">
             Suiv.<ChevronRight size={16} />
           </button>
         </div>

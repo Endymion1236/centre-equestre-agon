@@ -447,7 +447,7 @@ export default function FamilyCard({
                     <Mail size={10} />
                     <a href={`mailto:${family.parentEmail}`} onClick={(e) => e.stopPropagation()}
                       className="text-slate-600 no-underline hover:text-blue-500 hover:underline">{family.parentEmail}</a>
-                    <button
+                    <button type="button"
                       onClick={(e) => {
                         e.stopPropagation();
                         navigator.clipboard.writeText(family.parentEmail).then(
@@ -657,35 +657,35 @@ export default function FamilyCard({
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleSaveFamily} disabled={saving}
+                  <button type="button" onClick={handleSaveFamily} disabled={saving}
                     className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
                     {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Enregistrer
                   </button>
-                  <button onClick={() => setEditingFamily(false)} className="font-body text-xs text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                  <button type="button" onClick={() => setEditingFamily(false)} className="font-body text-xs text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                 </div>
               </div>
             ) : (
               <div className="mb-5">
                 {/* Actions famille */}
                 <div className="flex justify-end mb-2 gap-2 flex-wrap">
-                  <button onClick={() => setShowMerge(true)} className="font-body text-xs text-purple-500 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
+                  <button type="button" onClick={() => setShowMerge(true)} className="font-body text-xs text-purple-500 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex items-center gap-1">
                     <GitMerge size={12}/> Fusionner
                   </button>
-                  <button onClick={() => setShowLinkChildren(true)} className="font-body text-xs text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-teal-100 flex items-center gap-1">
+                  <button type="button" onClick={() => setShowLinkChildren(true)} className="font-body text-xs text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-teal-100 flex items-center gap-1">
                     <UserPlus size={12}/> Lier cavaliers
                   </button>
                   {family.parentEmail && (
-                    <button onClick={() => setEmailModal(true)} className="font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
+                    <button type="button" onClick={() => setEmailModal(true)} className="font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
                       <Mail size={12}/> Email
                     </button>
                   )}
-                  <button onClick={() => setAddingChild(true)} className="font-body text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                  <button type="button" onClick={() => setAddingChild(true)} className="font-body text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                     <UserPlus size={12}/> Ajouter un cavalier
                   </button>
-                  <button onClick={startEditFamily} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
+                  <button type="button" onClick={startEditFamily} className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1">
                     <Edit3 size={12}/> Modifier
                   </button>
-                  <button onClick={handleDeleteFamily} className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
+                  <button type="button" onClick={handleDeleteFamily} className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100 flex items-center gap-1">
                     <Trash2 size={12}/> Supprimer
                   </button>
                 </div>
@@ -796,11 +796,11 @@ export default function FamilyCard({
                     <span className="font-body text-xs text-gray-600">Autorisation parentale de transport en cas d&apos;urgence</span>
                   </label>
                   <div className="flex gap-2 mt-2">
-                    <button onClick={() => handleSaveSanitary(child.id)} disabled={saving}
+                    <button type="button" onClick={() => handleSaveSanitary(child.id)} disabled={saving}
                       className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-green-600 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                       {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Enregistrer
                     </button>
-                    <button onClick={() => setEditingSanitary(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                    <button type="button" onClick={() => setEditingSanitary(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                   </div>
                 </div>
               );
@@ -838,11 +838,11 @@ export default function FamilyCard({
                     </label>
                   </div>
                   <div className="flex gap-2 mt-2">
-                    <button onClick={() => handleSaveChild(editingChild)} disabled={saving}
+                    <button type="button" onClick={() => handleSaveChild(editingChild)} disabled={saving}
                       className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                       {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Enregistrer
                     </button>
-                    <button onClick={() => setEditingChild(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                    <button type="button" onClick={() => setEditingChild(null)} className="font-body text-xs text-slate-600 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                   </div>
                 </div>
               );
@@ -863,11 +863,11 @@ export default function FamilyCard({
                   </select>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={handleAddChild} disabled={saving || !newChildForm.firstName.trim()}
+                  <button type="button" onClick={handleAddChild} disabled={saving || !newChildForm.firstName.trim()}
                     className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     {saving ? <Loader2 size={12} className="animate-spin"/> : <Save size={12}/>} Ajouter
                   </button>
-                  <button onClick={() => setAddingChild(false)} className="font-body text-xs text-slate-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                  <button type="button" onClick={() => setAddingChild(false)} className="font-body text-xs text-slate-600 bg-white px-3 py-2 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
                 </div>
               </div>
             )}

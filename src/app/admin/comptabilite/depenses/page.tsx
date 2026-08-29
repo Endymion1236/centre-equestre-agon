@@ -155,7 +155,7 @@ export default function DepensesPage() {
             className="font-body text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-3 py-2 rounded-lg no-underline hover:bg-purple-100">
             👥 Masse salariale
           </Link>
-          <button onClick={load} disabled={loading}
+          <button type="button" onClick={load} disabled={loading}
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-50 disabled:opacity-50">
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Actualiser
           </button>
@@ -166,7 +166,7 @@ export default function DepensesPage() {
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {exercices.map(ex => (
-          <button key={ex} onClick={() => { setExercice(ex); setSel(null); }}
+          <button type="button" key={ex} onClick={() => { setExercice(ex); setSel(null); }}
             className={`px-3 py-1.5 rounded-lg font-body text-xs font-semibold border cursor-pointer ${exercice === ex ? "bg-orange-600 text-white border-orange-600" : "bg-white text-slate-600 border-gray-200 hover:bg-orange-50"}`}>
             Exercice {ex}
           </button>
@@ -208,7 +208,7 @@ export default function DepensesPage() {
                         const active = sel && sel.mois === mois && sel.poste === p.nom;
                         return (
                           <td key={mm} className="px-1 py-1 text-right">
-                            <button onClick={() => { setSel({ mois, poste: p.nom }); setForm({ editId: null, fournisseur: "", montant: "" }); }}
+                            <button type="button" onClick={() => { setSel({ mois, poste: p.nom }); setForm({ editId: null, fournisseur: "", montant: "" }); }}
                               title={factures.length > 0 ? `${factures.length} facture(s) — cliquer pour le détail` : "Cliquer pour saisir les factures"}
                               className={`w-full text-right border-none cursor-pointer px-1 py-0.5 rounded font-body text-[13px] ${active ? "bg-orange-200/70" : "bg-transparent hover:bg-orange-100/60"}`}>
                               {factures.length > 0
@@ -244,7 +244,7 @@ export default function DepensesPage() {
             </table>
             <div className="flex items-center justify-between flex-wrap gap-2 px-3 py-2">
               {nouveauPoste === null ? (
-                <button onClick={() => setNouveauPoste("")}
+                <button type="button" onClick={() => setNouveauPoste("")}
                   className="flex items-center gap-1 font-body text-[11px] font-semibold text-orange-700 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-orange-100">
                   <Plus size={11} /> Ajouter un poste
                 </button>
@@ -257,7 +257,7 @@ export default function DepensesPage() {
                     }}
                     placeholder="Nom du poste (Entrée pour ajouter)"
                     className="font-body text-xs border border-orange-300 rounded px-2 py-1 w-64" />
-                  <button onClick={() => setNouveauPoste(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1 rounded-lg cursor-pointer text-xs">✕</button>
+                  <button type="button" onClick={() => setNouveauPoste(null)} className="text-slate-500 bg-white border border-gray-200 px-2 py-1 rounded-lg cursor-pointer text-xs">✕</button>
                 </span>
               )}
               <p className="font-body text-[11px] text-slate-400">
@@ -275,7 +275,7 @@ export default function DepensesPage() {
                 <h2 className="font-display text-base font-bold text-blue-800">
                   {sel.poste} — {NOMS_MOIS_LONGS[sel.mois.slice(5)]} {sel.mois.slice(0, 4)}
                 </h2>
-                <button onClick={() => setSel(null)}
+                <button type="button" onClick={() => setSel(null)}
                   className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-2.5 py-1.5 rounded-lg cursor-pointer">✕ Fermer</button>
               </div>
 
@@ -288,9 +288,9 @@ export default function DepensesPage() {
                       <span className="text-slate-700">{f.fournisseur || <span className="text-slate-400 italic">(sans fournisseur)</span>}</span>
                       <span className="flex items-center gap-1">
                         <strong className="text-orange-900">{eur(f.montant)}</strong>
-                        <button onClick={() => setForm({ editId: f.id, fournisseur: f.fournisseur, montant: String(f.montant) })}
+                        <button type="button" onClick={() => setForm({ editId: f.id, fournisseur: f.fournisseur, montant: String(f.montant) })}
                           title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={12} /></button>
-                        <button onClick={() => supprimerFacture(f)} title="Retirer"
+                        <button type="button" onClick={() => supprimerFacture(f)} title="Retirer"
                           className="text-slate-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={12} /></button>
                       </span>
                     </div>
@@ -310,12 +310,12 @@ export default function DepensesPage() {
                 <input value={form.montant} inputMode="decimal" onChange={e => setForm({ ...form, montant: e.target.value })}
                   onKeyDown={e => { if (e.key === "Enter") enregistrerFacture(); }}
                   placeholder="Montant HT" className="border border-gray-200 rounded px-2 py-1 w-24 text-right" />
-                <button onClick={enregistrerFacture} disabled={saving || form.montant.trim() === ""}
+                <button type="button" onClick={enregistrerFacture} disabled={saving || form.montant.trim() === ""}
                   className="font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                   {form.editId ? "Corriger" : "+ Ajouter la facture"}
                 </button>
                 {form.editId && (
-                  <button onClick={() => setForm({ editId: null, fournisseur: "", montant: "" })}
+                  <button type="button" onClick={() => setForm({ editId: null, fournisseur: "", montant: "" })}
                     className="text-slate-500 bg-white border border-gray-200 px-2 py-1.5 rounded-lg cursor-pointer">annuler la correction</button>
                 )}
               </div>

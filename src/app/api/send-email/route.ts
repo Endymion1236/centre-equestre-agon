@@ -225,7 +225,7 @@ export async function POST(request: NextRequest) {
     await logEmail({
       to: logTo || "", subject: logSubject,
       context: logContext, template: logTemplate,
-      status: "failed", error: error?.message || String(error),
+      status: "failed", error: "Erreur interne",
       sentBy, ...logMeta,
     });
     return NextResponse.json({ error: "Erreur interne" }, { status: 500 });

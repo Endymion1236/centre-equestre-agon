@@ -18,6 +18,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "@/lib/firebase";
+import { estEmailAdmin, repliEmailAutorise } from "@/lib/admin-emails";
 import type { Family } from "@/types";
 
 interface AuthContextType {
@@ -48,12 +49,6 @@ const AuthContext = createContext<AuthContextType>({
   userRole: "cavalier",
 });
 
-// Nicolas & Emmeline admin emails
-const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -234,14 +229,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }).catch(() => {});
   }, [user]);
 
-  // isAdmin : custom claim Firebase OU email dans la liste admin.
-  // Important : le fallback email s'applique meme quand le claim vaut
-  // explicitement false (cas d'un environnement Firebase sans claims
-  // configures, ex: base de test gestion-2026-test). Sans ce OR, un
-  // admin connu par email mais sans claim ne serait jamais reconnu.
+  // isAdmin : le custom claim Firebase fait autorite. Le repli par email
+  // (source unique dans lib/admin-emails.ts) ne s'applique que hors base de
+  // production et sur une adresse verifiee, exactement comme cote serveur
+  // dans lib/api-auth.ts — sans quoi l'affichage admin et les droits reels
+  // divergeraient. Ce n'est de toute facon qu'un rendu : les donnees restent
+  // protegees par les regles Firestore.
   const isAdmin =
     adminClaim === true ||
-    (user?.email ? ADMIN_EMAILS.includes(user.email) : false);
+    (repliEmailAutorise() && !!user?.emailVerified && estEmailAdmin(user?.email));
   
   const isMoniteur = moniteurClaim;
   const userRole: "admin" | "moniteur" | "cavalier" = isAdmin ? "admin" : isMoniteur ? "moniteur" : "cavalier";

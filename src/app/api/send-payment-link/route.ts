@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
           await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: sentByUid, paymentId, familyId: payData.familyId });
         }
       } catch (e: any) {
-        await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "failed", error: e?.message || String(e), sentBy: sentByUid, paymentId, familyId: payData.familyId });
+        await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "failed", error: "Erreur interne", sentBy: sentByUid, paymentId, familyId: payData.familyId });
         console.error("Erreur envoi email:", e);
       }
     }

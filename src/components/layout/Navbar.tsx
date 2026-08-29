@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -58,7 +59,7 @@ export function Navbar() {
     }`}>
       <div className="mx-auto flex max-w-[1220px] items-center justify-between gap-5 px-5 sm:px-6">
         <Link href="/accueil" className="flex min-w-0 items-center gap-3 no-underline">
-          <img src="/images/logo-ce-agon.png" alt="Centre Équestre d’Agon-Coutainville" className="h-11 w-11 flex-shrink-0 rounded-xl object-contain" />
+          <Image src="/images/logo-ce-agon.png" alt="Centre Équestre d’Agon-Coutainville" width={44} height={44} priority className="h-11 w-11 flex-shrink-0 rounded-xl object-contain" />
           <div className="min-w-0">
             <div className={`truncate font-display text-[15px] font-bold leading-tight transition-colors ${light ? "text-blue-950" : "text-white"}`}>
               Centre Équestre
@@ -111,10 +112,10 @@ export function Navbar() {
                 <Pencil size={11} className="text-gold-500" />
                 <span className="font-body text-[10px] font-bold text-gold-600">Édition</span>
               </div>
-              <button onClick={signOut} className="border-none bg-transparent font-body text-[10px] text-slate-400 cursor-pointer hover:text-red-500">Quitter</button>
+              <button type="button" onClick={signOut} className="border-none bg-transparent font-body text-[10px] text-slate-400 cursor-pointer hover:text-red-500">Quitter</button>
             </div>
           ) : (
-            <button onClick={signInWithGoogle} className={`border-none bg-transparent p-1 cursor-pointer transition-colors ${light ? "text-slate-300 hover:text-slate-500" : "text-white/18 hover:text-white/45"}`} title="Connexion admin" aria-label="Connexion admin">
+            <button type="button" onClick={signInWithGoogle} className={`border-none bg-transparent p-1 cursor-pointer transition-colors ${light ? "text-slate-300 hover:text-slate-500" : "text-white/18 hover:text-white/45"}`} title="Connexion admin" aria-label="Connexion admin">
               <UserRound size={15} />
             </button>
           )}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth } from "@/lib/firebase-admin";
+import { estEmailAdmin, repliEmailAutorise } from "@/lib/admin-emails";
 
 /**
  * Vérifie le token Firebase dans le header Authorization.
@@ -29,18 +30,20 @@ interface AuthOptions {
   staffOnly?: boolean;
 }
 
-// Emails admin reconnus meme sans custom claim. Doit rester aligne avec
-// ADMIN_EMAILS dans auth-context.tsx et la liste dans firestore.rules.
-// Permet a un admin connu par email d'acceder aux routes admin meme sur
-// une base Firebase sans claims configures (ex: base de test).
-const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
-  "ceagon50@gmail.com",
-  "emmelinelagy@gmail.com",
-];
-
+/**
+ * L'autorité est le custom claim `admin: true`.
+ *
+ * Le repli par email (liste dans lib/admin-emails.ts) est conservé UNIQUEMENT
+ * hors production, et uniquement si l'adresse du jeton est vérifiée. Sans ces
+ * deux conditions, n'importe qui pouvant créer un compte avec l'une de ces
+ * adresses héritait de l'administration complète — l'inscription par
+ * email/mot de passe étant active sur ce projet, la seule barrière était un
+ * réglage de la console Firebase. Audit 29/08/2026.
+ */
 export function isAdminToken(decoded: any): boolean {
-  return decoded.admin === true || ADMIN_EMAILS.includes(decoded.email || "");
+  if (decoded?.admin === true) return true;
+  if (!repliEmailAutorise()) return false;
+  return decoded?.email_verified === true && estEmailAdmin(decoded?.email);
 }
 
 export async function verifyAuth(

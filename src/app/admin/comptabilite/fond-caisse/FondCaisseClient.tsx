@@ -257,7 +257,7 @@ export default function FondCaisseClient() {
           </div>
         )}
 
-        <button
+        <button type="button"
           onClick={handleSave}
           disabled={saving || loading || soldeTheorique === null}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-body text-sm font-semibold border-none cursor-pointer">

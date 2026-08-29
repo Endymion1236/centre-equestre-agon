@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
+import { deciderPaiement } from "@/lib/cawl-status";
 import crypto from "crypto";
 
 // Lit le statut d'un Hosted Checkout CAWL (même signature V1HMAC que /api/cawl/status).
@@ -40,13 +41,26 @@ export async function GET(req: NextRequest) {
   const cancel = () => NextResponse.redirect(new URL("/offrir-un-bon?cancelled=true", origin));
   const merci = () => NextResponse.redirect(new URL("/offrir-un-bon/merci?ok=1", origin));
 
-  if (!hostedCheckoutId) return cancel();
+  // Les DEUX paramètres sont exigés. Le test précédent
+  // (`sess.returnMac && returnMac && …`) échouait en mode ouvert : appeler
+  // l'URL sans RETURNMAC sautait entièrement le contrôle, et un simple
+  // hostedCheckoutId suffisait à déclencher le traitement du bon.
+  if (!hostedCheckoutId || !returnMac) return cancel();
 
   const sessSnap = await adminDb.collection("cawl_sessions").doc(hostedCheckoutId).get();
   if (!sessSnap.exists) return cancel();
   const sess = sessSnap.data() as any;
   if (!sess.bonCadeau) return cancel();
-  if (sess.returnMac && returnMac && sess.returnMac !== returnMac) {
+
+  // Comparaison en temps constant, comme /api/cawl/status
+  // (timingSafeEqual exige des Buffers de même longueur).
+  const receivedBuf = Buffer.from(returnMac, "utf8");
+  const storedBuf = Buffer.from(String(sess.returnMac || ""), "utf8");
+  const macValid =
+    receivedBuf.length === storedBuf.length &&
+    receivedBuf.length > 0 &&
+    crypto.timingSafeEqual(receivedBuf, storedBuf);
+  if (!macValid) {
     console.warn(`bon-cadeau status: RETURNMAC invalide pour ${hostedCheckoutId}`);
     return cancel();
   }
@@ -56,11 +70,17 @@ export async function GET(req: NextRequest) {
     const { status: httpStatus, body } = await getHostedCheckoutStatus(hostedCheckoutId);
     const paymentStatus = body?.createdPaymentOutput?.payment?.status;
     const hcStatus = body?.status;
-    const isSuccess = httpStatus === 200 &&
-      (["CAPTURED", "PAID", "PENDING_CAPTURE"].includes(paymentStatus) || hcStatus === "PAYMENT_CREATED");
 
-    if (!isSuccess) {
-      console.log(`bon-cadeau status non abouti: hc=${hcStatus}, pay=${paymentStatus}`);
+    // ⚠️ SEUL le statut du PAIEMENT décide — cf. lib/cawl-status.ts et
+    // l'incident du 30/07/2026. Cette route acceptait encore
+    // `hcStatus === "PAYMENT_CREATED"` comme critère de succès : or ce statut
+    // décrit la SESSION (« une tentative a été créée »), et un refus bancaire
+    // en crée une aussi. Un bon cadeau valide était donc émis, la recette
+    // comptabilisée et l'email envoyé, sans le moindre encaissement.
+    const decision = httpStatus === 200 ? deciderPaiement(paymentStatus) : "en_attente";
+
+    if (decision !== "succes") {
+      console.log(`bon-cadeau status non abouti (${decision}): hc=${hcStatus}, pay=${paymentStatus}`);
       return cancel();
     }
 
