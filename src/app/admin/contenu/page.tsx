@@ -407,13 +407,23 @@ export default function ContenuPage() {
             ) : (
               <div className="flex flex-col gap-3">
                 {(data.tarifs.cours_annuels || []).map((c, idx) => (
-                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-3 bg-sand rounded-lg items-end">
+                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-6 gap-2 p-3 bg-sand rounded-lg items-end">
                     <div><label className={label}>Libellé</label>
                       <input value={c.label} onChange={e => setCoursAnnuel(idx, "label", e.target.value)} className={inp} placeholder="ex : 1 cours / semaine" /></div>
                     <div><label className={label}>Niveau</label>
                       <input value={c.level} onChange={e => setCoursAnnuel(idx, "level", e.target.value)} className={inp} placeholder="ex : Tous niveaux" /></div>
                     <div><label className={label}>Prix (€)</label>
                       <input type="number" value={c.price} onChange={e => setCoursAnnuel(idx, "price", e.target.value)} className={inp} /></div>
+                    {/* « À partir de » : une première inscription ne paie pas
+                        le même tarif qu'un renouvellement. Afficher un prix sec
+                        engage sur un montant qui ne vaudra pas pour tout le
+                        monde. */}
+                    <div><label className={label}>Prix plancher</label>
+                      <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white cursor-pointer">
+                        <input type="checkbox" checked={!!(c as any).from}
+                          onChange={e => setCoursAnnuel(idx, "from", e.target.checked ? "1" : "")} />
+                        <span className="font-body text-xs text-slate-600">à partir de</span>
+                      </label></div>
                     <div><label className={label}>Fréquence</label>
                       <input value={c.freq} onChange={e => setCoursAnnuel(idx, "freq", e.target.value)} className={inp} placeholder="Trimestre, Année, Mois..." /></div>
                     <button type="button"
