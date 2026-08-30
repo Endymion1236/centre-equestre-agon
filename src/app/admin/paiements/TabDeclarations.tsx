@@ -187,7 +187,7 @@ export function TabDeclarations({
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
                             to: decl.familyEmail,
-                            subject: `✅ Paiement confirmé — ${decl.montant.toFixed(2)}€`,
+                            subject: `Paiement confirmé — ${decl.montant.toFixed(2)}€`,
                             context: "admin_confirmation_declaration",
                             template: "confirmationDeclaration",
                             familyId: decl.familyId,

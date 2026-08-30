@@ -944,7 +944,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: entry.familyEmail,
-          subject: `🎉 Une place s'est libérée — ${creneau.activityTitle}`,
+          subject: `Une place s'est libérée — ${creneau.activityTitle}`,
           context: "admin_place_liberee",
           template: "placeLiberee",
           familyId: entry.familyId,

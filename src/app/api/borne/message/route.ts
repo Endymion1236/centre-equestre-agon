@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
           await resend.emails.send({
             from,
             to,
-            subject: `📩 Message laissé à la borne — ${nom}`,
+            subject: `Message laissé à la borne — ${nom}`,
             text: [
               `Un visiteur a laissé un message sur la borne d'accueil :`,
               ``,

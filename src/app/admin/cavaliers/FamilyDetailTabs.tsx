@@ -71,7 +71,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: family.parentEmail,
-          subject: `📋 Attestation médicale manquante — ${child.firstName}`,
+          subject: `Attestation médicale manquante — ${child.firstName}`,
           context: "admin_relance_attestation",
           familyId: family.firestoreId || family.id,
           html: emailLayout([

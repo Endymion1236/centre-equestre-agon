@@ -1884,7 +1884,7 @@ export default function PlanningPage() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 to: first.familyEmail,
-                subject: `🎉 Une place s'est libérée — ${c.activityTitle}`,
+                subject: `Une place s'est libérée — ${c.activityTitle}`,
                 context: "admin_place_liberee",
                 template: "placeLibereeNotif",
                 familyId: first.familyId,

@@ -5,6 +5,9 @@ import { verifyAuth } from "@/lib/api-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { FieldValue } from "firebase-admin/firestore";
+import {
+  emailLayout, emailParagraphe, emailParagraphe as P,
+} from "@/lib/email-templates";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -352,12 +355,11 @@ async function executeTool(name: string, input: any): Promise<string> {
             from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
             to: input.to,
             subject: input.subject,
-            html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-              ${input.familyName ? `<p>Bonjour <strong>${input.familyName}</strong>,</p>` : ""}
-              <p>${input.message.replace(/\n/g, "<br>")}</p>
-              <hr style="margin:24px 0;border:none;border-top:1px solid #eee;">
-              <p style="color:#999;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville</p>
-            </div>`,
+            html: emailLayout(
+              (input.familyName ? emailParagraphe(`Bonjour <strong>${input.familyName}</strong>,`) : "")
+              + emailParagraphe(input.message.replace(/\n/g, "<br/>")),
+              input.subject,
+            ),
           }),
         });
         if (!res.ok) return `❌ Erreur envoi email (${res.status})`;

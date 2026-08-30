@@ -752,7 +752,7 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: famData.parentEmail,
-              subject: `💬 Un mot du moniteur pour ${childName}`,
+              subject: `Un mot du moniteur pour ${childName}`,
               context: "admin_note_moniteur",
               familyId,
               html: emailLayout([

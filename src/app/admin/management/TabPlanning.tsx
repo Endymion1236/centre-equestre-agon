@@ -10,6 +10,11 @@ import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
 import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour, bornesJournee } from "./types";
 import { dateSaisieComplete } from "@/lib/date-saisie";
+import {
+  emailLayout, emailButton, emailTitre, emailParagraphe as P, emailCouleurs as CE,
+} from "@/lib/email-templates";
+
+const POLICE_PLANNING = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 interface Props {
   semaine: string;
@@ -1195,62 +1200,23 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
           return `<td style="padding:4px;text-align:center;font-size:9px;font-weight:700;color:${charge > 0 ? "#1e3a5f" : "#d1d5db"};border-top:1px solid #e2e8f0;">${charge > 0 ? fmtDuree(charge) + finStr : "—"}</td>`;
         }).join("");
 
-        const html = `
-<div style="font-family:Arial,sans-serif;max-width:650px;margin:0 auto;background:#ffffff;">
-  <!-- Header -->
-  <div style="background:linear-gradient(135deg,#1e3a5f,#2050A0);padding:20px 24px;border-radius:12px 12px 0 0;">
-    <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-bottom:2px;">🐴 Centre Équestre d'Agon-Coutainville</div>
-    <div style="font-size:20px;font-weight:800;color:#ffffff;">Planning Semaine ${semaineNum}</div>
-    <div style="font-size:12px;color:rgba(255,255,255,0.8);margin-top:3px;">${dateDebut} → ${dateFin}</div>
-  </div>
-  
-  <!-- Salutation -->
-  <div style="padding:16px 24px 10px;">
-    <div style="font-size:14px;color:#1e293b;">Bonjour <strong>${mon.name}</strong>,</div>
-    <div style="font-size:12px;color:#64748b;margin-top:4px;">
-      ${totalCharge > 0 ? `Votre semaine : <strong style="color:#1e3a5f;">${fmtDuree(totalCharge)}</strong> de travail.` : "Aucune tâche assignée cette semaine."}
-    </div>
-  </div>
-
-  <!-- Tableau style management -->
-  ${totalCharge > 0 ? `
-  <div style="padding:8px 24px 16px;">
-    <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-      <thead>
-        <tr>
-          ${jourHeaders}
-        </tr>
-      </thead>
-      <tbody>
-        <tr>${jourCells}</tr>
-      </tbody>
-      <tfoot>
-        <tr style="background:#f8fafc;">${chargeCells}</tr>
-        <tr style="background:#f1f5f9;">
-          <td colspan="${joursLabels.length}" style="padding:8px 12px;text-align:center;font-weight:800;color:#1e3a5f;font-size:13px;border-top:2px solid #e2e8f0;">
-            Total : ${fmtDuree(totalCharge)}
-          </td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-  ` : ""}
-
-  <!-- Bouton -->
-  <div style="padding:4px 24px 20px;text-align:center;">
-    <a href="${siteUrl}/espace-moniteur/planning" style="display:inline-block;background:#2050A0;color:#ffffff;padding:10px 28px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
-      📋 Voir mon planning
-    </a>
-  </div>
-
-  <!-- Footer -->
-  <div style="background:#f8fafc;padding:12px 24px;border-radius:0 0 12px 12px;border-top:1px solid #e2e8f0;">
-    <div style="font-size:10px;color:#94a3b8;text-align:center;">
-      Ce planning peut être modifié. En cas de question, contactez Nicolas.
-      <br>Centre Équestre d'Agon-Coutainville · <a href="${siteUrl}" style="color:#2050A0;text-decoration:none;">centreequestreagon.com</a>
-    </div>
-  </div>
-</div>`;
+        const html = emailLayout([
+          emailTitre(`Planning de la semaine ${semaineNum}`),
+          P(`Bonjour <strong>${mon.name}</strong>,`),
+          P(totalCharge > 0
+            ? `Du ${dateDebut} au ${dateFin} — <strong>${fmtDuree(totalCharge)}</strong> de travail.`
+            : `Du ${dateDebut} au ${dateFin} — aucune tâche assignée cette semaine.`),
+          totalCharge > 0 ? `<table style="width:100%;border-collapse:collapse;margin:18px 0;font-family:${POLICE_PLANNING};">
+            <thead><tr>${jourHeaders}</tr></thead>
+            <tbody><tr>${jourCells}</tr></tbody>
+            <tfoot>
+              <tr>${chargeCells}</tr>
+              <tr><td colspan="${joursLabels.length}" style="padding:10px 12px;text-align:center;font-weight:700;color:${CE.encre};font-size:13px;border-top:1px solid ${CE.bord};">Total : ${fmtDuree(totalCharge)}</td></tr>
+            </tfoot>
+          </table>` : "",
+          emailButton("Voir mon planning", `${siteUrl}/espace-moniteur/planning`),
+          P("Ce planning peut être modifié. En cas de question, contacte Nicolas.", 13),
+        ].join("\n"), `Semaine ${semaineNum} — ${totalCharge > 0 ? fmtDuree(totalCharge) : "aucune tâche"}`);
 
         try {
           await authFetch("/api/send-email", {
@@ -1258,7 +1224,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: mon.email,
-              subject: `📋 Votre planning semaine ${semaineNum} — ${dateDebut} → ${dateFin}`,
+              subject: `Votre planning — semaine ${semaineNum}, du ${dateDebut} au ${dateFin}`,
               html,
               context: "admin_planning_moniteur",
               template: "planningMoniteur",
