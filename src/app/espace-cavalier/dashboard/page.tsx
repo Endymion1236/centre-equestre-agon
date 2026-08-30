@@ -193,9 +193,17 @@ export default function DashboardPage() {
     return issues;
   }, [family]);
 
-  const formattedNextDate = nextReservation?.date
-    ? new Date(`${nextReservation.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
-    : "";
+  // Un stage de vacances court sur toute une semaine (`dateFin`, `nbJours`).
+  // N'afficher que le premier jour laissait croire à une séance unique.
+  const formattedNextDate = (() => {
+    const r: any = nextReservation;
+    if (!r?.date) return "";
+    const opts: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" };
+    const debut = new Date(`${r.date}T12:00:00`).toLocaleDateString("fr-FR", opts);
+    if ((r.nbJours || 1) <= 1 || !r.dateFin || r.dateFin <= r.date) return debut;
+    const fin = new Date(`${r.dateFin}T12:00:00`).toLocaleDateString("fr-FR", opts);
+    return `Du ${debut} au ${fin} · ${r.nbJours} jours`;
+  })();
 
   const hasWhatsApp = Boolean(waCommunity || waGroups.length);
   const [rejointLocal, setRejointLocal] = useState(false);

@@ -37,6 +37,9 @@ interface Reservation {
   type?: string;
   dayLabel?: string;
   totalSessions?: number;
+  /** Stage sur plusieurs jours : dernier jour et nombre de jours. */
+  dateFin?: any;
+  nbJours?: number;
 }
 
 const statusConfig: Record<string, { label: string; color: "green" | "orange" | "red" | "gray" }> = {
@@ -67,6 +70,23 @@ function fullDate(value: any) {
 function shortDate(value: any) {
   const date = reservationDate(value);
   return date ? date.toLocaleDateString("fr-FR") : "Date à confirmer";
+}
+
+// Un stage de vacances court sur toute une semaine : la réservation porte
+// `date`, `dateFin` et `nbJours`. Seule `date` était affichée — une famille
+// inscrite pour cinq jours ne voyait que le lundi et pouvait croire n'avoir
+// réservé qu'une séance, alors qu'elle payait la semaine.
+function periode(reservation: { date?: any; dateFin?: any; nbJours?: number }) {
+  const debut = reservationDate(reservation.date);
+  const fin = reservationDate(reservation.dateFin);
+  const plusieursJours = (reservation.nbJours || 1) > 1 && fin && debut && fin > debut;
+  if (!plusieursJours || !debut || !fin) return fullDate(reservation.date);
+  const memeMois = debut.getMonth() === fin.getMonth() && debut.getFullYear() === fin.getFullYear();
+  const jourDebut = debut.toLocaleDateString("fr-FR", memeMois
+    ? { weekday: "long", day: "numeric" }
+    : { weekday: "long", day: "numeric", month: "long" });
+  const jourFin = fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  return `Du ${jourDebut} au ${jourFin} · ${reservation.nbJours} jours`;
 }
 
 function dateTile(value: any) {
@@ -339,10 +359,15 @@ export default function ReservationsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="font-display text-xl font-bold text-white">{nextReservation.activityTitle}</div>
                       <div className="font-body text-sm text-blue-50 mt-1">🐴 {nextReservation.childName}</div>
-                      <div className="font-body text-sm text-blue-100 mt-2 capitalize">
-                        {fullDate(nextReservation.date)}
+                      <div className="font-body text-sm text-blue-100 mt-2 first-letter:uppercase">
+                        {periode(nextReservation)}
                         {nextReservation.startTime && ` · ${nextReservation.startTime}${nextReservation.endTime ? `–${nextReservation.endTime}` : ""}`}
                       </div>
+                      {(nextReservation.nbJours || 1) > 1 && (
+                        <div className="font-body text-xs text-blue-100/90 mt-1">
+                          Chaque jour du stage, aux mêmes horaires.
+                        </div>
+                      )}
                     </div>
                     <Badge color={status.color}>{status.label}</Badge>
                   </div>
@@ -405,7 +430,7 @@ export default function ReservationsPage() {
                             <div className="font-body text-xs text-gray-600 mt-0.5">
                               {reservation.childName} · {reservation.startTime || ""}{reservation.endTime ? `–${reservation.endTime}` : ""}
                             </div>
-                            <div className="font-body text-xs text-gray-400 mt-0.5 capitalize">{fullDate(reservation.date)}</div>
+                            <div className="font-body text-xs text-gray-400 mt-0.5 first-letter:uppercase">{periode(reservation)}</div>
                           </div>
                         </div>
                         <Badge color={status.color}>{status.label}</Badge>

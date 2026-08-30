@@ -15,6 +15,7 @@ import {
   titreSansEnfant,
   prestationsCourtes,
   lignesDetailHtml,
+  datesStage,
 } from "../../src/lib/email-prestations";
 
 let passes = 0;
@@ -129,6 +130,45 @@ test("le bloc détaillé porte date, horaires et moniteur", () => {
 test("une date invalide n'affiche pas « Invalid Date »", () => {
   const html = lignesDetailHtml([{ activityTitle: "Cours", date: "pas-une-date" }]);
   assert.ok(!html.toLowerCase().includes("invalid"));
+});
+
+test("un stage d'une semaine s'annonce comme une semaine, pas comme un lundi", () => {
+  const items = [{
+    activityTitle: "Stage galop de bronze — Éliona",
+    date: "2026-10-26",
+    stageDates: [
+      { date: "2026-10-26" }, { date: "2026-10-27" }, { date: "2026-10-28" },
+      { date: "2026-10-29" }, { date: "2026-10-30" },
+    ],
+  }];
+  const rendu = datesStage(items, "2026-10-26");
+  assert.ok(rendu.includes("lundi 26"), "le premier jour manque");
+  assert.ok(rendu.includes("vendredi 30 octobre"), "le dernier jour manque");
+  assert.ok(rendu.includes("5 jours"), "le nombre de jours manque");
+});
+
+test("un stage d'un seul jour ne s'annonce pas comme une période", () => {
+  const rendu = datesStage([{ date: "2026-10-26", stageDates: [{ date: "2026-10-26" }] }]);
+  assert.ok(rendu.includes("lundi 26 octobre"));
+  assert.ok(!rendu.startsWith("du "), "une seule date ne doit pas devenir une plage");
+});
+
+test("les jours en double sont fusionnés et remis dans l'ordre", () => {
+  const items = [
+    { date: "2026-10-27", stageDates: [{ date: "2026-10-27" }, { date: "2026-10-26" }] },
+    { date: "2026-10-26", stageDates: [{ date: "2026-10-26" }] },
+  ];
+  assert.ok(datesStage(items).includes("2 jours"));
+  assert.ok(datesStage(items).includes("lundi 26"));
+});
+
+test("sans stageDates, la date de la ligne suffit", () => {
+  assert.ok(datesStage([{ date: "2026-10-26" }]).includes("lundi 26 octobre"));
+});
+
+test("sans aucune date, le repli est rendu tel quel", () => {
+  assert.equal(datesStage([], "à confirmer"), "à confirmer");
+  assert.equal(datesStage([]), "");
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

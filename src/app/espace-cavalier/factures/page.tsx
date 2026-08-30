@@ -580,6 +580,12 @@ export default function FacturesPage() {
             {due && (payment.paidAmount || 0) > 0 && (
               <div className="font-body text-xs text-gray-600 mt-2">
                 Déjà réglé : <span className="font-semibold text-green-600">{(payment.paidAmount || 0).toFixed(2)}€</span>
+                {/* La facture n'est numérotée qu'au règlement complet. Sans
+                    cette phrase, une famille ayant versé un acompte cherche
+                    une facture qui n'existe pas encore. */}
+                <span className="block text-gray-400 mt-0.5">
+                  La facture sera émise une fois le solde réglé.
+                </span>
               </div>
             )}
           </div>
@@ -656,7 +662,13 @@ export default function FacturesPage() {
                 )}
               </>
             )}
-            <button type="button" onClick={() => downloadReceipt(payment)} className="w-10 h-10 rounded-xl bg-gray-50 text-gray-600 border-none cursor-pointer flex items-center justify-center" title="Télécharger la facture">
+            {/* Tant qu'il reste un solde, le numéro de facture n'est pas
+                attribué (il l'est au règlement complet) : le document produit
+                est un justificatif, pas une facture. Le bouton disait
+                « facture » — la famille cliquait, recevait autre chose, et
+                signalait une facture manquante. */}
+            <button type="button" onClick={() => downloadReceipt(payment)} className="w-10 h-10 rounded-xl bg-gray-50 text-gray-600 border-none cursor-pointer flex items-center justify-center"
+              title={payment.paidAmount > 0 ? "Télécharger le justificatif d'acompte — la facture sera émise au règlement du solde" : "Télécharger le récapitulatif de commande"}>
               <Download size={16} />
             </button>
           </div>

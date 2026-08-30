@@ -14,7 +14,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { prestationsCourtes, libelleModePaiement, titreSansEnfant } from "@/lib/email-prestations";
+import { prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 
 export const dynamic = "force-dynamic";
@@ -364,7 +364,7 @@ export async function POST(req: NextRequest) {
                 vars = {
                   parentName,
                   stageTitle: titreSansEnfant(pData.items?.[0]) || "Stage",
-                  dates: pData.stageDate || prestations,
+                  dates: datesStage(pData.items || [], pData.stageDate || prestations),
                   horaires: pData.items?.[0]?.stageSchedule || "",
                   enfants: enfantsList,
                   montant: paidAmount.toFixed(2),

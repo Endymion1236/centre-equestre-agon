@@ -29,6 +29,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { encadreConditionsStage } from "@/lib/cgv-clauses";
+import { datesStage } from "@/lib/email-prestations";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -85,7 +86,9 @@ export async function POST(req: NextRequest) {
     const { subject, html: corps } = await loadTemplate("confirmationStageAcompte", {
       parentName: p.familyName || "",
       stageTitle: p.stageTitle || items[0]?.activityTitle || "Stage",
-      dates: p.stageDate || "",
+      // `stageDate` ne porte que le premier jour : un stage d'une semaine
+      // s'annonçait comme une séance unique (cf. lib/email-prestations).
+      dates: datesStage(items, p.stageDate),
       horaires: items[0]?.stageSchedule || "",
       enfants,
       montant: acompte.toFixed(2),

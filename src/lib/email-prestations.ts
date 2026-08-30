@@ -27,6 +27,8 @@ interface LigneEmail {
   startTime?: string | null;
   endTime?: string | null;
   monitor?: string | null;
+  /** Stage de vacances : tous les jours de la semaine, posés à l'achat. */
+  stageDates?: { date?: string | null; startTime?: string | null; endTime?: string | null }[] | null;
 }
 
 /**
@@ -117,4 +119,47 @@ export function lignesDetailHtml(items: LigneEmail[]): string {
       return `${titrePrestation(i)}${detail}`;
     })
     .join("<br/><br/>");
+}
+
+/**
+ * Dates d'un stage, lisibles dans un email.
+ *
+ * Un stage de vacances court sur toute une semaine, et la commande le sait :
+ * chaque ligne porte `stageDates`, la liste de ses journées. Les trois envois
+ * de confirmation l'ignoraient pourtant, chacun à sa manière — l'un joignait
+ * les `date` des lignes (une seule par ligne), les deux autres reprenaient le
+ * champ `stageDate`, qui ne contient que le premier jour.
+ *
+ * La famille lisait donc « lun. 26 octobre » pour une semaine entière, sans
+ * rien qui l'indique. Confirmer 30 € d'acompte sur ce qui ressemble à une
+ * séance de deux heures invite à croire qu'on s'est trompé de montant.
+ *
+ * Rendu : « du lundi 26 au vendredi 30 octobre (5 jours) », ou la seule date
+ * quand il n'y en a qu'une.
+ */
+export function datesStage(
+  items: LigneEmail[],
+  repli?: string | null,
+): string {
+  const jours = Array.from(new Set(
+    items.flatMap(i => Array.isArray(i.stageDates) && i.stageDates.length
+      ? i.stageDates.map(d => d?.date).filter((d): d is string => !!d)
+      : i.date ? [i.date] : []),
+  )).sort();
+
+  if (jours.length === 0) return repli || "";
+
+  const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
+    new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", opts);
+
+  if (jours.length === 1) {
+    return fmt(jours[0], { weekday: "long", day: "numeric", month: "long" });
+  }
+
+  const debut = new Date(`${jours[0]}T12:00:00`);
+  const fin = new Date(`${jours[jours.length - 1]}T12:00:00`);
+  const memeMois = debut.getMonth() === fin.getMonth() && debut.getFullYear() === fin.getFullYear();
+  const d = fmt(jours[0], memeMois ? { weekday: "long", day: "numeric" } : { weekday: "long", day: "numeric", month: "long" });
+  const f = fmt(jours[jours.length - 1], { weekday: "long", day: "numeric", month: "long" });
+  return `du ${d} au ${f} (${jours.length} jours)`;
 }
