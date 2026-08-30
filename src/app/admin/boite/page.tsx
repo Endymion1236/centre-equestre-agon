@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
+import { contientUnRib } from "@/lib/rib-texte";
 import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone, Paperclip, Landmark, AlertTriangle, Upload
 } from "lucide-react";
 import { formatIban } from "@/lib/sepa-validation";
@@ -296,7 +297,7 @@ export default function BoiteAssistantPage() {
    * dans Paiements → SEPA, après relecture.
    */
   const lireRib = async (a: any) => {
-    setRibBusy(a.attachmentId || a.driveFileId || "fichier");
+    setRibBusy(a.attachmentId || a.driveFileId || (a.texte ? "texte" : "fichier"));
     setRib(null);
     setRibErr("");
     try {
@@ -304,11 +305,13 @@ export default function BoiteAssistantPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...(a.driveFileId
-            ? { driveFileId: a.driveFileId }
-            : a.base64
-              ? { base64: a.base64, mimeType: a.mimeType }
-              : { messageId: selectedId, attachmentId: a.attachmentId, mimeType: a.mimeType }),
+          ...(a.texte
+            ? { texte: a.texte }
+            : a.driveFileId
+              ? { driveFileId: a.driveFileId }
+              : a.base64
+                ? { base64: a.base64, mimeType: a.mimeType }
+                : { messageId: selectedId, attachmentId: a.attachmentId, mimeType: a.mimeType }),
           from,
         }),
       });
@@ -735,6 +738,26 @@ export default function BoiteAssistantPage() {
                 <Paperclip size={13} /> Documents — lecture du RIB
               </div>
               <div className="flex flex-col gap-1.5">
+                {/* RIB recopié dans le corps du message. Beaucoup de familles
+                    ne joignent rien : elles collent les lignes de leur banque
+                    dans le mail. Le bouton n'apparaît que si un IBAN à clé de
+                    contrôle valide s'y trouve — sinon il promettrait une
+                    lecture qui n'aboutirait pas. */}
+                {contientUnRib(body) && (
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 font-body text-[13px] text-slate-600 sm:text-[11px]">
+                      Un RIB figure dans le texte du message
+                    </span>
+                    <button type="button"
+                      onClick={() => lireRib({ texte: body })}
+                      disabled={!!ribBusy}
+                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[13px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50 sm:text-[11px]"
+                    >
+                      {ribBusy === "texte" ? <Loader2 size={12} className="animate-spin" /> : <Landmark size={12} />}
+                      Lire le RIB du message
+                    </button>
+                  </div>
+                )}
                 {attachments.map((a: any) => (
                   <div key={a.attachmentId} className="flex items-center gap-2">
                     <span className="min-w-0 flex-1 truncate font-body text-[13px] sm:text-[11px] text-slate-600">{a.filename}</span>

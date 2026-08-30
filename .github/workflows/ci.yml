@@ -33,12 +33,21 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit
 
-      - name: Run validation tests
-        run: npm run validate:all
-        env:
-          # Variables minimales pour que validate:all puisse tourner
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-          NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+      # `validate:all` a été RETIRÉ de la CI, et pas seulement parce qu'il
+      # échouait faute d'identifiants : ce script ouvre une connexion Firebase
+      # Admin sur la VRAIE base et y crée puis supprime des documents. Le faire
+      # tourner à chaque proposition de modification ferait écrire dans la base
+      # de production par n'importe quelle branche — une CI qui touche aux
+      # données du centre est pire que pas de CI. Il reste lancé à la main,
+      # localement, contre la base de test (`npm run validate:all`).
+      #
+      # À la place, les deux vérifications qui n'ont besoin d'aucun identifiant :
+      # elles lisent le code source et les règles Firestore, rien d'autre.
+      - name: Audit de cohérence
+        run: npm run audit
+
+      - name: Règles Firestore
+        run: npm run validate:rules
 
       - name: Build check
         run: npx next build
