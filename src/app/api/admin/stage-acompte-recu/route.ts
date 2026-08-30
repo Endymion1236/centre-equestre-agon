@@ -98,12 +98,12 @@ export async function POST(req: NextRequest) {
       soldePhrase: modeLabel
         ? `Acompte réglé au centre équestre en ${modeLabel}. ${soldePhrase}`
         : soldePhrase,
-    });
-
     // Rappel des conditions d'annulation, comme sur les deux chemins CAWL :
     // la famille doit recevoir la même chose, que son acompte soit passé par
     // la banque ou par la caisse du bureau.
-    const html = corps + encadreConditionsStage();
+    }, encadreConditionsStage());
+
+    const html = corps;
 
     const resendKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";

@@ -345,6 +345,9 @@ export async function POST(req: NextRequest) {
                 montant: paidAmount.toFixed(2),
                 prestations,
                 mode: libelleModePaiement(pData.paymentMode || "cb_online"),
+                // Permet au gabarit de résoudre {fidelite} : les points
+                // viennent d'être crédités ci-dessus, le solde est à jour.
+                familyId: pData.familyId || "",
               };
 
               if (hasStage) {
@@ -363,6 +366,7 @@ export async function POST(req: NextRequest) {
                   : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
                 vars = {
                   parentName,
+                  familyId: pData.familyId || "",
                   stageTitle: titreSansEnfant(pData.items?.[0]) || "Stage",
                   dates: datesStage(pData.items || [], pData.stageDate || prestations),
                   horaires: pData.items?.[0]?.stageSchedule || "",
@@ -375,12 +379,12 @@ export async function POST(req: NextRequest) {
                 };
               }
 
-              const { subject, html } = await loadTemplate(templateKey, vars);
+              const { subject, html } = await loadTemplate(templateKey, vars, hasStage ? encadreConditionsStage() : "");
               // Rappel des conditions d'annulation, comme sur le retour de
               // paiement : le webhook est le chemin emprunté quand la famille
               // ferme son onglet avant le retour, elle recevait donc la
               // confirmation sans la clause.
-              const htmlFinal = hasStage ? html + encadreConditionsStage() : html;
+              const htmlFinal = html;
               fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: {

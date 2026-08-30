@@ -1,168 +1,46 @@
 /**
  * Serveur-side email template loader
- * 
+ *
  * Charge les templates depuis Firestore (settings/emailTemplates)
- * avec fallback sur les templates par défaut définis dans email-templates.ts.
- * 
+ * avec fallback sur les templates par défaut définis ici.
+ *
  * Les variables {parentName}, {montant}, etc. sont remplacées à l'exécution.
+ *
+ * ── Pourquoi ce fichier partage désormais l'habillage ─────────────────────
+ *
+ * Il portait sa propre copie du wrapper, des couleurs et des encadrés — une
+ * troisième après celle de `email-templates.ts` et celle de la page
+ * d'administration. Les trois avaient divergé, et comme ce sont ces
+ * gabarits-ci qui partent sur les paiements (webhook CAWL, retour de
+ * paiement, relances), c'était la version la plus vue qui était la moins
+ * soignée. L'habillage vient maintenant de `email-templates.ts`, qui reste
+ * la seule définition du design.
  */
 
 import { adminDb } from "@/lib/firebase-admin";
 import { renderDerouleStage } from "@/lib/stage-deroule";
+import { emailLayout, emailParagraphe as P, emailFidelite } from "@/lib/email-templates";
+import { DEFAULT_TEMPLATES } from "@/lib/email-templates-defauts";
 
-// ── Email wrapper (identique à email-templates.ts et email-templates admin page) ──
-const CLUB_NAME = "Centre Équestre d'Agon-Coutainville";
-const CLUB_TEL = "02 44 84 99 96";
-const CLUB_EMAIL = "ceagon@orange.fr";
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
 
-function wrapHtml(content: string): string {
-  return `<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:0;">
-    <div style="background:#1e3a5f;padding:20px 24px;border-radius:12px 12px 0 0;">
-      <h1 style="color:white;margin:0;font-size:18px;font-weight:700;">${CLUB_NAME}</h1>
-    </div>
-    <div style="background:white;padding:24px;border:1px solid #e8e0d0;border-top:none;">
-      ${content}
-    </div>
-    <div style="background:#f8f5f0;padding:16px 24px;border-radius:0 0 12px 12px;border:1px solid #e8e0d0;border-top:none;">
-      <p style="margin:0;color:#999;font-size:11px;text-align:center;">
-        ${CLUB_NAME} · ${CLUB_TEL} · <a href="mailto:${CLUB_EMAIL}" style="color:#999;">${CLUB_EMAIL}</a><br/>
-        <a href="${SITE_URL}" style="color:#2050A0;text-decoration:none;">Accéder à mon espace</a>
-      </p>
-    </div>
-  </div>`;
+/**
+ * Clés de variables qui portent un montant.
+ *
+ * Elles arrivent des appelants en « 82.50 » (toFixed) et repartaient telles
+ * quelles dans le message : un point décimal et pas d'espace avant l'euro,
+ * l'écriture d'un tableur, pas celle d'une facture française. Formatées ici
+ * une bonne fois, les gabarits personnalisés enregistrés dans Firestore en
+ * profitent aussi sans être réécrits.
+ */
+const CLES_MONTANT = new Set([
+  "montant", "acompte", "solde", "total", "totalTTC", "prix", "montantAvoir", "montantRegle",
+]);
+
+function formaterMontant(valeur: string | number): string {
+  const n = typeof valeur === "number" ? valeur : Number(String(valeur).replace(",", "."));
+  if (!Number.isFinite(n)) return String(valeur);
+  return n.toFixed(2).replace(".", ",");
 }
-
-// ── Templates par défaut (fallback si rien dans Firestore) ──
-const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }> = {
-  confirmationStageAcompte: {
-    subject: "✅ Acompte confirmé — {stageTitle}",
-    body: `<!-- Bandeau ACOMPTE CONFIRMÉ -->
-<div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;padding:20px 24px;border-radius:12px;margin:0 0 20px 0;text-align:center;box-shadow:0 4px 12px rgba(22,163,74,0.25);">
-  <div style="font-size:32px;line-height:1;margin-bottom:6px;">✅</div>
-  <div style="font-size:18px;font-weight:bold;letter-spacing:0.5px;margin-bottom:4px;">ACOMPTE CONFIRMÉ</div>
-  <div style="font-size:22px;font-weight:bold;margin-top:8px;">{acompte}€ réglé</div>
-</div>
-<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Votre acompte a bien été reçu : la place au stage <strong style="color:#1e3a5f;">{stageTitle}</strong> est réservée. 🐴</p>
-<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0 0 8px;color:#166534;font-weight:600;">📅 {dates}</p>
-  <p style="margin:0;color:#166534;font-weight:600;">🕐 {horaires}</p>
-  <p style="margin:8px 0 0;color:#555;font-size:13px;">👧 {enfants}</p>
-</div>
-{deroule}
-<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0 0 6px;color:#1e40af;font-weight:600;font-size:13px;">💳 Récapitulatif du paiement</p>
-  <table style="width:100%;border-collapse:collapse;font-size:14px;">
-    <tr><td style="padding:3px 0;color:#555;">Total du stage</td><td style="padding:3px 0;text-align:right;color:#1e3a5f;font-weight:600;">{total}€</td></tr>
-    <tr><td style="padding:3px 0;color:#16a34a;">Acompte réglé ce jour</td><td style="padding:3px 0;text-align:right;color:#16a34a;font-weight:600;">−{acompte}€</td></tr>
-    <tr style="border-top:1px solid #bfdbfe;"><td style="padding:6px 0 0;color:#1e3a5f;font-weight:bold;">Solde restant</td><td style="padding:6px 0 0;text-align:right;color:#dc2626;font-weight:bold;font-size:16px;">{solde}€</td></tr>
-  </table>
-  <p style="margin:10px 0 0;color:#555;font-size:13px;">{soldePhrase}</p>
-</div>
-<p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> bottes, bombe, pantalon long. Prévoir un goûter et de l'eau.</p>
-<p style="color:#555;">À bientôt au centre équestre !</p>`,
-  },
-  confirmationStage: {
-    subject: "✅ Paiement confirmé — {stageTitle}",
-    body: `<!-- Bandeau PAIEMENT CONFIRMÉ très visible en haut -->
-<div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;padding:20px 24px;border-radius:12px;margin:0 0 20px 0;text-align:center;box-shadow:0 4px 12px rgba(22,163,74,0.25);">
-  <div style="font-size:32px;line-height:1;margin-bottom:6px;">✅</div>
-  <div style="font-size:18px;font-weight:bold;letter-spacing:0.5px;margin-bottom:4px;">PAIEMENT CONFIRMÉ</div>
-  <div style="font-size:22px;font-weight:bold;margin-top:8px;">{montant}€ réglé</div>
-</div>
-<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Votre paiement a bien été reçu. L'inscription au stage <strong style="color:#1e3a5f;">{stageTitle}</strong> est validée et payée. 🐴</p>
-<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0 0 8px;color:#166534;font-weight:600;">📅 {dates}</p>
-  <p style="margin:0;color:#166534;font-weight:600;">🕐 {horaires}</p>
-  <p style="margin:8px 0 0;color:#555;font-size:13px;">👧 {enfants}</p>
-  <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">Total : {montant}€</p>
-</div>
-{deroule}
-<p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> bottes, bombe, pantalon long. Prévoir un goûter et de l'eau.</p>
-<p style="color:#555;">À bientôt au centre équestre !</p>`,
-  },
-  confirmationCours: {
-    subject: "Réservation confirmée — {coursTitle}",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>La réservation de <strong>{childName}</strong> est confirmée :</p>
-<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#1e40af;font-weight:600;">📚 {coursTitle}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 {date} · 🕐 {horaire}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">👤 {moniteur}</p>
-  <p style="margin:6px 0 0;color:#1e3a5f;font-weight:bold;font-size:15px;">{prix}€</p>
-</div>
-<p style="color:#555;font-size:13px;">N'oubliez pas les bottes et la bombe ! 🐴</p>`,
-  },
-  confirmationForfait: {
-    subject: "Forfait annuel confirmé — {childName}",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Le forfait annuel de <strong>{childName}</strong> est enregistré :</p>
-<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#854d0e;font-weight:600;">📋 {forfaitLabel}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">{nbSeances} séances · Paiement {planPaiement}</p>
-  <p style="margin:6px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">{totalTTC}€</p>
-</div>
-<p style="color:#555;">À bientôt au centre équestre !</p>`,
-  },
-  rappelJ1: {
-    subject: "Rappel — {coursTitle} demain",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Petit rappel pour demain{childrenStr} :</p>
-{lignes}
-<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;">
-  <p style="margin:0;color:#854d0e;font-size:13px;">💡 N'oubliez pas : casque obligatoire, tenue adaptée recommandée.</p>
-</div>
-<p style="color:#555;font-size:13px;">À demain au centre équestre !</p>`,
-  },
-  rappelImpaye: {
-    subject: "Rappel de paiement — {montant}€",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Nous nous permettons de vous rappeler qu'un solde reste dû :</p>
-<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#991b1b;font-weight:600;font-size:18px;">{montant}€</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">{prestations}</p>
-</div>
-<p style="color:#555;font-size:13px;">Merci de régulariser votre situation à votre convenance.</p>`,
-  },
-  bienvenue: {
-    subject: "Bienvenue au Centre Équestre d'Agon-Coutainville !",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Bienvenue au Centre Équestre d'Agon-Coutainville ! 🐴</p>
-<p>Votre espace personnel est prêt.</p>
-<p>N'hésitez pas à nous contacter au 02 44 84 99 96 pour toute question.</p>`,
-  },
-  // Confirmation paiement reçu
-  confirmationPaiement: {
-    subject: "✅ Paiement confirmé — {montant}€",
-    body: `<!-- Bandeau PAIEMENT CONFIRMÉ très visible en haut -->
-<div style="background:linear-gradient(135deg,#16a34a 0%,#15803d 100%);color:white;padding:20px 24px;border-radius:12px;margin:0 0 20px 0;text-align:center;box-shadow:0 4px 12px rgba(22,163,74,0.25);">
-  <div style="font-size:32px;line-height:1;margin-bottom:6px;">✅</div>
-  <div style="font-size:18px;font-weight:bold;letter-spacing:0.5px;margin-bottom:4px;">PAIEMENT CONFIRMÉ</div>
-  <div style="font-size:22px;font-weight:bold;margin-top:8px;">{montant}€ réglé</div>
-</div>
-<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Votre paiement a bien été reçu.</p>
-<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0 0 6px;color:#1e3a5f;font-weight:600;font-size:14px;">📋 Prestations</p>
-  <p style="margin:0;color:#555;font-size:13px;">{prestations}</p>
-  <p style="margin:8px 0 0;color:#555;font-size:13px;">Mode de paiement : <strong>{mode}</strong></p>
-</div>
-<p style="color:#555;">À bientôt au centre équestre !</p>`,
-  },
-  // Confirmation paiement en N fois
-  confirmationAbonnement: {
-    subject: "Inscription confirmée — Paiement mensuel en {nbEcheances} fois",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Votre inscription est confirmée avec un paiement en <strong>{nbEcheances} mensualités</strong>.</p>
-<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#166534;font-weight:600;">✅ 1ère échéance : {montant}€ reçue</p>
-  <p style="margin:8px 0 0;color:#555;font-size:13px;">Les {nbRestantes} prochaines mensualités de {montant}€ seront prélevées automatiquement.</p>
-</div>
-<p style="color:#555;">À bientôt au centre équestre !</p>`,
-  },
-};
 
 // ── Cache pour éviter de relire Firestore à chaque appel ──
 let cachedTemplates: Record<string, { subject: string; body: string }> | null = null;
@@ -211,7 +89,15 @@ async function getTemplates(): Promise<Record<string, { subject: string; body: s
  */
 export async function loadTemplate(
   key: string,
-  variables: Record<string, string | number> = {}
+  variables: Record<string, string | number> = {},
+  /**
+   * Bloc ajouté à la fin du corps, AVANT l'habillage — typiquement les
+   * conditions d'annulation. Les appelants le concaténaient au HTML déjà
+   * enveloppé : l'encadré se retrouvait sous le pied de page, hors de la
+   * carte, dans une largeur qui ne correspondait à rien. Passé ici, il est
+   * dans le message.
+   */
+  supplement = "",
 ): Promise<{ subject: string; html: string }> {
   const templates = await getTemplates();
   const template = templates[key] || DEFAULT_TEMPLATES[key];
@@ -220,7 +106,7 @@ export async function loadTemplate(
     console.warn(`⚠️ Template "${key}" introuvable, email générique`);
     return {
       subject: "Centre Équestre d'Agon-Coutainville",
-      html: wrapHtml(`<p>Bonjour,</p><p>Merci pour votre confiance.</p>`),
+      html: emailLayout(P("Bonjour,") + P("Merci pour votre confiance.")),
     };
   }
 
@@ -244,16 +130,47 @@ export async function loadTemplate(
     body = body.replace(/\{deroule\}/g, bloc);
   }
 
+  // {fidelite} : points gagnés sur ce règlement. Résolu ici, comme {deroule},
+  // pour que tous les chemins d'envoi en bénéficient. Le bloc reste vide si
+  // le programme est désactivé ou si aucun point n'a été crédité — un email
+  // ne doit pas annoncer un avantage qui n'existe pas.
+  if (body.includes("{fidelite}")) {
+    let bloc = "";
+    const familyId = variables.familyId ? String(variables.familyId) : "";
+    const base = Number(String(variables.montant ?? "").replace(",", "."));
+    if (familyId && Number.isFinite(base) && base > 0) {
+      try {
+        const reglages = await adminDb.collection("settings").doc("fidelite").get();
+        const d = reglages.exists ? (reglages.data() as Record<string, unknown>) : null;
+        if (d && d.enabled !== false) {
+          const taux = Number(d.taux) || 100;
+          const minPoints = Number(d.minPoints) || 500;
+          // Même règle qu'à l'attribution (lib/fidelite) : 1 point par euro.
+          const gagnes = Math.floor(base);
+          const compte = await adminDb.collection("fidelite").doc(familyId).get();
+          // Le solde est lu APRÈS l'attribution : les appelants créditent les
+          // points avant d'envoyer l'email. S'il ne l'a pas encore été, on
+          // annonce au moins les points de ce règlement.
+          const total = Math.max(Number((compte.data() || {}).points) || 0, gagnes);
+          bloc = emailFidelite(gagnes, total, taux, minPoints);
+        }
+      } catch {
+        bloc = ""; // la fidélité ne doit jamais empêcher un email de partir
+      }
+    }
+    body = body.replace(/\{fidelite\}/g, bloc);
+  }
+
   for (const [varKey, value] of Object.entries(variables)) {
     const regex = new RegExp(`\\{${varKey}\\}`, "g");
-    const strValue = String(value);
+    const strValue = CLES_MONTANT.has(varKey) ? formaterMontant(value) : String(value);
     subject = subject.replace(regex, strValue);
     body = body.replace(regex, strValue);
   }
 
   return {
     subject,
-    html: wrapHtml(body),
+    html: emailLayout(body + supplement),
   };
 }
 

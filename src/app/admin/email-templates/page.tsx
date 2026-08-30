@@ -6,6 +6,8 @@ import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { Save, Loader2, Sparkles, Eye, Code, ChevronDown, ChevronUp, RotateCcw, Send, X } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+import { emailLayout } from "@/lib/email-templates";
+import { DEFAULT_TEMPLATES as DEFAUTS_PARTAGES } from "@/lib/email-templates-defauts";
 
 // ─── Types ───
 interface TemplateConfig {
@@ -17,137 +19,81 @@ interface TemplateConfig {
 }
 
 // ─── Default templates ───
-const DEFAULT_TEMPLATES: Record<string, TemplateConfig> = {
+//
+// Les corps de message ne sont plus écrits ici. Cette page en portait une
+// copie, le chargeur serveur une autre, et les deux avaient divergé : ce que
+// l'aperçu montrait n'était pas ce qui partait, et « Réinitialiser »
+// réinstallait une version plus ancienne que celle en service. Les corps
+// viennent maintenant de `lib/email-templates-defauts`, qui est aussi la
+// source du chargeur ; il ne reste ici que ce qui est propre à l'édition —
+// les variables offertes et la description du déclencheur.
+//
+// Trois gabarits manquaient à l'appel et n'étaient donc pas modifiables,
+// alors que ce sont les plus envoyés : acompte de stage, paiement reçu et
+// paiement en plusieurs fois. Ils sont ajoutés.
+const META: Record<string, { variables: string[]; description: string }> = {
   confirmationStage: {
-    subject: "Inscription confirmée — {stageTitle}",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>L'inscription au stage <strong style="color:#1e3a5f;">{stageTitle}</strong> est confirmée !</p>
-<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0 0 8px;color:#166534;font-weight:600;">📅 {dates}</p>
-  <p style="margin:0;color:#166534;font-weight:600;">🕐 {horaires}</p>
-  <p style="margin:8px 0 0;color:#555;font-size:13px;">👧 {enfants}</p>
-  <p style="margin:8px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">{montant}€</p>
-</div>
-<p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> bottes, bombe, pantalon long. Prévoir un goûter et de l'eau.</p>
-<p style="color:#555;font-size:13px;">Rendez-vous 10 minutes avant le début du stage devant le club house.</p>
-<p style="color:#555;">À bientôt au centre équestre ! 🐴</p>`,
     variables: ["parentName", "stageTitle", "dates", "horaires", "enfants", "montant"],
-    description: "Envoyé après inscription à un stage (Pâques, été, Toussaint...)",
+    description: "Envoyé après un stage réglé en totalité (Pâques, été, Toussaint…)",
+  },
+  confirmationStageAcompte: {
+    variables: ["parentName", "stageTitle", "dates", "horaires", "enfants", "total", "acompte", "solde", "soldePhrase"],
+    description: "Envoyé quand seul l'acompte du stage est réglé",
+  },
+  confirmationPaiement: {
+    variables: ["parentName", "montant", "prestations", "mode"],
+    description: "Envoyé à réception d'un paiement (hors stage)",
   },
   confirmationCours: {
-    subject: "Réservation confirmée — {coursTitle}",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>La réservation de <strong>{childName}</strong> est confirmée :</p>
-<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#1e40af;font-weight:600;">📚 {coursTitle}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 {date} · 🕐 {horaire}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">👤 Moniteur : {moniteur}</p>
-  <p style="margin:6px 0 0;color:#1e3a5f;font-weight:bold;font-size:15px;">{prix}€</p>
-</div>
-<p style="color:#555;font-size:13px;">N'oubliez pas les bottes et la bombe ! 🐴</p>`,
     variables: ["parentName", "childName", "coursTitle", "date", "horaire", "moniteur", "prix"],
     description: "Envoyé après réservation d'un cours ponctuel",
   },
   confirmationForfait: {
-    subject: "Forfait annuel confirmé — {childName}",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Le forfait annuel de <strong>{childName}</strong> est enregistré :</p>
-<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#854d0e;font-weight:600;">📋 {forfaitLabel}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">{nbSeances} séances · Paiement {planPaiement}</p>
-  <p style="margin:6px 0 0;color:#1e3a5f;font-weight:bold;font-size:16px;">{totalTTC}€</p>
-</div>
-<p style="color:#555;">À bientôt au centre équestre !</p>`,
     variables: ["parentName", "childName", "forfaitLabel", "nbSeances", "planPaiement", "totalTTC"],
     description: "Envoyé après inscription en forfait annuel",
   },
   confirmationPromenade: {
-    subject: "Promenade confirmée — {date}",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Votre réservation de promenade est confirmée !</p>
-<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#166534;font-weight:600;">🌿 Promenade à cheval</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 {date} · 🕐 {horaire}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">👧 {participants}</p>
-  <p style="margin:6px 0 0;color:#1e3a5f;font-weight:bold;font-size:15px;">{prix}€</p>
-</div>
-<p style="color:#555;font-size:13px;"><strong>Rendez-vous :</strong> au parking du centre équestre, 15 minutes avant le départ.</p>
-<p style="color:#555;font-size:13px;"><strong>À prévoir :</strong> pantalon long, chaussures fermées. Bombe fournie si besoin.</p>
-<p style="color:#555;">Bonne balade ! 🐴</p>`,
     variables: ["parentName", "date", "horaire", "participants", "prix"],
-    description: "Envoyé après réservation d'une promenade/balade",
+    description: "Envoyé après réservation d'une promenade / balade",
+  },
+  confirmationAbonnement: {
+    variables: ["parentName", "nbEcheances", "montant", "nbRestantes"],
+    description: "Envoyé après une inscription réglée en plusieurs mensualités",
   },
   rappelJ1: {
-    subject: "Rappel — {coursTitle} demain",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Petit rappel : <strong>{childName}</strong> a cours demain !</p>
-<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#1e40af;font-weight:600;font-size:15px;">📚 {coursTitle}</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 {date}</p>
-  <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 {horaire}</p>
-  <p style="margin:4px 0 0;color:#555;font-size:13px;">👤 {moniteur}</p>
-</div>
-<p style="color:#555;font-size:13px;">N'oubliez pas les bottes et la bombe ! 🐴</p>`,
-    variables: ["parentName", "childName", "coursTitle", "date", "horaire", "moniteur"],
+    variables: ["parentName", "childrenStr", "lignes", "coursTitle"],
     description: "Envoyé automatiquement la veille d'un cours (cron J-1)",
   },
   rappelImpaye: {
-    subject: "Rappel de paiement — {montant}€",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Nous nous permettons de vous rappeler qu'un solde reste dû :</p>
-<div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:16px;margin:16px 0;">
-  <p style="margin:0;color:#991b1b;font-weight:600;font-size:18px;">{montant}€</p>
-  <p style="margin:6px 0 0;color:#555;font-size:13px;">{prestations}</p>
-</div>
-<p style="color:#555;font-size:13px;">Merci de régulariser votre situation à votre convenance.</p>
-<p style="color:#555;font-size:13px;">Vous pouvez régler directement en ligne via votre espace famille.</p>`,
     variables: ["parentName", "montant", "prestations"],
     description: "Envoyé manuellement depuis les Impayés (bouton Relancer)",
   },
   bienvenue: {
-    subject: "Bienvenue au Centre Équestre d'Agon-Coutainville !",
-    body: `<p>Bonjour <strong>{parentName}</strong>,</p>
-<p>Bienvenue au Centre Équestre d'Agon-Coutainville ! 🐴</p>
-<p>Votre espace personnel est prêt. Vous pouvez dès maintenant :</p>
-<ul style="color:#555;font-size:14px;line-height:1.8;">
-  <li>Compléter le profil de votre famille</li>
-  <li>Inscrire vos enfants aux activités</li>
-  <li>Réserver des stages et des balades</li>
-  <li>Suivre vos paiements et factures</li>
-</ul>
-<p>N'hésitez pas à nous contacter au 02 44 84 99 96 pour toute question.</p>`,
     variables: ["parentName"],
     description: "Envoyé à la création d'un compte famille",
   },
 };
 
-const TEMPLATE_LABELS: Record<string, string> = {
-  confirmationStage: "✅ Confirmation stage",
-  confirmationCours: "✅ Confirmation cours",
-  confirmationForfait: "✅ Confirmation forfait annuel",
-  confirmationPromenade: "✅ Confirmation promenade",
-  rappelJ1: "🔔 Rappel J-1",
-  rappelImpaye: "💰 Relance impayé",
-  bienvenue: "👋 Bienvenue nouvelle famille",
-};
+const DEFAULT_TEMPLATES: Record<string, TemplateConfig> = Object.fromEntries(
+  Object.entries(META).map(([cle, meta]) => [cle, {
+    subject: DEFAUTS_PARTAGES[cle]?.subject ?? "",
+    body: DEFAUTS_PARTAGES[cle]?.body ?? "",
+    ...meta,
+  }]),
+);
 
-// ─── Email wrapper (same as email-templates.ts) ───
-function wrapHtml(content: string) {
-  return `<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;padding:0;">
-    <div style="background:#1e3a5f;padding:20px 24px;border-radius:12px 12px 0 0;">
-      <h1 style="color:white;margin:0;font-size:18px;font-weight:700;">Centre Équestre d'Agon-Coutainville</h1>
-    </div>
-    <div style="background:white;padding:24px;border:1px solid #e8e0d0;border-top:none;">
-      ${content}
-    </div>
-    <div style="background:#f8f5f0;padding:16px 24px;border-radius:0 0 12px 12px;border:1px solid #e8e0d0;border-top:none;">
-      <p style="margin:0;color:#999;font-size:11px;text-align:center;">
-        Centre Équestre d'Agon-Coutainville · 02 44 84 99 96 · ceagon@orange.fr<br/>
-        <a href="https://centre-equestre-agon.vercel.app" style="color:#2050A0;text-decoration:none;">Accéder à mon espace</a>
-      </p>
-    </div>
-  </div>`;
-}
+const TEMPLATE_LABELS: Record<string, string> = {
+  confirmationStage: "Confirmation stage (payé)",
+  confirmationStageAcompte: "Confirmation stage (acompte)",
+  confirmationPaiement: "Paiement reçu",
+  confirmationCours: "Confirmation cours",
+  confirmationForfait: "Confirmation forfait annuel",
+  confirmationPromenade: "Confirmation promenade",
+  confirmationAbonnement: "Paiement en plusieurs fois",
+  rappelJ1: "Rappel J-1",
+  rappelImpaye: "Relance impayé",
+  bienvenue: "Bienvenue nouvelle famille",
+};
 
 // ─── Replace variables with sample data for preview ───
 function previewReplace(html: string) {
@@ -263,7 +209,7 @@ export default function EmailTemplatesPage() {
     if (!sendTestTo.includes("@")) { alert("Email invalide"); return; }
     setSendingTest(true);
     try {
-      const html = wrapHtml(previewReplace(current.body));
+      const html = emailLayout(previewReplace(current.body));
       const subject = previewReplace(current.subject) + " [TEST]";
       const res = await authFetch("/api/send-email", {
         method: "POST",
@@ -391,7 +337,7 @@ export default function EmailTemplatesPage() {
                   <div className="font-body text-[10px] text-slate-400">Aperçu avec données d&apos;exemple</div>
                   <div className="font-body text-xs text-blue-800 font-semibold">{previewReplace(current.subject)}</div>
                 </div>
-                <div className="p-4" dangerouslySetInnerHTML={{ __html: wrapHtml(previewReplace(current.body)) }} />
+                <div className="p-4" dangerouslySetInnerHTML={{ __html: emailLayout(previewReplace(current.body)) }} />
               </div>
             ) : (
               <textarea value={current.body}
