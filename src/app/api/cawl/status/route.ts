@@ -13,7 +13,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant } from "@/lib/email-prestations";
+import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
 
@@ -422,10 +422,9 @@ export async function GET(req: NextRequest) {
             // « Stage Poney — ambre » : le panier y a déjà mis l'enfant, et
             // les prénoms sont listés juste en dessous.
             stageTitle: titreSansEnfant(items[0]) || "Stage",
-            dates: items.map((i: any) => {
-              if (!i.date) return "";
-              return new Date(i.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" });
-            }).filter(Boolean).join(", "),
+            // Un stage court sur la semaine : `datesStage` lit `stageDates`
+            // plutôt que la seule `date` de la ligne (cf. lib/email-prestations).
+            dates: datesStage(items, pData.stageDate),
             horaires: items.map((i: any) => i.startTime && i.endTime ? `${i.startTime}–${i.endTime}` : "").filter(Boolean)[0] || "",
             enfants: items.map((i: any) => i.childName).filter(Boolean).join(", "),
             montant: paidAmount.toFixed(2),
