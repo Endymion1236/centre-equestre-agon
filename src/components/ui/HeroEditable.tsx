@@ -11,7 +11,7 @@ import { EditableImage } from "@/components/ui/EditableImage";
 // Unité `svh` et non `vh` : sur mobile, `vh` se cale sur la fenêtre barres de
 // navigation masquées, ce qui rend le bloc plus haut que l'écran réellement
 // visible et fait sauter la mise en page quand les barres réapparaissent.
-const HAUTEUR = "min-h-[76svh] sm:min-h-[82svh]";
+const HAUTEUR = "min-h-[62svh] sm:min-h-[68svh]";
 
 export function HeroEditable({ children }: { children: React.ReactNode }) {
   return (
