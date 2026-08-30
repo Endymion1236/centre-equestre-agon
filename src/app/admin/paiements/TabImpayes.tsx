@@ -56,6 +56,31 @@ export function TabImpayes({
   onMultiEncaisser, initialSearch, familyFilterId,
 }: TabImpayesProps) {
   const confirmer = useConfirm();
+  // Verdict « le solde sera-t-il prélevé tout seul ? », par commande.
+  // Trois choses doivent être vraies en même temps : la carte a été enregistrée
+  // à l'acompte, l'identifiant de cette transaction est connu, et le
+  // prélèvement automatique est activé sur l'environnement. Le savoir APRÈS
+  // le passage du cron ne sert à rien — d'où cette vérification à la demande.
+  const [verdictMit, setVerdictMit] = useState<Record<string, { ok: boolean; bloquants: string[] } | "chargement">>({});
+
+  const verifierPrelevementSolde = async (paymentId: string) => {
+    if (verdictMit[paymentId]) return;
+    setVerdictMit(prev => ({ ...prev, [paymentId]: "chargement" }));
+    try {
+      const res = await authFetch("/api/admin/test-mit-charge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId, dryRun: true }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      const bloquants: string[] = d?.bloquantsAvantDebitReel || [];
+      setVerdictMit(prev => ({ ...prev, [paymentId]: { ok: bloquants.length === 0, bloquants } }));
+    } catch (e: any) {
+      setVerdictMit(prev => ({ ...prev, [paymentId]: { ok: false, bloquants: [e?.message || "Vérification impossible"] } }));
+    }
+  };
+
   const [impayesSearch, setImpayesSearch] = useState(initialSearch || "");
   const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
@@ -407,6 +432,35 @@ export function TabImpayes({
                   {/* ── Détail déplié ── */}
                   {isOpen && (
                     <div className="mt-3 pt-3 border-t border-gray-100">
+                      {/* Solde de stage : dira-t-on à la famille de payer, ou
+                          sera-t-elle débitée toute seule ? La réponse dépend de
+                          trois conditions serveur ; on les interroge plutôt que
+                          de les deviner. */}
+                      {p.stageDate && due > 0 && (
+                        <div className="mb-3 p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                          {!verdictMit[p.id] ? (
+                            <button type="button" onClick={() => verifierPrelevementSolde(p.id)}
+                              className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer p-0 underline">
+                              Le solde sera-t-il prélevé automatiquement ?
+                            </button>
+                          ) : verdictMit[p.id] === "chargement" ? (
+                            <span className="font-body text-xs text-gray-400">Vérification…</span>
+                          ) : (verdictMit[p.id] as any).ok ? (
+                            <div className="font-body text-xs text-green-700">
+                              <strong>Prélèvement automatique armé.</strong> Le solde de {due.toFixed(2)} € sera
+                              débité sur la carte enregistrée, 7 jours avant le stage. Rien à faire.
+                            </div>
+                          ) : (
+                            <div className="font-body text-xs text-orange-700">
+                              <strong>Pas de prélèvement automatique</strong> — la famille recevra un email
+                              avec un lien de paiement, 7 jours avant le stage. Elle paiera, mais elle devra agir.
+                              <ul className="mt-1 mb-0 pl-4 text-gray-600">
+                                {(verdictMit[p.id] as any).bloquants.map((b: string, i: number) => <li key={i}>{b}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-2 mb-3">
                         <button type="button" onClick={() => { setQuickEncaisser({ payment: p }); setQuickMontant(due.toFixed(2)); setQuickDate(new Date().toISOString().split("T")[0]); setQuickRef(""); setQuickMode("cheque"); }}
                           className="font-body text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg border-none cursor-pointer font-semibold">💶 Encaisser</button>
