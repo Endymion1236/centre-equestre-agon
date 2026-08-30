@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, getDocs, getCountFromServer, query, where, Timestamp } from "firebase/firestore";
 import {
   ArrowRight,
   BarChart3,
@@ -134,18 +134,43 @@ export default function AdminDashboard() {
         // Les encaissements ne sont lus QUE pour un admin : masquer la carte
         // ne suffit pas, il ne faut pas charger la donnée financière dans le
         // navigateur d'un moniteur.
-        const [familiesSnap, activitiesSnap, encaissementsSnap, creneauxSnap] = await Promise.all([
-          getDocs(collection(db, "families")),
-          getDocs(collection(db, "activities")),
-          isAdmin ? getDocs(collection(db, "encaissements")) : Promise.resolve(null),
-          getDocs(collection(db, "creneaux")),
-        ]);
-
-        setFamilyCount(familiesSnap.size);
-        setActivityCount(activitiesSnap.size);
-
+        // ── Ne lire que ce qui est affiché ────────────────────────────────
+        //
+        // Cet écran lisait families, activities, encaissements et creneaux
+        // INTÉGRALEMENT, puis jetait presque tout : deux collections ne
+        // servaient qu'à un compteur, et les deux autres n'étaient exploitées
+        // que sur une fenêtre de dates. Chaque retour au tableau de bord —
+        // la page d'atterrissage de l'administration — coûtait ainsi plusieurs
+        // milliers de lectures Firestore, facturées au document.
+        //
+        // Les valeurs affichées sont rigoureusement les mêmes ; seul le volume
+        // téléchargé change. Aucun index composite n'est nécessaire : chaque
+        // requête ne pose une plage que sur un seul champ.
         const now = new Date();
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const todayStr = toLocalDateString(now);
+        const in30DaysStr = addDaysLocal(30, now);
+
+        const [familiesCount, activitiesCount, encaissementsSnap, creneauxSnap] = await Promise.all([
+          // Compté par le serveur : une lecture facturée par millier de
+          // documents, au lieu d'une par document.
+          getCountFromServer(collection(db, "families")),
+          getCountFromServer(collection(db, "activities")),
+          // Le CA affiché est celui du mois : l'historique complet n'a jamais
+          // servi. La borne haute reste appliquée plus bas, un encaissement
+          // post-daté ne devant pas compter avant l'heure.
+          isAdmin
+            ? getDocs(query(collection(db, "encaissements"),
+                where("date", ">=", Timestamp.fromDate(startOfMonth))))
+            : Promise.resolve(null),
+          // Taux de remplissage à 30 jours et séances du jour : la saison
+          // entière était téléchargée pour en regarder un mois.
+          getDocs(query(collection(db, "creneaux"),
+            where("date", ">=", todayStr), where("date", "<=", in30DaysStr))),
+        ]);
+
+        setFamilyCount(familiesCount.data().count);
+        setActivityCount(activitiesCount.data().count);
         const monthlyRevenue = (encaissementsSnap?.docs || []).reduce((total, document) => {
           const payment: any = document.data();
           if (payment.mode === "avoir") return total;
@@ -158,8 +183,8 @@ export default function AdminDashboard() {
         }, 0);
         setCaMois(Math.round(monthlyRevenue * 100) / 100);
 
-        const today = toLocalDateString(now);
-        const in30Days = addDaysLocal(30, now);
+        const today = todayStr;
+        const in30Days = in30DaysStr;
         let totalPlaces = 0;
         let totalEnrolled = 0;
         const allSlots = creneauxSnap.docs.map((document) => ({ id: document.id, ...document.data() } as any));

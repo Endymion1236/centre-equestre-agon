@@ -97,8 +97,20 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
                 }}
               />
             )}
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-950 via-blue-950/10 to-transparent lg:block" />
-            <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-blue-950/55 to-transparent lg:hidden" />
+            {/* Voile de lisibilité, et rien de plus.
+                L'ancien dégradé passait par blue-950/10 à mi-parcours et
+                n'atteignait la transparence qu'au bord droit : un voile bleu
+                courait sur toute la largeur et ternissait la photo entière.
+                Il est désormais dense là où le texte se pose, puis disparaît
+                avant la moitié — la photo se montre telle qu'elle est. */}
+            <div
+              className="pointer-events-none absolute inset-0"
+              style={{ background: "linear-gradient(to right, rgba(7,17,31,0.94) 0%, rgba(7,17,31,0.62) 18%, rgba(7,17,31,0) 46%)" }}
+            />
+            <div
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-2/5 lg:hidden"
+              style={{ background: "linear-gradient(to top, rgba(7,17,31,0.5) 0%, rgba(7,17,31,0) 100%)" }}
+            />
           </div>
         </div>
       </section>

@@ -93,15 +93,15 @@ export default function HomePage() {
             <LiveHeroStatus />
           </div>
 
-          <h1 className="max-w-4xl animate-fade-in-up font-display text-5xl font-bold leading-[0.98] tracking-[-0.045em] text-white [text-shadow:0_4px_40px_rgba(0,0,0,0.35)] sm:text-6xl md:text-7xl lg:text-[88px]">
+          <h1 className="max-w-4xl animate-fade-in-up font-display text-5xl font-bold leading-[0.98] tracking-[-0.045em] text-white [text-shadow:0_4px_40px_rgba(0,0,0,0.35)] sm:text-6xl lg:text-[68px]">
             <HeroTitreSaison />
           </h1>
 
-          <p className="mt-7 max-w-2xl animate-fade-in-up font-body text-lg leading-relaxed text-white/78 sm:text-xl">
+          <p className="mt-5 max-w-2xl animate-fade-in-up font-body text-lg leading-relaxed text-white/78 sm:text-xl">
             Stages dès 3 ans, cours toute l&apos;année et balades sur la plage à Agon-Coutainville. Un centre familial, vivant et tourné vers le plaisir de progresser.
           </p>
 
-          <div className="mt-9 flex animate-fade-in-up flex-wrap gap-3">
+          <div className="mt-7 flex animate-fade-in-up flex-wrap gap-3">
             <Link href="/planning" className="no-underline">
               <Button variant="primary" size="lg">Voir les places disponibles</Button>
             </Link>
