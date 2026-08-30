@@ -29,6 +29,8 @@
  * Réponse :
  *   { lie: true,  family }  → fiche rattachée (ou déjà rattachée)
  *   { lie: false }          → aucune fiche à cette adresse, au client de créer
+ *   403 EMAIL_NON_VERIFIE   → une fiche existe, mais l'adresse du jeton n'a
+ *                             pas été confirmée : rattachement refusé.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -82,6 +84,32 @@ export async function POST(req: NextRequest) {
     }
 
     const ancienne = snap.docs[0];
+
+    // ── Adresse vérifiée exigée pour REPRENDRE une fiche existante ─────────
+    //
+    // L'adresse du jeton est la seule clé de rattachement. L'inscription par
+    // email/mot de passe étant ouverte, une adresse non vérifiée ne prouve
+    // rien : n'importe qui pouvait taper l'adresse d'une famille du club,
+    // choisir son mot de passe, et récupérer sa fiche — enfants, téléphone,
+    // enfants liés. Google et Facebook renvoient toujours une adresse
+    // vérifiée ; seul le mot de passe est concerné.
+    //
+    // La création d'une fiche vierge (plus haut) reste permise : elle
+    // n'expose aucune donnée. C'est bien la reprise d'une fiche déjà remplie
+    // qui est protégée ici.
+    if (auth.email_verified !== true) {
+      console.warn(`[lier-compte] refus : ${email} non vérifiée (fiche ${ancienne.id})`);
+      return NextResponse.json(
+        {
+          error: "EMAIL_NON_VERIFIE",
+          message:
+            "Votre adresse e-mail doit être confirmée avant de retrouver votre fiche. " +
+            "Ouvrez le lien de confirmation que nous venons de vous envoyer.",
+        },
+        { status: 403 }
+      );
+    }
+
     const data = ancienne.data() as Record<string, unknown>;
 
     const fiche = {

@@ -203,6 +203,21 @@ export default function SepaPage() {
           return;
         }
       }
+      // ── Mandat déjà actif pour cette famille ? ───────────────────────────
+      // Deux mandats actifs, c'est l'ambiguïté : les échéances et
+      // l'autorisation à signer doivent en désigner UN. Le cas courant est le
+      // changement de RIB — l'ancien doit alors être révoqué. Le cas
+      // légitime (deux comptes, père et mère) reste possible, mais choisi.
+      const actifs = mandats.filter(m => m.familyId === newMandat.familyId && m.status === "active");
+      let aRevoquer: MandatSepa[] = [];
+      if (actifs.length > 0) {
+        const memeIban = actifs.filter(m => (m.iban || "").replace(/\s/g, "").toUpperCase() === cleanIban);
+        const question = memeIban.length > 0
+          ? `${family?.parentName} a déjà un mandat actif sur CE MÊME compte (${memeIban[0].mandatId}).\n\nRévoquer l'ancien et n'en garder qu'un ?\n\nOK = remplacer (recommandé)\nAnnuler = garder les deux`
+          : `${family?.parentName} a déjà ${actifs.length} mandat(s) actif(s) sur un AUTRE compte.\n\nS'agit-il d'un changement de banque ?\n\nOK = révoquer l'ancien et le remplacer\nAnnuler = garder les deux (ex. compte du père et compte de la mère)`;
+        if (confirm(question)) aRevoquer = memeIban.length > 0 ? memeIban : actifs;
+      }
+
       const nextMandatNum = mandats.length + 1;
       const mandatId = `CEDC${nextMandatNum}MD${Math.floor(Math.random() * 9000) + 1000}`;
 
@@ -218,6 +233,21 @@ export default function SepaPage() {
         status: "active",
         createdAt: serverTimestamp(),
       });
+
+      // Ancien(s) mandat(s) révoqué(s) — jamais supprimés : ils restent la
+      // preuve de l'autorisation passée, et les échéances déjà prélevées y
+      // font référence.
+      for (const anc of aRevoquer) {
+        await updateDoc(doc(db, "mandats-sepa", anc.id), {
+          status: "revoked",
+          revokedAt: serverTimestamp(),
+          revokedReason: `Remplacé par ${mandatId}`,
+        });
+      }
+      if (aRevoquer.length > 0) {
+        toast(`${aRevoquer.length} ancien(s) mandat(s) révoqué(s) — ${mandatId} est désormais le seul actif.`, "success");
+      }
+
       // Confirmation de mandat + prenotification de l'echeancier (obligation
       // SEPA d'informer le debiteur avant tout prelevement).
       try {
@@ -305,6 +335,12 @@ export default function SepaPage() {
     setSaving(false);
   };
 
+  /** "2026-08-29" → "29-08-26" pour un nom de fichier lisible (jamais de "/"). */
+  const nomDate = (iso: string): string => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || "");
+    return m ? `${m[3]}-${m[2]}-${m[1].slice(2)}` : "sans-date";
+  };
+
   // ─── Créer une remise SEPA ───
   const handleCreateRemise = async () => {
     if (selectedEcheances.size === 0) return;
@@ -348,7 +384,12 @@ export default function SepaPage() {
 
       // Générer le XML
       const xml = generateSepaXml(remiseData);
-      const fileName = `SEPA_${nextNum}.xml`;
+      // Nom de fichier daté : « SEPA_1.xml » ne disait rien une fois dans le
+      // dossier Téléchargements, et deux remises finissaient en « (1) »,
+      // « (2) » — impossible de savoir laquelle porter à la banque. On retient
+      // la date de PRÉLÈVEMENT (celle qui apparaîtra sur le relevé), pas la
+      // date de création.
+      const fileName = `SEPA_${nomDate(datePrlv)}_n${nextNum}.xml`;
 
       // Sauvegarder la remise
       const remiseRef = await addDoc(collection(db, "remises-sepa"), {
@@ -399,7 +440,9 @@ export default function SepaPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = remise.xmlFileName || `SEPA_${remise.numero}.xml`;
+      // Remises créées avant le nommage daté : on les redate au téléchargement
+      // plutôt que de ressortir un « SEPA_3.xml » anonyme.
+      a.download = remise.xmlFileName || `SEPA_${nomDate(remise.datePrelevement)}_n${remise.numero}.xml`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) { toast(e.message, "error"); }
@@ -517,6 +560,25 @@ export default function SepaPage() {
     if (!confirm("Supprimer ce mandat SEPA ?")) return;
     await deleteDoc(doc(db, "mandats-sepa", id));
     toast("Mandat supprimé", "success");
+    fetchAll();
+  };
+
+  /**
+   * Révoque un mandat sans le supprimer.
+   *
+   * Le bon geste quand une famille change de banque : le mandat reste la
+   * preuve de l'autorisation passée et les échéances déjà prélevées y font
+   * référence — le supprimer laisserait ces écritures orphelines. Révoqué, il
+   * n'est plus proposé nulle part.
+   */
+  const handleRevokeMandat = async (m: MandatSepa) => {
+    const enAttente = echeances.filter(e => e.mandatId === m.mandatId && e.status === "pending").length;
+    const avertissement = enAttente > 0
+      ? `\n\n⚠️ ${enAttente} échéance(s) en attente sur ce mandat : elles ne doivent plus être prélevées avec lui. Rattachez-les au nouveau mandat ou supprimez-les.`
+      : "";
+    if (!confirm(`Révoquer le mandat ${m.mandatId} de ${m.familyName} ?\n\nIl restera consultable mais ne sera plus utilisé pour les prélèvements.${avertissement}`)) return;
+    await updateDoc(doc(db, "mandats-sepa", m.id), { status: "revoked", revokedAt: serverTimestamp() });
+    toast(`Mandat ${m.mandatId} révoqué`, "success");
     fetchAll();
   };
 
@@ -827,7 +889,15 @@ export default function SepaPage() {
                               className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                               + Échéancier
                             </button>
+                            {m.status === "active" && (
+                              <button type="button" onClick={() => handleRevokeMandat(m)}
+                                title="Révoquer : le mandat n'est plus utilisé, mais reste conservé comme preuve"
+                                className="font-body text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-orange-100">
+                                Révoquer
+                              </button>
+                            )}
                             <button type="button" onClick={() => handleDeleteMandat(m.id)}
+                              title="Supprimer définitivement (préférez « Révoquer »)"
                               className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
                               <Trash2 size={14} />
                             </button>

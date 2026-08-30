@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { toParisDateString } from "@/lib/date-local";
+import { compteDeCategorie } from "@/lib/categories-comptables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -93,6 +94,15 @@ export async function GET(req: NextRequest) {
           tva: tvaRate,
           priceTTC: montantTTC,
           type: "recurrence",
+          // Ventilation comptable et statistique de la ligne — voir la
+          // catégorie choisie sur la récurrence. Sans elle, repli sur
+          // « autre » (compte 708000) plutôt qu'une ligne non classée.
+          category: r.categorie || "autre",
+          // Compte DÉDUIT de la catégorie, pas recopié depuis la récurrence :
+          // corriger un code dans le plan comptable corrige alors toutes les
+          // factures suivantes, sans rouvrir chaque récurrence.
+          compteComptable: r.categorie ? compteDeCategorie(r.categorie) : (r.compteComptable || compteDeCategorie(undefined)),
+          activityType: r.categorie || "autre",
           recurrenceId: recDoc.id,
           moisFacture: moisKey,
         }],

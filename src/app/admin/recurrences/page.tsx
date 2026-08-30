@@ -9,6 +9,7 @@ import {
   Loader2, Search, Plus, X, Edit2, Pause, Play, XCircle, RotateCw, FileText, CalendarDays, Euro,
 } from "lucide-react";
 import type { Family } from "@/types";
+import { CATEGORIES_COMPTABLES, compteDeCategorie } from "@/lib/categories-comptables";
 
 // ─────────────────────────────────────────────────────────────────────
 // Types
@@ -21,6 +22,10 @@ interface Recurrence {
   label: string;                  // ex: "Pension Caramel"
   montantTTC: number;
   tvaRate: number;                // 5.5 ou 20
+  /** Catégorie de recette (voir lib/categories-comptables) — absente sur les
+   *  récurrences créées avant son introduction : repli sur « autre ». */
+  categorie?: string;
+  compteComptable?: string;       // ex: "706200" (pension)
   jourFacturation: number;        // 1-28 (on évite 29-31 pour fiabilité)
   dateDebut: string;              // ISO YYYY-MM-DD
   dateFin: string | null;
@@ -319,6 +324,9 @@ function RecurrenceModal({ recurrence, families, onClose, onSaved }: {
   const [label, setLabel] = useState(recurrence?.label || "");
   const [montantTTC, setMontantTTC] = useState(recurrence?.montantTTC || 0);
   const [tvaRate, setTvaRate] = useState(recurrence?.tvaRate || 5.5);
+  // Catégorie comptable : le libellé étant libre, c'est elle qui dit dans quel
+  // compte tombe la recette et sous quelle rubrique elle apparaît en stats.
+  const [categorie, setCategorie] = useState(recurrence?.categorie || "pension");
   const [jourFacturation, setJourFacturation] = useState(recurrence?.jourFacturation || 1);
   const [dateDebut, setDateDebut] = useState(recurrence?.dateDebut || new Date().toISOString().split("T")[0]);
   const [paymentMode, setPaymentMode] = useState(recurrence?.paymentMode || "virement");
@@ -344,6 +352,8 @@ function RecurrenceModal({ recurrence, families, onClose, onSaved }: {
         familyId, familyName,
         label: label.trim(),
         montantTTC, tvaRate,
+        categorie,
+        compteComptable: compteDeCategorie(categorie),
         jourFacturation,
         dateDebut,
         dateFin: recurrence?.dateFin || null,
@@ -420,6 +430,23 @@ function RecurrenceModal({ recurrence, families, onClose, onSaved }: {
                 <option value={0}>0%</option>
               </select>
             </div>
+          </div>
+
+          {/* Catégorie comptable — le libellé est libre, c'est elle qui range
+              la recette dans le bon compte et la bonne rubrique de statistiques. */}
+          <div>
+            <label className="block font-body text-xs font-semibold text-slate-700 mb-1">Catégorie comptable</label>
+            <select value={categorie} onChange={e => setCategorie(e.target.value)}
+              style={{ color: "#1C2A3E", backgroundColor: "#ffffff" }}
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm">
+              {CATEGORIES_COMPTABLES.map(c => (
+                <option key={c.id} value={c.id}>{c.label} (cpt {c.compte})</option>
+              ))}
+            </select>
+            <p className="font-body text-[11px] text-slate-500 mt-1">
+              Reportée sur chaque facture générée : compte {compteDeCategorie(categorie)}. Sans elle, la recette
+              se retrouverait dans « Autre » faute d&apos;article rattaché.
+            </p>
           </div>
 
           {/* Jour facturation + Date début */}
@@ -546,6 +573,15 @@ function FacturationModal({ recurrences, onClose, onDone }: {
             tva: r.tvaRate,
             priceTTC: r.montantTTC,
             type: "recurrence",
+            // Ventilation : sans ces trois champs, la ligne n'a ni compte
+            // comptable ni rubrique — les statistiques la rangeaient dans
+            // « autre » et le comptable devait la reclasser à la main.
+            category: r.categorie || "autre",
+            // Compte DÉDUIT de la catégorie, pas recopié depuis la récurrence :
+            // corriger un code dans le plan comptable corrige alors toutes les
+            // factures suivantes, sans rouvrir chaque récurrence.
+            compteComptable: r.categorie ? compteDeCategorie(r.categorie) : (r.compteComptable || compteDeCategorie(undefined)),
+            activityType: r.categorie || "autre",
             recurrenceId: r.id,
             moisFacture: moisKey,
           }],

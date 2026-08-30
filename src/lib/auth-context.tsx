@@ -13,6 +13,7 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   updateProfile,
   signOut as firebaseSignOut,
 } from "firebase/auth";
@@ -33,6 +34,10 @@ interface AuthContextType {
   isAdmin: boolean;
   isMoniteur: boolean;
   userRole: "admin" | "moniteur" | "cavalier";
+  /** Une fiche existe à cette adresse, mais elle n'est pas encore confirmée. */
+  emailAConfirmer: boolean;
+  /** Renvoie le lien de confirmation à l'adresse du compte connecté. */
+  renvoyerConfirmation: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -47,6 +52,8 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   isMoniteur: false,
   userRole: "cavalier",
+  emailAConfirmer: false,
+  renvoyerConfirmation: async () => {},
 });
 
 
@@ -54,6 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [family, setFamily] = useState<Family | null>(null);
   const [loading, setLoading] = useState(true);
+  const [emailAConfirmer, setEmailAConfirmer] = useState(false);
 
   // Listen to auth state
   useEffect(() => {
@@ -68,6 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isStaff) {
           // Admin ou moniteur : pas de fiche famille
           setFamily(null);
+          setEmailAConfirmer(false);
         } else {
         // 1. Chercher une fiche famille par uid (cas normal : déjà lié)
         const familyRef = doc(db, "families", firebaseUser.uid);
@@ -101,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // sur une fiche vierge, sans ses enfants. L'Admin SDK ne connaît pas
           // ce cas.
           let linked = false;
+          let aConfirmer = false;
           try {
             const token = await firebaseUser.getIdToken();
             const res = await fetch("/api/famille/lier-compte", {
@@ -113,10 +123,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 setFamily(data.family as Family);
                 linked = true;
               }
+            } else if (res.status === 403) {
+              // Une fiche existe bien à cette adresse, mais elle n'a pas été
+              // confirmée : le serveur refuse de la rattacher. On renvoie le
+              // lien et on l'explique, plutôt que de laisser un espace vide.
+              const data = await res.json().catch(() => null);
+              if (data?.error === "EMAIL_NON_VERIFIE") {
+                aConfirmer = true;
+                try { await sendEmailVerification(firebaseUser); } catch { /* déjà envoyé */ }
+              }
             }
           } catch (e) {
             console.warn("Rattachement de compte impossible, bascule en création:", e);
           }
+          setEmailAConfirmer(aConfirmer);
 
           if (!linked) {
             // La route serveur crée la fiche vierge quand aucune n'existe :
@@ -131,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } // fin else !isStaff
       } else {
         setFamily(null);
+        setEmailAConfirmer(false);
       }
 
       setLoading(false);
@@ -164,6 +185,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (displayName) {
       await updateProfile(cred.user, { displayName });
     }
+    // Sans cette confirmation, l'adresse ne prouve rien : le serveur refuse
+    // alors de rattacher une fiche déjà remplie (cf. /api/famille/lier-compte).
+    try {
+      await sendEmailVerification(cred.user);
+    } catch (e) {
+      console.warn("Envoi du lien de confirmation impossible:", e);
+    }
+  };
+
+  const renvoyerConfirmation = async () => {
+    if (auth.currentUser) await sendEmailVerification(auth.currentUser);
   };
 
   const signOut = async () => {
@@ -221,6 +253,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin,
         isMoniteur,
         userRole,
+        emailAConfirmer,
+        renvoyerConfirmation,
       }}
     >
       {children}

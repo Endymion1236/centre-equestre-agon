@@ -16,6 +16,7 @@ import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Rece
 import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
+import { CATEGORIES_COMPTABLES } from "@/lib/categories-comptables";
 
 interface TabEncaisserProps {
   families: (Family & { firestoreId: string })[];
@@ -121,16 +122,9 @@ export function TabEncaisser({
     : families;
 
 
-  const CATEGORIES = [
-    { id: "enseignement", label: "Enseignement", compte: "706100", tvaDefault: "5.5" },
-    { id: "pension", label: "Pension / Hébergement", compte: "706200", tvaDefault: "10" },
-    { id: "location", label: "Location (box, matériel)", compte: "706300", tvaDefault: "20" },
-    { id: "vente", label: "Vente (équipement, produits)", compte: "707000", tvaDefault: "20" },
-    { id: "licence", label: "Licence / Cotisation FFE", compte: "706400", tvaDefault: "0" },
-    { id: "transport", label: "Transport", compte: "706500", tvaDefault: "10" },
-    { id: "evenement", label: "Événement / Animation", compte: "706600", tvaDefault: "5.5" },
-    { id: "autre", label: "Autre", compte: "708000", tvaDefault: "20" },
-  ];
+  // Liste partagée avec les récurrences : une pension facturée ici et une
+  // pension facturée par récurrence doivent tomber dans le même compte.
+  const CATEGORIES = CATEGORIES_COMPTABLES;
 
   const addToBasket = () => {
     if (!selectedFamily) {

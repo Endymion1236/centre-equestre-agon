@@ -18,7 +18,10 @@ const ALL_COLLECTIONS = [
   "encaissements", "payments", "cloturesJournalieres", "fondsDeCaisse",
   "remises", "waitlist", "reservations", "avoirs", "emailsSent", "emailsReprise",
   "payment_declarations", "cheques-differes", "fidelite_transactions",
-  "rattrapages", "devis", "cards", "sepa_mandats", "sepa_remises", "sepa_echeances",
+  // Noms RÉELS des collections SEPA : sous "sepa_mandats" & co., qui
+  // n'existent pas, la sauvegarde ne contenait AUCUNE donnée de prélèvement —
+  // ni les mandats signés, ni les échéances à venir.
+  "rattrapages", "devis", "cards", "mandats-sepa", "remises-sepa", "echeances-sepa",
   "forfaits", "creneaux", "indispos", "soins", "families", "equides", "activities",
   "emailTemplates", "settings", "resetLogs", "fidelite_soldes",
 ];

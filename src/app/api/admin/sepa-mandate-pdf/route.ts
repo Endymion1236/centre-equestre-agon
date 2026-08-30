@@ -72,17 +72,29 @@ export async function POST(request: NextRequest) {
     const [club, famSnap, mandatSnap] = await Promise.all([
       getClubInfo(),
       adminDb.collection("families").doc(String(familyId)).get(),
-      adminDb.collection("mandats-sepa").where("familyId", "==", String(familyId)).where("status", "==", "active").limit(1).get(),
+      // Sans tri, Firestore rend un mandat ARBITRAIRE quand la famille en a
+      // plusieurs actifs (changement de banque : l'ancien n'a pas été révoqué)
+      // — l'autorisation sortait alors avec le RUM et l'IBAN de l'ancien.
+      // On imprime toujours le PLUS RÉCENT.
+      adminDb.collection("mandats-sepa").where("familyId", "==", String(familyId)).where("status", "==", "active").get(),
     ]);
 
     const fam = famSnap.exists ? (famSnap.data() as any) : {};
-    const debtorName = fam.parentName || fam.titulaire || "";
     const debtorAddress = fam.address || fam.adresse || "";
     const debtorZip = fam.zipCode || fam.cp || fam.codePostal || "";
     const debtorCity = fam.city || fam.ville || "";
     const debtorAddrFull = [debtorAddress, [debtorZip, debtorCity].filter(Boolean).join(" ")].filter(Boolean).join(", ");
 
-    const mandat = !mandatSnap.empty ? (mandatSnap.docs[0].data() as any) : null;
+    const dateMandat = (m: any) => {
+      const c = m?.createdAt;
+      return c?.toDate ? c.toDate().getTime() : c?.seconds ? c.seconds * 1000 : 0;
+    };
+    const mandats = mandatSnap.docs.map(d => d.data() as any).sort((a, b) => dateMandat(b) - dateMandat(a));
+    const mandat = mandats[0] || null;
+    // Le débiteur d'un mandat SEPA est le TITULAIRE DU COMPTE, pas le contact
+    // de la fiche : sur un compte joint (« M OU MME X »), imprimer le nom du
+    // parent inscrit rendait l'autorisation incohérente avec le RIB.
+    const debtorName = mandat?.titulaire || fam.parentName || fam.titulaire || "";
     const rum = mandat?.mandatId || "À compléter par le centre";
     // Coordonnées bancaires : pré-remplies si le mandat les connaît, sinon vides.
     const rawIban = (mandat?.iban || "").replace(/\s/g, "").toUpperCase();
