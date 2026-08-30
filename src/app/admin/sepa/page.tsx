@@ -650,11 +650,70 @@ export default function SepaPage() {
   };
 
   // ─── Filtres ───
-  const filteredMandats = mandats.filter(m => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return m.familyName?.toLowerCase().includes(q) || m.titulaire?.toLowerCase().includes(q) || m.mandatId?.toLowerCase().includes(q);
-  });
+  // Familles portant PLUSIEURS mandats actifs. C'est le seul cas réellement
+  // dangereux : les échéances et l'autorisation de prélèvement se calent sur
+  // un mandat, et rien ne dit lequel à la lecture. Un mandat révoqué à côté
+  // d'un mandat actif est normal — c'est la trace du remplacement, on ne
+  // signale donc que les actifs en double.
+  const famillesEnDouble = new Set(
+    Object.entries(
+      mandats
+        .filter(m => m.status === "active")
+        .reduce<Record<string, number>>((acc, m) => {
+          const cle = m.familyId || m.familyName || "";
+          if (cle) acc[cle] = (acc[cle] || 0) + 1;
+          return acc;
+        }, {})
+    )
+      .filter(([, n]) => n > 1)
+      .map(([cle]) => cle)
+  );
+
+  const estEnDouble = (m: MandatSepa) =>
+    famillesEnDouble.has(m.familyId || "") || famillesEnDouble.has(m.familyName || "");
+
+  const filteredMandats = mandats
+    .filter(m => {
+      if (!search) return true;
+      const q = search.toLowerCase();
+      return m.familyName?.toLowerCase().includes(q) || m.titulaire?.toLowerCase().includes(q) || m.mandatId?.toLowerCase().includes(q);
+    })
+    // Tri alphabétique par famille : deux mandats d'une même famille se
+    // retrouvent côte à côte, ce qui rend le doublon visible. À famille égale,
+    // le plus récent d'abord — c'est celui sur lequel on prélève.
+    .sort((a, b) => {
+      const parNom = (a.familyName || "").localeCompare(b.familyName || "", "fr", { sensitivity: "base" });
+      if (parNom !== 0) return parNom;
+      return (b.dateSignature || "").localeCompare(a.dateSignature || "");
+    });
+
+  const nbFamillesEnDouble = famillesEnDouble.size;
+
+  // Enfants concernés par un mandat.
+  //
+  // Un mandat SEPA est signé par la FAMILLE, pas par enfant : rien dans la
+  // base ne relie l'un à l'autre. Le lien réel passe par les échéances, dont
+  // la description porte le prénom de l'enfant inscrit
+  // (« Forfait Poney 1 — Léa — 3/10 », cf. EnrollPanel).
+  //
+  // On ne découpe donc pas la description — un format qui changerait
+  // casserait tout — on cherche l'inverse : lequel des enfants de la fiche
+  // apparaît dans les échéances de ce mandat. C'est ce qui distingue deux
+  // mandats de parents séparés, où chacun prélève pour ses enfants.
+  const enfantsDuMandat = (m: MandatSepa) => {
+    const fam = families.find(f => f.firestoreId === m.familyId);
+    const enfants = (fam?.children || []).filter(c => c?.firstName);
+    const textes = echeances
+      .filter(e => e.mandatId === m.mandatId)
+      .map(e => `${e.description || ""} ${e.reference || ""}`)
+      .join(" ")
+      .toLowerCase();
+    if (!textes.trim()) return { preleves: [] as string[], tous: enfants.map(c => c.firstName) };
+    return {
+      preleves: enfants.filter(c => textes.includes(c.firstName.toLowerCase())).map(c => c.firstName),
+      tous: enfants.map(c => c.firstName),
+    };
+  };
 
   const pendingEcheances = echeances
     .filter(e => e.status === "pending")
@@ -851,6 +910,24 @@ export default function SepaPage() {
                 </Card>
               )}
 
+              {/* Deux mandats actifs pour une même famille : le prélèvement et
+                  l'autorisation se calent sur l'un des deux sans que rien ne
+                  dise lequel. À traiter avant de générer une remise. */}
+              {nbFamillesEnDouble > 0 && (
+                <Card padding="md" className="mb-3 border-l-4 border-l-orange-400">
+                  <div className="font-body text-sm font-bold text-orange-700 mb-1">
+                    {nbFamillesEnDouble === 1
+                      ? "1 famille a deux mandats actifs"
+                      : `${nbFamillesEnDouble} familles ont plusieurs mandats actifs`}
+                  </div>
+                  <div className="font-body text-xs text-gray-600 leading-relaxed">
+                    La liste est triée par nom : les mandats concernés sont côte à côte, signalés
+                    « Doublon ». Gardez celui qui porte le bon IBAN et <strong>révoquez l’autre</strong>
+                    {" "}— la révocation le conserve comme preuve, contrairement à la suppression.
+                  </div>
+                </Card>
+              )}
+
               {/* Liste des mandats */}
               {filteredMandats.length === 0 ? (
                 <Card padding="lg" className="text-center">
@@ -862,6 +939,7 @@ export default function SepaPage() {
                   {filteredMandats.map(m => {
                     const echCount = echeances.filter(e => e.mandatId === m.mandatId).length;
                     const echPending = echeances.filter(e => e.mandatId === m.mandatId && e.status === "pending").length;
+                    const { preleves, tous } = enfantsDuMandat(m);
                     return (
                       <Card key={m.id} padding="md">
                         <div className="flex items-start justify-between">
@@ -877,6 +955,19 @@ export default function SepaPage() {
                               <div className="font-body text-xs text-gray-400 mt-0.5 font-mono">
                                 IBAN : {formatIban(m.iban)} · BIC : {m.bic}
                               </div>
+                              {/* Enfants : « prélève pour » quand des échéances
+                                  existent, sinon les enfants de la fiche à titre
+                                  indicatif — un mandat sans échéance ne prélève
+                                  encore pour personne. */}
+                              {preleves.length > 0 ? (
+                                <div className="font-body text-xs text-blue-700 mt-0.5">
+                                  Prélève pour : <strong>{preleves.join(", ")}</strong>
+                                </div>
+                              ) : tous.length > 0 && echCount === 0 ? (
+                                <div className="font-body text-xs text-gray-400 mt-0.5">
+                                  Aucune échéance · enfants de la fiche : {tous.join(", ")}
+                                </div>
+                              ) : null}
                               <div className="font-body text-xs text-gray-400 mt-0.5">
                                 Signé le {new Date(m.dateSignature).toLocaleDateString("fr-FR")}
                                 {echCount > 0 && <span className="ml-2">· {echPending} échéance{echPending > 1 ? "s" : ""} en attente sur {echCount}</span>}
@@ -884,6 +975,9 @@ export default function SepaPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {m.status === "active" && estEnDouble(m) && (
+                              <Badge color="orange">Doublon</Badge>
+                            )}
                             <Badge color={m.status === "active" ? "green" : "gray"}>{m.status === "active" ? "Actif" : "Révoqué"}</Badge>
                             <button type="button" onClick={() => { setShowNewEcheancier(true); setNewEcheancier({ ...newEcheancier, mandatId: m.id }); setTab("echeancier"); }}
                               className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">

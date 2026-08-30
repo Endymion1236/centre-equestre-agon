@@ -157,6 +157,23 @@ export async function POST(req: NextRequest) {
         // le solde automatiquement plus tard (doc CAWL, Exemple B).
         ...(isDeposit ? { cardPaymentMethodSpecificInput: { tokenizationMode: "createWithConsent" } } : {}),
       },
+      // ── Moyens de paiement par redirection (Chèque-Vacances Connect…) ──
+      //
+      // Même piège que pour la carte juste en dessous : sans ce paramètre,
+      // CAWL applique son défaut (autorisation seule). La transaction resterait
+      // « Autorisée » sans jamais être encaissée, et finirait par expirer.
+      //
+      // La documentation CAWL du Chèque-Vacances Connect l'impose d'ailleurs :
+      // requiresApproval doit valoir false pour le paiement mixte
+      // (chèques-vacances + complément carte), qui est la situation la plus
+      // courante — une famille a rarement le montant exact en chèques.
+      //
+      // On n'envoie PAS de paymentProductId : la page de paiement continue
+      // ainsi de proposer tous les moyens actifs sur le compte, au choix de la
+      // famille, au lieu de la forcer vers un seul.
+      redirectPaymentMethodSpecificInput: {
+        requiresApproval: false,
+      },
       cardPaymentMethodSpecificInput: {
         // SALE = autorisation + CAPTURE immédiate. Sans ce paramètre, CAWL
         // applique son défaut (autorisation seule) : les fonds sont bloqués

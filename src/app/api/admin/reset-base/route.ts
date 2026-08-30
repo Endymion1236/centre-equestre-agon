@@ -228,6 +228,34 @@ export async function POST(req: NextRequest) {
       if (holdsLeves > 0) console.log(`[reset-base] ${holdsLeves} waitlistHold levé(s) sur les créneaux à venir`);
     }
 
+    // ─── 4c. Historique de facturation des récurrences ───────────
+    // Les récurrences sont des données MÉTIER (pensions, locations de box…) :
+    // on ne les efface jamais ici. Mais chacune garde dans `facturesGenerees`
+    // la liste des mois déjà facturés, et c'est ce que le cron mensuel
+    // consulte pour ne pas facturer deux fois le même mois.
+    //
+    // Si on vide `payments` sans nettoyer cette liste, la facture du mois en
+    // cours disparaît alors que la récurrence la croit toujours émise : elle
+    // ne sera jamais régénérée, et le mois passe à la trappe sans le moindre
+    // message. Cas concret : cron du 1er septembre, reset le 4 — plus aucune
+    // facture de pension pour septembre, la suivante au 1er octobre.
+    let recurrencesHistoriqueVide = 0;
+    if (!dryRun && collections.includes("payments")) {
+      const recSnap = await adminDb.collection("recurrences").get();
+      let recNettoyees = 0;
+      for (const d of recSnap.docs) {
+        const r = d.data() as any;
+        if (Array.isArray(r.facturesGenerees) && r.facturesGenerees.length > 0) {
+          await d.ref.update({ facturesGenerees: [] });
+          recNettoyees++;
+        }
+      }
+      if (recNettoyees > 0) {
+        console.log(`[reset-base] historique de facturation vidé sur ${recNettoyees} récurrence(s)`);
+      }
+      recurrencesHistoriqueVide = recNettoyees;
+    }
+
     const durationMs = Date.now() - startTime;
 
     // ─── 5. Log d'audit inaltérable ─────────────────────────────
@@ -235,6 +263,7 @@ export async function POST(req: NextRequest) {
       dryRun: !!dryRun,
       collections: collections,
       results,
+      recurrencesHistoriqueVide,
       durationMs,
       byUid: decoded.uid,
       byEmail: decoded.email || "",
@@ -247,6 +276,7 @@ export async function POST(req: NextRequest) {
       success: true,
       dryRun: !!dryRun,
       results,
+      recurrencesHistoriqueVide,
       durationMs,
       totalDeleted: Object.values(results).reduce((s, r) => s + r.deleted, 0),
     });
