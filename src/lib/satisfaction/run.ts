@@ -8,6 +8,10 @@ import { Resend } from "resend";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 import { REPLY_TO } from "@/lib/email-reply-to";
+import {
+  emailLayout, emailButton, emailTitre, emailParagraphe as P,
+  emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
 
 const FROM = process.env.RESEND_FROM_EMAIL || process.env.RESEND_FROM || "onboarding@resend.dev";
 // Pas de copie cachée sur les demandes de satisfaction : envoyées par
@@ -28,24 +32,29 @@ export const parisDate = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZon
 const addDays = (s: string, n: number) => { const d = new Date(s + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 const lundiDe = (s: string) => { const d = new Date(s + "T12:00:00Z"); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return d.toISOString().slice(0, 10); };
 
+/**
+ * Les trois invitations au questionnaire — stage, promenade, bilan d'année —
+ * étaient trois copies du même HTML, à un titre et une phrase près, chacune
+ * avec son propre en-tête. Une seule fonction, l'habillage commun, et les
+ * deux variantes en paramètres.
+ */
+function emailSatisfaction(titre: string, phrase: string, link: string) {
+  return emailLayout([
+    emailTitre(titre),
+    P("Bonjour,"),
+    P(`${phrase} Pour nous aider à progresser, pourriez-vous nous donner votre avis ? Cela prend moins d'une minute.`),
+    emailButton("Donner mon avis", link),
+    P(`<span style="color:${CE.discret};">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br/>${link}</span>`, 12),
+    emailSignature("Merci du temps que vous nous accordez."),
+  ].join("\n"), phrase);
+}
+
 function emailHtml(childFirst: string, stageLabel: string, link: string) {
-  return `
-  <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1e293b">
-    <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0">
-      <div style="font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.5px">Centre Équestre d'Agon-Coutainville</div>
-      <h1 style="margin:6px 0 0;font-size:20px">Votre avis nous intéresse</h1>
-    </div>
-    <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px">
-      <p>Bonjour,</p>
-      <p>${childFirst ? `${childFirst} vient` : "Votre enfant vient"} de terminer le stage <strong>${stageLabel}</strong>.
-      Pour nous aider à progresser, pourriez-vous nous donner votre avis ? Cela prend moins d'une minute.</p>
-      <p style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Donner mon avis</a>
-      </p>
-      <p style="font-size:12px;color:#64748b">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>${link}</p>
-      <p style="margin-top:24px">Merci, et à très bientôt !<br>L'équipe du Centre Équestre d'Agon-Coutainville</p>
-    </div>
-  </div>`;
+  return emailSatisfaction(
+    "Votre avis nous intéresse",
+    `${childFirst ? `${childFirst} vient` : "Votre enfant vient"} de terminer le stage <strong>${stageLabel}</strong>.`,
+    link,
+  );
 }
 
 export interface RunOptions { date?: string; dry?: boolean; toOverride?: string; limit?: number; force?: boolean; }
@@ -174,23 +183,11 @@ export async function runSatisfactionStages(opts: RunOptions = {}) {
 
 /** Email "bilan de l'année". */
 function emailHtmlAnnee(childFirst: string, saisonLabel: string, link: string) {
-  return `
-  <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1e293b">
-    <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0">
-      <div style="font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.5px">Centre Équestre d'Agon-Coutainville</div>
-      <h1 style="margin:6px 0 0;font-size:20px">Votre avis sur l'année</h1>
-    </div>
-    <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px">
-      <p>Bonjour,</p>
-      <p>La saison <strong>${saisonLabel}</strong> s'achève. ${childFirst ? `${childFirst} a` : "Votre enfant a"} passé l'année avec nous,
-      et votre regard compte beaucoup pour préparer la prochaine saison. Pourriez-vous nous donner votre avis ? Cela prend moins d'une minute.</p>
-      <p style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Donner mon avis</a>
-      </p>
-      <p style="font-size:12px;color:#64748b">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>${link}</p>
-      <p style="margin-top:24px">Merci, et à très bientôt !<br>L'équipe du Centre Équestre d'Agon-Coutainville</p>
-    </div>
-  </div>`;
+  return emailSatisfaction(
+    "Votre avis sur l'année",
+    `La saison <strong>${saisonLabel}</strong> s'achève. ${childFirst ? `${childFirst} a` : "Votre enfant a"} passé l'année avec nous, et votre regard compte beaucoup pour préparer la prochaine saison.`,
+    link,
+  );
 }
 
 export interface RunAnneeOptions { saison?: number; dry?: boolean; toOverride?: string; limit?: number; }
@@ -301,23 +298,11 @@ export async function runSatisfactionAnnee(opts: RunAnneeOptions = {}) {
 
 // ── Template email : satisfaction PROMENADE ───────────────────────────────────
 function emailHtmlPromenade(childFirst: string, baladeLabel: string, link: string) {
-  return `
-  <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;color:#1e293b">
-    <div style="background:#1e3a5f;color:#fff;padding:20px 24px;border-radius:12px 12px 0 0">
-      <div style="font-size:12px;opacity:.8;text-transform:uppercase;letter-spacing:.5px">Centre Équestre d'Agon-Coutainville</div>
-      <h1 style="margin:6px 0 0;font-size:20px">Votre avis nous intéresse</h1>
-    </div>
-    <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px">
-      <p>Bonjour,</p>
-      <p>${childFirst ? `${childFirst} vient` : "Votre enfant vient"} de participer à la promenade <strong>${baladeLabel}</strong>.
-      Pour nous aider à progresser, pourriez-vous nous donner votre avis ? Cela prend moins d'une minute.</p>
-      <p style="text-align:center;margin:28px 0">
-        <a href="${link}" style="background:#1e3a5f;color:#fff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:bold;display:inline-block">Donner mon avis</a>
-      </p>
-      <p style="font-size:12px;color:#64748b">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br>${link}</p>
-      <p style="margin-top:24px">Merci, et à très bientôt !<br>L'équipe du Centre Équestre d'Agon-Coutainville</p>
-    </div>
-  </div>`;
+  return emailSatisfaction(
+    "Votre avis nous intéresse",
+    `${childFirst ? `${childFirst} vient` : "Votre enfant vient"} de participer à la promenade <strong>${baladeLabel}</strong>.`,
+    link,
+  );
 }
 
 /**

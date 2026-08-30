@@ -6,6 +6,12 @@ import { refreshEmailMode, isRecipientAllowed } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 import { renderDerouleStage } from "@/lib/stage-deroule";
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
+import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
+
+const POLICE_LISTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -175,19 +181,19 @@ export async function POST(req: NextRequest) {
           ? "stage"
           : String((premiers[0].exists ? (premiers[0].data() as any) : null)?.activityType || "");
         const subject = `Inscription enregistrée — règlement ${modeLisible} à remettre`;
-        const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-          <p>Bonjour <strong>${fam.parentName || ""}</strong>,</p>
-          <p>Votre inscription est bien <strong>enregistrée</strong> :</p>
-          <ul style="padding-left:18px;color:#334155;font-size:14px;">${lignes}</ul>
-          <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:14px;margin:16px 0;">
-            <p style="margin:0;color:#9a3412;font-weight:600;">💶 Règlement de ${totalTTC.toFixed(2)}€ par ${modeLisible} à remettre au bureau</p>
-            <p style="margin:6px 0 0;color:#7c2d12;font-size:13px;">Votre place est réservée en attendant la remise de votre règlement (sous 7 jours).
-            Vous recevrez une confirmation dès sa réception.</p>
-          </div>
-          ${derouleHtml}
-          ${encadreConditionsPourType(typePourCgv)}
-          <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
-        </div>`;
+        const html = emailLayout([
+          emailTitre("Inscription enregistrée"),
+          P(`Bonjour <strong>${fam.parentName || ""}</strong>,`),
+          P("Votre inscription est bien <strong>enregistrée</strong> :"),
+          `<ul style="margin:0 0 4px;padding-left:18px;font-family:${POLICE_LISTE};font-size:14px;line-height:1.8;color:${CE.texte};">${lignes}</ul>`,
+          emailPanneau("Règlement à remettre au bureau", [
+            emailLigne(`Montant, par ${modeLisible}`, `${totalTTC.toFixed(2).replace(".", ",")}&nbsp;€`),
+            P("Votre place est réservée en attendant la remise de votre règlement, sous 7 jours. Vous recevrez une confirmation dès sa réception.", 13),
+          ].join("")),
+          derouleHtml,
+          encadreConditionsPourType(typePourCgv),
+          emailSignature(),
+        ].join("\n"), `Règlement de ${totalTTC.toFixed(2).replace(".", ",")} € par ${modeLisible} à remettre`);
         const r = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
