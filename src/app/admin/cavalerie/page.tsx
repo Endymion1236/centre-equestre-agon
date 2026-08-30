@@ -239,7 +239,7 @@ export default function CavaleriePage() {
       </div>
 
       <div className="mb-6 rounded-2xl border border-gray-200 bg-white p-2 shadow-[0_5px_24px_rgba(12,26,46,0.035)]">
-        <div className="flex gap-1.5 overflow-x-auto hide-scrollbar">
+        <div className="flex flex-wrap gap-1.5 sm:flex-nowrap sm:overflow-x-auto hide-scrollbar">
           {TABS.map(t => (
             <button type="button"
               key={t.id}

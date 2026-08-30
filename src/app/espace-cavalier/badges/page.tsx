@@ -90,7 +90,7 @@ export default function BadgesPage() {
       </div>
 
       {children.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-2 mb-5">
+        <div className="flex flex-wrap gap-2 pb-2 mb-5 sm:flex-nowrap sm:overflow-x-auto">
           {children.map((item: any) => {
             const active = item.id === child?.id;
             return (

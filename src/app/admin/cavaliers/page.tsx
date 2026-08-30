@@ -251,7 +251,7 @@ export default function CavaliersPage() {
           )}
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1 mt-3">
+        <div className="flex flex-wrap gap-2 pb-1 mt-3 sm:flex-nowrap sm:overflow-x-auto">
           {SEGMENTS.map((segment) => {
             const count = segment.id ? families.filter((family) => (family as any).tags?.includes(segment.id)).length : families.length;
             const active = filterTag === segment.id;
