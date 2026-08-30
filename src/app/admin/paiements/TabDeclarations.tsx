@@ -8,7 +8,10 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Check, X, CreditCard, Sparkles, AlertTriangle, Plus, Trash2, Search } from "lucide-react";
 import { paymentModes } from "./types";
 import { normalizePayment } from "./utils";
-import { emailTemplates } from "@/lib/email-templates";
+import {
+  emailTemplates, emailLayout, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature,
+} from "@/lib/email-templates";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { authFetch } from "@/lib/auth-fetch";
 import { renderDerouleStage } from "@/lib/stage-deroule";
@@ -189,18 +192,19 @@ export function TabDeclarations({
                             template: "confirmationDeclaration",
                             familyId: decl.familyId,
                             paymentId: decl.paymentId,
-                            html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                              <p>Bonjour <strong>${decl.familyName}</strong>,</p>
-                              <p>Nous avons bien reçu votre règlement :</p>
-                              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                                <p style="margin:0;color:#166534;font-weight:600;">✅ ${decl.montant.toFixed(2)}€ — ${decl.mode === "cheque" ? "Chèque" : decl.mode === "virement" ? "Virement" : "Espèces"}</p>
-                                <p style="margin:8px 0 0;color:#555;font-size:13px;">${decl.activityTitle}</p>
-                              </div>
-                              <p style="color:#166534;font-size:14px;">Votre inscription est confirmée.</p>
-                              ${derouleHtml}
-                              ${encadreConditionsPourType(typeCgv)}
-                              <p>À bientôt au centre équestre !</p>
-                            </div>`,
+                            html: emailLayout([
+                              emailTitre("Règlement bien reçu"),
+                              P(`Bonjour <strong>${decl.familyName}</strong>,`),
+                              P("Nous avons bien reçu votre règlement, et votre inscription est confirmée."),
+                              emailPanneau("Détail", [
+                                emailLigne("Montant", `${decl.montant.toFixed(2).replace(".", ",")}&nbsp;€`),
+                                emailLigne("Mode de règlement", decl.mode === "cheque" ? "Chèque" : decl.mode === "virement" ? "Virement" : "Espèces"),
+                                emailLigne("Prestations", decl.activityTitle),
+                              ].join("")),
+                              derouleHtml,
+                              encadreConditionsPourType(typeCgv),
+                              emailSignature("Merci de votre confiance."),
+                            ].join("\n"), `${decl.montant.toFixed(2).replace(".", ",")} € reçus — ${decl.activityTitle}`),
                           }),
                         }).catch(() => {});
                       }

@@ -17,6 +17,12 @@ import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 import { CATEGORIES_COMPTABLES } from "@/lib/categories-comptables";
+import {
+  emailLayout, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
+
+const POLICE_MAIL = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 interface TabEncaisserProps {
   families: (Family & { firestoreId: string })[];
@@ -455,33 +461,23 @@ export function TabEncaisser({
 
       // Prévenir la famille — best effort, la commande est déjà enregistrée.
       if (selectedFam?.parentEmail) {
-        const lignesHtml = basket.map(i => `
-          <tr>
-            <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e3a5f;">${i.activityTitle}${i.childName ? `<br><span style="font-size:11px;color:#94a3b8;">${i.childName}</span>` : ""}</td>
-            <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;font-weight:600;color:#1e3a5f;">${i.priceTTC.toFixed(2)}€</td>
-          </tr>`).join("");
-        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-          <div style="background:#0C1A2E;padding:24px;border-radius:12px 12px 0 0;">
-            <h1 style="color:#F0A010;margin:0;font-size:22px;">🐴 Centre Équestre d'Agon-Coutainville</h1>
-            <p style="color:#94a3b8;margin:4px 0 0;font-size:13px;">Votre commande est enregistrée</p>
-          </div>
-          <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
-            <p style="color:#1e3a5f;">Bonjour <strong>${selectedFam?.parentName || ""}</strong>,</p>
-            <p style="color:#555;">Nous avons enregistré votre commande. Aucun paiement n'a été prélevé :</p>
-            <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-              <tbody>${lignesHtml}</tbody>
-              <tfoot>
-                <tr style="background:#fff7ed;">
-                  <td style="padding:12px;font-weight:bold;color:#1e3a5f;">Total à régler</td>
-                  <td style="padding:12px;text-align:right;font-size:20px;font-weight:bold;color:#1e3a5f;">${basketTotal.toFixed(2)}€</td>
-                </tr>
-              </tfoot>
-            </table>
-            <p style="color:#555;font-size:13px;">Vous pouvez régler <strong>quand vous le souhaitez</strong> : en ligne par carte depuis votre <strong>espace famille</strong> (rubrique Paiements → « À régler »), ou directement au centre équestre (CB, chèque, espèces…).</p>
-            <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0;">
-            <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Agon-Coutainville, Normandie</p>
-          </div>
-        </div>`;
+        const lignesHtml = basket.map(i => emailLigne(
+          `${i.activityTitle}${i.childName ? ` <span style="color:${CE.gris};font-size:12px;">— ${i.childName}</span>` : ""}`,
+          `${i.priceTTC.toFixed(2).replace(".", ",")}&nbsp;€`,
+        )).join("");
+        const html = emailLayout([
+          emailTitre("Votre commande est enregistrée"),
+          P(`Bonjour <strong>${selectedFam?.parentName || ""}</strong>,`),
+          P("Nous avons enregistré votre commande. Aucun paiement n'a été prélevé."),
+          emailPanneau("Détail", lignesHtml + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:8px;border-top:1px solid ${CE.bord};">
+            <tr>
+              <td style="padding:9px 0 0;font-family:${POLICE_MAIL};font-size:13px;font-weight:700;color:${CE.encre};">Total à régler</td>
+              <td align="right" style="padding:9px 0 0;font-family:Georgia,serif;font-size:19px;color:${CE.encre};">${basketTotal.toFixed(2).replace(".", ",")}&nbsp;€</td>
+            </tr>
+          </table>`),
+          P("Vous pouvez régler <strong>quand vous le souhaitez</strong> : en ligne par carte depuis votre espace famille, rubrique Paiements → « À régler », ou directement au centre équestre (carte, chèque, espèces).", 14),
+          emailSignature(),
+        ].join("\n"), `Commande de ${basketTotal.toFixed(2).replace(".", ",")} € à régler`);
         authFetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
