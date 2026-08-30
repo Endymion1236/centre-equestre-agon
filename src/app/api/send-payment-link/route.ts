@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prestationsCourtes } from "@/lib/email-prestations";
+import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe, emailSignature, emailCouleurs as COULEURS, euros, eurosTexte,
+} from "@/lib/email-templates";
+
+const POLICE_TEXTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
@@ -87,9 +93,9 @@ export async function POST(req: NextRequest) {
     // dans le mail reçu. prestationsCourtes ne l'ajoute que s'il manque.
     const prestations = prestationsCourtes(payData.items || []);
 
-    const htmlMessage = message 
-      ? message.replace(/\n/g, "<br/>")
-      : `<p>Bonjour,</p><p>Veuillez trouver ci-dessous le lien de paiement pour régler <strong>${amount.toFixed(2)}€</strong> pour : ${prestations}.</p>`;
+    const htmlMessage = message
+      ? emailParagraphe(message.replace(/\n/g, "<br/>"))
+      : emailParagraphe("Bonjour,") + emailParagraphe(`Voici le lien de paiement pour régler <strong>${euros(amount)}</strong> — ${prestations}.`);
 
     // Générer les QR codes (CAWL pour paiement carte, SEPA pour virement bancaire).
     // On utilise le mécanisme CID (Content-ID) de Resend plutôt que des images
@@ -107,63 +113,50 @@ export async function POST(req: NextRequest) {
     const cidSEPA = `qr-sepa`;
 
     // Section HTML des QR codes (référence par cid:, pas par data:image)
-    const qrSection = (qrCAWL || qrSEPA) ? `
-      <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px;">
-        <p style="margin: 0 0 12px; font-size: 13px; color: #6b7280; text-align: center;">
-          Vous pouvez aussi <strong>scanner</strong> avec votre téléphone :
-        </p>
-        <table style="width: 100%; border-collapse: collapse;" cellpadding="0" cellspacing="0">
+    // Section QR — mêmes images (référencées par cid:, pas par data:), mise
+    // en page reprise du reste des emails.
+    const qrSection = (qrCAWL || qrSEPA) ? emailPanneau("Ou scannez avec votre téléphone", `
+        <table role="presentation" style="width:100%;border-collapse:collapse;" cellpadding="0" cellspacing="0">
           <tr>
             ${qrCAWL ? `
-            <td style="text-align: center; vertical-align: top; padding: 8px;">
-              <img src="cid:${cidCAWL}" alt="QR Code paiement carte" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
-              <p style="margin: 8px 0 0; font-size: 12px; color: #1e3a5f; font-weight: bold;">💳 Paiement carte</p>
-              <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280;">Instantané, scannez avec l'appareil photo</p>
+            <td style="text-align:center;vertical-align:top;padding:8px;">
+              <img src="cid:${cidCAWL}" alt="QR Code paiement carte" style="display:block;margin:0 auto;width:140px;height:140px;border:0;" />
+              <div style="margin:10px 0 0;font-family:${POLICE_TEXTE};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${COULEURS.encre};">Paiement carte</div>
+              <div style="margin:3px 0 0;font-family:${POLICE_TEXTE};font-size:12px;color:${COULEURS.gris};">Instantané, avec l'appareil photo</div>
             </td>
             ` : ""}
             ${qrSEPA ? `
-            <td style="text-align: center; vertical-align: top; padding: 8px;">
-              <img src="cid:${cidSEPA}" alt="QR Code virement SEPA" style="display: block; margin: 0 auto; width: 140px; height: 140px;" />
-              <p style="margin: 8px 0 0; font-size: 12px; color: #1e3a5f; font-weight: bold;">🏦 Virement bancaire</p>
-              <p style="margin: 2px 0 0; font-size: 11px; color: #6b7280;">Compatible ING, Boursorama, Revolut, BNP Pro</p>
+            <td style="text-align:center;vertical-align:top;padding:8px;">
+              <img src="cid:${cidSEPA}" alt="QR Code virement SEPA" style="display:block;margin:0 auto;width:140px;height:140px;border:0;" />
+              <div style="margin:10px 0 0;font-family:${POLICE_TEXTE};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${COULEURS.encre};">Virement bancaire</div>
+              <div style="margin:3px 0 0;font-family:${POLICE_TEXTE};font-size:12px;color:${COULEURS.gris};">ING, Boursorama, Revolut, BNP Pro…</div>
             </td>
             ` : ""}
           </tr>
         </table>
-      </div>
-    ` : "";
+    `) : "";
 
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <div style="background: #1e3a5f; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 20px;">Centre Équestre d'Agon-Coutainville</h1>
-        </div>
-        <div style="padding: 24px; background: #f9fafb; border: 1px solid #e5e7eb;">
-          ${htmlMessage}
-          <div style="margin: 24px 0; text-align: center;">
-            <a href="${paymentUrl}" style="display: inline-block; background: #16a34a; color: white; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: bold;">
-              Payer ${amount.toFixed(2)}€
-            </a>
-          </div>
-          <div style="background: white; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-top: 16px;">
-            <p style="margin: 0 0 8px; font-size: 13px; color: #6b7280;">Détail :</p>
-            <p style="margin: 0; font-size: 14px;"><strong>Famille :</strong> ${payData.familyName}</p>
-            <p style="margin: 4px 0 0; font-size: 14px;"><strong>Prestations :</strong> ${prestations}</p>
-            <p style="margin: 4px 0 0; font-size: 14px;"><strong>Montant :</strong> ${amount.toFixed(2)}€</p>
-            ${amount < resteDu ? `<p style="margin: 4px 0 0; font-size: 13px; color: #f97316;">Reste dû après ce paiement : ${(resteDu - amount).toFixed(2)}€</p>` : ""}
-          </div>
-          ${qrSection}
-          <p style="font-size: 12px; color: #9ca3af; margin-top: 20px;">Paiement sécurisé par CAWL / Crédit Agricole. Ce lien est valable 2 heures.</p>
-        </div>
-        <div style="text-align: center; padding: 12px; font-size: 11px; color: #9ca3af;">
-          Centre Équestre d'Agon-Coutainville · 02 44 84 99 96
-        </div>
-      </div>
-    `;
+    // Habillage commun (lib/email-templates). Ce message portait sa propre
+    // mise en forme — Arial, fond gris, en-tête bleu — sans rapport avec les
+    // autres. Or c'est souvent le premier email qu'une famille reçoit.
+    const emailHtml = emailLayout([
+      emailTitre("Votre lien de paiement"),
+      htmlMessage,
+      emailButton(`Payer ${euros(amount)}`, paymentUrl),
+      emailPanneau("Détail", [
+        emailLigne("Famille", String(payData.familyName || "")),
+        emailLigne("Prestations", prestations),
+        emailLigne("Montant", euros(amount)),
+        amount < resteDu ? emailLigne("Reste dû après ce paiement", euros(resteDu - amount)) : "",
+      ].join("")),
+      qrSection,
+      emailParagraphe(`<span style="color:${COULEURS.discret};">Paiement sécurisé par CAWL — Crédit Agricole. Ce lien est valable 2 heures.</span>`, 11),
+      emailSignature(),
+    ].join("\n"), `${euros(amount)} — ${prestations}`);
 
     // Envoyer via Resend
     const resendKey = process.env.RESEND_API_KEY;
-    const subject = `Lien de paiement — ${amount.toFixed(2)}€ — Centre Équestre`;
+    const subject = `Lien de paiement — ${eurosTexte(amount)}`;
     const sentByUid = (auth as any)?.uid || "admin";
     await refreshEmailMode();
     if (resendKey && !isRecipientAllowed(recipientEmail)) {

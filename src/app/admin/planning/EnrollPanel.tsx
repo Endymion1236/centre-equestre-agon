@@ -1972,8 +1972,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const noms = stageLines.map(l => l.childName).join(", ");
         setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7)` : ""}`);
 
-        // Envoyer email de confirmation stage automatiquement
-        if (fam.parentEmail) {
+        // Envoyer email de confirmation stage automatiquement.
+        //
+        // Sauf quand l'acompte vient d'être encaissé au comptoir : dans ce
+        // cas /api/admin/stage-acompte-recu a déjà envoyé « Acompte confirmé —
+        // la place est réservée », qui dit la même chose en mieux. La famille
+        // recevait les deux à une seconde d'intervalle.
+        const acompteEncaisseAuComptoir = showAcompte && acompteReglement === "sur_place";
+        if (fam.parentEmail && !acompteEncaisseAuComptoir) {
           try {
             const dates = creneauxAInscrire.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })).join(", ");
             // Deroule des 2 sequences : chaine vide si le reglage n'est pas
@@ -1986,8 +1992,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               stageTitle: creneau.activityTitle,
               dates: stageMode === "jour" ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : dates,
               totalTTC: stageTotalTTC,
-              acompte: stageAcompte,
-              solde: stageSolde,
+              acompte: showAcompte ? stageAcompte : undefined,
+              solde: showAcompte ? stageSolde : undefined,
+              // L'acompte n'est pas encore réglé : le message doit annoncer
+              // une place retenue, pas une inscription acquise. Le lien de
+              // paiement part dans un message séparé (send-payment-link).
+              lienSepare: showAcompte && acompteReglement === "lien",
               derouleHtml,
             });
             authFetch("/api/send-email", {
@@ -2002,19 +2012,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 creneauId: creneau.id,
               }),
             }).catch(e => console.warn("Email stage:", e));
-
-            // Notification push
-            authFetch("/api/push", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                familyId: fam.firestoreId,
-                title: `✅ Inscription confirmée`,
-                body: `${noms} inscrit(s) au stage ${creneau.activityTitle}`,
-                url: "/espace-cavalier/reservations",
-              }),
-            }).catch(() => {});
           } catch (e) { console.error("Email confirmation stage:", e); }
+        }
+
+        // Notification push — hors du bloc email : elle doit partir aussi quand
+        // l'acompte a été encaissé au comptoir, cas où l'email de confirmation
+        // est volontairement omis. Son titre suit l'état réel de la place.
+        {
+          const enAttenteAcompte = showAcompte && acompteReglement === "lien";
+          authFetch("/api/push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              familyId: fam.firestoreId,
+              title: enAttenteAcompte ? "Inscription enregistrée — acompte à régler" : "Inscription confirmée",
+              body: enAttenteAcompte
+                ? `${noms} : la place au stage ${creneau.activityTitle} est retenue jusqu'au règlement de l'acompte.`
+                : `${noms} inscrit(s) au stage ${creneau.activityTitle}`,
+              url: enAttenteAcompte ? "/espace-cavalier/factures" : "/espace-cavalier/reservations",
+            }),
+          }).catch(() => {});
         }
 
         panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? (acompteReglement === "sur_place" ? ` (acompte ${stageAcompte}€ encaissé + solde J-7)` : ` (acompte ${stageAcompte}€ + solde J-7)`) : " — paiement en attente"}`, "success");

@@ -270,6 +270,22 @@ export const emailTemplates = {
 
   // ═══ INSCRIPTIONS ═══
 
+  /**
+   * Inscription à un stage. Trois états, et non deux.
+   *
+   * Le message annonçait « Inscription confirmée » puis réclamait un acompte
+   * « à régler maintenant » dans le même souffle : la famille lisait qu'elle
+   * était inscrite et qu'il lui restait à payer pour l'être. L'acompte
+   * n'ayant pas encore été réglé, la place n'est justement pas acquise —
+   * c'est même tout l'intérêt de demander un acompte.
+   *
+   *   paiementConfirme   le stage est payé en entier  → « validée et payée »
+   *   acompte dû, non réglé  → « inscription enregistrée », place retenue
+   *   acompteRegle       l'acompte est encaissé       → place acquise, solde à venir
+   *
+   * L'objet du message suit l'état : il n'y a rien de plus déroutant qu'un
+   * objet qui dit « confirmée » au-dessus d'un corps qui demande de payer.
+   */
   confirmationStage: (vars: {
     parentName: string;
     enfants: { name: string; prix: number; remise: number }[];
@@ -280,20 +296,35 @@ export const emailTemplates = {
     solde?: number;
     paiementConfirme?: boolean; // Optionnel : true si paiement deja regle (webhook CAWL)
     montantRegle?: number; // Optionnel : montant effectivement regle si different du total
+    /** L'acompte a été encaissé (comptoir ou en ligne) : la place est acquise. */
+    acompteRegle?: boolean;
+    /** Le lien de paiement part dans un message séparé : on l'annonce. */
+    lienSepare?: boolean;
     // Bloc « Comment se deroule la seance » (cf. lib/stage-deroule). Chaine
     // vide tant que le reglage n'est pas saisi : rien ne s'affiche alors.
     derouleHtml?: string;
-  }) => ({
+  }) => {
+    const acompteDu = !vars.paiementConfirme && !vars.acompteRegle
+      && !!vars.acompte && !!vars.solde && vars.solde > 0;
+    return {
     subject: vars.paiementConfirme
       ? `Paiement confirmé — ${vars.stageTitle}`
-      : `Inscription confirmée — ${vars.stageTitle}`,
+      : acompteDu
+        ? `Inscription enregistrée — acompte à régler — ${vars.stageTitle}`
+        : `Inscription confirmée — ${vars.stageTitle}`,
     html: wrap(`
       ${vars.paiementConfirme
         ? etat("Paiement confirmé", `${euros((vars.montantRegle ?? vars.totalTTC))} réglés`, C.vert)
-        : ""}
-      ${titre(vars.paiementConfirme ? "Inscription validée et payée" : "Inscription confirmée")}
+        : vars.acompteRegle && vars.acompte
+          ? etat("Acompte reçu", `${euros(vars.acompte)}`, C.vert)
+          : ""}
+      ${titre(vars.paiementConfirme
+        ? "Inscription validée et payée"
+        : acompteDu ? "Il reste une étape" : "Inscription confirmée")}
       ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
-      ${p(`L'inscription au stage <strong style="color:${C.encre};">${vars.stageTitle}</strong> est ${vars.paiementConfirme ? "validée et payée" : "confirmée"}.`)}
+      ${p(acompteDu
+        ? `Nous avons enregistré l'inscription au stage <strong style="color:${C.encre};">${vars.stageTitle}</strong>. La place est retenue ; elle sera définitivement acquise dès réception de l'acompte.`
+        : `L'inscription au stage <strong style="color:${C.encre};">${vars.stageTitle}</strong> est ${vars.paiementConfirme ? "validée et payée" : "confirmée"}.`)}
       ${panneau(vars.dates, `
         ${vars.enfants.map(e => ligne(
           e.name + (e.remise > 0 ? ` <span style="color:${C.gris};font-size:12px;">(remise ${e.remise} €)</span>` : ""),
@@ -307,14 +338,24 @@ export const emailTemplates = {
         </table>
       `)}
       ${vars.derouleHtml || ""}
-      ${!vars.paiementConfirme && vars.acompte && vars.solde && vars.solde > 0 ? panneau("Modalités de paiement", `
-        ${ligne("Acompte à régler maintenant", `${euros(vars.acompte)}`)}
-        ${ligne("Solde, 7 jours avant le stage", `${euros(vars.solde)}`)}
-        ${p(`Un rappel avec le lien de paiement vous sera envoyé automatiquement.`, 12)}
+      ${acompteDu ? panneau("Ce qu'il reste à faire", `
+        ${ligne("Acompte, pour valider la place", `${euros(vars.acompte!)}`)}
+        ${ligne("Solde, 7 jours avant le stage", `${euros(vars.solde!)}`)}
+        ${p(vars.lienSepare
+          ? "Vous recevez le lien de paiement de l'acompte dans un message séparé. Le solde vous sera réclamé automatiquement une semaine avant le stage."
+          : "L'acompte se règle depuis votre espace client. Le solde vous sera réclamé automatiquement une semaine avant le stage.", 12)}
       `) : ""}
+      ${vars.acompteRegle && vars.solde && vars.solde > 0 ? panneau("Reste à venir", `
+        ${ligne("Solde, 7 jours avant le stage", `${euros(vars.solde)}`)}
+        ${p("Un rappel avec le lien de paiement vous sera envoyé automatiquement.", 12)}
+      `) : ""}
+      ${acompteDu && !vars.lienSepare ? button("Régler l'acompte", `${SITE_URL}/espace-cavalier/factures`) : ""}
       ${signature()}
-    `, `${vars.dates} · ${vars.enfants.map((e) => e.name).join(", ")}`),
-  }),
+    `, acompteDu
+        ? `Acompte de ${euros(vars.acompte!)} à régler · ${vars.dates}`
+        : `${vars.dates} · ${vars.enfants.map((e) => e.name).join(", ")}`),
+    };
+  },
 
   confirmationCours: (vars: {
     parentName: string;

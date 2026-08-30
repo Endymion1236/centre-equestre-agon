@@ -47,12 +47,21 @@ const EXEMPLES = [
     prestations: "Stage poney Toussaint — Léa, Tom", mode: "Carte bancaire",
   }),
   // ── Gabarits de lib/email-templates ──
+  // Acompte encore dû : la place est retenue, pas acquise.
   T.confirmationStage({
     parentName: "Marie Lefèvre",
     enfants: [{ name: "Léa Lefèvre", prix: 145, remise: 0 }, { name: "Tom Lefèvre", prix: 130, remise: 15 }],
     stageTitle: "Stage poney — Toussaint",
     dates: "Du lundi 19 au vendredi 23 octobre 2026",
-    totalTTC: 275, acompte: 82.5, solde: 192.5,
+    totalTTC: 275, acompte: 82.5, solde: 192.5, lienSepare: true,
+  }),
+  // Acompte encaissé au comptoir : place acquise, solde à venir.
+  T.confirmationStage({
+    parentName: "Marie Lefèvre",
+    enfants: [{ name: "Léa Lefèvre", prix: 145, remise: 0 }],
+    stageTitle: "Stage poney — Toussaint",
+    dates: "Du lundi 19 au vendredi 23 octobre 2026",
+    totalTTC: 145, acompte: 30, solde: 115, acompteRegle: true,
   }),
   T.confirmationStage({
     parentName: "Marie Lefèvre",
