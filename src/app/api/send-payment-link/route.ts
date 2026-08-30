@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prestationsCourtes } from "@/lib/email-prestations";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
@@ -81,9 +82,10 @@ export async function POST(req: NextRequest) {
     const { url: paymentUrl } = await cawlRes.json();
 
     // 3. Envoyer l'email avec le lien
-    const prestations = (payData.items || []).map((i: any) => 
-      `${i.activityTitle || "Prestation"}${i.childName ? ` — ${i.childName}` : ""}`
-    ).join(", ");
+    // Le panier a DÉJÀ mis le prénom dans activityTitle : le recoller donnait
+    // « Stage galop de bronze — Aurèle COSTEGROSSE — Aurèle COSTEGROSSE »
+    // dans le mail reçu. prestationsCourtes ne l'ajoute que s'il manque.
+    const prestations = prestationsCourtes(payData.items || []);
 
     const htmlMessage = message 
       ? message.replace(/\n/g, "<br/>")
