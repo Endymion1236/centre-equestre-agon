@@ -655,17 +655,29 @@ export default function SepaPage() {
   // un mandat, et rien ne dit lequel à la lecture. Un mandat révoqué à côté
   // d'un mandat actif est normal — c'est la trace du remplacement, on ne
   // signale donc que les actifs en double.
+  //
+  // Plusieurs mandats actifs ne sont PAS toujours une erreur : un mandat pour
+  // les pensions et un autre pour les forfaits, ou un par parent séparé, sont
+  // des situations voulues. Le libellé est là pour le dire — quand chacun
+  // porte un libellé distinct, l'intention est explicite et on ne signale
+  // rien. Ne restent signalés que les mandats qu'on ne peut pas distinguer.
+  const parFamille = mandats
+    .filter(m => m.status === "active")
+    .reduce<Record<string, MandatSepa[]>>((acc, m) => {
+      const cle = m.familyId || m.familyName || "";
+      if (cle) (acc[cle] = acc[cle] || []).push(m);
+      return acc;
+    }, {});
+
   const famillesEnDouble = new Set(
-    Object.entries(
-      mandats
-        .filter(m => m.status === "active")
-        .reduce<Record<string, number>>((acc, m) => {
-          const cle = m.familyId || m.familyName || "";
-          if (cle) acc[cle] = (acc[cle] || 0) + 1;
-          return acc;
-        }, {})
-    )
-      .filter(([, n]) => n > 1)
+    Object.entries(parFamille)
+      .filter(([, liste]) => {
+        if (liste.length < 2) return false;
+        const libelles = liste.map(m => (m.libelle || "").trim().toLowerCase());
+        const tousNommes = libelles.every(l => l.length > 0);
+        const tousDistincts = new Set(libelles).size === libelles.length;
+        return !(tousNommes && tousDistincts);
+      })
       .map(([cle]) => cle)
   );
 
@@ -922,8 +934,11 @@ export default function SepaPage() {
                   </div>
                   <div className="font-body text-xs text-gray-600 leading-relaxed">
                     La liste est triée par nom : les mandats concernés sont côte à côte, signalés
-                    « Doublon ». Gardez celui qui porte le bon IBAN et <strong>révoquez l’autre</strong>
-                    {" "}— la révocation le conserve comme preuve, contrairement à la suppression.
+                    « Doublon ». Si l’un doublonne l’autre, gardez celui qui porte le bon IBAN et
+                    {" "}<strong>révoquez l’autre</strong> — la révocation le conserve comme preuve,
+                    contrairement à la suppression. S’ils sont <strong>voulus tous les deux</strong>
+                    {" "}(un pour les pensions, un pour les forfaits, ou un par parent), donnez à chacun
+                    un libellé distinct : ils ne seront plus signalés.
                   </div>
                 </Card>
               )}
