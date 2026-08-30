@@ -161,6 +161,13 @@ export async function loadTemplate(
     body = body.replace(/\{fidelite\}/g, bloc);
   }
 
+  // {dateSolde} : une date réelle vaut mieux que « 7 jours avant le stage »,
+  // qui oblige la famille à compter. Quand l'appelant ne la connaît pas, on
+  // retombe sur l'ancienne formulation plutôt que d'afficher un trou.
+  if (body.includes("{dateSolde}") && !variables.dateSolde) {
+    body = body.replace(/Solde, avant le \{dateSolde\}/g, "Solde restant");
+  }
+
   for (const [varKey, value] of Object.entries(variables)) {
     const regex = new RegExp(`\\{${varKey}\\}`, "g");
     const strValue = CLES_MONTANT.has(varKey) ? formaterMontant(value) : String(value);

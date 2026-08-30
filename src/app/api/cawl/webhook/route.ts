@@ -14,7 +14,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage } from "@/lib/email-prestations";
+import { prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 
 export const dynamic = "force-dynamic";
@@ -374,6 +374,7 @@ export async function POST(req: NextRequest) {
                   montant: paidAmount.toFixed(2),
                   acompte: paidAmount.toFixed(2),
                   solde: soldeRestant.toFixed(2),
+                  dateSolde: dateEcheanceSolde(pData.stageDate),
                   total: (pData.totalTTC || 0).toFixed(2),
                   soldePhrase,
                 };

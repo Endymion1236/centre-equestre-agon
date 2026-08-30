@@ -8,6 +8,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { emailTemplates } from "@/lib/email-templates";
+import { dateEcheanceSolde } from "@/lib/email-prestations";
 import { generateOrderId, emailValide } from "@/lib/utils";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "@/app/admin/paiements/types";
@@ -1998,6 +1999,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               // une place retenue, pas une inscription acquise. Le lien de
               // paiement part dans un message séparé (send-payment-link).
               lienSepare: showAcompte && acompteReglement === "lien",
+              // Date réelle d'échéance du solde plutôt que « 7 jours avant le
+              // stage » : la famille n'a pas à compter, et une date se retient.
+              dateSolde: showAcompte ? dateEcheanceSolde(creneauxAInscrire[0]?.date || creneau.date) : undefined,
               derouleHtml,
             });
             authFetch("/api/send-email", {

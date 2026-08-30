@@ -42,7 +42,7 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       emailPanneau("Récapitulatif du paiement", [
         emailLigne("Total du stage", "{total}&nbsp;€"),
         emailLigne("Acompte réglé ce jour", "−{acompte}&nbsp;€"),
-        emailLigne('<strong style="color:' + C.encre + ';">Solde restant</strong>', '<span style="color:' + C.rouge + ';">{solde}&nbsp;€</span>'),
+        emailLigne('<strong style="color:' + C.encre + ';">Solde, avant le {dateSolde}</strong>', '<span style="color:' + C.rouge + ';">{solde}&nbsp;€</span>'),
         P("{soldePhrase}", 12),
       ].join("")),
       "{fidelite}",
@@ -107,7 +107,7 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       P("Petit rappel pour demain{childrenStr} :"),
       "{lignes}",
       emailPanneau("", P("Casque obligatoire, tenue adaptée recommandée.", 13)),
-      emailSignature("À demain."),
+      emailSignature("À demain au centre équestre."),
     ].join("\n"),
   },
   rappelImpaye: {
@@ -122,7 +122,7 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       ].join("")),
       emailButton("Régler en ligne", SITE_URL + "/espace-cavalier/factures"),
       P("Merci de régulariser à votre convenance. Si ce règlement a déjà été fait, ce message est sans objet.", 13),
-      emailSignature("Merci d'avance."),
+      emailSignature("Avec nos remerciements."),
     ].join("\n"),
   },
   bienvenue: {
@@ -133,7 +133,7 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       P("Votre espace personnel est prêt : vous pouvez y inscrire vos enfants, réserver stages et balades, et suivre vos règlements."),
       emailButton("Accéder à mon espace", SITE_URL + "/espace-cavalier"),
       P("Une question ? Appelez-nous au 02 44 84 99 96.", 14),
-      emailSignature("Au plaisir de vous accueillir."),
+      emailSignature(),
     ].join("\n"),
   },
   confirmationPaiement: {
@@ -165,7 +165,7 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       ].join("")),
       P("<strong>Rendez-vous</strong> au parking du centre équestre, 15 minutes avant le départ.", 14),
       P("<strong>À prévoir :</strong> pantalon long, chaussures fermées. Bombe fournie si besoin.", 14),
-      emailSignature("Bonne balade."),
+      emailSignature("Bonne balade !"),
     ].join("\n"),
   },
   confirmationAbonnement: {

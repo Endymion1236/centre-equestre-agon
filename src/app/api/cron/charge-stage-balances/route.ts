@@ -187,7 +187,7 @@ export async function GET(req: NextRequest) {
                 P(`Le solde du stage <strong>${stageTitle}</strong>, qui commence le ${j7Label}, vient d'être prélevé sur votre carte enregistrée.`),
                 P("Aucune action n'est requise. La facture est disponible dans votre espace.", 14),
                 emailButton("Voir ma facture", `${appUrl}/espace-cavalier/factures`),
-                emailSignature("À très bientôt au centre équestre."),
+                emailSignature(),
               ].join("\n"), `${euros(solde)} prélevés — ${stageTitle}`);
               const r = await fetch("https://api.resend.com/emails", {
                 method: "POST",

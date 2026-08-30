@@ -13,7 +13,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage } from "@/lib/email-prestations";
+import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
 
@@ -434,6 +434,7 @@ export async function GET(req: NextRequest) {
             // Variables spécifiques au template acompte
             acompte: paidAmount.toFixed(2),
             solde: soldeRestant.toFixed(2),
+            dateSolde: dateEcheanceSolde(pData.stageDate),
             total: (pData.totalTTC || 0).toFixed(2),
             soldePhrase,
           } : {

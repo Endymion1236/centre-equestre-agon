@@ -42,7 +42,11 @@
 const CLUB_NAME = "Centre Équestre d'Agon-Coutainville";
 const CLUB_TEL = "02 44 84 99 96";
 const CLUB_EMAIL = "ceagon@orange.fr";
+const CLUB_MOBILE = "06 09 02 71 59";
 const SITE_URL = "https://centre-equestre-agon.vercel.app";
+/** Site vitrine, différent de l'application : c'est lui qu'on montre. */
+const SITE_VITRINE = "https://www.centreequestreagon.com";
+const ADRESSE = { rue: "56 Charrière du Commerce", cp: "50230", ville: "Agon-Coutainville" } as const;
 
 // ═══ La palette, et rien d'autre ═══
 // Reprise du site (cf. lib/config COLORS) pour que l'email et l'espace
@@ -62,6 +66,9 @@ const C = {
   rouge: "#B3261E",   // état : dû
 } as const;
 
+const POLICE = "Georgia,'Times New Roman',serif";
+const POLICE_TEXTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
 /**
  * Montant à la française : virgule décimale et espace insécable avant l'euro.
  *
@@ -78,9 +85,6 @@ export function euros(n: number): string {
 export function eurosTexte(n: number): string {
   return n.toFixed(2).replace(".", ",") + "\u00A0€";
 }
-
-const POLICE = "Georgia,'Times New Roman',serif";
-const POLICE_TEXTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 /**
  * Enveloppe commune : fond sable, carte blanche de 600 px, en-tête au logo,
@@ -118,10 +122,13 @@ function wrap(content: string, preheader = "") {
         ${content}
       </td></tr>
 
-      <tr><td style="background:${C.sable};padding:18px 28px;border:1px solid ${C.bord};border-top:none;border-radius:0 0 14px 14px;text-align:center;font-family:${POLICE_TEXTE};font-size:11px;line-height:1.7;color:${C.discret};">
+      <tr><td style="background:${C.sable};padding:18px 28px;border:1px solid ${C.bord};border-top:none;border-radius:0 0 14px 14px;text-align:center;font-family:${POLICE_TEXTE};font-size:11px;line-height:1.8;color:${C.discret};">
         ${CLUB_NAME}<br/>
-        ${CLUB_TEL} · <a href="mailto:${CLUB_EMAIL}" style="color:${C.discret};text-decoration:none;">${CLUB_EMAIL}</a><br/>
+        ${ADRESSE.rue}, ${ADRESSE.cp} ${ADRESSE.ville}<br/>
+        ${CLUB_TEL} · ${CLUB_MOBILE} · <a href="mailto:${CLUB_EMAIL}" style="color:${C.discret};text-decoration:none;">${CLUB_EMAIL}</a><br/>
         <a href="${SITE_URL}/espace-cavalier" style="color:${C.bleu};text-decoration:none;font-weight:600;">Accéder à mon espace</a>
+        &nbsp;·&nbsp;
+        <a href="${SITE_VITRINE}" style="color:${C.discret};text-decoration:none;">${SITE_VITRINE.replace(/^https?:\/\//, "")}</a>
       </td></tr>
 
     </table>
@@ -217,7 +224,7 @@ function etat(libelle: string, detail: string, couleur: string) {
  * de réception automatique. Deux lignes signées suffisent à rappeler qu'il
  * y a un club derrière — et c'est la différence entre correct et soigné.
  */
-function signature(mot = "À très bientôt au centre équestre.") {
+function signature(mot = `Au plaisir de vous accueillir prochainement au ${CLUB_NAME}.`) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 0;border-collapse:collapse;border-top:1px solid ${C.bord};">
     <tr><td style="padding:16px 0 0;font-family:${POLICE_TEXTE};font-size:14px;line-height:1.6;color:${C.texte};">
       ${mot}<br/>
@@ -300,6 +307,14 @@ export const emailTemplates = {
     acompteRegle?: boolean;
     /** Le lien de paiement part dans un message séparé : on l'annonce. */
     lienSepare?: boolean;
+    /**
+     * Date réelle d'échéance du solde, déjà formatée (« 12 octobre »).
+     *
+     * « 7 jours avant le stage » oblige la famille à compter, et donne au
+     * message un ton de règlement intérieur. Une date se lit. Absente, on
+     * retombe sur l'ancienne formulation plutôt que d'inventer une date.
+     */
+    dateSolde?: string;
     // Bloc « Comment se deroule la seance » (cf. lib/stage-deroule). Chaine
     // vide tant que le reglage n'est pas saisi : rien ne s'affiche alors.
     derouleHtml?: string;
@@ -339,14 +354,14 @@ export const emailTemplates = {
       `)}
       ${vars.derouleHtml || ""}
       ${acompteDu ? panneau("Ce qu'il reste à faire", `
-        ${ligne("Acompte, pour valider la place", `${euros(vars.acompte!)}`)}
-        ${ligne("Solde, 7 jours avant le stage", `${euros(vars.solde!)}`)}
+        ${ligne("Acompte aujourd'hui", `${euros(vars.acompte!)}`)}
+        ${ligne(vars.dateSolde ? `Solde avant le ${vars.dateSolde}` : "Solde, 7 jours avant le stage", `${euros(vars.solde!)}`)}
         ${p(vars.lienSepare
           ? "Vous recevez le lien de paiement de l'acompte dans un message séparé. Le solde vous sera réclamé automatiquement une semaine avant le stage."
           : "L'acompte se règle depuis votre espace client. Le solde vous sera réclamé automatiquement une semaine avant le stage.", 12)}
       `) : ""}
       ${vars.acompteRegle && vars.solde && vars.solde > 0 ? panneau("Reste à venir", `
-        ${ligne("Solde, 7 jours avant le stage", `${euros(vars.solde)}`)}
+        ${ligne(vars.dateSolde ? `Solde avant le ${vars.dateSolde}` : "Solde, 7 jours avant le stage", `${euros(vars.solde)}`)}
         ${p("Un rappel avec le lien de paiement vous sera envoyé automatiquement.", 12)}
       `) : ""}
       ${acompteDu && !vars.lienSepare ? button("Régler l'acompte", `${SITE_URL}/espace-cavalier/factures`) : ""}
@@ -477,7 +492,7 @@ export const emailTemplates = {
         ${ligne("Encadrement", vars.moniteur)}
       `)}
       ${p("À prévoir : bottes et bombe.", 14)}
-      ${signature("À demain.")}
+      ${signature("À demain au centre équestre.")}
     `, `${vars.childName} — ${vars.date}, ${vars.horaire}`),
   }),
 
@@ -523,7 +538,7 @@ export const emailTemplates = {
       `)}
       ${button("Régler en ligne", `${SITE_URL}/espace-cavalier/factures`)}
       ${p("Merci de régulariser à votre convenance. Si ce règlement a déjà été fait, ce message est sans objet.", 13)}
-      ${signature("Merci d'avance.")}
+      ${signature("Avec nos remerciements.")}
     `, `${euros(vars.montant)} — ${vars.prestations}`),
   }),
 
@@ -547,7 +562,7 @@ export const emailTemplates = {
       `)}
       ${button("Accéder à mon espace", `${SITE_URL}/espace-cavalier`)}
       ${p(`Une question ? Appelez-nous au ${CLUB_TEL}.`, 14)}
-      ${signature("Au plaisir de vous accueillir.")}
+      ${signature()}
     `, "Votre espace personnel est prêt."),
   }),
 
