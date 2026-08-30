@@ -90,6 +90,9 @@ export default function InscriptionAnnuellePage() {
   const { user, family } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  // Vrai quand les créneaux n'ont pas pu être lus : une liste vide se lit
+  // « complet », il faut distinguer les deux.
+  const [erreurCreneaux, setErreurCreneaux] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [creneaux, setCreneaux] = useState<Creneau[]>([]);
   const [step, setStep] = useState(1);
@@ -180,15 +183,18 @@ export default function InscriptionAnnuellePage() {
           query(collection(db, "creneaux"), where("activityType", "==", "cours"), where("date", ">=", today))
         );
         setCreneaux(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[]);
-      } catch {
-        try {
-          const snap = await getDocs(collection(db, "creneaux"));
-          const today = todayLocalString();
-          setCreneaux(
-            (snap.docs.map(d => ({ id: d.id, ...d.data() })) as Creneau[])
-              .filter(c => c.activityType === "cours" && c.date >= today)
-          );
-        } catch (e) { console.error(e); }
+      } catch (e) {
+        // Le repli lisait TOUTE la collection `creneaux` — la saison entière,
+        // stages et balades compris — puis filtrait dans le navigateur. Il ne
+        // se déclenche que si la requête filtrée échoue : règles fraîchement
+        // publiées, index absent. Autrement dit au pire moment, et pour chaque
+        // famille connectée à la fois.
+        //
+        // Une liste vide se lit « aucun créneau disponible », ce qui est faux
+        // et décourage l'inscription. On laisse donc l'échec visible.
+        console.error("[inscription-annuelle] lecture des créneaux refusée :", e);
+        setCreneaux([]);
+        setErreurCreneaux(true);
       }
       setLoading(false);
     };
@@ -985,6 +991,18 @@ export default function InscriptionAnnuellePage() {
           {step === 1 && (
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Quel cavalier inscrivez-vous ?</h2>
+              {/* Sans ce message, une liste de créneaux vide se lit « tout est
+                  complet » : la famille renonce à une inscription qui était
+                  possible. */}
+              {erreurCreneaux && (
+                <div className="mb-4 p-4 rounded-xl bg-red-50 border border-red-200">
+                  <div className="font-body text-sm font-semibold text-red-800 mb-1">Les créneaux n&apos;ont pas pu être chargés</div>
+                  <p className="font-body text-xs text-red-700 leading-relaxed">
+                    Aucun cours ne s&apos;affichera tant que le problème dure — ce n&apos;est pas qu&apos;il n&apos;y a plus de place.
+                    Réessayez dans quelques minutes, ou contactez le centre pour inscrire votre cavalier.
+                  </p>
+                </div>
+              )}
               {/* Bandeau réduction 1ère inscription : aucun forfait dans
                   l'application ET fiche créée après juin 2026. Les deux
                   conditions sont nécessaires — voir DEBUT_NOUVELLES_FAMILLES.

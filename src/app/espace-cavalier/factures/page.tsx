@@ -176,6 +176,9 @@ export default function FacturesPage() {
   const [declareSending, setDeclareSending] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [declareSuccess, setDeclareSuccess] = useState(false);
+  // Vrai quand la lecture des paiements a échoué : mieux vaut dire qu'on ne
+  // sait pas que laisser croire à une ardoise vide.
+  const [erreurChargement, setErreurChargement] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -184,13 +187,19 @@ export default function FacturesPage() {
       try {
         const snapshot = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
         setPayments(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Payment[]);
-      } catch {
-        try {
-          const snapshot = await getDocs(collection(db, "payments"));
-          setPayments(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Payment)).filter((item) => item.familyId === user.uid));
-        } catch {
-          setPayments([]);
-        }
+      } catch (e) {
+        // Le repli lisait TOUTE la collection `payments` puis filtrait dans le
+        // navigateur. Il ne se déclenche que si la requête filtrée échoue —
+        // c'est-à-dire au moment le plus délicat : des règles fraîchement
+        // publiées qui refusent, ou un index absent. Ce jour-là, chaque
+        // famille connectée aurait téléchargé l'intégralité des paiements du
+        // club. Le coût se multiplie par le nombre d'inscrits, et contourner
+        // un refus de règle n'est de toute façon pas le rôle d'un repli.
+        //
+        // Un échec doit se voir. La page affiche donc une erreur explicite.
+        console.error("[factures] lecture des paiements refusée :", e);
+        setPayments([]);
+        setErreurChargement(true);
       }
 
       try {
@@ -695,6 +704,19 @@ export default function FacturesPage() {
         <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Mes paiements</h1>
         <p className="font-body text-sm text-gray-600">Ce qu'il reste à régler, vos avoirs et vos factures.</p>
       </div>
+
+      {/* Un écran vide se lit « vous ne devez rien ». Quand la lecture a
+          échoué, il faut le dire : sans cela, une famille repart persuadée
+          d'être à jour. */}
+      {erreurChargement && (
+        <Card padding="md" className="mb-5 !bg-red-50 !border-red-200">
+          <div className="font-body text-sm font-bold text-red-800 mb-1">Vos paiements n&apos;ont pas pu être chargés</div>
+          <div className="font-body text-xs text-red-700 leading-relaxed">
+            Cette page ne montre donc pas votre situation réelle. Réessayez dans quelques minutes ;
+            si le problème persiste, contactez le centre — nous vérifierons de notre côté.
+          </div>
+        </Card>
+      )}
 
       {totalDue > 0 ? (
         <Card padding="md" className="mb-5 !bg-gradient-to-br !from-orange-50 !to-amber-50 !border-orange-200">
