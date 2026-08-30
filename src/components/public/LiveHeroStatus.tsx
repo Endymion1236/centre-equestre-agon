@@ -64,7 +64,7 @@ export default function LiveHeroStatus() {
         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-400" />
       </span>
       <CalendarDays size={14} className="flex-shrink-0 text-gold-300" />
-      <span className="truncate font-body text-xs font-semibold text-white/90 sm:text-sm">{label}</span>
+      <span className="truncate font-body text-xs font-semibold text-white/90">{label}</span>
     </div>
   );
 }

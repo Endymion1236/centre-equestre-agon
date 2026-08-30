@@ -49,7 +49,7 @@ export default function InstallationsPage() {
           <div className="pointer-events-none absolute bottom-0 left-[12%] h-32 w-72 rounded-t-[140px] border border-white/[0.06] bg-white/[0.025]" />
           <div className="relative mx-auto max-w-[1120px]">
             <div className="max-w-3xl">
-              <div className="mb-4 font-body text-xs font-bold uppercase tracking-[0.2em] text-gold-300">Le centre et ses installations</div>
+              <div className="mb-4 font-body text-[11px] font-bold uppercase tracking-[0.2em] text-gold-300">Le centre et ses installations</div>
               <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">De l’espace pour apprendre, du confort pour se retrouver</h1>
               <p className="mt-6 max-w-2xl font-body text-base leading-relaxed text-white/68 sm:text-lg">
                 Des équipements adaptés à chaque âge, des espaces couverts pour monter toute l’année et une organisation attentive aux besoins naturels des chevaux.
@@ -73,7 +73,7 @@ export default function InstallationsPage() {
         <section className="px-6 py-20 sm:py-24">
           <div className="mx-auto max-w-[1120px]">
             <div className="mx-auto mb-12 max-w-2xl text-center">
-              <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Monter toute l’année</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Monter toute l’année</div>
               <h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Des espaces pour chaque pratique</h2>
               <p className="mt-4 font-body text-base leading-relaxed text-slate-500">Du Baby Poney au travail sportif, chaque groupe bénéficie d’un espace cohérent avec son âge, son niveau et l’objectif de la séance.</p>
             </div>
@@ -99,13 +99,13 @@ export default function InstallationsPage() {
               <div className="pointer-events-none absolute -right-12 -top-12 h-44 w-44 rounded-full bg-orange-300/10 blur-2xl" />
               <div className="relative">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-300/15 text-orange-200 ring-1 ring-orange-200/20"><Flame size={31} /></div>
-                <div className="mt-10 font-body text-xs font-bold uppercase tracking-[0.18em] text-orange-200">Le club-house</div>
+                <div className="mt-10 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-orange-200">Le club-house</div>
                 <h2 className="mt-3 font-display text-3xl font-bold text-white">Un endroit chaleureux, surtout quand le feu crépite</h2>
                 <p className="mt-5 font-body text-sm leading-relaxed text-white/68">Cavaliers, parents et accompagnants peuvent s’y retrouver, patienter ou simplement partager un moment après la séance. En hiver, le feu en fait le cœur chaleureux du centre.</p>
               </div>
             </div>
             <div>
-              <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Plus qu’un lieu de pratique</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Plus qu’un lieu de pratique</div>
               <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950 sm:text-4xl">Un club où l’on se sent bien</h2>
               <p className="mt-5 font-body text-base leading-relaxed text-slate-600">Un centre équestre vit aussi autour des reprises : les échanges avec l’équipe, les retrouvailles entre familles et les souvenirs racontés après avoir dessellé.</p>
               <div className="mt-7 grid gap-3 sm:grid-cols-2">
@@ -119,7 +119,7 @@ export default function InstallationsPage() {
         <section className="overflow-hidden bg-[linear-gradient(135deg,#061f17_0%,#0d4934_52%,#14734f_100%)] px-6 py-20 text-white sm:py-24">
           <div className="mx-auto grid max-w-[1100px] gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
             <div>
-              <div className="flex items-center gap-2 font-body text-xs font-bold uppercase tracking-[0.18em] text-emerald-300"><Heart size={15} /> Bien-être de la cavalerie</div>
+              <div className="flex items-center gap-2 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300"><Heart size={15} /> Bien-être de la cavalerie</div>
               <h2 className="mt-4 font-display text-3xl font-bold leading-tight text-white sm:text-4xl">Vivre dehors, bouger et rester en contact</h2>
               <p className="mt-5 font-body text-base leading-relaxed text-white/68">Pour rester au plus près de leurs besoins naturels, nos chevaux et poneys vivent la majeure partie du temps en extérieur. Ils peuvent se déplacer, observer leur environnement et entretenir des contacts sociaux.</p>
               <p className="mt-4 font-body text-sm leading-relaxed text-white/55">Lorsque les conditions météorologiques l’exigent, ils sont bien sûr abrités ou rentrés. Leur confort, leur état physique, leur alimentation et leur charge de travail font l’objet d’une attention quotidienne.</p>
@@ -141,7 +141,7 @@ export default function InstallationsPage() {
         <section className="bg-cream px-6 py-20 sm:py-24">
           <div className="mx-auto max-w-[1050px]">
             <div className="mx-auto mb-10 max-w-2xl text-center">
-              <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Pédagogie</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Pédagogie</div>
               <h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Du matériel qui aide vraiment à comprendre</h2>
               <p className="mt-4 font-body text-base leading-relaxed text-slate-500">Un équipement adapté rend les consignes plus concrètes et permet aux cavaliers de gagner en autonomie dès les premières séances.</p>
             </div>

@@ -175,8 +175,8 @@ export default function PlanningPublic() {
           <div className="relative mx-auto max-w-[1120px]">
             <div className="grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end">
               <div className="max-w-3xl">
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-2 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-gold-300"><CalendarDays size={14} /> Les prochaines aventures</div>
-                <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl">Planning des activités</h1>
+                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-2 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-300"><CalendarDays size={14} /> Les prochaines aventures</div>
+                <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">Planning des activités</h1>
                 <p className="mt-5 max-w-2xl font-body text-base leading-relaxed text-white/62">Repérez les stages, balades, animations et créneaux ouverts. La réservation se finalise ensuite dans votre espace famille.</p>
               </div>
               <Link href="/espace-cavalier/reserver" className="group inline-flex items-center justify-center gap-2 rounded-xl bg-gold-400 px-6 py-4 font-body text-sm font-bold text-blue-950 no-underline shadow-[0_12px_30px_rgba(240,160,16,0.2)] transition-transform hover:-translate-y-0.5">Réserver une activité <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" /></Link>
@@ -238,8 +238,8 @@ export default function PlanningPublic() {
                   return (
                     <article key={key} className={`overflow-hidden rounded-[22px] border bg-white shadow-[0_10px_35px_rgba(12,26,46,0.035)] ${isToday ? "border-blue-300 ring-4 ring-blue-50" : "border-blue-500/[0.08]"}`}>
                       <header className={`flex items-center justify-between px-5 py-4 ${isToday ? "bg-blue-700 text-white" : "bg-slate-50 text-blue-950"}`}>
-                        <div><div className="font-body text-[10px] font-bold uppercase tracking-[0.14em] opacity-55">{isToday ? "Aujourd’hui" : day.toLocaleDateString("fr-FR", { weekday: "long" })}</div><div className="mt-0.5 font-display text-lg font-bold capitalize">{day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</div></div>
-                        <div className={`rounded-full px-2.5 py-1 font-body text-[10px] font-bold ${isToday ? "bg-white/12 text-white" : "bg-white text-slate-400"}`}>{daySlots.length} activité{daySlots.length > 1 ? "s" : ""}</div>
+                        <div><div className="font-body text-[11px] font-bold uppercase tracking-[0.14em] opacity-55">{isToday ? "Aujourd’hui" : day.toLocaleDateString("fr-FR", { weekday: "long" })}</div><div className="mt-0.5 font-display text-lg font-bold capitalize">{day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}</div></div>
+                        <div className={`rounded-full px-2.5 py-1 font-body text-xs font-bold ${isToday ? "bg-white/12 text-white" : "bg-white text-slate-400"}`}>{daySlots.length} activité{daySlots.length > 1 ? "s" : ""}</div>
                       </header>
 
                       <div className="divide-y divide-slate-100 p-2">
@@ -257,14 +257,14 @@ export default function PlanningPublic() {
                             <div key={slot.id} className={`rounded-2xl p-4 transition-colors hover:bg-slate-50 ${isPast ? "opacity-55" : ""}`}>
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <span className="inline-flex rounded-full border px-2.5 py-1 font-body text-[9px] font-bold uppercase tracking-wide" style={{ background: info.bg, borderColor: info.border, color: info.color }}>{info.label}</span>
+                                  <span className="inline-flex rounded-full border px-2.5 py-1 font-body text-[11px] font-bold uppercase tracking-wide" style={{ background: info.bg, borderColor: info.border, color: info.color }}>{info.label}</span>
                                   <h2 className="mt-2 font-display text-lg font-bold leading-tight text-blue-950">{slot.activityTitle}</h2>
                                 </div>
                                 {price !== null && (
                                   <div className="flex-shrink-0 text-right">
                                     <div className="font-display text-lg font-bold text-blue-700">{price}€</div>
                                     {prixJour !== null && (
-                                      <div className="font-body text-[10px] font-semibold text-slate-400 leading-tight">la semaine</div>
+                                      <div className="font-body text-xs font-semibold text-slate-400 leading-tight">la semaine</div>
                                     )}
                                   </div>
                                 )}
@@ -272,7 +272,7 @@ export default function PlanningPublic() {
                               {/* Formule journee : affichee seulement si elle est
                                   reellement ouverte ET tarifee sur ce creneau. */}
                               {prixJour !== null && (
-                                <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-body text-[11px] font-semibold text-amber-700">
+                                <div className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 font-body text-xs font-semibold text-amber-700">
                                   Inscription à la journée possible · {prixJour}€ la journée
                                 </div>
                               )}
@@ -282,9 +282,9 @@ export default function PlanningPublic() {
                               </div>
                               <div className="mt-4 flex items-center justify-between gap-3">
                                 <div className={`flex items-center gap-1.5 font-body text-xs font-bold ${full ? "text-red-500" : places !== null && places <= 2 ? "text-orange-600" : "text-emerald-600"}`}><Users size={14} />{capacity === 0 ? `${enrolled} inscrit${enrolled > 1 ? "s" : ""}` : full ? "Complet" : `${places} place${places && places > 1 ? "s" : ""}`}</div>
-                                {!isPast && <Link href="/espace-cavalier/reserver" className={`rounded-lg px-3 py-2 font-body text-[11px] font-bold no-underline ${full ? "bg-slate-100 text-slate-500" : "bg-blue-700 text-white"}`}>{full ? "Voir la liste d’attente" : "Réserver"}</Link>}
+                                {!isPast && <Link href="/espace-cavalier/reserver" className={`rounded-lg px-3 py-2 font-body text-xs font-bold no-underline ${full ? "bg-slate-100 text-slate-500" : "bg-blue-700 text-white"}`}>{full ? "Voir la liste d’attente" : "Réserver"}</Link>}
                               </div>
-                              <Link href={activityLink(slot.activityType)} className="mt-3 inline-flex items-center gap-1 font-body text-[11px] font-semibold text-blue-500 no-underline">En savoir plus sur cette activité <ArrowRight size={12} /></Link>
+                              <Link href={activityLink(slot.activityType)} className="mt-3 inline-flex items-center gap-1 font-body text-xs font-semibold text-blue-500 no-underline">En savoir plus sur cette activité <ArrowRight size={12} /></Link>
                             </div>
                           );
                         })}
@@ -298,7 +298,7 @@ export default function PlanningPublic() {
             )}
 
             <div className="mt-10 grid overflow-hidden rounded-[26px] bg-[linear-gradient(135deg,#07111f,#12346b)] text-white shadow-[0_22px_60px_rgba(12,26,46,0.14)] md:grid-cols-[1fr_auto] md:items-center">
-              <div className="p-7 sm:p-9"><div className="font-body text-xs font-bold uppercase tracking-[0.16em] text-gold-300">Votre espace famille</div><h2 className="mt-3 font-display text-2xl font-bold text-white">Réservez, payez et retrouvez toutes vos activités au même endroit</h2><p className="mt-3 max-w-2xl font-body text-sm leading-relaxed text-white/55">Ajoutez vos cavaliers, choisissez le bon niveau et suivez les inscriptions depuis votre compte.</p></div>
+              <div className="p-7 sm:p-9"><div className="font-body text-[11px] font-bold uppercase tracking-[0.16em] text-gold-300">Votre espace famille</div><h2 className="mt-3 font-display text-2xl font-bold text-white">Réservez, payez et retrouvez toutes vos activités au même endroit</h2><p className="mt-3 max-w-2xl font-body text-sm leading-relaxed text-white/55">Ajoutez vos cavaliers, choisissez le bon niveau et suivez les inscriptions depuis votre compte.</p></div>
               <div className="flex flex-col gap-2 p-7 pt-0 md:p-9"><Link href="/espace-cavalier/reserver" className="rounded-xl bg-gold-400 px-6 py-3.5 text-center font-body text-sm font-bold text-blue-950 no-underline">Réserver en ligne</Link><Link href="/contact" className="rounded-xl border border-white/15 bg-white/[0.06] px-6 py-3.5 text-center font-body text-sm font-bold text-white no-underline">Nous contacter</Link></div>
             </div>
           </div>

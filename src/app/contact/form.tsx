@@ -67,7 +67,7 @@ export function ContactForm() {
   return (
     <form onSubmit={submit} className="rounded-[26px] border border-blue-500/[0.08] bg-white p-6 shadow-[0_20px_55px_rgba(12,26,46,0.07)] sm:p-8">
       <div className="mb-7">
-        <div className="font-body text-[10px] font-bold uppercase tracking-[0.18em] text-gold-500">Écrivez-nous</div>
+        <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Écrivez-nous</div>
         <h2 className="mt-2 font-display text-2xl font-bold text-blue-950">Parlez-nous de votre projet</h2>
         <p className="mt-2 font-body text-sm leading-relaxed text-slate-500">Âge, niveau, dates souhaitées, nombre de personnes : plus nous avons de contexte, plus la réponse sera précise.</p>
       </div>
@@ -125,7 +125,7 @@ export function ContactForm() {
       <button type="submit" disabled={status === "sending"} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border-none bg-blue-700 px-5 py-4 font-body text-sm font-bold text-white shadow-[0_9px_25px_rgba(32,80,160,0.18)] transition-all hover:-translate-y-0.5 hover:bg-blue-600 disabled:cursor-wait disabled:opacity-65">
         {status === "sending" ? <><Loader2 size={17} className="animate-spin" /> Envoi en cours…</> : <><Send size={17} /> Envoyer le message</>}
       </button>
-      <p className="mt-3 text-center font-body text-[11px] leading-relaxed text-slate-400">Vos coordonnées servent uniquement à répondre à votre demande.</p>
+      <p className="mt-3 text-center font-body text-xs leading-relaxed text-slate-400">Vos coordonnées servent uniquement à répondre à votre demande.</p>
     </form>
   );
 }

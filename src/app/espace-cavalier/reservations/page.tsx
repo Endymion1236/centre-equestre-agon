@@ -321,7 +321,7 @@ export default function ReservationsPage() {
 
       {urgentWaitlist.length > 0 && (
         <section className="mb-6">
-          <div className="font-body text-xs font-bold uppercase tracking-wider text-green-700 mb-2 flex items-center gap-2">
+          <div className="font-body text-[11px] font-bold uppercase tracking-wider text-green-700 mb-2 flex items-center gap-2">
             <Bell size={14} /> Une place s’est libérée
           </div>
           <div className="flex flex-col gap-3">{urgentWaitlist.map((entry) => renderWaitlistCard(entry, true))}</div>
@@ -349,7 +349,7 @@ export default function ReservationsPage() {
             const status = statusConfig[nextReservation.status] || statusConfig.pending;
             return (
               <section className="mb-7">
-                <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Prochaine activité</div>
+                <div className="font-body text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Prochaine activité</div>
                 <Card padding="md" className="!bg-gradient-to-br !from-blue-800 !to-blue-600 !border-blue-700 text-white">
                   <div className="flex items-start gap-4">
                     <div className="w-14 h-14 rounded-2xl bg-white/15 flex flex-col items-center justify-center flex-shrink-0">
@@ -387,18 +387,18 @@ export default function ReservationsPage() {
                             const detail = n === 1 ? deroule.sequence1Detail : deroule.sequence2Detail;
                             return (
                               <div key={n} className="flex gap-2 mb-1.5 last:mb-0">
-                                <span className="w-4 h-4 rounded-full bg-white/25 text-white font-body text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+                                <span className="w-4 h-4 rounded-full bg-white/25 text-white font-body text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
                                 <div className="min-w-0">
                                   <div className="font-body text-xs font-semibold text-white leading-snug">{titre}</div>
                                   {detail?.trim() && (
-                                    <div className="font-body text-[11px] text-blue-100 leading-snug">{detail}</div>
+                                    <div className="font-body text-xs text-blue-100 leading-snug">{detail}</div>
                                   )}
                                 </div>
                               </div>
                             );
                           })}
                           {deroule.note?.trim() && (
-                            <p className="font-body text-[10px] text-blue-100 mt-2 mb-0">{deroule.note}</p>
+                            <p className="font-body text-xs text-blue-100 mt-2 mb-0">{deroule.note}</p>
                           )}
                         </div>
                       )}

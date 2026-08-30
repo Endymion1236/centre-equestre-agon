@@ -50,7 +50,7 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
               <ArrowLeft size={14} /> Toutes les activités
             </Link>
             <div className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-gold-300">{CATEGORY_LABELS[display.category]}</div>
-            <h1 className="mt-4 font-display text-4xl font-bold leading-[1.04] text-white sm:text-5xl lg:text-6xl">{display.title}</h1>
+            <h1 className="mt-4 font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">{display.title}</h1>
             <p className="mt-6 max-w-xl font-body text-base leading-relaxed text-white/66 sm:text-lg">{display.description}</p>
 
             <div className="mt-7 flex flex-wrap gap-2">
@@ -61,11 +61,11 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
               <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-4">
                 <Clock size={18} className="mt-0.5 flex-shrink-0 text-gold-300" />
-                <div><div className="font-body text-[10px] font-bold uppercase tracking-wide text-white/35">Quand</div><div className="mt-1 font-body text-sm font-semibold text-white/82">{display.schedule}</div></div>
+                <div><div className="font-body text-[11px] font-bold uppercase tracking-wide text-white/35">Quand</div><div className="mt-1 font-body text-sm font-semibold text-white/82">{display.schedule}</div></div>
               </div>
               <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-4">
                 <CalendarDays size={18} className="mt-0.5 flex-shrink-0 text-gold-300" />
-                <div><div className="font-body text-[10px] font-bold uppercase tracking-wide text-white/35">Tarif</div><div className="mt-1 font-body text-sm font-semibold text-white/82">{display.price || "Selon la formule"}</div></div>
+                <div><div className="font-body text-[11px] font-bold uppercase tracking-wide text-white/35">Tarif</div><div className="mt-1 font-body text-sm font-semibold text-white/82">{display.price || "Selon la formule"}</div></div>
               </div>
             </div>
 
@@ -118,8 +118,8 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
       <section className="px-6 py-20 sm:py-24">
         <div className="mx-auto grid max-w-[1120px] gap-12 lg:grid-cols-[1.08fr_0.92fr]">
           <div>
-            <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">L’expérience</div>
-            <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950">Ce que vous allez vivre</h2>
+            <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">L’expérience</div>
+            <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950 sm:text-4xl">Ce que vous allez vivre</h2>
             <p className="mt-5 font-body text-base leading-relaxed text-slate-600">{display.intro}</p>
 
             <div className="mt-8 grid gap-3 sm:grid-cols-2">
@@ -146,7 +146,7 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
               ))}
             </div>
             <div className="mt-7 rounded-2xl bg-blue-50 p-5">
-              <div className="font-body text-xs font-bold uppercase tracking-wide text-blue-500">Bon à savoir</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-wide text-blue-500">Bon à savoir</div>
               <p className="mt-2 font-body text-sm leading-relaxed text-blue-950/68">Le casque est fourni. Pour toute hésitation sur le niveau, l’âge ou l’activité, l’équipe vous conseille avant la réservation.</p>
             </div>
           </aside>
@@ -156,13 +156,13 @@ export default function ActivityDetailClient({ activity }: { activity: PublicAct
       <section className="bg-white px-6 py-20">
         <div className="mx-auto max-w-[1120px]">
           <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div><div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Dans le même univers</div><h2 className="mt-2 font-display text-3xl font-bold text-blue-950">À découvrir aussi</h2></div>
+            <div><div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Dans le même univers</div><h2 className="mt-2 font-display text-3xl font-bold text-blue-950">À découvrir aussi</h2></div>
             <Link href="/activites" className="inline-flex items-center gap-2 font-body text-sm font-bold text-blue-700 no-underline">Toutes les activités <ArrowRight size={15} /></Link>
           </div>
           <div className="grid gap-4 md:grid-cols-3">
             {related.map((item) => (
               <Link key={item.id} href={`/activites/${item.id}`} className="group rounded-[22px] border border-blue-500/[0.08] bg-cream p-5 no-underline transition-all hover:-translate-y-1 hover:bg-white hover:shadow-[0_15px_40px_rgba(12,26,46,0.08)]">
-                <div className="font-body text-[10px] font-bold uppercase tracking-[0.14em] text-gold-500">{item.ages}</div>
+                <div className="font-body text-[11px] font-bold uppercase tracking-[0.14em] text-gold-500">{item.ages}</div>
                 <h3 className="mt-3 font-display text-xl font-bold text-blue-950">{item.title}</h3>
                 <p className="mt-2 line-clamp-3 font-body text-sm leading-relaxed text-slate-500">{item.description}</p>
                 <div className="mt-5 flex items-center gap-2 font-body text-xs font-bold text-blue-700">Voir la fiche <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" /></div>

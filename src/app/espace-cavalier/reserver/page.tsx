@@ -1285,7 +1285,7 @@ export default function ReserverPage() {
                   return (
                     <div key={key} className="flex flex-col gap-3">
                       {showWeekHeader && (
-                        <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mt-2 first:mt-0">
+                        <div className="font-body text-[11px] font-bold uppercase tracking-wider text-slate-500 mt-2 first:mt-0">
                           📅 {weekLabel}
                         </div>
                       )}
@@ -1359,7 +1359,7 @@ export default function ReserverPage() {
                           {/* Un badge "Complet" seul ressemble à une porte fermée :
                               on annonce ce qui reste possible SANS avoir à déplier. */}
                           {spots === 0 && (
-                            <div className="mt-1 font-body text-[11px] font-semibold text-orange-600 whitespace-nowrap">
+                            <div className="mt-1 font-body text-xs font-semibold text-orange-600 whitespace-nowrap">
                               {joursOuvertsALaJournee.length > 0 ? "🗓 Jours à l'unité dispo" : "🔔 Liste d'attente"}
                             </div>
                           )}
@@ -1393,7 +1393,7 @@ export default function ReserverPage() {
                                 )}
                                 {montrerDeroule && (
                                   <div className={desc ? "mt-3 pt-3 border-t border-green-200" : ""}>
-                                    <div className="font-body text-[10px] font-semibold text-green-800 uppercase tracking-wider mb-2">
+                                    <div className="font-body text-[11px] font-semibold text-green-800 uppercase tracking-wider mb-2">
                                       🐴 Comment se déroule la séance
                                     </div>
                                     {[1, 2].map((n) => {
@@ -1401,18 +1401,18 @@ export default function ReserverPage() {
                                       const detail = n === 1 ? deroule.sequence1Detail : deroule.sequence2Detail;
                                       return (
                                         <div key={n} className="flex gap-2 mb-1.5 last:mb-0">
-                                          <span className="w-4 h-4 rounded-full bg-green-600 text-white font-body text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+                                          <span className="w-4 h-4 rounded-full bg-green-600 text-white font-body text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
                                           <div className="min-w-0">
                                             <div className="font-body text-xs font-semibold text-gray-800 leading-snug">{titre}</div>
                                             {detail?.trim() && (
-                                              <div className="font-body text-[11px] text-gray-600 leading-snug">{detail}</div>
+                                              <div className="font-body text-xs text-gray-600 leading-snug">{detail}</div>
                                             )}
                                           </div>
                                         </div>
                                       );
                                     })}
                                     {deroule.note?.trim() && (
-                                      <p className="font-body text-[10px] text-gray-500 mt-2 mb-0">{deroule.note}</p>
+                                      <p className="font-body text-xs text-gray-500 mt-2 mb-0">{deroule.note}</p>
                                     )}
                                   </div>
                                 )}
@@ -1436,7 +1436,7 @@ export default function ReserverPage() {
                             <div className="font-body text-xs font-semibold text-green-800">
                               🎉 Place réservée pour {hold.childName}
                             </div>
-                            <div className="mt-0.5 font-body text-[11px] text-green-700">
+                            <div className="mt-0.5 font-body text-xs text-green-700">
                               Confirmez votre inscription avant le{" "}
                               {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à{" "}
                               {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
@@ -1512,7 +1512,7 @@ export default function ReserverPage() {
                                 if (joursALaJournee.length === 0 || joursOuvertsALaJournee.length > 0) return null;
                                 return (
                                   <div className="mt-3 rounded-lg border border-orange-100 bg-orange-50/60 p-2.5">
-                                    <div className="font-body text-[11px] font-semibold text-orange-700 mb-1.5">
+                                    <div className="font-body text-xs font-semibold text-orange-700 mb-1.5">
                                       Ou pour une journée précise seulement :
                                     </div>
                                     {joursALaJournee.map((c: any) => (
@@ -1522,14 +1522,14 @@ export default function ReserverPage() {
                                         </span>
                                         {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
                                           enAttente(c.id, ch.id) ? (
-                                            <span key={ch.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 font-body text-[11px] font-semibold text-green-700">
+                                            <span key={ch.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 font-body text-xs font-semibold text-green-700">
                                               <Check size={11} /> {ch.firstName} — en liste d&apos;attente
                                             </span>
                                           ) : (
                                             <button key={ch.id}
                                               onClick={(e) => { e.stopPropagation(); addToWaitlist(c, ch.id); }}
                                               disabled={waitlistLoading === c.id}
-                                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-orange-200 bg-white font-body text-[11px] text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-orange-200 bg-white font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
                                               {waitlistLoading === c.id ? <Loader2 size={11} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
                                             </button>
                                           )
@@ -1612,7 +1612,7 @@ export default function ReserverPage() {
                                   email, confirmation — tout existe déjà. */}
                               {joursJournee.some((c: any) => spotsLeft(c) <= 0) && (
                                 <div className="mt-2 rounded-lg border border-orange-100 bg-orange-50/60 p-2.5">
-                                  <div className="font-body text-[11px] font-semibold text-orange-700 mb-1.5">
+                                  <div className="font-body text-xs font-semibold text-orange-700 mb-1.5">
                                     🔔 Un jour complet vous intéresse ? Touchez un prénom pour l&apos;inscrire en liste
                                     d&apos;attente de ce jour (inscription immédiate, vous serez prévenus par email) :
                                   </div>
@@ -1623,14 +1623,14 @@ export default function ReserverPage() {
                                       </span>
                                       {children.filter((ch: any) => !(c.enrolled || []).some((e: any) => e.childId === ch.id)).map((ch: any) => (
                                         enAttente(c.id, ch.id) ? (
-                                          <span key={ch.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 font-body text-[11px] font-semibold text-green-700">
+                                          <span key={ch.id} className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-green-200 bg-green-50 font-body text-xs font-semibold text-green-700">
                                             <Check size={11} /> {ch.firstName} — en liste d&apos;attente
                                           </span>
                                         ) : (
                                           <button key={ch.id}
                                             onClick={(e) => { e.stopPropagation(); addToWaitlist(c, ch.id); }}
                                             disabled={waitlistLoading === c.id}
-                                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-orange-200 bg-white font-body text-[11px] text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
+                                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-orange-200 bg-white font-body text-xs text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
                                             {waitlistLoading === c.id ? <Loader2 size={11} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
                                           </button>
                                         )
@@ -1754,7 +1754,7 @@ export default function ReserverPage() {
                                 <div className="font-body text-xs font-semibold text-green-800">
                                   🎉 Place réservée pour {hold.childName}
                                 </div>
-                                <div className="mt-0.5 font-body text-[11px] text-green-700">
+                                <div className="mt-0.5 font-body text-xs text-green-700">
                                   Confirmez avant le{" "}
                                   {fin.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à{" "}
                                   {fin.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.
@@ -1801,7 +1801,7 @@ export default function ReserverPage() {
                             const sup = typeof act?.supplementPetitGroupe === "number" && act.supplementPetitGroupe > 0
                               ? act.supplementPetitGroupe : 0;
                             return (
-                              <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 font-body text-[11px] text-amber-800 leading-relaxed">
+                              <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 font-body text-xs text-amber-800 leading-relaxed">
                                 Balade maintenue à partir de <strong>{min} participants</strong>. En dessous, nous
                                 proposons au choix : maintien en petit comité{sup > 0 ? ` (supplément de ${sup}€/cavalier)` : ""}, report ou avoir.
                               </div>
@@ -1844,7 +1844,7 @@ export default function ReserverPage() {
                                   if (!bdDate || isNaN(bdDate.getTime())) return true;
                                   return bdDate.getFullYear() > new Date().getFullYear() - 12;
                                 }) && (
-                                  <div className="w-full mt-1 font-body text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5">
+                                  <div className="w-full mt-1 font-body text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5">
                                     ⚠️ Les promenades sont réservées aux cavaliers de 12 ans et plus (nés en {new Date().getFullYear() - 12} ou avant).
                                   </div>
                                 )}
@@ -1946,7 +1946,7 @@ export default function ReserverPage() {
                       🔔 Ce créneau est complet. Inscrivez-vous en liste d&apos;attente :
                     </div>
                     <div className="font-body text-sm font-semibold text-slate-700 mb-1">Pour quel cavalier ?</div>
-                <div className="font-body text-[11px] text-slate-500 mb-3">
+                <div className="font-body text-xs text-slate-500 mb-3">
                   Touchez un cavalier : son inscription en liste d&apos;attente est immédiate.
                 </div>
                     <div className="flex flex-col gap-2">
@@ -2160,7 +2160,7 @@ export default function ReserverPage() {
                         </div>
                         {soldeFixe > 0 && (
                           <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                            <p className="font-body text-[11px] text-amber-800 leading-snug">
+                            <p className="font-body text-xs text-amber-800 leading-snug">
                               ⚠️ <strong>À faire sur la page de paiement :</strong> cochez la case <strong>« Enregistrer mes données de paiement »</strong>. En la cochant, vous autorisez le prélèvement automatique du solde de <strong>{soldeFixe.toFixed(2)}€</strong> environ une semaine avant le stage. Sans cette case, le solde restera à régler manuellement.
                             </p>
                           </div>

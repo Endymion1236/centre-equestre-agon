@@ -563,7 +563,7 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
       {showMoreMenu && (
         <div className="md:hidden fixed inset-0 z-[55] bg-black/20" onClick={() => setShowMoreMenu(false)}>
           <div className="absolute bottom-[76px] left-3 right-3 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2" onClick={(event) => event.stopPropagation()}>
-            <div className="font-body text-xs font-bold uppercase tracking-wider text-gray-400 px-3 py-2">Plus</div>
+            <div className="font-body text-[11px] font-bold uppercase tracking-wider text-gray-400 px-3 py-2">Plus</div>
             {moreItems.map((item) => {
               const Icon = item.icon;
               const active = isActivePath(pathname, item.href);
@@ -589,7 +589,7 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
                 const texte = item.shortLabel || item.label;
                 // « Réservations » deborde a 11px sur les petits ecrans :
                 // on retrecit uniquement les libelles longs.
-                const taille = texte.length > 10 ? "text-[10px]" : "text-[11px]";
+                const taille = texte.length > 10 ? "text-xs" : "text-xs";
                 return (
                   <span className={`font-body ${taille} leading-none whitespace-nowrap ${active ? "font-bold" : "font-medium"}`}>
                     {texte}
@@ -602,7 +602,7 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
 
         <button type="button" onClick={() => setShowMoreMenu((value) => !value)} className={`min-w-[58px] flex flex-col items-center gap-0.5 px-1 py-1.5 rounded-xl border-none bg-transparent cursor-pointer ${showMoreMenu || activeMore ? "text-blue-600" : "text-gray-500"}`}>
           <MoreHorizontal size={21} strokeWidth={showMoreMenu || activeMore ? 2.4 : 1.8} />
-          <span className={`font-body text-[11px] ${showMoreMenu || activeMore ? "font-bold" : "font-medium"}`}>Plus</span>
+          <span className={`font-body text-xs ${showMoreMenu || activeMore ? "font-bold" : "font-medium"}`}>Plus</span>
         </button>
       </nav>
     </div>

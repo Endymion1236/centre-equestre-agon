@@ -65,7 +65,7 @@ export default function OffrirUnBonPage() {
           <div className="pointer-events-none absolute -right-32 -top-48 h-[520px] w-[520px] rounded-full border border-white/[0.06] bg-white/[0.03]" />
           <div className="relative mx-auto grid max-w-[1120px] gap-10 lg:grid-cols-[1fr_0.88fr] lg:items-center">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-300"><Gift size={14} /> Une expérience à offrir</div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300"><Gift size={14} /> Une expérience à offrir</div>
               <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">Offrez des souvenirs plutôt qu’un objet</h1>
               <p className="mt-6 max-w-2xl font-body text-base leading-relaxed text-white/65 sm:text-lg">Choisissez le montant, ajoutez un prénom et un message. Le bon et son code sont envoyés par email après le paiement sécurisé.</p>
 
@@ -85,7 +85,7 @@ export default function OffrirUnBonPage() {
               <Image src="/images/vitrine/choices/anniversaire-poney.webp" alt="Un anniversaire au centre équestre avec un enfant et un poney" fill sizes="100vw" className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/58 via-transparent to-white/5" />
               <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-white/14 bg-emerald-950/58 p-5 backdrop-blur-md">
-                <div className="font-body text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">Pour toutes les occasions</div>
+                <div className="font-body text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-200">Pour toutes les occasions</div>
                 <div className="mt-2 font-display text-2xl font-bold text-white">Anniversaire, vacances ou simple envie de faire plaisir</div>
               </div>
             </div>
@@ -95,8 +95,8 @@ export default function OffrirUnBonPage() {
         <section className="px-5 py-16 sm:px-6 sm:py-20">
           <div className="mx-auto grid max-w-[1080px] gap-10 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
             <div className="lg:sticky lg:top-28">
-              <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-emerald-600">Comment ça marche</div>
-              <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950">Un cadeau simple à acheter, agréable à choisir</h2>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600">Comment ça marche</div>
+              <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950 sm:text-4xl">Un cadeau simple à acheter, agréable à choisir</h2>
               <p className="mt-4 font-body text-sm leading-relaxed text-slate-500">Le bénéficiaire utilise ensuite le code du bon lors d’un paiement compatible ou le présente au centre pour organiser son activité.</p>
               <div className="mt-7 space-y-3">
                 {[
@@ -150,7 +150,7 @@ export default function OffrirUnBonPage() {
               <button type="button" onClick={payer} disabled={busy} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl border-none bg-emerald-600 px-5 py-4 font-body text-base font-bold text-white shadow-[0_10px_28px_rgba(5,150,105,0.2)] transition-all hover:-translate-y-0.5 hover:bg-emerald-500 disabled:cursor-wait disabled:opacity-60">
                 {busy ? <><Loader2 size={18} className="animate-spin" /> Préparation du paiement…</> : <><CreditCard size={18} /> Payer {montant || "—"} € par carte</>}
               </button>
-              <p className="mt-3 text-center font-body text-[11px] text-slate-400">Vous serez redirigé vers la page de paiement sécurisée du Crédit Agricole.</p>
+              <p className="mt-3 text-center font-body text-xs text-slate-400">Vous serez redirigé vers la page de paiement sécurisée du Crédit Agricole.</p>
             </div>
           </div>
         </section>

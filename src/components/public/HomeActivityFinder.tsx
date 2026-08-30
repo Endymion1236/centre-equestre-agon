@@ -93,7 +93,7 @@ export default function HomeActivityFinder() {
 
       <div className="relative mx-auto max-w-[1180px]">
         <div className="mx-auto mb-10 max-w-2xl text-center">
-          <div className="mb-3 font-body text-xs font-bold uppercase tracking-[0.2em] text-gold-500">Par où commencer ?</div>
+          <div className="mb-3 font-body text-[11px] font-bold uppercase tracking-[0.2em] text-gold-500">Par où commencer ?</div>
           <h2 className="font-display text-3xl font-bold leading-tight text-blue-900 sm:text-4xl">Trouvez l’activité qui vous ressemble</h2>
           <p className="mt-4 font-body text-base leading-relaxed text-gray-500">Pas besoin de connaître les niveaux du club. Choisissez simplement l’âge, l’envie ou le projet.</p>
         </div>
@@ -124,8 +124,8 @@ export default function HomeActivityFinder() {
                     <Icon size={23} />
                   </div>
 
-                  <div className={`font-body text-[10px] font-bold uppercase tracking-[0.16em] ${choice.accent}`}>{choice.eyebrow}</div>
-                  <h3 className="mt-2 font-display text-[25px] font-bold leading-[1.08] text-blue-950 sm:text-[27px]">{choice.title}</h3>
+                  <div className={`font-body text-[11px] font-bold uppercase tracking-[0.16em] ${choice.accent}`}>{choice.eyebrow}</div>
+                  <h3 className="mt-2 font-display text-[25px] font-bold leading-[1.08] text-blue-950 sm:text-[28px]">{choice.title}</h3>
                   <p className="mt-4 flex-1 font-body text-sm leading-relaxed text-slate-600">{choice.text}</p>
 
                   <div className="mt-6 inline-flex items-center gap-2 font-body text-sm font-bold text-blue-800">

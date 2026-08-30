@@ -758,7 +758,7 @@ export default function TestProtocolPage() {
                                     <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-600 font-body text-xs font-bold flex items-center justify-center mt-0.5">{i + 1}</span>
                                     <div>
                                       <div className="font-body text-xs text-slate-700">{step.action}</div>
-                                      <div className="font-body text-[11px] text-green-600 mt-0.5">→ {step.attendu}</div>
+                                      <div className="font-body text-xs text-green-600 mt-0.5">→ {step.attendu}</div>
                                     </div>
                                   </div>
                                 ))}
@@ -767,7 +767,7 @@ export default function TestProtocolPage() {
 
                             {/* Note */}
                             {results[t.id]?.note && !isEditingNote && (
-                              <div className="mt-1.5 font-body text-[11px] text-slate-600 bg-white/70 rounded-lg px-2 py-1">
+                              <div className="mt-1.5 font-body text-xs text-slate-600 bg-white/70 rounded-lg px-2 py-1">
                                 💬 {results[t.id].note}
                               </div>
                             )}
@@ -777,8 +777,8 @@ export default function TestProtocolPage() {
                                   onKeyDown={e => { if (e.key === "Enter") saveNote(t.id); if (e.key === "Escape") setNoteEditing(null); }}
                                   placeholder="Note..."
                                   className="flex-1 font-body text-xs border border-blue-400 rounded-lg px-2 py-1 focus:outline-none bg-white"/>
-                                <button type="button" onClick={() => saveNote(t.id)} className="font-body text-[11px] text-white bg-blue-500 px-2 py-1 rounded-lg border-none cursor-pointer">OK</button>
-                                <button type="button" onClick={() => setNoteEditing(null)} className="font-body text-[11px] text-slate-500 bg-white px-2 py-1 rounded-lg border border-gray-200 cursor-pointer">✕</button>
+                                <button type="button" onClick={() => saveNote(t.id)} className="font-body text-xs text-white bg-blue-500 px-2 py-1 rounded-lg border-none cursor-pointer">OK</button>
+                                <button type="button" onClick={() => setNoteEditing(null)} className="font-body text-xs text-slate-500 bg-white px-2 py-1 rounded-lg border border-gray-200 cursor-pointer">✕</button>
                               </div>
                             )}
                           </div>
@@ -788,23 +788,23 @@ export default function TestProtocolPage() {
                             <div className="flex gap-1">
                               {(["ok", "ko", "remarque"] as Status[]).map(s => (
                                 <button type="button" key={s} onClick={() => setStatus(t.id, s)}
-                                  className={`font-body text-[11px] w-8 h-8 rounded-lg border-none cursor-pointer transition-all ${status === s ? STATUS_CFG[s].btn : "bg-white text-slate-400 hover:bg-gray-100"}`}>
+                                  className={`font-body text-xs w-8 h-8 rounded-lg border-none cursor-pointer transition-all ${status === s ? STATUS_CFG[s].btn : "bg-white text-slate-400 hover:bg-gray-100"}`}>
                                   {STATUS_CFG[s].icon}
                                 </button>
                               ))}
                             </div>
                             <div className="flex gap-1">
                               <button type="button" onClick={() => toggleTest(t.id)}
-                                className="font-body text-[9px] text-slate-500 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">
+                                className="font-body text-xs text-slate-500 bg-white px-2 py-1 rounded border border-gray-200 cursor-pointer">
                                 {isExpanded ? "▲" : "▼"} Étapes
                               </button>
                               <button type="button" onClick={() => { setNoteEditing(t.id); setNoteInput(results[t.id]?.note || ""); }}
-                                className="font-body text-[9px] text-slate-500 bg-white px-1.5 py-1 rounded border border-gray-200 cursor-pointer">
+                                className="font-body text-xs text-slate-500 bg-white px-1.5 py-1 rounded border border-gray-200 cursor-pointer">
                                 💬
                               </button>
                               {status !== "non_teste" && (
                                 <button type="button" onClick={() => reset(t.id)}
-                                  className="font-body text-[9px] text-red-400 bg-white px-1.5 py-1 rounded border border-gray-200 cursor-pointer">
+                                  className="font-body text-xs text-red-400 bg-white px-1.5 py-1 rounded border border-gray-200 cursor-pointer">
                                   <RotateCcw size={9}/>
                                 </button>
                               )}

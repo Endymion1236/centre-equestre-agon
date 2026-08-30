@@ -1044,7 +1044,7 @@ export default function InscriptionAnnuellePage() {
                         </div>
                       </div>
                       {deja ? (
-                        <span className="font-body text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">Déjà inscrit · 2e cours possible</span>
+                        <span className="font-body text-xs font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-1 rounded-full">Déjà inscrit · 2e cours possible</span>
                       ) : selectedChild === c.id && <Check size={20} className="text-blue-500" />}
                     </button>
                     );

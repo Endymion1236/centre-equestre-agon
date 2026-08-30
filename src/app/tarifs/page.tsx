@@ -20,7 +20,7 @@ export default function TarifsPage() {
         <div className="pointer-events-none absolute -left-28 bottom-0 h-72 w-72 rounded-full bg-gold-400/10 blur-3xl" />
         <div className="relative mx-auto grid max-w-[1120px] gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
           <div>
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-2 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-gold-300"><BadgeEuro size={14} /> Des formules pour chaque projet</div>
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-2 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-300"><BadgeEuro size={14} /> Des formules pour chaque projet</div>
             <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">Des tarifs clairs pour choisir sereinement</h1>
             <p className="mt-6 max-w-2xl font-body text-base leading-relaxed text-white/65 sm:text-lg">Stages, balades, forfaits annuels et compétitions : retrouvez les principales formules, puis consultez les dates réellement ouvertes dans la réservation.</p>
             <div className="mt-8 flex flex-wrap gap-3">
@@ -34,7 +34,7 @@ export default function TarifsPage() {
             <Image src="/images/vitrine/choices/stages-enfants.webp" alt="Des enfants profitent d'un stage à poney" fill sizes="100vw" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-blue-950/48 via-transparent to-white/5" />
             <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-white/14 bg-blue-950/55 p-4 backdrop-blur-md">
-              <div className="font-body text-[10px] font-bold uppercase tracking-[0.15em] text-gold-300">Réserver au bon moment</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.15em] text-gold-300">Réserver au bon moment</div>
               <div className="mt-1 font-display text-xl font-bold text-white">Les places et horaires à jour sont dans le planning</div>
             </div>
           </div>

@@ -62,7 +62,7 @@ export function NextStagesBanner() {
           <span className="font-body text-xs font-bold text-gold-400 uppercase tracking-widest mb-3 block">
             {data.period.label}
           </span>
-          <h2 className="font-display text-3xl md:text-4xl font-bold text-white leading-tight mb-4">
+          <h2 className="font-display text-3xl font-bold leading-tight text-white sm:text-4xl mb-4">
             Les inscriptions<br />sont ouvertes !
           </h2>
           <p className="font-body text-base text-white/60 leading-relaxed mb-6">
@@ -93,7 +93,7 @@ export function NextStagesBanner() {
                 <div key={i} className="bg-white/8 backdrop-blur-sm border border-white/10 rounded-xl p-4 text-center">
                   <Icon size={24} className={`${color} mx-auto mb-1`} />
                   <div className="font-body text-xs font-semibold text-white">{s.activityTitle}</div>
-                  {sub && <div className="font-body text-[10px] text-white/40">{sub}</div>}
+                  {sub && <div className="font-body text-xs text-white/40">{sub}</div>}
                 </div>
               );
             })}
