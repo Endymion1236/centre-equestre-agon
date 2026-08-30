@@ -74,11 +74,35 @@ export const vitrineDefaults = {
 
   // ── Tarifs ──────────────────────────────────────────────────────────────────
   tarifs: {
+    // Ancien modèle : trois prix figés, un par niveau. Il ne décrivait pas
+    // l'offre réelle — toutes les demi-journées, du baby au galop 4, sont au
+    // même tarif, et seuls les stages intensifs de passage de galop coûtent
+    // plus cher. Conservé en lecture pour les bases enregistrées avant la
+    // bascule ; `stages_liste` fait foi dès qu'elle existe.
     stages: {
       baby_poney: "175",
       galop_bronze_argent: "175",
       galop_or: "175",
     },
+    // Modèle courant : autant de formules que nécessaire, nommées librement.
+    stages_liste: [
+      {
+        label: "Stages demi-journée",
+        subtitle: "Du Baby Poney au Galop 4",
+        price: "180",
+        unite: "/ semaine",
+        details: "5 demi-journées\nTous niveaux, du baby au galop 4\nPetits groupes\nSoins aux poneys et mini-ferme",
+        highlight: true,
+      },
+      {
+        label: "Stages intensifs",
+        subtitle: "Passage du Galop 4 au Galop 6",
+        price: "",
+        unite: "/ semaine",
+        details: "Préparation au passage de galop\nCavaliers confirmés\nEncadrement renforcé",
+        highlight: false,
+      },
+    ],
     balades: [
       { label: "Promenade en journée", level: "Tous niveaux", price: "53", note: "Dès 12 ans" },
       { label: "Coucher de soleil — débrouillés", level: "Galop 1-2", price: "57", note: "Avril à octobre" },
