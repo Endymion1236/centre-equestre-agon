@@ -84,7 +84,11 @@ export default function HomePage() {
           <path d="M0,55 C480,25 960,70 1440,40 L1440,80 L0,80Z" className="fill-cream" />
         </svg>
 
-        <div className="relative z-10 mx-auto w-full max-w-[1180px] px-6 pb-28 pt-36 sm:pb-32 sm:pt-40">
+        {/* Marges resserrées : pt-36/pb-28 laissaient près de 290 px de vide et
+            repoussaient tout sous la ligne de flottaison. Le haut doit encore
+            dégager le bandeau (2 rem) et la barre de navigation fixe — d'où
+            pt-28, pas moins. */}
+        <div className="relative z-10 mx-auto w-full max-w-[1180px] px-6 pb-16 pt-28 sm:pb-20 sm:pt-32">
           <div className="mb-7 animate-fade-in-up">
             <LiveHeroStatus />
           </div>
