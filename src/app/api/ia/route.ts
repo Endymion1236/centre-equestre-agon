@@ -829,7 +829,18 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
         max_tokens: 1500,
         messages: [{ role: "user", content: consigne }],
       });
-      const text = message.content[0]?.type === "text" ? message.content[0].text.trim() : "";
+      // Lire TOUS les blocs de texte, jamais `content[0]`.
+      //
+      // claude-opus-5 raisonne par défaut : le premier bloc de la réponse est
+      // un bloc `thinking`, et le texte vient après. Indexer [0] renvoyait donc
+      // une chaîne vide — « Génération impossible : réponse vide » — alors que
+      // le modèle avait bien répondu. Les autres cas de cette route lisent
+      // content[0] sans risque : ils utilisent claude-sonnet-4-5, qui ne
+      // raisonne pas. C'est la lecture de rib-extract, déjà éprouvée.
+      const text = message.content
+        .map((b) => (b.type === "text" ? b.text : ""))
+        .join("")
+        .trim();
       return NextResponse.json({ success: true, text, content: [{ type: "text", text }] });
     }
 
