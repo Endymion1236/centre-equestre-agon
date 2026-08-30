@@ -55,6 +55,9 @@ export default function ContenuPage() {
             balades: d.tarifs?.balades || prev.tarifs.balades,
             competitions: d.tarifs?.competitions || prev.tarifs.competitions,
             cours_annuels: d.tarifs?.cours_annuels || prev.tarifs.cours_annuels,
+            // Une base enregistrée avant l'introduction de stages_liste part
+            // sur les formules par défaut plutôt que sur une liste vide.
+            stages_liste: (d.tarifs as any)?.stages_liste || (prev.tarifs as any).stages_liste,
           },
           infos: { ...prev.infos, ...(d.infos || {}) },
         }));
@@ -135,6 +138,39 @@ export default function ContenuPage() {
     });
   };
 
+  // ── Formules de stage ────────────────────────────────────────────────
+  // Une liste et non trois champs figés : toutes les demi-journées, du baby
+  // au galop 4, sont au même tarif, et seuls les intensifs de passage de galop
+  // coûtent plus cher. Le nombre de formules appartient au club, pas au code.
+  const setStageFormule = (idx: number, field: string, value: string | boolean) => {
+    setData(prev => {
+      const stages_liste = [...((prev.tarifs as any).stages_liste || [])];
+      stages_liste[idx] = { ...stages_liste[idx], [field]: value };
+      return { ...prev, tarifs: { ...prev.tarifs, stages_liste } as any };
+    });
+  };
+
+  const addStageFormule = () => {
+    setData(prev => ({
+      ...prev,
+      tarifs: {
+        ...prev.tarifs,
+        stages_liste: [...((prev.tarifs as any).stages_liste || []),
+          { label: "", subtitle: "", price: "", unite: "/ semaine", details: "", highlight: false }],
+      } as any,
+    }));
+  };
+
+  const removeStageFormule = (idx: number) => {
+    setData(prev => ({
+      ...prev,
+      tarifs: {
+        ...prev.tarifs,
+        stages_liste: ((prev.tarifs as any).stages_liste || []).filter((_: any, i: number) => i !== idx),
+      } as any,
+    }));
+  };
+
   const setCoursAnnuel = (idx: number, field: string, value: string) => {
     setData(prev => {
       const cours_annuels = [...(prev.tarifs.cours_annuels || [])];
@@ -197,8 +233,12 @@ export default function ContenuPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      {/* Tabs — flex-wrap indispensable : sans lui, le cinquième onglet
+          (« Actus & événements ») débordait hors de l'écran sur mobile.
+          Aucun défilement n'étant prévu ici, il était non seulement invisible
+          mais inatteignable : les actualités du site paraissaient ne pas
+          exister. */}
+      <div className="flex flex-wrap gap-2 mb-6">
         {TABS.map(t => (
           <button type="button" key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-body text-sm font-medium border-none cursor-pointer transition-all ${tab === t.id ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200 hover:bg-gray-50"}`}>
@@ -347,22 +387,55 @@ export default function ContenuPage() {
         <div className="flex flex-col gap-4">
           {/* Stages */}
           <Card padding="md">
-            <div className="font-body text-sm font-semibold text-blue-800 mb-4">🏕️ Tarifs des stages (€ / semaine)</div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { field: "baby_poney", label: "Baby Poney" },
-                { field: "galop_bronze_argent", label: "Galop Bronze / Argent" },
-                { field: "galop_or", label: "Galop d'Or" },
-              ].map(({ field, label: lbl }) => (
-                <div key={field}>
-                  <label className={label}>{lbl}</label>
-                  <div className="relative">
-                    <input type="number" value={(data.tarifs.stages as any)[field]} onChange={e => setTarif(field, e.target.value)} className={`${inp} pr-8`} />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 font-body text-sm text-slate-400">€</span>
-                  </div>
-                </div>
-              ))}
+            <div className="flex items-center justify-between mb-1">
+              <div className="font-body text-sm font-semibold text-blue-800">🏕️ Formules de stage</div>
+              <button type="button" onClick={addStageFormule}
+                className="font-body text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                + Ajouter une formule
+              </button>
             </div>
+            <p className="font-body text-xs text-slate-500 mb-4">
+              Une carte par formule sur la page Tarifs du site. Une formule sans prix n&apos;est pas publiée.
+            </p>
+
+            {((data.tarifs as any).stages_liste || []).length === 0 ? (
+              <div className="text-center py-6 font-body text-sm text-slate-400">
+                Aucune formule. Cliquez sur « + Ajouter une formule ».
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {((data.tarifs as any).stages_liste || []).map((f: any, idx: number) => (
+                  <div key={idx} className="p-3 bg-sand rounded-lg flex flex-col gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                      <div><label className={label}>Nom de la formule</label>
+                        <input value={f.label || ""} onChange={e => setStageFormule(idx, "label", e.target.value)} className={inp} placeholder="ex : Stages demi-journée" /></div>
+                      <div><label className={label}>Sous-titre</label>
+                        <input value={f.subtitle || ""} onChange={e => setStageFormule(idx, "subtitle", e.target.value)} className={inp} placeholder="ex : Du Baby Poney au Galop 4" /></div>
+                      <div><label className={label}>Prix (€)</label>
+                        <input type="number" value={f.price ?? ""} onChange={e => setStageFormule(idx, "price", e.target.value)} className={inp} placeholder="180" /></div>
+                      <div><label className={label}>Unité</label>
+                        <input value={f.unite || ""} onChange={e => setStageFormule(idx, "unite", e.target.value)} className={inp} placeholder="/ semaine" /></div>
+                    </div>
+                    <div>
+                      <label className={label}>Ce que comprend la formule — une ligne par point</label>
+                      <textarea value={f.details || ""} onChange={e => setStageFormule(idx, "details", e.target.value)} rows={4}
+                        className={`${inp} resize-y`} placeholder={"5 demi-journées\nPetits groupes\nSoins aux poneys"} />
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" checked={!!f.highlight} onChange={e => setStageFormule(idx, "highlight", e.target.checked)} />
+                        <span className="font-body text-xs text-slate-600">Mettre en avant (carte sombre « Le plus choisi »)</span>
+                      </label>
+                      <button type="button" onClick={() => removeStageFormule(idx)}
+                        className="font-body text-xs font-semibold text-red-600 hover:text-red-800 bg-white hover:bg-red-50 px-3 py-2 rounded-lg border border-red-200 cursor-pointer">
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             <div className="mt-3">
               <label className={label}>Note paiement</label>
               <input value={data.tarifs.paiement_note} onChange={e => setData(prev => ({ ...prev, tarifs: { ...prev.tarifs, paiement_note: e.target.value } }))} className={inp} />
@@ -403,13 +476,23 @@ export default function ContenuPage() {
             ) : (
               <div className="flex flex-col gap-3">
                 {(data.tarifs.cours_annuels || []).map((c, idx) => (
-                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-5 gap-2 p-3 bg-sand rounded-lg items-end">
+                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-6 gap-2 p-3 bg-sand rounded-lg items-end">
                     <div><label className={label}>Libellé</label>
                       <input value={c.label} onChange={e => setCoursAnnuel(idx, "label", e.target.value)} className={inp} placeholder="ex : 1 cours / semaine" /></div>
                     <div><label className={label}>Niveau</label>
                       <input value={c.level} onChange={e => setCoursAnnuel(idx, "level", e.target.value)} className={inp} placeholder="ex : Tous niveaux" /></div>
                     <div><label className={label}>Prix (€)</label>
                       <input type="number" value={c.price} onChange={e => setCoursAnnuel(idx, "price", e.target.value)} className={inp} /></div>
+                    {/* « À partir de » : une première inscription ne paie pas
+                        le même tarif qu'un renouvellement. Afficher un prix sec
+                        engage sur un montant qui ne vaudra pas pour tout le
+                        monde. */}
+                    <div><label className={label}>Prix plancher</label>
+                      <label className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-white cursor-pointer">
+                        <input type="checkbox" checked={!!(c as any).from}
+                          onChange={e => setCoursAnnuel(idx, "from", e.target.checked ? "1" : "")} />
+                        <span className="font-body text-xs text-slate-600">à partir de</span>
+                      </label></div>
                     <div><label className={label}>Fréquence</label>
                       <input value={c.freq} onChange={e => setCoursAnnuel(idx, "freq", e.target.value)} className={inp} placeholder="Trimestre, Année, Mois..." /></div>
                     <button type="button"

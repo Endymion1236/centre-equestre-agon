@@ -54,17 +54,21 @@ const strengths = [
 
 export default function HomePage() {
   return (
-    <div style={{ ["--nav-top" as string]: "2.75rem" } as React.CSSProperties}>
-      {/* Bandeau transition — fixé tout en haut, la Navbar se décale dessous */}
+    <div style={{ ["--nav-top" as string]: "2rem" } as React.CSSProperties}>
+      {/* Bandeau — fixé tout en haut, la Navbar se décale dessous via --nav-top.
+          Volontairement discret : il double le bouton « Réserver » de la barre
+          de navigation, qui est juste en dessous et bien plus visible. Il
+          rappelle l'ouverture, il ne la crie pas. D'où 2 rem de haut au lieu
+          de 2,75, un texte plus court et le badge « Rentrée 2026 » retiré —
+          l'année n'apprend rien à qui lit « réservations ouvertes ». */}
       <Link href="/espace-cavalier" className="fixed inset-x-0 top-0 z-[210] block no-underline group">
-        <div className="flex h-11 items-center justify-center gap-2 bg-gradient-to-r from-blue-900 via-blue-800 to-blue-900 px-3 sm:gap-3">
-          <span className="hidden items-center gap-1.5 whitespace-nowrap rounded-full bg-white/10 px-2.5 py-0.5 font-body text-[10px] font-bold uppercase tracking-wider text-gold-300 sm:inline-flex">✨ Rentrée 2026</span>
-          <span className="truncate text-center font-body text-[11px] text-white/90 sm:text-sm">
-            <span className="sm:hidden">Nouveau site en septembre — consultez déjà votre espace</span>
-            <span className="hidden sm:inline">Les nouvelles fonctionnalités seront actives <strong className="text-white">en septembre</strong>. Vous pouvez déjà consulter votre espace client.</span>
+        <div className="flex h-8 items-center justify-center gap-2 bg-blue-900 px-3">
+          <span className="truncate text-center font-body text-[11px] text-white/85">
+            <strong className="font-semibold text-white">Réservations ouvertes</strong>
+            <span className="hidden sm:inline"> — connectez-vous à votre espace client</span>
           </span>
-          <span className="inline-flex items-center gap-1 whitespace-nowrap font-body text-[11px] font-bold text-gold-300 transition-all group-hover:gap-1.5 sm:text-sm">
-            <span className="hidden sm:inline">Accéder à mon espace</span><span className="sm:hidden">Mon espace</span> <ArrowRight size={14} />
+          <span className="inline-flex items-center gap-1 whitespace-nowrap font-body text-[11px] font-semibold text-gold-300 transition-all group-hover:gap-1.5">
+            Mon espace <ArrowRight size={12} />
           </span>
         </div>
       </Link>

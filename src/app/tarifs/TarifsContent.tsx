@@ -5,13 +5,13 @@ import { useVitrine } from "@/lib/use-vitrine";
 import IllustratedFeatureBand from "@/components/public/IllustratedFeatureBand";
 import { ArrowRight, Check, CreditCard, Gift, Trophy } from "lucide-react";
 
-function StageCard({ title, subtitle, price, features, highlight = false }: { title: string; subtitle: string; price: string; features: string[]; highlight?: boolean }) {
+function StageCard({ title, subtitle, price, features, unite = "/ semaine", highlight = false }: { title: string; subtitle: string; price: string; features: string[]; unite?: string; highlight?: boolean }) {
   return (
     <article className={`relative flex h-full flex-col overflow-hidden rounded-[24px] border p-6 transition-all hover:-translate-y-1 ${highlight ? "border-blue-700 bg-[linear-gradient(145deg,#07111f,#12346b)] text-white shadow-[0_22px_55px_rgba(12,26,46,0.16)]" : "border-blue-500/[0.08] bg-white shadow-[0_12px_38px_rgba(12,26,46,0.04)]"}`}>
       {highlight && <div className="absolute right-4 top-4 rounded-full bg-gold-400 px-3 py-1 font-body text-[9px] font-bold uppercase tracking-wide text-blue-950">Le plus choisi</div>}
       <div className={`font-body text-[10px] font-bold uppercase tracking-[0.15em] ${highlight ? "text-gold-300" : "text-gold-600"}`}>{subtitle}</div>
       <h3 className={`mt-3 font-display text-2xl font-bold ${highlight ? "text-white" : "text-blue-950"}`}>{title}</h3>
-      <div className="mt-5 flex items-end gap-2"><span className={`font-display text-4xl font-bold ${highlight ? "text-white" : "text-blue-700"}`}>{price}€</span><span className={`mb-1 font-body text-xs ${highlight ? "text-white/45" : "text-slate-400"}`}>/ semaine</span></div>
+      <div className="mt-5 flex items-end gap-2"><span className={`font-display text-4xl font-bold ${highlight ? "text-white" : "text-blue-700"}`}>{price}€</span><span className={`mb-1 font-body text-xs ${highlight ? "text-white/45" : "text-slate-400"}`}>{unite}</span></div>
       <div className="mt-6 flex-1 space-y-3">
         {features.map((feature) => <div key={feature} className={`flex items-start gap-2.5 font-body text-sm leading-relaxed ${highlight ? "text-white/68" : "text-slate-500"}`}><span className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full ${highlight ? "bg-white/10 text-gold-300" : "bg-emerald-50 text-emerald-600"}`}><Check size={11} strokeWidth={3} /></span>{feature}</div>)}
       </div>
@@ -23,18 +23,41 @@ function StageCard({ title, subtitle, price, features, highlight = false }: { ti
 export function TarifsContent() {
   const { vitrine } = useVitrine();
   const tariffs = vitrine.tarifs;
-  const stages = tariffs.stages as { baby_poney: number | string; galop_bronze_argent: number | string; galop_or: number | string };
-  const annualCourses = ((tariffs as any).cours_annuels || []) as Array<{ label: string; level?: string; freq?: string; price: number | string }>;
+  // Formules de stage : la liste modifiable fait foi. Les trois prix figés
+  // d'origine — un par niveau — ne décrivaient pas l'offre : toutes les
+  // demi-journées sont au même tarif, seuls les intensifs coûtent plus cher.
+  // Ils servent encore de repli pour une base enregistrée avant la bascule.
+  const stagesLegacy = tariffs.stages as { baby_poney: number | string; galop_bronze_argent: number | string; galop_or: number | string };
+  type FormuleStage = { label: string; subtitle?: string; price: number | string; unite?: string; details?: string; highlight?: boolean };
+  const formulesSaisies = ((tariffs as any).stages_liste || []) as FormuleStage[];
+  const formules: FormuleStage[] = formulesSaisies.length > 0
+    // Une formule sans prix n'est pas publiée : mieux vaut une carte de moins
+    // qu'une carte annonçant « € ».
+    ? formulesSaisies.filter(f => String(f.price ?? "").trim() !== "" && (f.label || "").trim() !== "")
+    : [
+        { label: "Baby Poney", subtitle: "3 – 5 ans", price: stagesLegacy.baby_poney, details: "10h de stage\nPetits groupes\nThèmes imaginaires\nMini-ferme et soins" },
+        { label: "Galop Bronze / Argent", subtitle: "6 – 10 ans", price: stagesLegacy.galop_bronze_argent, highlight: true, details: "10h de stage\nSemaines thématiques\nJeux et progression\nSoins aux poneys\nPassage de galop possible" },
+        { label: "Galop d’Or / G3-4", subtitle: "Cavaliers réguliers", price: stagesLegacy.galop_or, details: "10h de stage\nMulti-disciplines\nCSO, dressage, cross\nObjectifs techniques" },
+      ];
+  const annualCourses = ((tariffs as any).cours_annuels || []) as Array<{ label: string; level?: string; freq?: string; price: number | string; from?: unknown }>;
 
   return (
     <>
       <section className="bg-cream px-6 py-16 sm:py-20">
         <div className="mx-auto max-w-[1120px]">
           <div className="mb-10 text-center"><div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Stages vacances</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Une semaine complète à poney</h2><p className="mx-auto mt-4 max-w-2xl font-body text-base leading-relaxed text-slate-500">Les groupes sont organisés par âge et niveau. La réservation affiche les dates et horaires réellement disponibles.</p></div>
-          <div className="grid gap-5 lg:grid-cols-3">
-            <StageCard title="Baby Poney" subtitle="3 – 5 ans" price={String(stages.baby_poney)} features={["10h de stage", "Petits groupes", "Thèmes imaginaires", "Mini-ferme et soins"]} />
-            <StageCard title="Galop Bronze / Argent" subtitle="6 – 10 ans" price={String(stages.galop_bronze_argent)} features={["10h de stage", "Semaines thématiques", "Jeux et progression", "Soins aux poneys", "Passage de galop possible"]} highlight />
-            <StageCard title="Galop d’Or / G3-4" subtitle="Cavaliers réguliers" price={String(stages.galop_or)} features={["10h de stage", "Multi-disciplines", "CSO, dressage, cross", "Objectifs techniques"]} />
+          <div className={`grid gap-5 ${formules.length >= 3 ? "sm:grid-cols-2 lg:grid-cols-3" : "sm:grid-cols-2"}`}>
+            {formules.map((f, i) => (
+              <StageCard
+                key={`${f.label}-${i}`}
+                title={f.label}
+                subtitle={f.subtitle || ""}
+                price={String(f.price)}
+                unite={f.unite}
+                features={String(f.details || "").split("\n").map(l => l.trim()).filter(Boolean)}
+                highlight={!!f.highlight}
+              />
+            ))}
           </div>
         </div>
       </section>
@@ -95,7 +118,7 @@ export function TarifsContent() {
                 {annualCourses.map((course, index) => (
                   <div key={`${course.label}-${index}`} className="flex items-center justify-between gap-5 rounded-[20px] border border-blue-500/[0.07] bg-cream p-5">
                     <div><div className="font-display text-lg font-bold text-blue-950">{course.label}</div><div className="mt-1 font-body text-xs text-slate-400">{course.level}{course.freq ? ` · ${course.freq}` : ""}</div></div>
-                    <div className="flex-shrink-0 text-right"><div className="font-display text-2xl font-bold text-blue-700">{course.price}€</div><div className="font-body text-[10px] text-slate-400">forfait annuel</div></div>
+                    <div className="flex-shrink-0 text-right">{course.from ? <div className="font-body text-[11px] text-slate-400">à partir de</div> : null}<div className="font-display text-2xl font-bold text-blue-700">{course.price}€</div><div className="font-body text-[10px] text-slate-400">forfait annuel</div></div>
                   </div>
                 ))}
               </div>
