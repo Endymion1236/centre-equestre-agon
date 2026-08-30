@@ -1,9 +1,9 @@
 /**
  * Templates emails — Centre Équestre d'Agon-Coutainville
  *
- * Habillage transactionnel premium, compatible avec les principaux clients
- * email. Toute la structure reste en tableaux et styles inline afin de tenir
- * correctement dans Outlook, Gmail et Apple Mail.
+ * V2 : une papeterie sobre et légère. L'or devient un accent rare, les
+ * titres redeviennent compacts et les blocs privilégient l'information.
+ * La structure reste en tableaux et styles inline pour Outlook/Gmail.
  */
 
 const CLUB_NAME = "Centre Équestre d'Agon-Coutainville";
@@ -15,19 +15,18 @@ const SITE_VITRINE = "https://www.centreequestreagon.com";
 const ADRESSE = { rue: "56 Charrière du Commerce", cp: "50230", ville: "Agon-Coutainville" } as const;
 
 const C = {
-  encre: "#0F2C56",
-  texte: "#344155",
-  gris: "#778296",
-  discret: "#9AA3B0",
+  encre: "#102C50",
+  texte: "#3E4959",
+  gris: "#758092",
+  discret: "#98A0AB",
   bleu: "#173A68",
-  or: "#D79A25",
-  orFonce: "#9A6818",
-  sable: "#FBF7F1",
-  ivoire: "#FFFDF9",
-  bord: "#E9DDCC",
-  fond: "#F2EEE7",
-  vert: "#15803D",
-  rouge: "#B3261E",
+  or: "#C58A27",
+  sable: "#FCFAF7",
+  ivoire: "#FFFDFC",
+  bord: "#E8E2D9",
+  fond: "#F4F2EE",
+  vert: "#247A4D",
+  rouge: "#A93B35",
 } as const;
 
 const POLICE = "Georgia,'Times New Roman',serif";
@@ -46,50 +45,41 @@ function wrap(content: string, preheader = "") {
     ? `<div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:${C.fond};">${preheader}${"&#847;&zwnj;&nbsp;".repeat(40)}</div>`
     : "";
 
-  return `${apercu}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.fond};margin:0;padding:28px 10px;">
+  return `${apercu}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.fond};margin:0;padding:18px 8px;">
   <tr><td align="center">
-    <table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:640px;border-collapse:separate;border-spacing:0;">
+    <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:620px;border-collapse:separate;border-spacing:0;">
 
       <tr>
-        <td style="background:${C.encre};padding:28px 34px 26px;border-radius:18px 18px 0 0;">
+        <td style="background:${C.encre};padding:18px 24px;border-radius:14px 14px 0 0;">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
             <tr>
-              <td width="74" style="width:74px;vertical-align:middle;padding-right:18px;">
-                <img src="${SITE_URL}/images/logo-ce-agon.png" width="64" height="64" alt="Centre Équestre d'Agon-Coutainville"
-                     style="display:block;width:64px;height:64px;border:0;border-radius:12px;background:#ffffff;" />
+              <td width="54" style="width:54px;vertical-align:middle;padding-right:14px;">
+                <img src="${SITE_URL}/images/logo-ce-agon.png" width="46" height="46" alt="Centre Équestre d'Agon-Coutainville"
+                     style="display:block;width:46px;height:46px;border:0;border-radius:9px;background:#ffffff;" />
               </td>
               <td style="vertical-align:middle;">
-                <div style="font-family:${POLICE};font-size:26px;line-height:1.1;color:#ffffff;font-weight:normal;letter-spacing:0.01em;">Centre Équestre</div>
-                <div style="font-family:${POLICE_TEXTE};font-size:11px;line-height:1.5;color:${C.or};letter-spacing:0.20em;text-transform:uppercase;padding-top:7px;">Agon-Coutainville</div>
-                <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-top:10px;"><tr>
-                  <td width="54" style="height:1px;width:54px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td>
-                  <td style="padding:0 9px;color:${C.or};font-family:${POLICE};font-size:12px;line-height:1;">&#9670;</td>
-                  <td width="54" style="height:1px;width:54px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td>
-                </tr></table>
+                <div style="font-family:${POLICE};font-size:21px;line-height:1.15;color:#ffffff;font-weight:normal;">Centre Équestre</div>
+                <div style="font-family:${POLICE_TEXTE};font-size:9px;line-height:1.4;color:#D5B16B;letter-spacing:0.18em;text-transform:uppercase;padding-top:5px;">Agon-Coutainville</div>
               </td>
             </tr>
           </table>
         </td>
       </tr>
 
-      <tr><td style="height:3px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td></tr>
+      <tr><td style="height:2px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td></tr>
 
       <tr>
-        <td style="background:#ffffff;padding:38px 38px 34px;border-left:1px solid ${C.bord};border-right:1px solid ${C.bord};font-family:${POLICE_TEXTE};font-size:15px;line-height:1.65;color:${C.texte};">
+        <td style="background:#ffffff;padding:28px 30px 30px;border-left:1px solid ${C.bord};border-right:1px solid ${C.bord};font-family:${POLICE_TEXTE};font-size:15px;line-height:1.62;color:${C.texte};">
           ${content}
         </td>
       </tr>
 
       <tr>
-        <td style="background:${C.encre};padding:20px 28px 22px;border-radius:0 0 18px 18px;border-top:2px solid ${C.or};text-align:center;font-family:${POLICE_TEXTE};font-size:11px;line-height:1.75;color:#E7EDF5;">
-          <div style="font-family:${POLICE};font-size:14px;color:#ffffff;padding-bottom:5px;">${CLUB_NAME}</div>
+        <td style="background:#F8F6F2;padding:15px 24px 17px;border:1px solid ${C.bord};border-top:none;border-radius:0 0 14px 14px;text-align:center;font-family:${POLICE_TEXTE};font-size:10px;line-height:1.65;color:#818A96;">
+          <div style="font-family:${POLICE};font-size:12px;color:${C.encre};padding-bottom:3px;">${CLUB_NAME}</div>
           <div>${ADRESSE.rue} · ${ADRESSE.cp} ${ADRESSE.ville}</div>
-          <div style="padding-top:2px;">${CLUB_TEL} · ${CLUB_MOBILE} · <a href="mailto:${CLUB_EMAIL}" style="color:#ffffff;text-decoration:none;">${CLUB_EMAIL}</a></div>
-          <div style="padding-top:8px;">
-            <a href="${SITE_URL}/espace-cavalier" style="color:${C.or};text-decoration:none;font-weight:700;">Mon espace cavalier</a>
-            <span style="color:#73839A;"> &nbsp;·&nbsp; </span>
-            <a href="${SITE_VITRINE}" style="color:#E7EDF5;text-decoration:none;">${SITE_VITRINE.replace(/^https?:\/\//, "")}</a>
-          </div>
+          <div>${CLUB_TEL} · ${CLUB_MOBILE} · <a href="mailto:${CLUB_EMAIL}" style="color:${C.encre};text-decoration:none;">${CLUB_EMAIL}</a></div>
+          <div style="padding-top:5px;"><a href="${SITE_VITRINE}" style="color:${C.encre};text-decoration:none;">${SITE_VITRINE.replace(/^https?:\/\//, "")}</a></div>
         </td>
       </tr>
 
@@ -99,21 +89,20 @@ function wrap(content: string, preheader = "") {
 }
 
 function button(text: string, url: string, color: string = C.encre) {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:26px auto;border-collapse:separate;">
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0;border-collapse:separate;">
     <tr>
-      <td align="center" bgcolor="${color}" style="background:${color};border:1px solid ${C.or};border-radius:10px;">
-        <a href="${url}" style="display:block;padding:14px 31px;color:#ffffff;text-decoration:none;font-weight:700;font-size:14px;font-family:${POLICE_TEXTE};line-height:1.3;letter-spacing:0.01em;">${text}</a>
+      <td align="center" bgcolor="${color}" style="background:${color};border-radius:8px;">
+        <a href="${url}" style="display:block;padding:11px 20px;color:#ffffff;text-decoration:none;font-weight:650;font-size:13px;font-family:${POLICE_TEXTE};line-height:1.3;">${text}</a>
       </td>
     </tr>
   </table>`;
 }
 
 function panneau(titrePanneau: string, contenu: string) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0;border-collapse:separate;border-spacing:0;">
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:19px 0;border-collapse:separate;border-spacing:0;">
     <tr>
-      <td width="4" style="width:4px;background:${C.or};font-size:0;line-height:0;border-radius:12px 0 0 12px;">&nbsp;</td>
-      <td style="background:${C.sable};padding:20px 22px 19px;border:1px solid ${C.bord};border-left:none;border-radius:0 12px 12px 0;">
-        ${titrePanneau ? `<div style="font-family:${POLICE_TEXTE};font-size:11px;font-weight:800;letter-spacing:0.17em;text-transform:uppercase;color:${C.orFonce};padding-bottom:12px;border-bottom:1px solid ${C.bord};margin-bottom:8px;">${titrePanneau}</div>` : ""}
+      <td style="background:${C.sable};padding:17px 18px;border:1px solid ${C.bord};border-radius:10px;">
+        ${titrePanneau ? `<div style="font-family:${POLICE_TEXTE};font-size:10px;font-weight:750;letter-spacing:0.10em;text-transform:uppercase;color:${C.encre};padding-bottom:10px;margin-bottom:5px;border-bottom:1px solid ${C.bord};">${titrePanneau}</div>` : ""}
         ${contenu}
       </td>
     </tr>
@@ -124,49 +113,41 @@ function ligne(label: string, valeur: string) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
     <tr>
       <td style="padding:5px 0;font-family:${POLICE_TEXTE};font-size:13px;color:${C.gris};vertical-align:top;">${label}</td>
-      <td align="right" style="padding:5px 0 5px 16px;font-family:${POLICE_TEXTE};font-size:13px;color:${C.encre};font-weight:700;vertical-align:top;white-space:nowrap;">${valeur}</td>
+      <td align="right" style="padding:5px 0 5px 14px;font-family:${POLICE_TEXTE};font-size:13px;color:${C.encre};font-weight:650;vertical-align:top;">${valeur}</td>
     </tr>
   </table>`;
 }
 
 function montant(valeur: number, couleur: string = C.encre) {
-  return `<div style="font-family:${POLICE};font-size:31px;line-height:1.2;color:${couleur};padding:5px 0;">${euros(valeur)}</div>`;
+  return `<div style="font-family:${POLICE};font-size:27px;line-height:1.2;color:${couleur};padding:3px 0;">${euros(valeur)}</div>`;
 }
 
 function titre(texte: string) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 25px;border-collapse:collapse;">
-    <tr><td align="center">
-      <div style="font-family:${POLICE};font-size:28px;line-height:1.28;font-weight:normal;color:${C.encre};">${texte}</div>
-      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:12px auto 0;"><tr>
-        <td width="36" style="height:1px;width:36px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td>
-        <td style="padding:0 8px;color:${C.or};font-family:${POLICE};font-size:10px;line-height:1;">&#9670;</td>
-        <td width="36" style="height:1px;width:36px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td>
-      </tr></table>
-    </td></tr>
-  </table>`;
+  return `<h1 style="margin:0 0 18px;font-family:${POLICE};font-size:24px;line-height:1.3;font-weight:normal;color:${C.encre};text-align:left;">${texte}</h1>`;
 }
 
 function p(texte: string, taille = 15) {
-  return `<p style="margin:0 0 13px;font-family:${POLICE_TEXTE};font-size:${taille}px;line-height:1.68;color:${C.texte};">${texte}</p>`;
+  return `<p style="margin:0 0 12px;font-family:${POLICE_TEXTE};font-size:${taille}px;line-height:1.65;color:${C.texte};">${texte}</p>`;
 }
 
 function etat(libelle: string, detail: string, couleur: string) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;border-collapse:separate;border-spacing:0;">
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;border-collapse:separate;border-spacing:0;">
     <tr>
-      <td align="center" style="background:${C.ivoire};padding:15px 20px 16px;border:1px solid ${C.bord};border-top:3px solid ${couleur};border-radius:11px;">
-        <div style="font-family:${POLICE_TEXTE};font-size:10px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:${couleur};">${libelle}</div>
-        <div style="font-family:${POLICE};font-size:24px;line-height:1.25;color:${C.encre};padding-top:5px;">${detail}</div>
+      <td style="background:${C.ivoire};padding:12px 15px;border:1px solid ${C.bord};border-radius:9px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td style="font-family:${POLICE_TEXTE};font-size:10px;font-weight:750;letter-spacing:0.10em;text-transform:uppercase;color:${couleur};">${libelle}</td>
+          <td align="right" style="font-family:${POLICE};font-size:21px;line-height:1.2;color:${C.encre};">${detail}</td>
+        </tr></table>
       </td>
     </tr>
   </table>`;
 }
 
 function signature(mot = `Au plaisir de vous accueillir prochainement au ${CLUB_NAME}.`) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:32px 0 0;border-collapse:collapse;border-top:1px solid ${C.bord};">
-    <tr><td align="center" style="padding:22px 8px 0;font-family:${POLICE_TEXTE};font-size:14px;line-height:1.65;color:${C.texte};">
-      <div style="color:${C.or};font-family:${POLICE};font-size:14px;line-height:1;padding-bottom:9px;">&#9670;</div>
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:27px 0 0;border-collapse:collapse;border-top:1px solid ${C.bord};">
+    <tr><td style="padding:16px 0 0;font-family:${POLICE_TEXTE};font-size:13px;line-height:1.6;color:${C.gris};">
       ${mot}<br/>
-      <span style="display:inline-block;padding-top:5px;font-family:${POLICE};font-size:17px;font-style:italic;color:${C.encre};">L'équipe du centre équestre</span>
+      <span style="display:inline-block;padding-top:3px;font-family:${POLICE};font-size:15px;font-style:italic;color:${C.encre};">L'équipe du Centre Équestre d'Agon-Coutainville</span>
     </td></tr>
   </table>`;
 }
@@ -175,15 +156,13 @@ function fidelite(gagnes: number, total: number, taux: number, minPoints: number
   if (!gagnes || gagnes <= 0) return "";
   const valeur = taux > 0 ? total / taux : 0;
   const utilisable = total >= minPoints;
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 0;border-collapse:separate;border-spacing:0;">
-    <tr><td style="background:${C.encre};padding:17px 21px;border-radius:11px;border-bottom:2px solid ${C.or};">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-        <td style="font-family:${POLICE_TEXTE};font-size:10px;font-weight:800;letter-spacing:0.16em;text-transform:uppercase;color:#FFFFFF;opacity:0.65;">Fidélité</td>
-        <td align="right" style="font-family:${POLICE};font-size:21px;color:${C.or};">+${gagnes} points</td>
-      </tr></table>
-      <div style="font-family:${POLICE_TEXTE};font-size:12px;line-height:1.6;color:#E7EDF5;padding-top:8px;">
-        Votre solde : <strong style="color:#ffffff;">${total} points</strong>, soit ${valeur.toFixed(2).replace(".", ",")}&nbsp;€ de réduction${utilisable
-          ? " — utilisables dès votre prochain règlement."
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:17px 0 0;border-collapse:separate;border-spacing:0;">
+    <tr><td style="background:${C.sable};padding:14px 17px;border:1px solid ${C.bord};border-radius:9px;">
+      <div style="font-family:${POLICE_TEXTE};font-size:10px;font-weight:750;letter-spacing:0.09em;text-transform:uppercase;color:${C.gris};">Fidélité</div>
+      <div style="font-family:${POLICE};font-size:19px;line-height:1.25;color:${C.encre};padding-top:3px;">+${gagnes} points</div>
+      <div style="font-family:${POLICE_TEXTE};font-size:12px;line-height:1.55;color:${C.gris};padding-top:4px;">
+        Votre solde est de <strong style="color:${C.encre};">${total} points</strong>, soit ${valeur.toFixed(2).replace(".", ",")}&nbsp;€ de réduction${utilisable
+          ? " utilisables dès votre prochain règlement."
           : `. Utilisables à partir de ${minPoints} points.`}
       </div>
     </td></tr>
@@ -245,10 +224,10 @@ export const emailTemplates = {
             e.name + (e.remise > 0 ? ` <span style="color:${C.gris};font-size:12px;">(remise ${e.remise} €)</span>` : ""),
             euros(e.prix),
           )).join("")}
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:10px;border-top:1px solid ${C.bord};">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin-top:9px;border-top:1px solid ${C.bord};">
             <tr>
-              <td style="padding:12px 0 0;font-family:${POLICE_TEXTE};font-size:13px;font-weight:800;color:${C.encre};text-transform:uppercase;letter-spacing:0.08em;">Total</td>
-              <td align="right" style="padding:9px 0 0;font-family:${POLICE};font-size:26px;color:${C.encre};">${euros(vars.totalTTC)}</td>
+              <td style="padding:10px 0 0;font-family:${POLICE_TEXTE};font-size:12px;font-weight:700;color:${C.encre};">Total</td>
+              <td align="right" style="padding:8px 0 0;font-family:${POLICE};font-size:24px;color:${C.encre};">${euros(vars.totalTTC)}</td>
             </tr>
           </table>
         `)}
@@ -334,7 +313,7 @@ export const emailTemplates = {
       ${titre("Votre lien de paiement")}
       ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
       ${p(`Voici votre lien de paiement pour <strong>${vars.label}</strong>.`)}
-      ${panneau("Montant à régler", `<div style="text-align:center;">${montant(vars.montant)}</div>`)}
+      ${panneau("Montant à régler", `<div style="text-align:left;">${montant(vars.montant)}</div>`)}
       ${button("Payer en ligne", vars.lienPaiement)}
       ${p(`<span style="color:${C.discret};">Paiement sécurisé par CAWL — Crédit Agricole.</span>`, 11)}
     `, `${vars.label} — ${euros(vars.montant)}`),
@@ -355,9 +334,9 @@ export const emailTemplates = {
       ${etat("Paiement reçu", euros(vars.montant), C.vert)}
       ${titre("Merci, votre paiement nous est parvenu")}
       ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
-      ${panneau("Détail", `
+      ${panneau("Détail du règlement", `
         ${ligne("Mode de règlement", vars.mode)}
-        ${ligne("Prestations", vars.prestations)}
+        ${ligne("Prestation", vars.prestations)}
       `)}
       ${vars.pointsGagnes ? fidelite(vars.pointsGagnes, vars.pointsTotal ?? vars.pointsGagnes, vars.tauxFidelite ?? 100, vars.minPointsFidelite ?? 500) : ""}
       ${button("Voir mes factures", `${SITE_URL}/espace-cavalier/factures`)}
@@ -423,8 +402,8 @@ export const emailTemplates = {
       ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
       ${p("Nous nous permettons de vous rappeler qu'un solde reste ouvert sur votre compte.")}
       ${panneau("Montant restant", `
-        <div style="text-align:center;">${montant(vars.montant, C.rouge)}</div>
-        ${p(`<span style="color:${C.gris};text-align:center;display:block;">${vars.prestations}</span>`, 13)}
+        <div>${montant(vars.montant, C.rouge)}</div>
+        ${p(`<span style="color:${C.gris};">${vars.prestations}</span>`, 13)}
       `)}
       ${button("Régler en ligne", `${SITE_URL}/espace-cavalier/factures`)}
       ${p("Merci de régulariser à votre convenance. Si ce règlement a déjà été fait, ce message est sans objet.", 13)}
@@ -441,7 +420,7 @@ export const emailTemplates = {
       ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
       ${p("Votre espace personnel est prêt. Vous pouvez dès maintenant :")}
       ${panneau("Votre espace cavalier", `
-        <ul style="margin:0;padding-left:18px;font-family:${POLICE_TEXTE};font-size:14px;line-height:1.9;color:${C.texte};">
+        <ul style="margin:0;padding-left:18px;font-family:${POLICE_TEXTE};font-size:14px;line-height:1.8;color:${C.texte};">
           <li>compléter le profil de votre famille ;</li>
           <li>inscrire vos enfants aux activités ;</li>
           <li>réserver des stages et des balades ;</li>
@@ -467,7 +446,7 @@ export const emailTemplates = {
       ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
       ${p(`La désinscription de <strong>${vars.childName}</strong> de <strong>${vars.activite}</strong> a été enregistrée.`)}
       ${panneau("Avoir créé sur votre compte", `
-        <div style="text-align:center;">${montant(vars.montantAvoir)}</div>
+        <div>${montant(vars.montantAvoir)}</div>
         ${ligne("Référence", vars.refAvoir)}
       `)}
       ${p("Cet avoir sera automatiquement proposé lors de votre prochain règlement.", 14)}
