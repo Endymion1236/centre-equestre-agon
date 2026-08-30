@@ -141,25 +141,38 @@ export function datesStage(
   items: LigneEmail[],
   repli?: string | null,
 ): string {
-  const jours = Array.from(new Set(
-    items.flatMap(i => Array.isArray(i.stageDates) && i.stageDates.length
-      ? i.stageDates.map(d => d?.date).filter((d): d is string => !!d)
-      : i.date ? [i.date] : []),
-  )).sort();
-
-  if (jours.length === 0) return repli || "";
-
   const fmt = (iso: string, opts: Intl.DateTimeFormatOptions) =>
     new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", opts);
 
-  if (jours.length === 1) {
-    return fmt(jours[0], { weekday: "long", day: "numeric", month: "long" });
+  // Une plage par LIGNE, jamais une plage globale. Deux enfants inscrits à
+  // deux stages différents tiennent dans une seule commande : réduire
+  // l'ensemble à son premier et son dernier jour aurait annoncé « du lundi
+  // 26 octobre au vendredi 20 février (10 jours) » — une période que
+  // personne n'a achetée.
+  const plages: string[] = [];
+  for (const i of items) {
+    const jours = Array.from(new Set(
+      Array.isArray(i.stageDates) && i.stageDates.length
+        ? i.stageDates.map(d => d?.date).filter((d): d is string => !!d)
+        : i.date ? [i.date] : [],
+    )).sort();
+    if (jours.length === 0) continue;
+
+    if (jours.length === 1) {
+      plages.push(fmt(jours[0], { weekday: "long", day: "numeric", month: "long" }));
+      continue;
+    }
+    const debut = new Date(`${jours[0]}T12:00:00`);
+    const fin = new Date(`${jours[jours.length - 1]}T12:00:00`);
+    const memeMois = debut.getMonth() === fin.getMonth() && debut.getFullYear() === fin.getFullYear();
+    const d = fmt(jours[0], memeMois ? { weekday: "long", day: "numeric" } : { weekday: "long", day: "numeric", month: "long" });
+    const f = fmt(jours[jours.length - 1], { weekday: "long", day: "numeric", month: "long" });
+    plages.push(`du ${d} au ${f} (${jours.length} jours)`);
   }
 
-  const debut = new Date(`${jours[0]}T12:00:00`);
-  const fin = new Date(`${jours[jours.length - 1]}T12:00:00`);
-  const memeMois = debut.getMonth() === fin.getMonth() && debut.getFullYear() === fin.getFullYear();
-  const d = fmt(jours[0], memeMois ? { weekday: "long", day: "numeric" } : { weekday: "long", day: "numeric", month: "long" });
-  const f = fmt(jours[jours.length - 1], { weekday: "long", day: "numeric", month: "long" });
-  return `du ${d} au ${f} (${jours.length} jours)`;
+  // Deux enfants sur le MÊME stage donnent deux lignes identiques : une seule
+  // mention suffit.
+  const uniques = Array.from(new Set(plages));
+  if (uniques.length === 0) return repli || "";
+  return uniques.join(" · ");
 }

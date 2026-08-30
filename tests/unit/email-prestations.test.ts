@@ -153,13 +153,39 @@ test("un stage d'un seul jour ne s'annonce pas comme une période", () => {
   assert.ok(!rendu.startsWith("du "), "une seule date ne doit pas devenir une plage");
 });
 
-test("les jours en double sont fusionnés et remis dans l'ordre", () => {
+test("les jours d'un même stage sont fusionnés et remis dans l'ordre", () => {
   const items = [
     { date: "2026-10-27", stageDates: [{ date: "2026-10-27" }, { date: "2026-10-26" }] },
-    { date: "2026-10-26", stageDates: [{ date: "2026-10-26" }] },
   ];
   assert.ok(datesStage(items).includes("2 jours"));
   assert.ok(datesStage(items).includes("lundi 26"));
+});
+
+test("deux enfants sur le même stage ne l'annoncent qu'une fois", () => {
+  const semaine = [{ date: "2026-10-26" }, { date: "2026-10-27" }];
+  const items = [
+    { activityTitle: "Stage — Éliona", date: "2026-10-26", stageDates: semaine },
+    { activityTitle: "Stage — Tom", date: "2026-10-26", stageDates: semaine },
+  ];
+  const rendu = datesStage(items);
+  assert.equal(rendu.split("·").length, 1, "la même période est répétée");
+  assert.ok(rendu.includes("2 jours"));
+});
+
+test("deux stages différents restent deux périodes distinctes", () => {
+  const items = [
+    { activityTitle: "Toussaint — Éliona", date: "2026-10-26",
+      stageDates: [{ date: "2026-10-26" }, { date: "2026-10-30" }] },
+    { activityTitle: "Février — Tom", date: "2027-02-15",
+      stageDates: [{ date: "2027-02-15" }, { date: "2027-02-19" }] },
+  ];
+  const rendu = datesStage(items);
+  // Le piège : réduire l'ensemble au premier et au dernier jour annoncerait
+  // une période de quatre mois que personne n'a achetée.
+  assert.ok(!/octobre.*f[ée]vrier/.test(rendu.replace(/·.*/, "")),
+    "les deux stages ont été fusionnés en une seule plage");
+  assert.ok(rendu.includes("octobre") && rendu.includes("février"), "un stage manque");
+  assert.ok(rendu.includes("·"), "les deux périodes ne sont pas séparées");
 });
 
 test("sans stageDates, la date de la ligne suffit", () => {
