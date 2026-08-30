@@ -680,7 +680,7 @@ export default function TestProtocolPage() {
       </Card>
 
       {/* Filtre */}
-      <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1">
+      <div className="flex flex-wrap gap-1.5 mb-5 pb-1 sm:flex-nowrap sm:overflow-x-auto">
         {(["tous", "non_teste", "ok", "ko", "remarque"] as const).map(f => (
           <button type="button" key={f} onClick={() => setFilterStatus(f)}
             className={`flex-shrink-0 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer transition-all ${filterStatus === f ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>

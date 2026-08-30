@@ -322,7 +322,7 @@ export default function EmailTemplatesPage() {
 
       <div className="flex flex-col lg:flex-row gap-5">
         {/* ── Sidebar : liste des templates ── */}
-        <div className="w-full lg:w-64 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0">
+        <div className="w-full lg:w-64 flex flex-wrap lg:flex-col gap-2 lg:overflow-visible pb-2 lg:pb-0">
           {Object.keys(DEFAULT_TEMPLATES).map(key => (
             <button type="button" key={key} onClick={() => setSelectedKey(key)}
               className={`text-left px-3 py-2.5 rounded-lg font-body text-xs font-semibold whitespace-nowrap cursor-pointer border-none transition-all flex-shrink-0 ${

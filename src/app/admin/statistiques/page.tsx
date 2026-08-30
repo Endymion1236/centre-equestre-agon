@@ -540,7 +540,7 @@ export default function StatistiquesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1 hide-scrollbar">
+      <div className="flex flex-wrap gap-2 mb-6 pb-1 sm:flex-nowrap sm:overflow-x-auto hide-scrollbar">
         {tabs.map(t => {
           const Icon = t.icon;
           const active = tab === t.id;

@@ -311,7 +311,7 @@ export function ActivitiesContent() {
             </div>
           </div>
 
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="mt-4 flex flex-wrap gap-2 pb-1 sm:flex-nowrap sm:overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {categories.map((category) => {
               const count = category.id === "all" ? activities.length : activities.filter((activity) => activity.category === category.id).length;
               const active = filter === category.id;

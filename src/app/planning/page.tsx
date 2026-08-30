@@ -215,7 +215,7 @@ export default function PlanningPublic() {
                 <button type="button" onClick={() => { didSelectInitialWeek.current = true; setWeekOffset((value) => value + 1); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 font-body text-xs font-bold text-slate-600 hover:border-blue-200 hover:text-blue-700">Semaine suivante <ChevronRight size={16} /></button>
               </div>
 
-              <div className="mt-5 flex items-center gap-2 overflow-x-auto border-t border-slate-100 pt-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4 sm:flex-nowrap sm:overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-slate-50 text-slate-400"><Filter size={15} /></div>
                 <button type="button" onClick={() => setFilter("all")} className={`flex-shrink-0 rounded-full border px-4 py-2 font-body text-xs font-bold ${filter === "all" ? "border-blue-700 bg-blue-700 text-white" : "border-slate-200 bg-white text-slate-500"}`}>Tout</button>
                 {types.map((type) => {
