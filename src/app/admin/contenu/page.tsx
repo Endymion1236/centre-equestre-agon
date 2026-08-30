@@ -197,8 +197,12 @@ export default function ContenuPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      {/* Tabs — flex-wrap indispensable : sans lui, le cinquième onglet
+          (« Actus & événements ») débordait hors de l'écran sur mobile.
+          Aucun défilement n'étant prévu ici, il était non seulement invisible
+          mais inatteignable : les actualités du site paraissaient ne pas
+          exister. */}
+      <div className="flex flex-wrap gap-2 mb-6">
         {TABS.map(t => (
           <button type="button" key={t.id} onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg font-body text-sm font-medium border-none cursor-pointer transition-all ${tab === t.id ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200 hover:bg-gray-50"}`}>
