@@ -1842,18 +1842,56 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           // Fusionner avec la commande existante
           const existingData = openOrder.data();
           const mergedItems = [...(existingData.items || []), ...newItems];
-          const mergedTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
+          const mergedTotal = Math.round(mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
+
+          // Acompte de la commande ENTIÈRE, enfants déjà présents compris :
+          // 30 € par enfant inscrit à un stage.
+          const nbEnfantsStage = mergedItems.filter(
+            (i: any) => i.activityType === "stage" || i.activityType === "stage_journee",
+          ).length || stageLines.length;
+          const acompteTotal = Math.min(ACOMPTE_PAR_ENFANT * nbEnfantsStage, mergedTotal);
+          const soldeTotal = Math.round((mergedTotal - acompteTotal) * 100) / 100;
 
           await updateDoc(doc(db, "payments", openOrder.id), {
             items: mergedItems,
-            totalTTC: Math.round(mergedTotal * 100) / 100,
+            totalTTC: mergedTotal,
             stageDate: existingData.stageDate || creneauxAInscrire[0]?.date || creneau.date,
             stageTitle: existingData.stageTitle || creneau.activityTitle,
             familyEmail: existingData.familyEmail || fam.parentEmail || "",
-            acompteAmount: ACOMPTE_PAR_ENFANT * (mergedItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee").length || stageLines.length),
-            soldeAmount: Math.round((mergedTotal - ACOMPTE_PAR_ENFANT * (mergedItems.filter((i: any) => i.activityType === "stage" || i.activityType === "stage_journee").length || stageLines.length)) * 100) / 100,
+            acompteAmount: acompteTotal,
+            soldeAmount: soldeTotal,
             updatedAt: serverTimestamp(),
           });
+
+          // ── Lien de paiement du COMPLÉMENT d'acompte ────────────────────
+          //
+          // L'envoi n'existait que pour une commande neuve. Inscrire un second
+          // enfant dans une commande déjà ouverte ne déclenchait donc aucun
+          // email : la famille restait avec le lien du premier — 30 € et un
+          // « solde de 150 € » devenus faux, alors que la commande en réclamait
+          // 60 et 289,20. Rien n'était perdu, mais plus rien n'était juste.
+          //
+          // On ne redemande que ce qui manque : l'acompte de la commande
+          // entière moins ce qui a déjà été réglé.
+          const emailFamille = existingData.familyEmail || fam.parentEmail || "";
+          if (showAcompte && acompteReglement === "lien" && emailFamille) {
+            const dejaRegle = existingData.paidAmount || 0;
+            const complement = Math.round(Math.max(0, acompteTotal - dejaRegle) * 100) / 100;
+            if (complement > 0) {
+              authFetch("/api/send-payment-link", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  paymentId: openOrder.id,
+                  recipientEmail: emailFamille,
+                  amount: complement,
+                  familyId: fam.firestoreId,
+                  familyName: fam.parentName || "",
+                  message: `Bonjour,\n\nVotre inscription porte maintenant sur ${nbEnfantsStage} enfant${nbEnfantsStage > 1 ? "s" : ""}, pour un total de ${mergedTotal.toFixed(2)}€.\n\nL'acompte est de ${acompteTotal.toFixed(2)}€${dejaRegle > 0 ? `, dont ${dejaRegle.toFixed(2)}€ déjà réglés` : ""}. Voici le lien pour régler ${complement.toFixed(2)}€.\n\nCe message remplace le précédent. Le solde de ${soldeTotal.toFixed(2)}€ vous sera demandé 7 jours avant le stage.`,
+                }),
+              }).catch(e => console.warn("Lien complément acompte:", e));
+            }
+          }
 
           // Acompte réglé au comptoir : même écriture comptable que la caisse,
           // et même confirmation d'acompte que lorsqu'il est payé en ligne.
