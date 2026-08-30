@@ -5,6 +5,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { adminDb } from "@/lib/firebase-admin";
 import { gmailGetAttachment, driveGetFile } from "@/lib/gmail";
 import { validateIban, validateBic } from "@/lib/sepa-validation";
+import { extraireRibDuTexte } from "@/lib/rib-texte";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,6 +47,78 @@ Règles :
 const norm = (s: string) =>
   (s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 
+/**
+ * Vérifie les coordonnées lues et propose la ou les familles correspondantes.
+ *
+ * Partagée par les DEUX chemins de lecture — document (PDF/photo, lu par le
+ * modèle) et texte du message (lu par expression régulière). Les garde-fous
+ * doivent être les mêmes des deux côtés : c'est le même IBAN qui finira sur
+ * le même mandat.
+ */
+async function construireReponse(opts: {
+  titulaire: string;
+  iban: string;
+  bic: string;
+  banque?: string | null;
+  remarque?: string | null;
+  from?: string;
+  /** Provenance, pour que l'interface puisse le dire à l'admin. */
+  source: "document" | "texte";
+}) {
+  // ── Vérifications : la clé de contrôle rattrape une lecture erronée ──
+  const iban = String(opts.iban || "").replace(/\s/g, "").toUpperCase();
+  const ibanCheck = iban ? validateIban(iban) : { valid: false, error: "IBAN non lu" };
+  const bic = String(opts.bic || "").replace(/\s/g, "").toUpperCase();
+  const bicCheck = bic && ibanCheck.valid
+    ? validateBic(bic, iban.substring(0, 2))
+    : { valid: !bic, error: null as string | null };
+
+  // ── Rapprochement avec une fiche famille ──
+  // L'expéditeur du mail d'abord (le plus fiable), le nom du titulaire
+  // ensuite. On PROPOSE : c'est l'admin qui tranche.
+  const emailExp = String(opts.from || "").toLowerCase().trim();
+
+  // Rapprochement par nom : MOT ENTIER, jamais un fragment. Un compte joint
+  // écrit « MLLE PERONDI MAUD OU M ANDRIEU CHRISTOPHE » : une comparaison par
+  // sous-chaîne y trouvait la famille « PERON » (⊂ PERONDI) et la proposait à
+  // côté de la bonne — un clic de travers aurait posé le mandat, donc l'IBAN,
+  // sur la mauvaise famille.
+  const motsDe = (s: string) => norm(s).split(" ").filter(w => w.length >= 4);
+  const motsTitulaire = new Set(motsDe(String(opts.titulaire || "")));
+  const famSnap = await adminDb.collection("families").get();
+  const candidats: { familyId: string; parentName: string; parentEmail: string; motif: string }[] = [];
+  famSnap.docs.forEach(d => {
+    const f = d.data() as any;
+    if (f.status === "merged") return;
+    const mail = String(f.parentEmail || "").toLowerCase().trim();
+    if (emailExp && mail && mail === emailExp) {
+      candidats.push({ familyId: d.id, parentName: f.parentName || "", parentEmail: f.parentEmail || "", motif: "email de l'expéditeur" });
+      return;
+    }
+    const commun = motsDe(f.parentName || "").find(w => motsTitulaire.has(w));
+    if (commun) {
+      candidats.push({ familyId: d.id, parentName: f.parentName || "", parentEmail: f.parentEmail || "", motif: `« ${commun} » sur le RIB` });
+    }
+  });
+  // L'email prime sur le nom : c'est le rapprochement le plus sûr.
+  candidats.sort((a, b) => (a.motif === "email de l'expéditeur" ? -1 : 0) - (b.motif === "email de l'expéditeur" ? -1 : 0));
+
+  return {
+    estRib: true,
+    source: opts.source,
+    titulaire: opts.titulaire || null,
+    iban: ibanCheck.valid ? iban : null,
+    ibanBrut: iban || null,
+    ibanValide: ibanCheck.valid,
+    ibanErreur: ibanCheck.valid ? null : ibanCheck.error,
+    bic: bicCheck.valid ? bic : null,
+    bicErreur: bicCheck.valid ? null : bicCheck.error,
+    banque: opts.banque || null,
+    remarque: opts.remarque || null,
+    candidats: candidats.slice(0, 5),
+  };
+}
+
 export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
@@ -65,7 +138,35 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({} as any));
-    const { messageId, attachmentId, mimeType, base64, from, driveFileId } = body || {};
+    const { messageId, attachmentId, mimeType, base64, from, driveFileId, texte } = body || {};
+
+    // ── RIB recopié DANS le corps du message ─────────────────────────────
+    // Beaucoup de familles ne joignent rien : elles collent les lignes de
+    // leur banque dans le mail. Ce cas n'avait aucun chemin, et l'IBAN
+    // devait être retapé à la main — là où une faute coûte un prélèvement
+    // rejeté et des frais.
+    //
+    // Traité SANS appel au modèle : un IBAN dans du texte se reconnaît à sa
+    // forme et se vérifie par sa clé de contrôle. Instantané, gratuit,
+    // reproductible. L'IA reste pour le PDF et la photo, qu'elle seule lit.
+    if (texte && !messageId && !driveFileId && !base64) {
+      const trouve = extraireRibDuTexte(String(texte));
+      if (!trouve) {
+        return NextResponse.json({
+          estRib: false,
+          remarque: "Aucun IBAN valide trouvé dans le message. Si le RIB est en pièce jointe, utilisez le bouton correspondant.",
+        });
+      }
+      return NextResponse.json(
+        await construireReponse({
+          titulaire: trouve.titulaire || "",
+          iban: trouve.iban,
+          bic: trouve.bic || "",
+          from,
+          source: "texte",
+        })
+      );
+    }
 
     // Source : pièce jointe Gmail, ou fichier envoyé directement (photo prise
     // au club). Dans les deux cas on travaille sur des octets, jamais une URL.
@@ -133,54 +234,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── Vérifications : la clé de contrôle rattrape une lecture erronée ──
-    const iban = String(lu.iban || "").replace(/\s/g, "").toUpperCase();
-    const ibanCheck = iban ? validateIban(iban) : { valid: false, error: "IBAN non lu sur le document" };
-    const bic = String(lu.bic || "").replace(/\s/g, "").toUpperCase();
-    const bicCheck = bic && ibanCheck.valid ? validateBic(bic, iban.substring(0, 2)) : { valid: !bic, error: null as string | null };
-
-    // ── Rapprochement avec une fiche famille ──
-    // L'expéditeur du mail d'abord (le plus fiable), le nom du titulaire
-    // ensuite. On PROPOSE : c'est l'admin qui tranche.
-    const emailExp = String(from || "").toLowerCase().trim();
-    // Rapprochement par nom : MOT ENTIER, jamais un fragment. Un compte joint
-    // écrit « MLLE PERONDI MAUD OU M ANDRIEU CHRISTOPHE » : une comparaison par
-    // sous-chaîne y trouvait la famille « PERON » (⊂ PERONDI) et la proposait à
-    // côté de la bonne — un clic de travers aurait posé le mandat, donc l'IBAN,
-    // sur la mauvaise famille.
-    const motsDe = (s: string) => norm(s).split(" ").filter(w => w.length >= 4);
-    const motsTitulaire = new Set(motsDe(String(lu.titulaire || "")));
-    const famSnap = await adminDb.collection("families").get();
-    const candidats: { familyId: string; parentName: string; parentEmail: string; motif: string }[] = [];
-    famSnap.docs.forEach(d => {
-      const f = d.data() as any;
-      if (f.status === "merged") return;
-      const mail = String(f.parentEmail || "").toLowerCase().trim();
-      if (emailExp && mail && mail === emailExp) {
-        candidats.push({ familyId: d.id, parentName: f.parentName || "", parentEmail: f.parentEmail || "", motif: "email de l'expéditeur" });
-        return;
-      }
-      const commun = motsDe(f.parentName || "").find(w => motsTitulaire.has(w));
-      if (commun) {
-        candidats.push({ familyId: d.id, parentName: f.parentName || "", parentEmail: f.parentEmail || "", motif: `« ${commun} » sur le RIB` });
-      }
-    });
-    // L'email prime sur le nom : c'est le rapprochement le plus sûr.
-    candidats.sort((a, b) => (a.motif === "email de l'expéditeur" ? -1 : 0) - (b.motif === "email de l'expéditeur" ? -1 : 0));
-
-    return NextResponse.json({
-      estRib: true,
-      titulaire: lu.titulaire || null,
-      iban: ibanCheck.valid ? iban : null,
-      ibanBrut: iban || null,
-      ibanValide: ibanCheck.valid,
-      ibanErreur: ibanCheck.valid ? null : ibanCheck.error,
-      bic: bicCheck.valid ? bic : null,
-      bicErreur: bicCheck.valid ? null : bicCheck.error,
-      banque: lu.banque || null,
-      remarque: lu.remarque || null,
-      candidats: candidats.slice(0, 5),
-    });
+    return NextResponse.json(
+      await construireReponse({
+        titulaire: String(lu.titulaire || ""),
+        iban: String(lu.iban || ""),
+        bic: String(lu.bic || ""),
+        banque: lu.banque || null,
+        remarque: lu.remarque || null,
+        from,
+        source: "document",
+      })
+    );
   } catch (e: any) {
     // Message d'erreur seul : jamais le contenu du document.
     console.error("[rib-extract]", e?.message || e);
