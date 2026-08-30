@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone, Paperclip, Landmark, AlertTriangle } from "lucide-react";
+import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone, Paperclip, Landmark, AlertTriangle, Upload
+} from "lucide-react";
 import { formatIban } from "@/lib/sepa-validation";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
@@ -61,6 +62,8 @@ export default function BoiteAssistantPage() {
   const [ribBusy, setRibBusy] = useState<string>("");
   const [rib, setRib] = useState<any>(null);
   const [ribErr, setRibErr] = useState("");
+  // Le champ fichier natif est masqué : c'est nous qui affichons le nom.
+  const [ribFileName, setRibFileName] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [from, setFrom] = useState("");
@@ -762,16 +765,33 @@ export default function BoiteAssistantPage() {
                     </button>
                   </div>
                 ))}
-                <label className="flex cursor-pointer flex-col items-start gap-1 font-body text-[13px] sm:text-[11px] text-slate-500 sm:flex-row sm:items-center sm:gap-2">
-                  <span className="min-w-0 sm:flex-1">…ou déposer le fichier (PDF ou photo)</span>
+                {/* Le champ fichier NATIF est masqué et piloté par un bouton à
+                    nous. Chrome Android impose au bouton « Choisir un fichier »
+                    une largeur minimale qu'aucune règle CSS ne réduit : le
+                    contrôle élargissait la carte au-delà de l'écran, et tout ce
+                    qui se trouvait à droite passait hors champ. Le libellé
+                    visible étant désormais un simple span, la largeur est
+                    entièrement sous notre contrôle ; le clic reste transmis au
+                    champ par le label qui l'entoure. */}
+                <label className="flex cursor-pointer flex-wrap items-center gap-2 font-body text-[13px] sm:text-[11px] text-slate-500">
+                  <span className="min-w-0 basis-full sm:flex-1 sm:basis-auto">…ou déposer le fichier (PDF ou photo)</span>
+                  <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-slate-100 px-2.5 py-1.5 font-body text-[13px] font-semibold text-slate-600 sm:text-[11px]">
+                    <Upload size={12} /> Choisir un fichier
+                  </span>
+                  {ribFileName && (
+                    <span className="min-w-0 basis-full truncate font-body text-[12px] text-slate-400 sm:text-[10px]">
+                      {ribFileName}
+                    </span>
+                  )}
                   <input
                     type="file"
                     accept=".pdf,image/*"
-                    className="w-full min-w-0 font-body text-[10px] sm:max-w-[46%]"
+                    className="sr-only"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       e.target.value = "";
                       if (!f) return;
+                      setRibFileName(f.name);
                       if (f.size > 10 * 1024 * 1024) { setRibErr("Fichier trop lourd (max 10 Mo)."); return; }
                       // FileReader plutôt qu'un btoa(String.fromCharCode(...)) :
                       // l'étalement d'un tableau de plusieurs Mo fait sauter la
