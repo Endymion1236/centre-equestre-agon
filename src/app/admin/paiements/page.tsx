@@ -2672,6 +2672,10 @@ export default function PaiementsPage() {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({
+                            // `type` explicite : /api/ia dispatche dessus. Sans
+                            // lui, aucune branche ne correspondait et l'appel
+                            // repartait en erreur.
+                            type: "texte_libre",
                             prompt: `Tu es l'assistant du Centre Équestre d'Agon-Coutainville. Rédige un email court et chaleureux pour envoyer un lien de paiement.
 
 Contexte :
@@ -2692,9 +2696,16 @@ Règles :
                           }),
                         });
                         const data = await res.json();
-                        const text = data.content?.[0]?.text || data.text || data.message || "";
+                        if (!res.ok) throw new Error(data?.error || `Erreur ${res.status}`);
+                        const text = data.text || data.content?.[0]?.text || data.message || "";
+                        if (!text.trim()) throw new Error("Réponse vide");
                         setPayLinkMessage(text);
-                      } catch (e) { console.error(e); toast("Erreur IA", "error"); }
+                      } catch (e: any) {
+                        console.error(e);
+                        // Un « Erreur IA » sans raison ne dit pas s'il faut
+                        // réessayer, corriger une clé ou écrire le texte à la main.
+                        toast(`Génération impossible : ${e?.message || "erreur inconnue"}`, "error");
+                      }
                       setPayLinkGenerating(false);
                     }}
                       className="font-body text-[10px] text-purple-600 bg-purple-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50 flex items-center gap-1">
