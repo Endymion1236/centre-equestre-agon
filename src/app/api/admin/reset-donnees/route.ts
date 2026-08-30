@@ -19,7 +19,11 @@ export const maxDuration = 300;
  *
  * SÉCURITÉ :
  *   - verifyAuth adminOnly.
- *   - GARDE-FOU : refuse si la base n'est PAS gestion-2026-test.
+ *   - GARDE-FOU : mot-clé de confirmation EFFACER-PROD exigé pour tout
+ *     effacement réel. Cette route s'appliquait autrefois à la seule base de
+ *     test et l'en-tête l'annonçait encore : c'était faux, elle s'exécute sur
+ *     la base courante quelle qu'elle soit. Un commentaire qui rassure à tort
+ *     sur une route destructrice est pire que pas de commentaire.
  *   - DRY-RUN par défaut (?apply=true pour effacer réellement).
  *   - LISTE BLANCHE EXPLICITE : on n'efface QUE les collections listées dans
  *     COLLECTIONS_A_EFFACER. Toute collection non listée (= structure) est

@@ -921,18 +921,17 @@ export const MANUAL: ManualChapter[] = [
           plus une seule donnée de test</strong>, <strong>les emails partent réellement aux familles</strong>, et
           <strong>les paiements en ligne arrivent sur le vrai compte</strong>. Tout le reste se corrige après —
           ces trois-là, non.</p>
-          <p><strong>J-10 à J-5 — préparer :</strong></p>
+          <p><strong>Étapes faites — pour mémoire :</strong></p>
           <ol>
-            <li><strong>Sauvegarde JSON complète</strong> depuis <code>/admin/reset-base</code>, rangée en trois
-            endroits (classeur, disque externe, cloud).</li>
-            <li><strong>Vider les données de test</strong> (même écran) : cocher Financier & comptable +
-            Inscriptions & réservations + Communications, <em>laisser Données métier décoché</em>, Simuler,
-            puis taper <code>SUPPRIMER-DONNEES-TEST</code>. Noter la référence <code>resetLogs/…</code>.</li>
+            <li><strong>Sauvegarde JSON complète</strong> : le bouton se trouve désormais sur
+            <code>/admin/import-celeris</code>. À ranger en trois endroits (classeur, disque externe, cloud).</li>
+            <li><strong>Données de test vidées</strong> le 29 août 2026. La référence de l'opération reste
+            consultable dans la collection <code>resetLogs</code>, qui est inaltérable.</li>
             <li><strong>Vérifier que c'est propre</strong> : CA du mois à 0 €, journal vide, livre de caisse vide,
             journal emails vide — familles, équidés, activités et créneaux <em>intacts</em>.</li>
-            <li><strong>Faire supprimer l'outil de reset</strong> (demander « supprime l'outil de reset-base ») :
-            son existence après la bascule serait contraire à l'inaltérabilité NF525. Sa trace reste dans Git
-            comme preuve de diligence.</li>
+            <li><strong>Outil de reset supprimé</strong> le 30 août 2026, après usage unique. Le conserver en
+            production aurait été contraire à l'inaltérabilité NF525. Sa trace complète reste dans l'historique
+            Git, du commit de création au commit de suppression, comme preuve de diligence.</li>
             <li><strong>Publier les règles Firestore</strong> (console Firebase → Règles → coller
             <code>firestore.rules</code> → Publier), puis vérifier qu'une suppression d'encaissement est refusée.</li>
             <li><strong>Fonds de caisse initial</strong> : livre de caisse → Apport en caisse, avec ce qui est

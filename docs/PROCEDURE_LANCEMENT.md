@@ -24,12 +24,17 @@ ne se rattrapent pas proprement.
 
 À faire **d'une traite**, dans cet ordre, sans interruption :
 
+> **Fait le 29 août 2026.** L'outil de reset a été supprimé le 30 août 2026
+> (voir § 3). Cette section est conservée pour mémoire ; elle n'est plus
+> exécutable. La sauvegarde JSON complète reste téléchargeable depuis
+> `/admin/import-celeris`.
+
 | # | Action | Où |
 |---|---|---|
-| 1 | Télécharger la **sauvegarde JSON complète** et la ranger en trois endroits (classeur, disque externe, cloud) | `/admin/reset-base` |
-| 2 | Cocher Financier & comptable + Inscriptions & réservations + Communications. **Laisser Données métier décoché** | même écran |
-| 3 | Cliquer **Simuler**, vérifier les volumes | même écran |
-| 4 | Cocher l'irréversibilité, taper `SUPPRIMER-DONNEES-TEST`, valider | même écran |
+| 1 | Télécharger la **sauvegarde JSON complète** et la ranger en trois endroits (classeur, disque externe, cloud) | `/admin/import-celeris` |
+| 2 | Cocher Financier & comptable + Inscriptions & réservations + Communications. **Laisser Données métier décoché** | ~~`/admin/reset-base`~~ (supprimé) |
+| 3 | Cliquer **Simuler**, vérifier les volumes | idem |
+| 4 | Cocher l'irréversibilité, taper `SUPPRIMER-DONNEES-TEST`, valider | idem |
 | 5 | Noter la référence du log (`resetLogs/…`) sur la note papier | classeur |
 
 ### 2. Vérifier que c'est propre
@@ -40,13 +45,19 @@ ne se rattrapent pas proprement.
 - `/admin/emails-log` → vide
 - Familles, équidés, activités, créneaux → **intacts**
 
-### 3. Faire supprimer l'outil de reset
+### 3. Faire supprimer l'outil de reset — ✅ FAIT le 30 août 2026
 
 Une fois la base vide, l'outil n'a plus aucune raison d'exister — et son
-existence est contraire au principe d'inaltérabilité. Il suffit de demander :
-« supprime l'outil de reset-base ». Sont retirés `/admin/reset-base` et
-`/api/admin/reset-base`. L'export de sauvegarde, lui, peut rester : il lit, il
-n'efface rien.
+existence est contraire au principe d'inaltérabilité.
+
+`/admin/reset-base` et `/api/admin/reset-base` ont été retirés du code. Les
+deux URL renvoient désormais 404. L'export de sauvegarde a été conservé — il
+lit, il n'efface rien — et reste accessible depuis `/admin/import-celeris`.
+
+Le log d'audit de l'opération demeure dans la collection Firestore
+`resetLogs`, elle-même inaltérable (aucun update ni delete autorisé par les
+règles). La trace complète de l'outil, de sa création à sa suppression, reste
+vérifiable dans l'historique Git.
 
 ### 4. Publier les règles Firestore
 
