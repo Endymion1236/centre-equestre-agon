@@ -57,11 +57,12 @@ En **septembre 2026**, la plateforme Vercel devient l'outil de comptabilité off
 
 Cette étape garantit qu'**aucune réinitialisation ne pourra plus être déclenchée** à partir de la mise en production officielle. C'est ce qui transforme une "phase de test" en "production conforme".
 
-**Actions côté dev (moi, Claude)** :
+**✅ FAIT le 30 août 2026.** `/admin/reset-base` et `/api/admin/reset-base` ont
+été retirés du code ; les deux URL renvoient 404. L'export de sauvegarde a été
+conservé (il lit, il n'efface rien) et se trouve désormais sur
+`/admin/import-celeris`.
 
-Dans la prochaine session, il suffira de dire : *"Supprime l'outil de reset-base"*
-
-Je supprimerai alors :
+Ce qui a été supprimé :
 - `src/app/admin/reset-base/page.tsx` (page UI)
 - `src/app/api/admin/reset-base/route.ts` (API suppression)
 - `src/app/api/admin/backup-json/route.ts` (API sauvegarde — ou à garder si on veut pouvoir continuer à exporter des backups lisibles, c'est pas la même chose qu'un reset)
