@@ -539,14 +539,14 @@ export default function BoiteAssistantPage() {
                 onClick={connectGmail}
                 disabled={connecting}
                 title="Redemander l'autorisation Google (nécessaire pour activer l'envoi)"
-                className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-600 hover:bg-blue-100 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-blue-600 hover:bg-blue-100 disabled:opacity-50"
               >
                 {connecting ? <Loader2 size={12} className="animate-spin" /> : <Mail size={12} />} Reconnecter
               </button>
               <button type="button"
                 onClick={loadGmail}
                 disabled={gmail.loading}
-                className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
               >
                 <RefreshCw size={12} className={gmail.loading ? "animate-spin" : ""} /> Actualiser
               </button>
@@ -591,14 +591,14 @@ export default function BoiteAssistantPage() {
                 <div className="flex items-center gap-2">
                   <button type="button"
                     onClick={() => setSelectedIds([])}
-                    className="font-body text-[11px] text-slate-500 hover:text-slate-700"
+                    className="font-body text-[13px] sm:text-[11px] text-slate-500 hover:text-slate-700"
                   >
                     Annuler
                   </button>
                   <button type="button"
                     onClick={deleteSelected}
                     disabled={mailboxBusy === "trash"}
-                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                   >
                     {mailboxBusy === "trash" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                     Corbeille
@@ -633,18 +633,18 @@ export default function BoiteAssistantPage() {
                         {estVocal(m) ? "Répondeur téléphonique" : decodeHtml(m.from)}
                       </span>
                       {estVocal(m) && (
-                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-700">
+                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-amber-700">
                           <Phone size={10} /> Vocal
                         </span>
                       )}
                       {(m.docAttachments || []).length > 0 && (
-                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-body text-[10px] font-semibold text-slate-600">
+                        <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-slate-600">
                           <Paperclip size={10} /> {(m.docAttachments || []).length}
                         </span>
                       )}
                     </div>
                     <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
-                    <div className="truncate font-body text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
+                    <div className="truncate font-body text-[13px] sm:text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
                   </button>
                 </div>
               ))}
@@ -663,9 +663,9 @@ export default function BoiteAssistantPage() {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-2">
         {/* Entrée */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 font-body text-sm font-semibold text-slate-700">
               <Mail size={16} className="text-blue-500" /> Mail reçu
@@ -675,14 +675,14 @@ export default function BoiteAssistantPage() {
                 <button type="button"
                   onClick={forwardMail}
                   disabled={!!mailboxBusy}
-                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50"
                 >
                   {mailboxBusy === "forward" ? <Loader2 size={12} className="animate-spin" /> : <Forward size={12} />} Transférer
                 </button>
                 <button type="button"
                   onClick={deleteMail}
                   disabled={!!mailboxBusy}
-                  className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 font-body text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md bg-red-50 px-2 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-red-600 hover:bg-red-100 disabled:opacity-50"
                 >
                   {mailboxBusy === "trash" ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Supprimer
                 </button>
@@ -701,7 +701,7 @@ export default function BoiteAssistantPage() {
                 {vocal.numeroLisible || "Numéro masqué"}
                 <span className="font-normal text-amber-600">· {vocal.dureeSec}s</span>
               </div>
-              <div className="mt-1 font-body text-[11px] text-amber-700">
+              <div className="mt-1 font-body text-[13px] sm:text-[11px] text-amber-700">
                 {vocal.famille ? (
                   <>
                     Famille reconnue : <strong>{vocal.famille.parentName}</strong>
@@ -734,11 +734,11 @@ export default function BoiteAssistantPage() {
               <div className="flex flex-col gap-1.5">
                 {attachments.map((a: any) => (
                   <div key={a.attachmentId} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate font-body text-[11px] text-slate-600">{a.filename}</span>
+                    <span className="min-w-0 flex-1 truncate font-body text-[13px] sm:text-[11px] text-slate-600">{a.filename}</span>
                     <button type="button"
                       onClick={() => lireRib(a)}
                       disabled={!!ribBusy}
-                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
                       {ribBusy === a.attachmentId ? <Loader2 size={12} className="animate-spin" /> : <Landmark size={12} />}
                       Lire le RIB
@@ -747,7 +747,7 @@ export default function BoiteAssistantPage() {
                 ))}
                 {liensDrive(body).map((d) => (
                   <div key={d.driveFileId} className="flex items-center gap-2">
-                    <span className="min-w-0 flex-1 truncate font-body text-[11px] text-slate-600">
+                    <span className="min-w-0 flex-1 truncate font-body text-[13px] sm:text-[11px] text-slate-600">
                       <a href={d.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                         Fichier Google Drive
                       </a>
@@ -755,19 +755,19 @@ export default function BoiteAssistantPage() {
                     <button type="button"
                       onClick={() => lireRib(d)}
                       disabled={!!ribBusy}
-                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                      className="inline-flex flex-shrink-0 items-center gap-1 rounded-md bg-blue-50 px-2 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                     >
                       {ribBusy === d.driveFileId ? <Loader2 size={12} className="animate-spin" /> : <Landmark size={12} />}
                       Lire le RIB (Drive)
                     </button>
                   </div>
                 ))}
-                <label className="flex cursor-pointer items-center gap-2 font-body text-[11px] text-slate-500">
-                  <span className="flex-1">…ou déposer le fichier (PDF ou photo)</span>
+                <label className="flex cursor-pointer flex-col items-start gap-1 font-body text-[13px] sm:text-[11px] text-slate-500 sm:flex-row sm:items-center sm:gap-2">
+                  <span className="min-w-0 sm:flex-1">…ou déposer le fichier (PDF ou photo)</span>
                   <input
                     type="file"
                     accept=".pdf,image/*"
-                    className="max-w-[46%] font-body text-[10px]"
+                    className="w-full min-w-0 font-body text-[10px] sm:max-w-[46%]"
                     onChange={(e) => {
                       const f = e.target.files?.[0];
                       e.target.value = "";
@@ -785,7 +785,7 @@ export default function BoiteAssistantPage() {
                   />
                 </label>
               </div>
-              {ribErr && <p className="mt-1.5 font-body text-[11px] font-semibold text-red-600">{ribErr}</p>}
+              {ribErr && <p className="mt-1.5 font-body text-[13px] sm:text-[11px] font-semibold text-red-600">{ribErr}</p>}
             </div>
           )}
 
@@ -800,7 +800,7 @@ export default function BoiteAssistantPage() {
               ) : (
                 <>
                   <div className="mb-1.5 font-body text-xs font-semibold text-slate-700">Coordonnées lues — à vérifier avant de créer le mandat</div>
-                  <div className="grid gap-x-4 gap-y-0.5 font-body text-[11px] text-slate-700 sm:grid-cols-2">
+                  <div className="grid gap-x-4 gap-y-0.5 font-body text-[13px] sm:text-[11px] text-slate-700 sm:grid-cols-2">
                     <div><span className="text-slate-400">Titulaire :</span> {rib.titulaire || "—"}</div>
                     <div><span className="text-slate-400">Banque :</span> {rib.banque || "—"}</div>
                     <div className="sm:col-span-2">
@@ -812,29 +812,29 @@ export default function BoiteAssistantPage() {
                     <div><span className="text-slate-400">BIC :</span> {rib.bic || (rib.bicErreur ? <span className="text-red-600">{rib.bicErreur}</span> : "déduit à la création")}</div>
                   </div>
                   {rib.ibanValide && (
-                    <div className="mt-1 font-body text-[10px] text-emerald-700">✓ Clé de contrôle de l'IBAN vérifiée</div>
+                    <div className="mt-1 font-body text-[12px] sm:text-[10px] text-emerald-700">✓ Clé de contrôle de l'IBAN vérifiée</div>
                   )}
                   {rib.remarque && (
-                    <div className="mt-1 flex items-start gap-1.5 font-body text-[11px] text-amber-800">
+                    <div className="mt-1 flex items-start gap-1.5 font-body text-[13px] sm:text-[11px] text-amber-800">
                       <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" /> {rib.remarque}
                     </div>
                   )}
                   {rib.ibanValide && (
                     <div className="mt-2 border-t border-white/60 pt-2">
                       {(rib.candidats || []).length === 0 ? (
-                        <div className="font-body text-[11px] text-slate-600">
+                        <div className="font-body text-[13px] sm:text-[11px] text-slate-600">
                           Aucune fiche famille reconnue — ouvrez Paiements → SEPA et choisissez la famille à la main.
                         </div>
                       ) : (
                         <>
-                          <div className="mb-1 font-body text-[11px] text-slate-600">Créer le mandat pour :</div>
+                          <div className="mb-1 font-body text-[13px] sm:text-[11px] text-slate-600">Créer le mandat pour :</div>
                           <div className="flex flex-wrap gap-1.5">
                             {(rib.candidats || []).map((c: any) => (
                               <button type="button"
                                 key={c.familyId}
                                 onClick={() => preremplirMandat(c.familyId, c.parentName)}
                                 title={`Rapprochement par ${c.motif}`}
-                                className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 font-body text-[11px] font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
+                                className="inline-flex items-center gap-1 rounded-md bg-white px-2.5 py-1.5 font-body text-[13px] sm:text-[11px] font-semibold text-blue-700 shadow-sm hover:bg-blue-50"
                               >
                                 <Landmark size={12} /> {c.parentName}
                                 <span className="font-normal text-slate-400">({c.motif})</span>
@@ -843,7 +843,7 @@ export default function BoiteAssistantPage() {
                           </div>
                         </>
                       )}
-                      <div className="mt-1.5 font-body text-[10px] text-slate-500">
+                      <div className="mt-1.5 font-body text-[12px] sm:text-[10px] text-slate-500">
                         Le formulaire SEPA s'ouvrira pré-rempli. Le mandat n'est créé qu'après votre validation, et il reste à faire signer.
                       </div>
                     </div>
@@ -884,7 +884,7 @@ export default function BoiteAssistantPage() {
         </div>
 
         {/* Sortie */}
-        <div className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
+        <div className="min-w-0 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
           {!res && !loading && (
             <p className="font-body text-sm text-slate-400">Le résultat de l'analyse s'affichera ici.</p>
           )}
@@ -897,12 +897,12 @@ export default function BoiteAssistantPage() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-2">
                 {c && (
-                  <span className={`rounded-full px-2.5 py-1 font-body text-[11px] font-bold uppercase tracking-wide ${c.cls}`}>
+                  <span className={`rounded-full px-2.5 py-1 font-body text-[13px] sm:text-[11px] font-bold uppercase tracking-wide ${c.cls}`}>
                     {c.label}
                   </span>
                 )}
                 {res.familleConnue && (
-                  <span className="rounded-full bg-blue-50 px-2.5 py-1 font-body text-[11px] font-semibold text-blue-600">
+                  <span className="rounded-full bg-blue-50 px-2.5 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-blue-600">
                     Famille connue
                   </span>
                 )}
@@ -910,8 +910,8 @@ export default function BoiteAssistantPage() {
 
               {res.resume && (
                 <div>
-                  <div className="mb-1 font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">Résumé</div>
-                  <p className="font-body text-sm text-slate-700">{res.resume}</p>
+                  <div className="mb-1 font-body text-[13px] sm:text-[11px] font-bold uppercase tracking-wide text-slate-400">Résumé</div>
+                  <p className="break-words font-body text-sm text-slate-700">{res.resume}</p>
                 </div>
               )}
 
@@ -919,11 +919,11 @@ export default function BoiteAssistantPage() {
               {famForm && (
                 <div className="rounded-lg border border-violet-200 bg-violet-50/40 p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <div className="font-body text-[11px] font-bold uppercase tracking-wide text-violet-500">
+                    <div className="font-body text-[13px] sm:text-[11px] font-bold uppercase tracking-wide text-violet-500">
                       Nouvelle famille détectée — fiche pré-remplie, à relire avant création
                     </div>
                     {newFam && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
+                      <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-green-700">
                         <Check size={10} /> Créée
                       </span>
                     )}
@@ -952,7 +952,7 @@ export default function BoiteAssistantPage() {
                     />
                   </div>
                   <div className="mt-2 flex items-center gap-1.5">
-                    <span className="font-body text-[10px] font-semibold uppercase text-violet-400">Fléchage :</span>
+                    <span className="font-body text-[12px] sm:text-[10px] font-semibold uppercase text-violet-400">Fléchage :</span>
                     {[
                       { id: "cavalier_annee", label: "À l'année" },
                       { id: "stage", label: "Stages" },
@@ -963,7 +963,7 @@ export default function BoiteAssistantPage() {
                         type="button"
                         disabled={!!newFam}
                         onClick={() => setFamForm({ ...famForm, flechage: o.id })}
-                        className={`rounded-full px-2.5 py-0.5 font-body text-[10px] font-semibold disabled:opacity-60 ${
+                        className={`rounded-full px-2.5 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold disabled:opacity-60 ${
                           famForm.flechage === o.id ? "bg-violet-600 text-white" : "bg-white text-violet-600 border border-violet-200"
                         }`}
                       >
@@ -1009,7 +1009,7 @@ export default function BoiteAssistantPage() {
                       <button
                         type="button"
                         onClick={() => setFamForm({ ...famForm, children: [...famForm.children, { firstName: "", lastName: "", birthDate: "", galopLevel: "", ageHint: null }] })}
-                        className="font-body text-[11px] font-semibold text-violet-500 hover:text-violet-700"
+                        className="font-body text-[13px] sm:text-[11px] font-semibold text-violet-500 hover:text-violet-700"
                       >
                         + Ajouter un enfant
                       </button>
@@ -1020,23 +1020,23 @@ export default function BoiteAssistantPage() {
                       <button type="button"
                         onClick={createFamily}
                         disabled={creatingFam || !famForm.parentEmail.trim() || !famForm.children.some((c) => c.firstName.trim())}
-                        className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 font-body text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 font-body text-[13px] sm:text-[11px] font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
                       >
                         {creatingFam ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
                         {creatingFam ? "Création…" : "Créer la famille"}
                       </button>
-                      <span className="ml-2 font-body text-[10px] text-slate-400">Aucun email envoyé à la famille.</span>
+                      <span className="ml-2 font-body text-[12px] sm:text-[10px] text-slate-400">Aucun email envoyé à la famille.</span>
                     </div>
                   )}
                   {famMsg && (
-                    <div className={`mt-1.5 font-body text-[11px] font-semibold ${famMsg.ok ? "text-green-600" : "text-red-600"}`}>{famMsg.text}</div>
+                    <div className={`mt-1.5 font-body text-[13px] sm:text-[11px] font-semibold ${famMsg.ok ? "text-green-600" : "text-red-600"}`}>{famMsg.text}</div>
                   )}
                 </div>
               )}
 
               {((Array.isArray(res.suggestions) && res.suggestions.length > 0) || manual.length > 0 || (Array.isArray(res.catalogue) && res.catalogue.length > 0)) && (
                 <div>
-                  <div className="mb-1.5 font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  <div className="mb-1.5 font-body text-[13px] sm:text-[11px] font-bold uppercase tracking-wide text-slate-400">
                     Prestations disponibles proposées
                   </div>
                   <div className="space-y-2">
@@ -1047,7 +1047,7 @@ export default function BoiteAssistantPage() {
                             <Calendar size={13} className="text-blue-400" /> {s.titre || "(créneau)"}
                           </div>
                           {typeof s.places === "number" && s.places > 0 && (
-                            <span className="whitespace-nowrap font-body text-[11px] font-semibold text-green-600">
+                            <span className="whitespace-nowrap font-body text-[13px] sm:text-[11px] font-semibold text-green-600">
                               {s.places} place{s.places > 1 ? "s" : ""}
                             </span>
                           )}
@@ -1072,12 +1072,12 @@ export default function BoiteAssistantPage() {
                         </div>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {s.childName && (
-                            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[10px] font-semibold text-blue-600">
+                            <span className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-blue-600">
                               pour {s.childName}
                             </span>
                           )}
                           {s.manual && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-body text-[10px] font-semibold text-slate-500">
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-slate-500">
                               ajout manuel
                             </span>
                           )}
@@ -1094,7 +1094,7 @@ export default function BoiteAssistantPage() {
                                 const ligne = `\n• ${s.titre} — ${s.periode || s.date}${s.horaire ? `, ${s.horaire}` : ""}${prixLbl ? ` (${prixLbl})` : ""}`;
                                 setDraft((prev) => (prev ? `${prev}${ligne}` : ligne.trim()));
                               }}
-                              className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[10px] font-semibold text-blue-600 hover:bg-blue-100"
+                              className="rounded-full bg-blue-50 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-blue-600 hover:bg-blue-100"
                               title="Ajouter cette prestation à la fin du brouillon de réponse"
                             >
                               → brouillon
@@ -1102,21 +1102,21 @@ export default function BoiteAssistantPage() {
                           )}
                           {s.actionable ? (
                             s.childId ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[10px] font-semibold text-green-700">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-green-700">
                                 <Check size={10} /> Vérifié · place dispo
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-body text-[10px] font-semibold text-sky-600">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-sky-600">
                                 <Check size={10} /> Place dispo · éligibilité à confirmer
                               </span>
                             )
                           ) : (
-                            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-body text-[10px] font-semibold text-amber-600">
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 font-body text-[12px] sm:text-[10px] font-semibold text-amber-600">
                               {s.note || "non disponible"}
                             </span>
                           )}
                         </div>
-                        {s.pourquoi && <div className="mt-1 font-body text-[11px] italic text-slate-400">{s.pourquoi}</div>}
+                        {s.pourquoi && <div className="mt-1 font-body text-[13px] sm:text-[11px] italic text-slate-400">{s.pourquoi}</div>}
                         {/* Étape 2 — inscription 1-clic (famille connue OU nouvelle famille créée) */}
                         {(() => {
                           const hasIds = Array.isArray(s.creneauIds) ? s.creneauIds.length > 0 : !!s.creneauId;
@@ -1138,7 +1138,7 @@ export default function BoiteAssistantPage() {
                               <select
                                 value={chosenChild[i] || famChildren[0]?.id || ""}
                                 onChange={(e) => setChosenChild((prev) => ({ ...prev, [i]: e.target.value }))}
-                                className="rounded-md border border-blue-200 bg-white px-2 py-1 font-body text-[11px]"
+                                className="rounded-md border border-blue-200 bg-white px-2 py-1 font-body text-[13px] sm:text-[11px]"
                               >
                                 {famChildren.map((c) => (
                                   <option key={c.id} value={c.id}>{c.firstName}</option>
@@ -1146,7 +1146,7 @@ export default function BoiteAssistantPage() {
                               </select>
                             )}
                             {enrollState[i]?.done ? (
-                              <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white">
+                              <span className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-white">
                                 <Check size={12} /> Inscrit{effChildName ? ` · ${effChildName}` : ""}
                                 {s.prixMode === "semaine" && s.nbJours > 1 ? ` · ${s.nbJours} jours` : ""}
                               </span>
@@ -1154,7 +1154,7 @@ export default function BoiteAssistantPage() {
                               <button type="button"
                                 onClick={() => enrollSuggestion(s, i)}
                                 disabled={enrollState[i]?.busy}
-                                className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 rounded-md bg-blue-600 px-2.5 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                               >
                                 {enrollState[i]?.busy ? <Loader2 size={12} className="animate-spin" /> : <UserPlus size={12} />}
                                 {enrollState[i]?.busy
@@ -1169,13 +1169,13 @@ export default function BoiteAssistantPage() {
                               </button>
                             )}
                             {enrollState[i]?.error && (
-                              <span className="ml-2 font-body text-[11px] font-semibold text-red-600">{enrollState[i]?.error}</span>
+                              <span className="ml-2 font-body text-[13px] sm:text-[11px] font-semibold text-red-600">{enrollState[i]?.error}</span>
                             )}
                             {enrollState[i]?.done && enrollState[i]?.orderWarn && (
-                              <span className="ml-2 font-body text-[11px] font-semibold text-amber-600">{enrollState[i]?.orderWarn}</span>
+                              <span className="ml-2 font-body text-[13px] sm:text-[11px] font-semibold text-amber-600">{enrollState[i]?.orderWarn}</span>
                             )}
                             {enrollState[i]?.done && !enrollState[i]?.orderWarn && enrollState[i]?.orderMsg && (
-                              <span className="ml-2 font-body text-[11px] text-slate-500">
+                              <span className="ml-2 font-body text-[13px] sm:text-[11px] text-slate-500">
                                 {enrollState[i]?.orderMsg} · à régler dans Paiements (aucun lien envoyé)
                               </span>
                             )}
@@ -1221,7 +1221,7 @@ export default function BoiteAssistantPage() {
 
               <div>
                 <div className="mb-1 flex items-center justify-between">
-                  <div className="font-body text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                  <div className="font-body text-[13px] sm:text-[11px] font-bold uppercase tracking-wide text-slate-400">
                     Brouillon de réponse
                   </div>
                   <div className="flex items-center gap-2">
@@ -1229,14 +1229,14 @@ export default function BoiteAssistantPage() {
                       <button type="button"
                         onClick={sendReply}
                         disabled={sending || !from.trim() || !draft.trim()}
-                        className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-white hover:bg-green-700 disabled:opacity-50"
                       >
                         {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />} Envoyer
                       </button>
                     )}
                     <button type="button"
                       onClick={copyDraft}
-                      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
+                      className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-1 font-body text-[13px] sm:text-[11px] font-semibold text-slate-600 hover:bg-slate-200"
                     >
                       {copied ? <Check size={12} /> : <Copy size={12} />} {copied ? "Copié" : "Copier"}
                     </button>
@@ -1253,7 +1253,7 @@ export default function BoiteAssistantPage() {
                     {sendMsg.text}
                   </p>
                 )}
-                <p className="mt-1.5 font-body text-[11px] text-slate-400">
+                <p className="mt-1.5 font-body text-[13px] sm:text-[11px] text-slate-400">
                   {gmail.connected
                     ? "« Envoyer » répond directement dans le fil Gmail (à ton clic). Sinon, copie et envoie depuis Gmail."
                     : "Relis, ajuste, puis envoie toi-même depuis Gmail. Aucune action automatique."}
