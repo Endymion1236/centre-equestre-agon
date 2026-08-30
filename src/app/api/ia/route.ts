@@ -159,7 +159,19 @@ interface DescriptionActiviteRequest {
   contexteLibre?: string;
 }
 
-type IARequest = DescriptionActiviteRequest | RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest | AnalyseProgressionRequest;
+/**
+ * Rédaction libre guidée par un prompt écrit côté écran.
+ *
+ * `type` est optionnel : la fenêtre « Envoyer un lien de paiement » n'envoyait
+ * qu'un `prompt`. Sans ce cas dans l'union, le corps se réduisait à `never`
+ * après les onze branches, et aucune n'acceptait la requête.
+ */
+interface TexteLibreRequest {
+  type?: "texte_libre";
+  prompt: string;
+}
+
+type IARequest = TexteLibreRequest | DescriptionActiviteRequest | RapprochementRequest | AssistantRequest | SuggestionsRequest | EmailRepriseRequest | BilanPedaRequest | GenerateEmailTemplateRequest | ThemeStageRequest | PlanningManagementRequest | ManagementCommandRequest | AnalyseProgressionRequest;
 
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
@@ -797,9 +809,40 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
       return NextResponse.json({ success: true, actions: parsed.actions, message: parsed.message || "" });
     }
 
+    // ── Rédaction libre ────────────────────────────────────────────────
+    //
+    // Les onze cas ci-dessus attendent un `type` précis. La fenêtre « Envoyer
+    // un lien de paiement » n'envoyait qu'un `prompt` : aucun bloc ne
+    // correspondait, la fonction se terminait sans rien renvoyer, et le
+    // bouton « Générer avec l'IA » affichait « Erreur IA ».
+    //
+    // Ce cas couvre toute rédaction ponctuelle guidée par un prompt écrit
+    // côté écran. La réponse porte `text` ET `content`, les deux formes que
+    // les appelants savent lire.
+    if (body.type === "texte_libre" || (!body.type && typeof body.prompt === "string")) {
+      const consigne = String(body.prompt || "").trim();
+      if (!consigne) {
+        return NextResponse.json({ error: "Prompt vide" }, { status: 400 });
+      }
+      const message = await client.messages.create({
+        model: "claude-opus-5",
+        max_tokens: 1500,
+        messages: [{ role: "user", content: consigne }],
+      });
+      const text = message.content[0]?.type === "text" ? message.content[0].text.trim() : "";
+      return NextResponse.json({ success: true, text, content: [{ type: "text", text }] });
+    }
+
+    // Aucun cas ne correspond. Sans ce retour, la fonction s'achevait sur
+    // `undefined` : Next.js levait une erreur interne, et l'appelant recevait
+    // un 500 opaque au lieu de savoir que son `type` n'existe pas.
+    return NextResponse.json(
+      { error: `Type de requête inconnu : ${JSON.stringify(body.type ?? null)}` },
+      { status: 400 },
+    );
+
   } catch (error: any) {
     console.error("IA API error:", error);
-    console.error("API error:", error);
     return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
   }
 }
