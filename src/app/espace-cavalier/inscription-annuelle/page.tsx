@@ -142,6 +142,32 @@ export default function InscriptionAnnuellePage() {
   const [familyDiscountRules, setFamilyDiscountRules] = useState<FamilyDiscountRule[]>([]);
   const [allForfaits, setAllForfaits] = useState<any[]>([]);
 
+  // ─── Ancienneté de la famille ────────────────────────────────────────
+  //
+  // Le bandeau « première inscription » se fondait sur l'absence de forfait
+  // dans l'application. Insuffisant : cette application démarre, l'historique
+  // des saisons passées vivait dans Celeris et n'a pas été repris. Une famille
+  // présente au club depuis dix ans se serait donc vu proposer une réduction
+  // de bienvenue — et l'aurait demandée.
+  //
+  // Les fiches ont commencé à être saisies en avril 2026, pour tester le
+  // planning. Toute fiche créée avant juin correspond donc à une famille déjà
+  // au club la saison précédente. Après, ce sont de vraies arrivées.
+  //
+  // Date inconnue ou illisible : on considère la famille comme ancienne. Se
+  // taire à tort coûte moins cher que promettre une réduction à tort.
+  const DEBUT_NOUVELLES_FAMILLES = new Date("2026-06-01T00:00:00");
+
+  const familleArriveeCetteAnnee = (() => {
+    const brut: any = (family as any)?.createdAt;
+    if (!brut) return false;
+    const d = brut?.seconds ? new Date(brut.seconds * 1000)
+      : brut?.toDate ? brut.toDate()
+      : new Date(brut);
+    if (!(d instanceof Date) || isNaN(d.getTime())) return false;
+    return d >= DEBUT_NOUVELLES_FAMILLES;
+  })();
+
   const children = family?.children || [];
   const child = children.find((c: any) => c.id === selectedChild);
 
@@ -959,10 +985,11 @@ export default function InscriptionAnnuellePage() {
           {step === 1 && (
             <Card padding="md">
               <h2 className="font-body text-base font-semibold text-blue-800 mb-2">Quel cavalier inscrivez-vous ?</h2>
-              {/* Bandeau réduction 1ère inscription : visible UNIQUEMENT si la
-                  famille n'a aucun forfait existant (vraie première inscription).
+              {/* Bandeau réduction 1ère inscription : aucun forfait dans
+                  l'application ET fiche créée après juin 2026. Les deux
+                  conditions sont nécessaires — voir DEBUT_NOUVELLES_FAMILLES.
                   Réduction non automatique : invite à contacter le club. */}
-              {allForfaits.length === 0 && (
+              {allForfaits.length === 0 && familleArriveeCetteAnnee && (
                 <div className="mb-4 p-4 rounded-xl bg-green-50 border border-green-200">
                   <div className="font-body text-sm font-semibold text-green-800 mb-1">🎁 Première inscription ?</div>
                   <p className="font-body text-xs text-green-700">
