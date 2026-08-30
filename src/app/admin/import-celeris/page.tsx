@@ -152,10 +152,23 @@ export default function ImportCelerisPage() {
   const copierProd = async (apply: boolean) => {
     setLoading(true); setErreur(""); setRapport(null);
     try {
-      const res = await authFetch(`/api/admin/copy-prod-to-test${apply ? "?apply=true" : ""}`, { method: "POST" });
+      let url = `/api/admin/copy-prod-to-test`;
+      if (apply) {
+        // Mot-clé saisi à la main : la copie écrase la base de test.
+        const mot = window.prompt("Pour copier réellement vers la base de TEST, tapez : COPIER-VERS-TEST");
+        if (mot !== "COPIER-VERS-TEST") { setErreur("Mot-clé incorrect — opération annulée."); setLoading(false); return; }
+        url += `?apply=true&confirm=${encodeURIComponent(mot)}`;
+      }
+      const res = await authFetch(url, { method: "POST" });
       const data = await res.json();
       if (!res.ok) { setErreur(data.error || "Erreur"); setLoading(false); return; }
-      setRapport({ mode: data.mode + ` — COPIE PROD→TEST`, projectId: data.projectId, total_familles_fichier: data.total_snapshot, a_creer: data.a_copier, skip_enfant_existant: data.skip_existant, sans_email_crees: 0, enfants_crees: data.enfants_copies, details_crees: [], details_skip: [] });
+      setRapport({
+        kind: "reset",
+        mode: `${data.mode} — COPIE ${data.source} → ${data.destination}`,
+        projectId: data.projectId,
+        total_documents: data.total_documents,
+        par_collection: data.par_collection || {},
+      });
     } catch (e: any) {
       setErreur(e?.message || "Erreur réseau");
     }
@@ -293,12 +306,17 @@ export default function ImportCelerisPage() {
       )}
 
       <div className="flex gap-3 mb-6 flex-wrap border-t border-gray-100 pt-4">
-        <span className="font-body text-xs text-gray-400 w-full">Copie du snapshot PROD vers la base TEST (pour tester en conditions réelles) :</span>
+        <span className="font-body text-xs text-gray-400 w-full">
+          Recopie <strong>toutes les collections</strong> de la base courante vers la base de TEST,
+          pour essayer une fonctionnalité sur des données réalistes. Sens unique : cette copie ne
+          peut pas écrire en production. Les documents déjà présents en test et absents ici ne sont
+          pas supprimés.
+        </span>
         <button type="button" onClick={() => copierProd(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-purple-700 bg-purple-50 border border-purple-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu copie prod→test"}
         </button>
-        <button type="button" onClick={() => { if (confirm("Copier les familles PROD dans la base TEST ?")) copierProd(true); }} disabled={loading}
+        <button type="button" onClick={() => copierProd(true)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-purple-500 border-none cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Copier prod→test pour de vrai"}
         </button>
