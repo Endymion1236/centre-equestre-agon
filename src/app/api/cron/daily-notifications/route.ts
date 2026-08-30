@@ -6,7 +6,12 @@ import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
 import { addDaysParis } from "@/lib/date-local";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
-import { emailButton } from "@/lib/email-templates";
+import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
+
+const POLICE_TAB = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -185,26 +190,18 @@ export async function GET(req: NextRequest) {
               </tr>`;
             }).join("");
 
-          const html = `<div style="font-family:Arial,sans-serif;max-width:650px;margin:0 auto;padding:24px;">
-            <div style="background:#0C1A2E;padding:16px 24px;border-radius:12px 12px 0 0;text-align:center;">
-              <p style="color:#F0A010;font-size:18px;font-weight:bold;margin:0;">📋 Planning du ${todayLabel}</p>
-            </div>
-            <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
-              <p style="color:#1e3a5f;font-size:15px;">Bonjour <strong>${monitorName}</strong>,</p>
-              <p style="color:#555;">${isPersonal ? `Tu as <strong>${monitorCreneaux.length} cours</strong> aujourd'hui :` : `Planning complet (<strong>${coursToShow.length} cours</strong>) :`}</p>
-              <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-                <thead><tr style="background:#f8fafc;">
-                  <th style="padding:8px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Horaire</th>
-                  <th style="padding:8px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Cours</th>
-                  <th style="padding:8px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Moniteur</th>
-                  <th style="padding:8px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Places</th>
-                  <th style="padding:8px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Cavaliers</th>
-                </tr></thead>
-                <tbody>${lignes}</tbody>
-              </table>
-              <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville</p>
-            </div>
-          </div>`;
+          const html = emailLayout([
+            emailTitre(`Planning du ${todayLabel}`),
+            P(`Bonjour <strong>${monitorName}</strong>,`),
+            P(isPersonal ? `Tu as <strong>${monitorCreneaux.length} cours</strong> aujourd'hui :` : `Planning complet (<strong>${coursToShow.length} cours</strong>) :`),
+            `<table style="width:100%;border-collapse:collapse;margin:16px 0;font-family:${POLICE_TAB};">
+              <thead><tr>
+                ${["Horaire", "Cours", "Moniteur", "Places", "Cavaliers"].map(t =>
+                  `<th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${CE.gris};border-bottom:1px solid ${CE.bord};">${t}</th>`).join("")}
+              </tr></thead>
+              <tbody>${lignes}</tbody>
+            </table>`,
+          ].join("\n"), `${isPersonal ? monitorCreneaux.length : coursToShow.length} cours le ${todayLabel}`);
 
           for (const email of emails) {
             await refreshEmailMode();
@@ -445,24 +442,18 @@ export async function GET(req: NextRequest) {
           const soldeLink = `${appUrl}/espace-cavalier/factures?payId=${paymentId}`;
 
           const subject = `💳 Rappel solde stage — ${totalSolde.toFixed(2)}€ à régler avant le ${j7Label}`;
-          const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-            <div style="background:#2050A0;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-              <h2 style="margin:0;font-size:18px;">Centre Équestre d'Agon-Coutainville</h2>
-            </div>
-            <div style="background:#f8faff;padding:24px;border:1px solid #e0e8ff;border-top:none;border-radius:0 0 12px 12px;">
-              <p>Bonjour <strong>${data.familyName}</strong>,</p>
-              <p>Votre stage commence dans <strong>7 jours</strong> (${j7Label}).</p>
-              <p>Il reste un solde à régler :</p>
-              <div style="background:white;border:2px solid #2050A0;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
-                <div style="font-size:28px;font-weight:bold;color:#2050A0;">${totalSolde.toFixed(2)}€</div>
-                <div style="color:#555;font-size:13px;margin-top:4px;">${activites}</div>
-              </div>
-              ${emailButton("Régler mon solde", soldeLink, "#2050A0")}
-              <p style="color:#888;font-size:12px;text-align:center;">
-                Accédez à votre espace cavalier → Mes factures pour régler par CB en ligne.
-              </p>
-            </div>
-          </div>`;
+          const html = emailLayout([
+            emailTitre("Le stage commence dans une semaine"),
+            P(`Bonjour <strong>${data.familyName}</strong>,`),
+            P(`Votre stage commence dans <strong>7 jours</strong> (${j7Label}).`),
+            emailPanneau("", [
+              emailLigne('<strong style="color:' + CE.encre + ';">Solde à régler</strong>', `${totalSolde.toFixed(2).replace(".", ",")}&nbsp;€`),
+              emailLigne("Prestations", activites),
+            ].join("")),
+            emailButton("Régler mon solde", soldeLink),
+            P("Vous pouvez aussi régler sur place, par carte, chèque ou espèces.", 13),
+            emailSignature(),
+          ].join("\n"), `${totalSolde.toFixed(2).replace(".", ",")} € à régler avant le ${j7Label}`);
 
           const resendRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -556,17 +547,20 @@ export async function GET(req: NextRequest) {
             try {
               const lignes = [...slots.values()]
                 .sort((a, b) => a.jour.localeCompare(b.jour) || a.horaire.localeCompare(b.horaire))
-                .map(s => `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin:8px 0;">
-                  <p style="margin:0;color:#1e40af;font-weight:600;font-size:14px;">🐴 ${s.title}</p>
-                  <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 ${s.jour} · 🕐 ${s.horaire}${s.moniteur ? ` · 👤 ${s.moniteur}` : ""}</p>
-                </div>`).join("");
-              const subject = `🐴 Reprise des cours — votre planning de la saison`;
-              const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-                <p>Bonjour ${parentName || "cher parent"},</p>
-                <p>Les cours reprennent le <strong>${debutDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</strong>. Voici votre planning récurrent pour la saison :</p>
-                ${lignes}
-                <p style="color:#888;font-size:12px;margin-top:16px;">Ce créneau est le vôtre chaque semaine pour toute la saison. À très vite au club ! 🐴</p>
-              </div>`;
+                .map(s => emailPanneau(s.title, [
+                  emailLigne("Jour", s.jour),
+                  emailLigne("Horaire", s.horaire),
+                  s.moniteur ? emailLigne("Encadrement", s.moniteur) : "",
+                ].join(""))).join("");
+              const subject = "Reprise des cours — votre planning de la saison";
+              const html = emailLayout([
+                emailTitre("Les cours reprennent"),
+                P(`Bonjour ${parentName || "cher parent"},`),
+                P(`Les cours reprennent le <strong>${debutDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</strong>. Voici votre planning récurrent pour la saison :`),
+                lignes,
+                P("Ce créneau est le vôtre chaque semaine pour toute la saison.", 13),
+                emailSignature(),
+              ].join("\n"), `Reprise le ${debutDate.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`);
               const res = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -623,18 +617,22 @@ export async function GET(req: NextRequest) {
           const cree = d.createdAt?.toDate?.();
           const jours = cree ? Math.floor((Date.now() - cree.getTime()) / 86400_000) : "?";
           const mode = { cheque: "chèque", especes: "espèces", virement: "virement" }[d.mode as string] || d.mode || "règlement";
-          return `<div style="padding:10px 12px;border-left:3px solid #f59e0b;background:#fffbeb;margin-bottom:8px;">
-            <strong>${d.familyName || "—"}</strong> — ${Number(d.montant || 0).toFixed(2)} € par ${mode}
-            <p style="margin:4px 0 0;color:#555;font-size:13px;">${d.activityTitle || ""}</p>
-            <p style="margin:2px 0 0;color:#92400e;font-size:12px;">déclaré il y a ${jours} jour(s)${d.familyEmail ? ` · ${d.familyEmail}` : ""}</p>
-          </div>`;
+          return emailPanneau(
+            `${d.familyName || "—"} · ${Number(d.montant || 0).toFixed(2).replace(".", ",")} € par ${mode}`,
+            [
+              d.activityTitle ? emailLigne("Prestations", String(d.activityTitle)) : "",
+              emailLigne("Déclaré il y a", typeof jours === "number" ? `${jours} jour${jours > 1 ? "s" : ""}` : "date inconnue"),
+              d.familyEmail ? emailLigne("Email", String(d.familyEmail)) : "",
+            ].join(""),
+          );
         }).join("");
-        const subject = `⏳ ${anciennes.length} règlement(s) déclaré(s) depuis plus de ${SEUIL_JOURS} jours`;
-        const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-          <p>Ces familles ont annoncé un règlement qui n'a toujours pas été confirmé. Leur place reste réservée et la somme n'est pas encaissée.</p>
-          ${lignes}
-          <p style="color:#888;font-size:12px;margin-top:16px;">À traiter dans Paiements › Déclarations, ou à libérer depuis Inscriptions non payées si la réservation est caduque.</p>
-        </div>`;
+        const subject = `${anciennes.length} règlement(s) déclaré(s) depuis plus de ${SEUIL_JOURS} jours`;
+        const html = emailLayout([
+          emailTitre("Règlements déclarés, non confirmés"),
+          P("Ces familles ont annoncé un règlement qui n'a toujours pas été confirmé. Leur place reste réservée et la somme n'est pas encaissée."),
+          lignes,
+          P("À traiter dans Paiements › Déclarations, ou à libérer depuis Inscriptions non payées si la réservation est caduque.", 13),
+        ].join("\n"), `${anciennes.length} règlement(s) en attente de confirmation`);
         try {
           const res = await fetch("https://api.resend.com/emails", {
             method: "POST",

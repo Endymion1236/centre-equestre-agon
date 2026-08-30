@@ -6,6 +6,12 @@ import { verifyAuth } from "@/lib/api-auth";
 import { refreshEmailMode, isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { logEmail } from "@/lib/email-log";
+import {
+  emailLayout, emailButton, emailPanneau, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
+
+const POLICE_MSG = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -186,15 +192,13 @@ export async function POST(req: NextRequest) {
         `${l.annuel ? " (à l'année)" : ` · ${d}`} · ${l.horaire}</li>`;
     }).join("");
 
-    const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1e293b;">
-      <p>Bonjour ${f.familyName || ""},</p>
-      <div style="white-space:pre-wrap;line-height:1.6;">${message
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
-      <div style="margin:20px 0;padding:14px;background:#eef2ff;border-left:3px solid #6366f1;border-radius:0 6px 6px 0;">
-        <p style="margin:0 0 8px;font-weight:bold;">Place${f.lignes.length > 1 ? "s" : ""} retenue${f.lignes.length > 1 ? "s" : ""} :</p>
-        <ul style="margin:0;padding-left:18px;">${lignes}</ul>
-      </div>
-      ${(() => {
+    const html = emailLayout([
+      P(`Bonjour ${f.familyName || ""},`),
+      `<div style="white-space:pre-wrap;font-family:${POLICE_MSG};font-size:15px;line-height:1.65;color:${CE.texte};margin:0 0 4px;">${message
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>`,
+      emailPanneau(`Place${f.lignes.length > 1 ? "s" : ""} retenue${f.lignes.length > 1 ? "s" : ""}`,
+        `<ul style="margin:0;padding-left:18px;font-family:${POLICE_MSG};font-size:14px;line-height:1.8;color:${CE.texte};">${lignes}</ul>`),
+      (() => {
         // Groupes WhatsApp des reprises de CETTE famille. Un lien vers son
         // propre groupe convainc bien mieux qu'un lien générique.
         const liens = [...new Map(
@@ -203,48 +207,20 @@ export async function POST(req: NextRequest) {
             .map(l => [l.waKey, { label: l.activite, url: waReprises[l.waKey] }])
         ).values()];
         if (liens.length === 0 && !waCommunity) return "";
-        const boutons = liens.map(l =>
-          `<a href="${l.url}" style="display:block;margin-bottom:8px;padding:11px 16px;background:#16a34a;
-             color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">
-             Groupe WhatsApp — ${l.label}</a>`
-        ).join("");
-        const communaute = (liens.length === 0 && waCommunity)
-          ? `<a href="${waCommunity}" style="display:inline-block;padding:11px 16px;background:#16a34a;
-               color:#ffffff;text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">
-               Rejoindre la communauté WhatsApp</a>`
-          : "";
-        return `<div style="margin:20px 0;padding:16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
-          <p style="margin:0 0 6px;font-weight:bold;">Rejoignez le groupe WhatsApp de votre reprise</p>
-          <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">
-            C'est par là que passent les infos de dernière minute : météo, changement
-            d'horaire, séance annulée. Un seul clic, une seule fois.
-          </p>
-          ${boutons}${communaute}
-        </div>`;
-      })()}
-      <div style="margin:20px 0;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">
-        <p style="margin:0 0 8px;font-weight:bold;">Votre espace famille</p>
-        <p style="margin:0 0 12px;font-size:14px;line-height:1.6;">
-          Nous changeons d'outil de gestion cette saison. Vous disposez désormais
-          d'un espace en ligne pour consulter le planning et vos réservations,
-          retrouver vos factures, suivre la progression et les galops de votre
-          enfant, et réserver stages et balades.
-        </p>
-        <a href="https://centre-equestre-agon.vercel.app/espace-cavalier"
-           style="display:inline-block;padding:11px 20px;background:#1e40af;color:#ffffff;
-                  text-decoration:none;border-radius:8px;font-weight:bold;font-size:14px;">
-          Accéder à mon espace
-        </a>
-        <p style="margin:12px 0 0;font-size:12px;color:#64748b;">
-          À partir du 1<sup>er</sup> octobre, l'adresse deviendra
-          <strong>centreequestreagon.com</strong>. Vous serez redirigé automatiquement.
-        </p>
-      </div>
-      <p style="color:#64748b;font-size:13px;">
-        Vous pouvez répondre directement à ce message, il nous parviendra.
-      </p>
-      <p style="margin-top:16px;">Centre Équestre d'Agon-Coutainville</p>
-    </div>`;
+        const boutons = liens.length > 0
+          ? liens.map(l => emailButton(`Groupe WhatsApp — ${l.label}`, l.url)).join("")
+          : emailButton("Rejoindre la communauté WhatsApp", waCommunity);
+        return emailPanneau("Le groupe WhatsApp de votre reprise",
+          P("C'est par là que passent les infos de dernière minute : météo, changement d'horaire, séance annulée. Un seul clic, une seule fois.", 14) + boutons);
+      })(),
+      emailPanneau("Votre espace famille", [
+        P("Nous changeons d'outil de gestion cette saison. Vous disposez désormais d'un espace en ligne pour consulter le planning et vos réservations, retrouver vos factures, suivre la progression et les galops de votre enfant, et réserver stages et balades.", 14),
+        emailButton("Accéder à mon espace", "https://centre-equestre-agon.vercel.app/espace-cavalier"),
+        P("À partir du 1<sup>er</sup> octobre, l'adresse deviendra <strong>centreequestreagon.com</strong>. Vous serez redirigé automatiquement.", 12),
+      ].join("")),
+      P("Vous pouvez répondre directement à ce message, il nous parviendra.", 13),
+      emailSignature(),
+    ].join("\n"), `Place${f.lignes.length > 1 ? "s" : ""} retenue${f.lignes.length > 1 ? "s" : ""} pour la saison`);
 
     try {
       // Resend limite à 2 requêtes/seconde : un dépassement (429) est

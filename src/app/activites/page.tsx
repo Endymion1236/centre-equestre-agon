@@ -56,10 +56,10 @@ export default function ActivitesPage() {
         <div className="pointer-events-none absolute bottom-0 left-1/3 h-60 w-60 rounded-full bg-gold-400/10 blur-3xl" />
         <div className="relative mx-auto max-w-[1120px]">
           <div className="max-w-3xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-2 font-body text-[10px] font-bold uppercase tracking-[0.17em] text-gold-300 backdrop-blur-md">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/[0.06] px-3 py-2 font-body text-[11px] font-bold uppercase tracking-[0.17em] text-gold-300 backdrop-blur-md">
               <Sparkles size={14} /> Du premier contact au projet sportif
             </div>
-            <h1 className="font-display text-4xl font-bold leading-[1.02] tracking-[-0.03em] text-white sm:text-5xl md:text-6xl">Une activité pour chaque âge, chaque niveau et chaque envie</h1>
+            <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">Une activité pour chaque âge, chaque niveau et chaque envie</h1>
             <p className="mt-6 max-w-2xl font-body text-base leading-relaxed text-white/65 sm:text-lg">Stages pendant les vacances, cours à l’année, balades sur la plage, compétition et moments à offrir. Utilisez les filtres ou laissez-vous guider.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a href="#catalogue" className="inline-flex items-center gap-2 rounded-xl bg-gold-400 px-5 py-3.5 font-body text-sm font-bold text-blue-950 no-underline shadow-[0_10px_28px_rgba(240,160,16,0.2)] transition-transform hover:-translate-y-0.5">Explorer le catalogue <ArrowDown size={15} /></a>
@@ -92,7 +92,7 @@ export default function ActivitesPage() {
               <Image src={universe.image} alt="" aria-hidden="true" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover transition-transform duration-700 group-hover:scale-[1.025]" />
               <div className={`absolute inset-0 bg-gradient-to-r ${universe.wash}`} />
               <div className="relative z-10 flex min-h-[275px] max-w-[68%] flex-col justify-end p-6">
-                <div className={`font-body text-[10px] font-bold uppercase tracking-[0.16em] ${universe.accent}`}>{universe.eyebrow}</div>
+                <div className={`font-body text-[11px] font-bold uppercase tracking-[0.16em] ${universe.accent}`}>{universe.eyebrow}</div>
                 <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-blue-950">{universe.title}</h2>
                 <p className="mt-3 font-body text-sm leading-relaxed text-slate-600">{universe.text}</p>
                 <div className="mt-5 inline-flex items-center gap-2 font-body text-xs font-bold text-blue-800">Explorer <ArrowRight size={14} className="transition-transform group-hover:translate-x-1" /></div>
@@ -106,7 +106,7 @@ export default function ActivitesPage() {
 
       <section className="bg-white px-6 py-20 text-center">
         <div className="mx-auto max-w-2xl">
-          <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Besoin d’un conseil</div>
+          <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Besoin d’un conseil</div>
           <h2 className="mt-3 font-display text-3xl font-bold text-blue-950">Vous hésitez entre deux activités ?</h2>
           <p className="mx-auto mt-4 max-w-lg font-body text-base leading-relaxed text-slate-500">Indiquez-nous l’âge, l’expérience et ce que le cavalier aime. Nous vous orienterons vers le groupe le plus adapté.</p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">

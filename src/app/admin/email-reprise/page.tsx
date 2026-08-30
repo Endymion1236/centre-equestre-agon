@@ -5,6 +5,9 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Send, Mail, Check, Sparkles, X } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+import {
+  emailLayout, emailParagraphe, emailParagraphe as P,
+} from "@/lib/email-templates";
 
 export default function EmailReprisePage() {
   const [creneaux, setCreneaux] = useState<any[]>([]);
@@ -109,19 +112,10 @@ export default function EmailReprisePage() {
     let emailStatus = "logged";
     if (emails.length > 0) {
       try {
-        const htmlBody = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-          <div style="background:#2050A0;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-            <h2 style="margin:0;font-size:18px;">Centre Équestre d'Agon-Coutainville</h2>
-          </div>
-          <div style="padding:24px;background:#fff;border:1px solid #eee;">
-            <p style="white-space:pre-line;color:#333;line-height:1.6;">${message.replace(/</g,"&lt;").replace(/>/g,"&gt;")}</p>
-          </div>
-          <div style="padding:16px;text-align:center;font-size:12px;color:#999;">
-            Centre Équestre Poney Club d'Agon-Coutainville<br>
-            56 Charrière du Commerce — 50230 Agon-Coutainville<br>
-            02 44 84 99 96 — ceagon@orange.fr
-          </div>
-        </div>`;
+        const htmlBody = emailLayout(
+          emailParagraphe(message.replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")),
+          subject,
+        );
         const res = await authFetch("/api/send-email", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ to:emails, subject, html:htmlBody, context: "admin_email_reprise", creneauId: selectedCreneau.id }) });
         const result = await res.json();
         emailStatus = result.success ? "sent" : "error";

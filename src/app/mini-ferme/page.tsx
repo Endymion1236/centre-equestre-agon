@@ -21,7 +21,7 @@ export default function MiniFermePage() {
           <div className="pointer-events-none absolute -right-32 -top-48 h-[520px] w-[520px] rounded-full border border-white/[0.06] bg-white/[0.03]" />
           <div className="relative mx-auto grid max-w-[1120px] gap-10 lg:grid-cols-[1fr_0.86fr] lg:items-center">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-200"><TreePine size={14} /> Découvrir le vivant</div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-300/20 bg-emerald-300/[0.08] px-3 py-2 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-200"><TreePine size={14} /> Découvrir le vivant</div>
               <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">La mini-ferme fait partie de l’aventure équestre</h1>
               <p className="mt-6 max-w-2xl font-body text-base leading-relaxed text-white/66 sm:text-lg">Cochons Kune Kune, chèvres, poules et autres pensionnaires permettent aux enfants d’observer, de toucher, de comprendre et d’apprendre à prendre soin.</p>
 
@@ -41,7 +41,7 @@ export default function MiniFermePage() {
               <Image src="/images/vitrine/choices/baby-poney.webp" alt="Un jeune enfant découvre un poney avec douceur" fill sizes="100vw" className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-emerald-950/54 via-transparent to-white/5" />
               <div className="absolute bottom-5 left-5 right-5 rounded-2xl border border-white/14 bg-emerald-950/56 p-5 backdrop-blur-md">
-                <div className="font-body text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">Pour les petits comme les grands</div>
+                <div className="font-body text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-200">Pour les petits comme les grands</div>
                 <div className="mt-2 font-display text-2xl font-bold text-white">Approcher un animal, observer et apprendre à prendre soin</div>
               </div>
             </div>
@@ -50,7 +50,7 @@ export default function MiniFermePage() {
 
         <section className="px-6 py-20 sm:py-24">
           <div className="mx-auto max-w-[1080px]">
-            <div className="mx-auto mb-10 max-w-2xl text-center"><div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-emerald-600">Nos pensionnaires</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Rencontrez les animaux de la ferme</h2><p className="mt-4 font-body text-base leading-relaxed text-slate-500">Les portraits ci-dessous sont alimentés directement depuis la gestion du centre pour rester à jour.</p></div>
+            <div className="mx-auto mb-10 max-w-2xl text-center"><div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-600">Nos pensionnaires</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Rencontrez les animaux de la ferme</h2><p className="mt-4 font-body text-base leading-relaxed text-slate-500">Les portraits ci-dessous sont alimentés directement depuis la gestion du centre pour rester à jour.</p></div>
             <MiniFermeAnimals />
           </div>
         </section>
@@ -58,7 +58,7 @@ export default function MiniFermePage() {
         <section className="bg-white px-6 py-20 sm:py-24">
           <div className="mx-auto grid max-w-[1050px] gap-10 lg:grid-cols-[1fr_0.9fr] lg:items-center">
             <div>
-              <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Une pédagogie concrète</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Une pédagogie concrète</div>
               <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950 sm:text-4xl">Apprendre à s’occuper d’un animal, c’est déjà grandir</h2>
               <p className="mt-5 font-body text-base leading-relaxed text-slate-600">La mini-ferme complète le travail autour des poneys. Les enfants découvrent des comportements différents, apprennent à se déplacer calmement, à observer avant d’agir et à adapter leurs gestes.</p>
               <p className="mt-4 font-body text-base leading-relaxed text-slate-600">Pour les plus jeunes, c’est aussi un espace de respiration pendant les stages, particulièrement apprécié après une activité dynamique à poney.</p>

@@ -176,3 +176,20 @@ export function datesStage(
   if (uniques.length === 0) return repli || "";
   return uniques.join(" · ");
 }
+
+/**
+ * Date à laquelle le solde d'un stage est réclamé : sept jours avant son
+ * premier jour, la règle du cron `charge-stage-balances`.
+ *
+ * Écrire « avant le 12 octobre » plutôt que « 7 jours avant le stage » évite
+ * à la famille de compter, et donne au message le ton d'une échéance plutôt
+ * que celui d'un règlement intérieur. Renvoie "" si la date est inexploitable,
+ * auquel cas l'appelant garde son ancienne formulation.
+ */
+export function dateEcheanceSolde(premierJour?: string | null): string {
+  if (!premierJour) return "";
+  const d = new Date(premierJour);
+  if (Number.isNaN(d.getTime())) return "";
+  d.setDate(d.getDate() - 7);
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+}

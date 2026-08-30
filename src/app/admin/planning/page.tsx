@@ -13,7 +13,10 @@ import {
 } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import { emailTemplates } from "@/lib/email-templates";
+import {
+  emailTemplates, emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature,
+} from "@/lib/email-templates";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { dateSaisieComplete } from "@/lib/date-saisie";
 import { generateOrderId } from "@/lib/utils";
@@ -1881,32 +1884,28 @@ export default function PlanningPage() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 to: first.familyEmail,
-                subject: `🎉 Une place s'est libérée — ${c.activityTitle}`,
+                subject: `Une place s'est libérée — ${c.activityTitle}`,
                 context: "admin_place_liberee",
                 template: "placeLibereeNotif",
                 familyId: first.familyId,
                 creneauId: cid,
-                html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                  <p>Bonjour <strong>${first.familyName}</strong>,</p>
-                  <p>Une place s'est libérée pour <strong>${first.childName}</strong> dans :</p>
-                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-                    <p style="margin:0;color:#166534;font-weight:600;">${c.activityTitle}</p>
-                    <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${first.isStage && first.dateFin && first.dateFin !== first.date
-                      ? `du ${new Date(first.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} au ${new Date(first.dateFin).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}${first.nbJours ? ` (${first.nbJours} jours)` : ""}`
-                      : new Date(c.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} — ${c.startTime}–${c.endTime}</p>
-                  </div>
-                  <p><strong>Cette place vous est réservée pendant 24h</strong> (jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}). Passé ce délai, elle sera proposée aux autres familles.</p>
-                  <p style="text-align:center;margin:24px 0;">
-                    <a href="${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(cid)}"
-                       style="background:#16a34a;color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">
-                      Confirmer l'inscription
-                    </a>
-                  </p>
-                  <p style="color:#555;font-size:13px;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au
-                    <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
-                  ${encadreConditionsPourType(c.activityType)}
-                  <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
-                </div>`,
+                html: emailLayout([
+                  emailTitre("Une place s'est libérée"),
+                  P(`Bonjour <strong>${first.familyName}</strong>,`),
+                  P(`Une place s'est libérée pour <strong>${first.childName}</strong>.`),
+                  emailPanneau(c.activityTitle, [
+                    emailLigne(first.isStage && first.dateFin && first.dateFin !== first.date ? "Dates" : "Date",
+                      first.isStage && first.dateFin && first.dateFin !== first.date
+                        ? `du ${new Date(first.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} au ${new Date(first.dateFin).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}${first.nbJours ? ` (${first.nbJours} jours)` : ""}`
+                        : new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })),
+                    emailLigne("Horaire", `${c.startTime}–${c.endTime}`),
+                  ].join("")),
+                  P(`<strong>Cette place vous est réservée pendant 24 h</strong>, jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}. Passé ce délai, elle sera proposée aux autres familles.`),
+                  emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(cid)}`),
+                  P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
+                  encadreConditionsPourType(c.activityType),
+                  emailSignature(),
+                ].join("\n"), `Place disponible — ${c.activityTitle}`),
               }),
             }).catch(() => {});
             await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString(), holdUntil });

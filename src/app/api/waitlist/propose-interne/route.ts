@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
 import { refreshEmailMode, isRecipientAllowed } from "@/lib/email-guard";
+import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
 
 /**
  * POST /api/waitlist/propose  { creneauId }
@@ -59,20 +63,16 @@ export async function POST(req: NextRequest) {
   if (email && resendKey && isRecipientAllowed(email)) {
     const lien = `${appUrl}/espace-cavalier/reserver?creneau=${encodeURIComponent(String(creneauId))}`;
     const subject = `Une place s'est libérée — ${c.activityTitle || "activité"}`;
-    const html = `
-      <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:20px;">
-        <div style="background:#1e3a5f;color:#fff;padding:16px;border-radius:12px 12px 0 0;text-align:center;font-size:18px;font-weight:bold;">Centre Équestre d'Agon-Coutainville</div>
-        <div style="border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:20px;">
-          <p style="font-size:15px;color:#1e293b;">Bonjour <strong>${w.familyName || ""}</strong>,</p>
-          <p style="font-size:15px;color:#334155;line-height:1.6;">Bonne nouvelle : une place vient de se libérer pour
-            <strong>${c.activityTitle || ""}</strong>${c.date ? ` le <strong>${c.date}</strong>` : ""}${c.startTime ? ` (${c.startTime}–${c.endTime || ""})` : ""},
-            pour laquelle <strong>${w.childName || "votre cavalier"}</strong> est en liste d'attente.</p>
-          <p style="font-size:14px;color:#334155;line-height:1.6;">Elle vous est proposée en priorité pendant <strong>24&nbsp;heures</strong> — passé ce délai, elle sera proposée à la famille suivante.</p>
-          <p style="text-align:center;margin:22px 0;"><a href="${lien}" style="background:#16a34a;color:#fff;padding:12px 26px;border-radius:10px;text-decoration:none;font-weight:bold;">Réserver la place</a></p>
-          <p style="font-size:13px;color:#555;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
-          <p style="font-size:12px;color:#64748b;">Vous n'êtes plus intéressé ? Ignorez simplement ce message.</p>
-        </div>
-      </div>`;
+    const html = emailLayout([
+        emailTitre("Une place s'est libérée"),
+        P(`Bonjour <strong>${w.familyName || ""}</strong>,`),
+        P(`Bonne nouvelle : une place vient de se libérer pour <strong>${c.activityTitle || ""}</strong>${c.date ? ` le <strong>${c.date}</strong>` : ""}${c.startTime ? ` (${c.startTime}–${c.endTime || ""})` : ""}, pour laquelle <strong>${w.childName || "votre cavalier"}</strong> est en liste d'attente.`),
+        P("Elle vous est proposée en priorité pendant <strong>24&nbsp;heures</strong> — passé ce délai, elle sera proposée à la famille suivante.", 14),
+        emailButton("Réserver la place", lien),
+        P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
+        P(`<span style="color:${CE.discret};">Vous n'êtes plus intéressé ? Ignorez simplement ce message.</span>`, 12),
+        emailSignature(),
+      ].join("\n"), `Place disponible — ${c.activityTitle || ""}${c.date ? ` le ${c.date}` : ""}`);
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },

@@ -11,6 +11,10 @@ import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2, Chevron
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import ThemesVusModal from "./components/ThemesVusModal";
 import { normalizeSearch } from "@/lib/search-normalize";
+import {
+  emailLayout, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
 
 const modeLabels: Record<string, string> = {
   cb_terminal: "CB", cb_online: "CB en ligne", cheque: "Chèque",
@@ -67,18 +71,18 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: family.parentEmail,
-          subject: `📋 Attestation médicale manquante — ${child.firstName}`,
+          subject: `Attestation médicale manquante — ${child.firstName}`,
           context: "admin_relance_attestation",
           familyId: family.firestoreId || family.id,
-          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-            <p>Bonjour <strong>${family.parentName || ""}</strong>,</p>
-            <p>Pour que <strong>${child.firstName}</strong> puisse monter en toute sécurité, il nous manque encore sa <strong>fiche sanitaire et attestation médicale</strong>.</p>
-            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;margin:16px 0;">
-              <p style="margin:0;color:#9a3412;font-size:14px;">📝 Connectez-vous à votre espace famille, rubrique <strong>Profil</strong>, pour compléter la fiche sanitaire de ${child.firstName} (allergies, contact d'urgence, attestation).</p>
-            </div>
-            <p style="color:#555;font-size:13px;">Cela ne prend que 2 minutes. Merci !</p>
-            <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
-          </div>`,
+          html: emailLayout([
+            emailTitre("Il nous manque un document"),
+            P(`Bonjour <strong>${family.parentName || ""}</strong>,`),
+            P(`Pour que <strong>${child.firstName}</strong> puisse monter en toute sécurité, il nous manque encore sa <strong>fiche sanitaire et attestation médicale</strong>.`),
+            emailPanneau("Ce qu'il reste à faire",
+              P(`Connectez-vous à votre espace famille, rubrique <strong>Profil</strong>, pour compléter la fiche sanitaire de ${child.firstName} — allergies, contact d'urgence, attestation.`, 14)),
+            P("Cela ne prend que deux minutes.", 13),
+            emailSignature(),
+          ].join("\n"), `Fiche sanitaire de ${child.firstName} à compléter`),
         }),
       });
       if (!res.ok) throw new Error();

@@ -64,7 +64,7 @@ export function Navbar() {
             <div className={`truncate font-display text-[15px] font-bold leading-tight transition-colors ${light ? "text-blue-950" : "text-white"}`}>
               Centre Équestre
             </div>
-            <div className={`truncate font-body text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors ${light ? "text-slate-400" : "text-white/58"}`}>
+            <div className={`truncate font-body text-[11px] font-semibold uppercase tracking-[0.16em] transition-colors ${light ? "text-slate-400" : "text-white/58"}`}>
               Agon-Coutainville
             </div>
           </div>
@@ -110,9 +110,9 @@ export function Navbar() {
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5 rounded-lg border border-gold-300/35 bg-gold-400/12 px-2.5 py-1.5">
                 <Pencil size={11} className="text-gold-500" />
-                <span className="font-body text-[10px] font-bold text-gold-600">Édition</span>
+                <span className="font-body text-xs font-bold text-gold-600">Édition</span>
               </div>
-              <button type="button" onClick={signOut} className="border-none bg-transparent font-body text-[10px] text-slate-400 cursor-pointer hover:text-red-500">Quitter</button>
+              <button type="button" onClick={signOut} className="border-none bg-transparent font-body text-xs text-slate-400 cursor-pointer hover:text-red-500">Quitter</button>
             </div>
           ) : (
             <button type="button" onClick={signInWithGoogle} className={`border-none bg-transparent p-1 cursor-pointer transition-colors ${light ? "text-slate-300 hover:text-slate-500" : "text-white/18 hover:text-white/45"}`} title="Connexion admin" aria-label="Connexion admin">
@@ -141,7 +141,7 @@ export function Navbar() {
             </div>
 
             <div className="my-5 border-t border-slate-100 pt-5">
-              <div className="mb-2 font-body text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Découvrir le club</div>
+              <div className="mb-2 font-body text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Découvrir le club</div>
               {clubLinks.map((link) => (
                 <Link key={link.href} href={link.href} className="flex items-center justify-between border-b border-slate-100 py-3 font-body text-sm font-semibold text-blue-950 no-underline last:border-b-0">
                   {link.label}<span className="text-slate-300">→</span>

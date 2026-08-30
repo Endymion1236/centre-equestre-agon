@@ -83,7 +83,7 @@ export default function IllustratedFeatureBand({
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-white/18 via-transparent to-white/8" />
 
       <div className={`relative z-10 flex ${minHeight} ${contentWidth} flex-col justify-center p-6 sm:p-8`}>
-        <div className={`font-body text-[10px] font-bold uppercase tracking-[0.17em] ${theme.eyebrow}`}>{eyebrow}</div>
+        <div className={`font-body text-[11px] font-bold uppercase tracking-[0.17em] ${theme.eyebrow}`}>{eyebrow}</div>
         <h2 className="mt-3 font-display text-2xl font-bold leading-tight text-blue-950 sm:text-3xl">{title}</h2>
         <p className="mt-4 font-body text-sm leading-relaxed text-slate-600 sm:text-base">{text}</p>
         {href && (

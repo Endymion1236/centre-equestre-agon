@@ -7,7 +7,11 @@ import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import { emailTemplates } from "@/lib/email-templates";
+import {
+  emailTemplates, emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe, emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
+import { dateEcheanceSolde } from "@/lib/email-prestations";
 import { generateOrderId, emailValide } from "@/lib/utils";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "@/app/admin/paiements/types";
@@ -940,29 +944,24 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: entry.familyEmail,
-          subject: `🎉 Une place s'est libérée — ${creneau.activityTitle}`,
+          subject: `Une place s'est libérée — ${creneau.activityTitle}`,
           context: "admin_place_liberee",
           template: "placeLiberee",
           familyId: entry.familyId,
           creneauId: creneau.id,
-          html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-            <p>Bonjour <strong>${entry.familyName}</strong>,</p>
-            <p>Bonne nouvelle ! Une place s'est libérée pour <strong>${entry.childName}</strong> :</p>
-            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin:16px 0;">
-              <p style="margin:0;color:#166534;font-weight:600;">✅ ${creneau.activityTitle}</p>
-              <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })}</p>
-              <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 ${creneau.startTime}–${creneau.endTime}</p>
-            </div>
-            <p><strong>Cette place vous est réservée pendant 24 heures.</strong> Confirmez l'inscription depuis votre espace famille : elle sera ensuite proposée aux autres familles en attente.</p>
-            <p style="text-align:center;margin:24px 0;">
-              <a href="${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(creneau.id!)}"
-                 style="background:#16a34a;color:#fff;padding:13px 28px;border-radius:10px;text-decoration:none;font-weight:bold;display:inline-block;">
-                Confirmer l'inscription
-              </a>
-            </p>
-            <p style="color:#555;font-size:13px;line-height:1.6;">Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.</p>
-            <p>À bientôt au centre équestre !</p>
-          </div>`,
+          html: emailLayout([
+            emailTitre("Une place s'est libérée"),
+            P(`Bonjour <strong>${entry.familyName}</strong>,`),
+            P(`Bonne nouvelle : une place s'est libérée pour <strong>${entry.childName}</strong>.`),
+            emailPanneau(creneau.activityTitle, [
+              emailLigne("Date", new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })),
+              emailLigne("Horaire", `${creneau.startTime}–${creneau.endTime}`),
+            ].join("")),
+            P("<strong>Cette place vous est réservée pendant 24 heures.</strong> Confirmez l'inscription depuis votre espace famille : passé ce délai, elle sera proposée aux autres familles en attente."),
+            emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(creneau.id!)}`),
+            P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
+            emailSignature(),
+          ].join("\n"), `Place disponible — ${creneau.activityTitle}`),
         }),
       }).catch(e => console.warn("Email waitlist:", e));
       // Mettre à jour la liste locale
@@ -1972,8 +1971,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const noms = stageLines.map(l => l.childName).join(", ");
         setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7)` : ""}`);
 
-        // Envoyer email de confirmation stage automatiquement
-        if (fam.parentEmail) {
+        // Envoyer email de confirmation stage automatiquement.
+        //
+        // Sauf quand l'acompte vient d'être encaissé au comptoir : dans ce
+        // cas /api/admin/stage-acompte-recu a déjà envoyé « Acompte confirmé —
+        // la place est réservée », qui dit la même chose en mieux. La famille
+        // recevait les deux à une seconde d'intervalle.
+        const acompteEncaisseAuComptoir = showAcompte && acompteReglement === "sur_place";
+        if (fam.parentEmail && !acompteEncaisseAuComptoir) {
           try {
             const dates = creneauxAInscrire.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })).join(", ");
             // Deroule des 2 sequences : chaine vide si le reglage n'est pas
@@ -1986,8 +1991,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               stageTitle: creneau.activityTitle,
               dates: stageMode === "jour" ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : dates,
               totalTTC: stageTotalTTC,
-              acompte: stageAcompte,
-              solde: stageSolde,
+              acompte: showAcompte ? stageAcompte : undefined,
+              solde: showAcompte ? stageSolde : undefined,
+              // L'acompte n'est pas encore réglé : le message doit annoncer
+              // une place retenue, pas une inscription acquise. Le lien de
+              // paiement part dans un message séparé (send-payment-link).
+              lienSepare: showAcompte && acompteReglement === "lien",
+              // Date réelle d'échéance du solde plutôt que « 7 jours avant le
+              // stage » : la famille n'a pas à compter, et une date se retient.
+              dateSolde: showAcompte ? dateEcheanceSolde(creneauxAInscrire[0]?.date || creneau.date) : undefined,
               derouleHtml,
             });
             authFetch("/api/send-email", {
@@ -2002,19 +2014,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 creneauId: creneau.id,
               }),
             }).catch(e => console.warn("Email stage:", e));
-
-            // Notification push
-            authFetch("/api/push", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                familyId: fam.firestoreId,
-                title: `✅ Inscription confirmée`,
-                body: `${noms} inscrit(s) au stage ${creneau.activityTitle}`,
-                url: "/espace-cavalier/reservations",
-              }),
-            }).catch(() => {});
           } catch (e) { console.error("Email confirmation stage:", e); }
+        }
+
+        // Notification push — hors du bloc email : elle doit partir aussi quand
+        // l'acompte a été encaissé au comptoir, cas où l'email de confirmation
+        // est volontairement omis. Son titre suit l'état réel de la place.
+        {
+          const enAttenteAcompte = showAcompte && acompteReglement === "lien";
+          authFetch("/api/push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              familyId: fam.firestoreId,
+              title: enAttenteAcompte ? "Inscription enregistrée — acompte à régler" : "Inscription confirmée",
+              body: enAttenteAcompte
+                ? `${noms} : la place au stage ${creneau.activityTitle} est retenue jusqu'au règlement de l'acompte.`
+                : `${noms} inscrit(s) au stage ${creneau.activityTitle}`,
+              url: enAttenteAcompte ? "/espace-cavalier/factures" : "/espace-cavalier/reservations",
+            }),
+          }).catch(() => {});
         }
 
         panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? (acompteReglement === "sur_place" ? ` (acompte ${stageAcompte}€ encaissé + solde J-7)` : ` (acompte ${stageAcompte}€ + solde J-7)`) : " — paiement en attente"}`, "success");
@@ -2512,17 +2531,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             context: "admin_email_reprise",
             familyId: r.familyId,
             creneauId: creneau.id,
-            html: `<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:560px;margin:0 auto;">
-              <div style="background:#1e3a5f;padding:20px 24px;border-radius:12px 12px 0 0;">
-                <h1 style="color:white;margin:0;font-size:18px;font-weight:700;">Centre Équestre d'Agon-Coutainville</h1>
-              </div>
-              <div style="background:white;padding:24px;border:1px solid #e8e0d0;border-top:none;">
-                ${emailBody.replace(/\n/g, "<br/>")}
-              </div>
-              <div style="background:#f8f5f0;padding:16px 24px;border-radius:0 0 12px 12px;border:1px solid #e8e0d0;border-top:none;">
-                <p style="margin:0;color:#999;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville · 02 44 84 99 96</p>
-              </div>
-            </div>`,
+            html: emailLayout(emailParagraphe(emailBody.replace(/\n/g, "<br/>")), emailSubject),
           }),
         });
         sent++;

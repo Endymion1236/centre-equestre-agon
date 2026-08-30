@@ -13,7 +13,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage } from "@/lib/email-prestations";
+import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
 
@@ -418,6 +418,9 @@ export async function GET(req: NextRequest) {
             : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
           const vars: Record<string, string | number> = hasStage ? {
             parentName: pData.familyName || "Client",
+            // Résout {fidelite} dans le gabarit : les points ont été crédités
+            // plus haut, le solde lu par le loader est donc à jour.
+            familyId: familyId || pData.familyId || "",
             // Sans nettoyage, le titre du stage arrive sous la forme
             // « Stage Poney — ambre » : le panier y a déjà mis l'enfant, et
             // les prénoms sont listés juste en dessous.
@@ -431,10 +434,12 @@ export async function GET(req: NextRequest) {
             // Variables spécifiques au template acompte
             acompte: paidAmount.toFixed(2),
             solde: soldeRestant.toFixed(2),
+            dateSolde: dateEcheanceSolde(pData.stageDate),
             total: (pData.totalTTC || 0).toFixed(2),
             soldePhrase,
           } : {
             parentName: pData.familyName || "Client",
+            familyId: familyId || pData.familyId || "",
             montant: paidAmount.toFixed(2),
             prestations: lignesDetail || prestations,
             // Le gabarit `confirmationPaiement` attend `mode`. Le webhook le
@@ -443,14 +448,14 @@ export async function GET(req: NextRequest) {
             // ponctuels ET les balades — tout ce qui n'est pas un stage.
             mode: libelleModePaiement("cb_online"),
           };
-          const { subject, html } = await loadTemplate(templateKey, vars);
-          // Rappel des conditions d'annulation pour les stages. Ajouté ici
-          // plutôt que dans le gabarit : la clause doit apparaître même si
+          // Rappel des conditions d'annulation pour les stages. Passé au
+          // gabarit plutôt qu'écrit dedans : la clause doit apparaître même si
           // le gabarit est réédité depuis l'admin. Ce n'est PAS ce qui rend
           // la clause opposable (l'acceptation à la commande le fait), mais
           // ça évite la mauvaise surprise et désamorce les litiges.
           const estStage = items.some((i: any) => String(i.activityType || "").includes("stage"));
-          const htmlFinal = estStage ? html + encadreConditionsStage() : html;
+          const { subject, html } = await loadTemplate(templateKey, vars, estStage ? encadreConditionsStage() : "");
+          const htmlFinal = html;
           fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },

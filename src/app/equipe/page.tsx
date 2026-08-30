@@ -85,7 +85,7 @@ export default function EquipePage() {
           <div className="pointer-events-none absolute -right-36 -top-52 h-[540px] w-[540px] rounded-full border border-white/[0.06] bg-white/[0.03]" />
           <div className="relative mx-auto max-w-[1120px]">
             <div className="max-w-3xl">
-              <div className="mb-4 font-body text-xs font-bold uppercase tracking-[0.2em] text-gold-300">Une histoire familiale depuis 1976</div>
+              <div className="mb-4 font-body text-[11px] font-bold uppercase tracking-[0.2em] text-gold-300">Une histoire familiale depuis 1976</div>
               <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">Les humains et les poneys qui font vivre le club</h1>
               <p className="mt-6 max-w-2xl font-body text-base leading-relaxed text-white/65 sm:text-lg">Derrière chaque cours, chaque stage et chaque balade, il y a une équipe, une cavalerie suivie au quotidien et près de cinquante ans de souvenirs à Agon-Coutainville.</p>
             </div>
@@ -105,7 +105,7 @@ export default function EquipePage() {
         <section className="px-6 py-20 sm:py-24">
           <div className="mx-auto grid max-w-[1120px] gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
-              <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Notre histoire</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Notre histoire</div>
               <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950 sm:text-4xl">Un club construit autour des enfants, du jeu et du grand air</h2>
               <p className="mt-5 font-body text-base leading-relaxed text-slate-600">Créé en 1976 par William et Marianne Richard, le centre a accompagné plusieurs générations de cavaliers. Le poney y a toujours été un formidable outil d’apprentissage, de confiance et d’aventure.</p>
               <p className="mt-4 font-body text-base leading-relaxed text-slate-600">Pony Games, horse-ball, stages scénarisés, promenades sur la plage puis outils numériques : le club évolue, mais conserve la même envie de proposer une équitation vivante et accessible.</p>
@@ -129,7 +129,7 @@ export default function EquipePage() {
 
         <section className="bg-white px-6 py-20 sm:py-24">
           <div className="mx-auto max-w-[1000px]">
-            <div className="mx-auto mb-10 max-w-2xl text-center"><div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">L’équipe</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Des interlocuteurs que vous connaissez</h2><p className="mt-4 font-body text-base leading-relaxed text-slate-500">Une petite équipe permet de suivre les cavaliers dans le temps et de garder un échange simple avec les familles.</p></div>
+            <div className="mx-auto mb-10 max-w-2xl text-center"><div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">L’équipe</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Des interlocuteurs que vous connaissez</h2><p className="mt-4 font-body text-base leading-relaxed text-slate-500">Une petite équipe permet de suivre les cavaliers dans le temps et de garder un échange simple avec les familles.</p></div>
             <div className="grid gap-6 md:grid-cols-2">
               {team.map((member) => (
                 <article key={member.name} className="overflow-hidden rounded-[26px] border border-blue-500/[0.08] bg-cream shadow-[0_16px_48px_rgba(12,26,46,0.055)]">
@@ -139,7 +139,7 @@ export default function EquipePage() {
                     </EditableImage>
                     <div><h3 className="font-display text-2xl font-bold text-blue-950">{member.name}</h3><div className="mt-1 font-body text-sm font-bold text-gold-600">{member.role}</div></div>
                   </div>
-                  <div className="px-6 pb-6"><p className="font-body text-sm leading-relaxed text-slate-600">{member.description}</p><div className="mt-5 flex flex-wrap gap-2">{member.specialties.map((specialty) => <span key={specialty} className="rounded-full bg-white px-3 py-1.5 font-body text-[10px] font-bold text-blue-700 ring-1 ring-blue-100">{specialty}</span>)}</div></div>
+                  <div className="px-6 pb-6"><p className="font-body text-sm leading-relaxed text-slate-600">{member.description}</p><div className="mt-5 flex flex-wrap gap-2">{member.specialties.map((specialty) => <span key={specialty} className="rounded-full bg-white px-3 py-1.5 font-body text-xs font-bold text-blue-700 ring-1 ring-blue-100">{specialty}</span>)}</div></div>
                 </article>
               ))}
             </div>
@@ -148,7 +148,7 @@ export default function EquipePage() {
 
         <section className="bg-sand px-6 py-20 sm:py-24">
           <div className="mx-auto max-w-[1120px]">
-            <div className="mx-auto mb-10 max-w-2xl text-center"><div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">La cavalerie</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Les poneys vedettes du centre</h2><p className="mt-4 font-body text-base leading-relaxed text-slate-500">Chaque poney a son caractère, ses qualités et les cavaliers avec lesquels il se sent le mieux.</p></div>
+            <div className="mx-auto mb-10 max-w-2xl text-center"><div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">La cavalerie</div><h2 className="mt-3 font-display text-3xl font-bold text-blue-950 sm:text-4xl">Les poneys vedettes du centre</h2><p className="mt-4 font-body text-base leading-relaxed text-slate-500">Chaque poney a son caractère, ses qualités et les cavaliers avec lesquels il se sent le mieux.</p></div>
 
             {loadingPoneys ? (
               <div className="flex justify-center py-14"><Loader2 className="h-8 w-8 animate-spin text-blue-400" /></div>

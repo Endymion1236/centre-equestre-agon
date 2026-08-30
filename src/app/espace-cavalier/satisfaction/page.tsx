@@ -238,7 +238,7 @@ export default function SatisfactionPage() {
             Envoyer mon avis
           </button>
           {globalNote === 0 && (
-            <p className="font-body text-[11px] text-slate-400 text-center mt-2">Sélectionnez une note pour continuer</p>
+            <p className="font-body text-xs text-slate-400 text-center mt-2">Sélectionnez une note pour continuer</p>
           )}
         </Card>
       )}
@@ -257,7 +257,7 @@ export default function SatisfactionPage() {
                       <p className="font-body text-sm text-slate-600 mt-1">"{a.commentaire}"</p>
                     )}
                     {a.createdAt?.seconds && (
-                      <p className="font-body text-[11px] text-slate-400 mt-1">
+                      <p className="font-body text-xs text-slate-400 mt-1">
                         {new Date(a.createdAt.seconds * 1000).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
                       </p>
                     )}

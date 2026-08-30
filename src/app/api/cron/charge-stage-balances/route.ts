@@ -8,7 +8,13 @@ import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
 import { addDaysParis } from "@/lib/date-local";
 import { chargeWithToken, logMitAttempt } from "@/lib/cawl-mit";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
-import { emailLayout, emailButton } from "@/lib/email-templates";
+import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailEtat, emailSignature,
+  emailCouleurs as C, euros, eurosTexte,
+} from "@/lib/email-templates";
+
+const POLICE_TEXTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -173,21 +179,16 @@ export async function GET(req: NextRequest) {
             // Email de confirmation "solde prélevé"
             await refreshEmailMode();
             if (resendKey && isRecipientAllowed(familyEmail)) {
-              const subject = `✅ Solde stage prélevé — ${solde.toFixed(2)}€`;
-              const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                <div style="background:#2050A0;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-                  <h2 style="margin:0;font-size:18px;">Centre Équestre d'Agon-Coutainville</h2>
-                </div>
-                <div style="background:#f8faff;padding:24px;border:1px solid #e0e8ff;border-top:none;border-radius:0 0 12px 12px;">
-                  <p>Bonjour <strong>${familyName}</strong>,</p>
-                  <p>Le solde du stage <strong>${stageTitle}</strong> (qui commence le ${j7Label}) vient d'être prélevé automatiquement sur votre carte enregistrée.</p>
-                  <div style="background:white;border:2px solid #27ae60;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
-                    <div style="font-size:28px;font-weight:bold;color:#27ae60;">${solde.toFixed(2)}€</div>
-                    <div style="color:#555;font-size:13px;margin-top:4px;">Solde réglé — ${stageTitle}</div>
-                  </div>
-                  <p style="color:#888;font-size:12px;text-align:center;">Aucune action n'est requise de votre part. Une facture est disponible dans votre espace.</p>
-                </div>
-              </div>`;
+              const subject = `Solde du stage prélevé — ${eurosTexte(solde)}`;
+              const html = emailLayout([
+                emailEtat("Solde prélevé", euros(solde), C.vert),
+                emailTitre("Tout est réglé"),
+                P(`Bonjour <strong>${familyName}</strong>,`),
+                P(`Le solde du stage <strong>${stageTitle}</strong>, qui commence le ${j7Label}, vient d'être prélevé sur votre carte enregistrée.`),
+                P("Aucune action n'est requise. La facture est disponible dans votre espace.", 14),
+                emailButton("Voir ma facture", `${appUrl}/espace-cavalier/factures`),
+                emailSignature(),
+              ].join("\n"), `${euros(solde)} prélevés — ${stageTitle}`);
               const r = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -207,28 +208,23 @@ export async function GET(req: NextRequest) {
             // Le prélèvement a échoué : email d'échec + on laisse le lien manuel ci-dessous.
             let emailEnvoye = false;
             if (resendKey && isRecipientAllowed(familyEmail)) {
-              const subject = `⚠️ Prélèvement du solde stage impossible — ${solde.toFixed(2)}€`;
+              const subject = `Prélèvement du solde impossible — ${eurosTexte(solde)}`;
               // Gabarit MAISON (bandeau bleu marine + pied de page) plutot
               // qu'un HTML ad hoc a bandeau rouge : ce n'est pas une mise en
               // demeure, juste un prelevement qui n'a pas abouti. Le bouton
               // vient du helper partage, insensible au passage a la ligne.
-              const html = emailLayout(`
-                <p style="margin:0 0 14px;font-size:15px;color:#1e293b;">Bonjour <strong>${familyName}</strong>,</p>
-                <p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.6;">
-                  Le prélèvement automatique du solde de votre stage
-                  <strong>${stageTitle}</strong> n'a pas abouti.
-                  Cela arrive parfois — un plafond de carte, une opposition temporaire,
-                  ou une carte arrivée à expiration.
-                </p>
-                <p style="margin:0 0 4px;font-size:15px;color:#334155;">
-                  Il reste <strong>${solde.toFixed(2)} €</strong> à régler avant le <strong>${j7Label}</strong>.
-                </p>
-                ${emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`, "#2050A0")}
-                <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
-                  Un souci pour régler en ligne ? Répondez simplement à ce message,
-                  nous trouverons une solution.
-                </p>
-              `);
+              const html = emailLayout([
+                emailTitre("Le prélèvement n'a pas abouti"),
+                P(`Bonjour <strong>${familyName}</strong>,`),
+                P(`Le prélèvement automatique du solde de votre stage <strong>${stageTitle}</strong> n'a pas abouti. Cela arrive : un plafond de carte, une opposition temporaire, ou une carte arrivée à expiration.`),
+                emailPanneau("", [
+                  emailLigne("Reste à régler", euros(solde)),
+                  emailLigne("Avant le", j7Label),
+                ].join("")),
+                emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`),
+                P("Un souci pour régler en ligne ? Répondez simplement à ce message, nous trouverons une solution.", 13),
+                emailSignature(),
+              ].join("\n"), `${euros(solde)} à régler avant le ${j7Label}`);
               const r = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -277,46 +273,37 @@ export async function GET(req: NextRequest) {
       const qrSEPA = await generateSEPAQR(solde, sepaLibelle, "email");
       const cidCAWL = `qr-cawl`;
       const cidSEPA = `qr-sepa`;
-      const qrSection = (qrCAWL || qrSEPA) ? `
-        <div style="background:white;border:1px solid #e0e8ff;border-radius:8px;padding:16px;margin-top:8px;">
-          <p style="margin:0 0 12px;font-size:12px;color:#6b7280;text-align:center;">Ou scannez avec votre téléphone :</p>
-          <table style="width:100%;border-collapse:collapse;" cellpadding="0" cellspacing="0">
+      const qrSection = (qrCAWL || qrSEPA) ? emailPanneau("Ou scannez avec votre téléphone", `
+          <table role="presentation" style="width:100%;border-collapse:collapse;" cellpadding="0" cellspacing="0">
             <tr>
               ${qrCAWL ? `<td style="text-align:center;vertical-align:top;padding:6px;">
-                <img src="cid:${cidCAWL}" alt="QR carte" style="width:130px;height:130px;display:block;margin:0 auto;" />
-                <p style="margin:6px 0 0;font-size:11px;color:#2050A0;font-weight:bold;">💳 Carte</p>
+                <img src="cid:${cidCAWL}" alt="QR paiement carte" style="width:130px;height:130px;display:block;margin:0 auto;border:0;" />
+                <div style="margin:9px 0 0;font-family:${POLICE_TEXTE};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.encre};">Carte</div>
               </td>` : ""}
               ${qrSEPA ? `<td style="text-align:center;vertical-align:top;padding:6px;">
-                <img src="cid:${cidSEPA}" alt="QR virement" style="width:130px;height:130px;display:block;margin:0 auto;" />
-                <p style="margin:6px 0 0;font-size:11px;color:#2050A0;font-weight:bold;">🏦 Virement</p>
-                <p style="margin:2px 0 0;font-size:9px;color:#6b7280;">ING, Boursorama, Revolut, BNP Pro</p>
+                <img src="cid:${cidSEPA}" alt="QR virement SEPA" style="width:130px;height:130px;display:block;margin:0 auto;border:0;" />
+                <div style="margin:9px 0 0;font-family:${POLICE_TEXTE};font-size:11px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${C.encre};">Virement</div>
+                <div style="margin:3px 0 0;font-family:${POLICE_TEXTE};font-size:12px;color:${C.gris};">ING, Boursorama, Revolut, BNP Pro</div>
               </td>` : ""}
             </tr>
           </table>
-        </div>` : "";
+      `) : "";
 
       try {
-        const subject = `💳 Solde stage à régler — ${solde.toFixed(2)}€ avant le ${j7Label}`;
-        const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-          <div style="background:#2050A0;color:white;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-            <h2 style="margin:0;font-size:18px;">Centre Équestre d'Agon-Coutainville</h2>
-          </div>
-          <div style="background:#f8faff;padding:24px;border:1px solid #e0e8ff;border-top:none;border-radius:0 0 12px 12px;">
-            <p>Bonjour <strong>${familyName}</strong>,</p>
-            <p>Le stage <strong>${stageTitle}</strong> commence dans <strong>7 jours</strong> (${j7Label}).</p>
-            ${p.paidAmount > 0 ? `<p>Votre acompte de <strong>${p.paidAmount.toFixed(2)}€</strong> a bien été reçu. Merci !</p>` : `<p>Aucun acompte n'a encore été versé.</p>`}
-            <p>Il reste un solde à régler :</p>
-            <div style="background:white;border:2px solid #2050A0;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
-              <div style="font-size:28px;font-weight:bold;color:#2050A0;">${solde.toFixed(2)}€</div>
-              <div style="color:#555;font-size:13px;margin-top:4px;">${stageTitle}</div>
-            </div>
-            ${emailButton("Régler mon solde", soldeLink, "#2050A0")}
-            ${qrSection}
-            <p style="color:#888;font-size:12px;text-align:center;">
-              Vous pouvez également régler sur place par CB, chèque ou espèces.
-            </p>
-          </div>
-        </div>`;
+        const subject = `Solde du stage à régler — ${eurosTexte(solde)} avant le ${j7Label}`;
+        const html = emailLayout([
+          emailTitre("Le stage commence dans une semaine"),
+          P(`Bonjour <strong>${familyName}</strong>,`),
+          P(`Le stage <strong>${stageTitle}</strong> commence dans <strong>7 jours</strong> (${j7Label}).`),
+          emailPanneau("", [
+            p.paidAmount > 0 ? emailLigne("Acompte déjà reçu", euros(p.paidAmount)) : "",
+            emailLigne('<strong style="color:' + C.encre + ';">Solde à régler</strong>', euros(solde)),
+          ].join("")),
+          emailButton("Régler mon solde", soldeLink),
+          qrSection,
+          P("Vous pouvez également régler sur place, par carte, chèque ou espèces.", 13),
+          emailSignature(),
+        ].join("\n"), `${euros(solde)} à régler avant le ${j7Label}`);
 
         if (resendKey && isRecipientAllowed(familyEmail)) {
           // Attachments CID pour les QR. IMPORTANT : content_id (snake_case)
@@ -396,19 +383,15 @@ export async function GET(req: NextRequest) {
         if (!familyEmail || !resendKey || !isRecipientAllowed(familyEmail)) continue;
 
         const stageTitle = p.stageTitle || (p.items || [])[0]?.activityTitle || "Stage";
-        const subject = `Rappel — solde de ${solde.toFixed(2)}€ à régler avant le stage`;
-        const html = emailLayout(`
-          <p style="margin:0 0 14px;font-size:15px;color:#1e293b;">Bonjour <strong>${p.familyName || ""}</strong>,</p>
-          <p style="margin:0 0 14px;font-size:15px;color:#334155;line-height:1.6;">
-            Le stage <strong>${stageTitle}</strong> commence <strong>${j5Label}</strong> et il reste
-            <strong>${solde.toFixed(2)} €</strong> à régler sur votre inscription.
-          </p>
-          ${emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`, "#2050A0")}
-          <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
-            Vous préférez régler sur place, ou rencontrez un souci ? Répondez simplement
-            à ce message, nous trouverons une solution.
-          </p>
-        `);
+        const subject = `Rappel — solde de ${eurosTexte(solde)} à régler avant le stage`;
+        const html = emailLayout([
+          emailTitre("Le stage approche"),
+          P(`Bonjour <strong>${p.familyName || ""}</strong>,`),
+          P(`Le stage <strong>${stageTitle}</strong> commence <strong>${j5Label}</strong> et il reste <strong>${euros(solde)}</strong> à régler sur votre inscription.`),
+          emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`),
+          P("Vous préférez régler sur place, ou vous rencontrez un souci ? Répondez simplement à ce message, nous trouverons une solution.", 13),
+          emailSignature(),
+        ].join("\n"), `${euros(solde)} à régler avant ${j5Label}`);
         const r = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },

@@ -6,6 +6,10 @@ import { SITE_CONFIG } from "@/lib/config";
 import { vitrineDefaults } from "@/lib/vitrine-defaults";
 import { logEmail } from "@/lib/email-log";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import {
+  emailLayout, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe, emailCouleurs as CE,
+} from "@/lib/email-templates";
 
 export const dynamic = "force-dynamic";
 
@@ -127,20 +131,15 @@ export async function POST(request: NextRequest) {
       to: [to],
       replyTo: email,
       subject: `[Site CE Agon] ${subject} · ${fullName}`,
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:680px;margin:auto;color:#1e293b">
-          <div style="background:#12346b;padding:24px 28px;border-radius:16px 16px 0 0;color:white">
-            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.12em;opacity:.65">Nouveau message du site</div>
-            <h1 style="font-size:24px;margin:8px 0 0">${escapeHtml(subject)}</h1>
-          </div>
-          <div style="padding:28px;border:1px solid #e2e8f0;border-top:0;border-radius:0 0 16px 16px;background:#fff">
-            <p style="margin:0 0 8px"><strong>De :</strong> ${escapeHtml(fullName)}</p>
-            <p style="margin:0 0 8px"><strong>Email :</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
-            ${phone ? `<p style="margin:0 0 22px"><strong>Téléphone :</strong> ${escapeHtml(phone)}</p>` : ""}
-            <div style="background:#f8fafc;border-radius:12px;padding:20px;line-height:1.65">${safeMessage}</div>
-          </div>
-        </div>
-      `,
+      html: emailLayout([
+        emailTitre(escapeHtml(subject)),
+        emailPanneau("Expéditeur", [
+          emailLigne("Nom", escapeHtml(fullName)),
+          emailLigne("Email", `<a href="mailto:${escapeHtml(email)}" style="color:${CE.bleu};text-decoration:none;">${escapeHtml(email)}</a>`),
+          phone ? emailLigne("Téléphone", escapeHtml(phone)) : "",
+        ].join("")),
+        emailParagraphe(safeMessage),
+      ].join("\n"), `${escapeHtml(fullName)} — ${escapeHtml(subject)}`),
     });
 
     if (error) {

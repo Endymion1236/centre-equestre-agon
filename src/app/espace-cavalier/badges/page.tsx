@@ -147,7 +147,7 @@ export default function BadgesPage() {
               setFilter(id);
               setOpenBadge(null);
             }}
-            className={`rounded-xl border px-2 py-2.5 font-body text-xs sm:text-sm font-bold cursor-pointer transition-all ${
+            className={`rounded-xl border px-2 py-2.5 font-body text-xs font-bold cursor-pointer transition-all ${
               filter === id ? "bg-blue-800 text-white border-blue-800" : "bg-white text-gray-600 border-gray-200"
             }`}
           >

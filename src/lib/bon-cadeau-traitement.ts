@@ -86,7 +86,7 @@ export async function traiterBonCadeauSession(
     if (resend && sess.acheteurEmail) {
       await resend.emails.send({
         from: FROM, replyTo: REPLY_TO, to: sess.acheteurEmail, ...(BCC ? { bcc: BCC } : {}),
-        subject: "🎁 Votre bon cadeau — Centre Équestre d'Agon-Coutainville",
+        subject: "Votre bon cadeau — Centre Équestre d'Agon-Coutainville",
         html: emailHtml(code, montant, sess.beneficiaire || "", sess.message || ""),
       });
     }

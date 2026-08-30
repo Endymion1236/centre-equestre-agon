@@ -54,12 +54,18 @@ export const COLORS = {
   sand: "#FAF6F0",
 } as const;
 
-// Horaires par saison
+// Horaires par saison, affichés sur la page Contact.
+//
+// Il y avait ici une quatrième ligne « Décembre – Février : Fermé », en rouge.
+// Elle contredisait la ligne juste au-dessus : la période scolaire couvre
+// décembre à février, et les cours à l'année y ont bien lieu le mercredi et
+// le samedi. Un visiteur qui lisait « Fermé » en plein hiver n'appelait pas.
+// Retirée le 30/08/2026 ; les fermetures réelles se saisissent dans les
+// périodes de vacances de l'administration, pas en dur ici.
 export const SCHEDULE = {
   summer: { period: "Juillet – Août", days: "Lun – Sam", hours: "9h – 19h" },
   holidays: { period: "Vacances scolaires", days: "Lun – Ven", hours: "9h – 18h" },
   school: { period: "Période scolaire", days: "Mer, Sam", hours: "9h – 18h" },
-  winter: { period: "Décembre – Février", days: "Fermé", hours: "—" },
 } as const;
 
 // Politique d'annulation (configurable dans le back-office)

@@ -63,11 +63,11 @@ export default function HomePage() {
           l'année n'apprend rien à qui lit « réservations ouvertes ». */}
       <Link href="/espace-cavalier" className="fixed inset-x-0 top-0 z-[210] block no-underline group">
         <div className="flex h-8 items-center justify-center gap-2 bg-blue-900 px-3">
-          <span className="truncate text-center font-body text-[11px] text-white/85">
+          <span className="truncate text-center font-body text-xs text-white/85">
             <strong className="font-semibold text-white">Réservations ouvertes</strong>
             <span className="hidden sm:inline"> — connectez-vous à votre espace client</span>
           </span>
-          <span className="inline-flex items-center gap-1 whitespace-nowrap font-body text-[11px] font-semibold text-gold-300 transition-all group-hover:gap-1.5">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap font-body text-xs font-semibold text-gold-300 transition-all group-hover:gap-1.5">
             Mon espace <ArrowRight size={12} />
           </span>
         </div>
@@ -156,7 +156,7 @@ export default function HomePage() {
       <section className="bg-white px-6 py-20 sm:py-24">
         <div className="mx-auto grid max-w-[1120px] gap-8 overflow-hidden rounded-[30px] border border-blue-500/[0.07] bg-[linear-gradient(135deg,#f7f3eb_0%,#ffffff_55%,#edf4ff_100%)] p-7 shadow-[0_20px_60px_rgba(12,26,46,0.06)] sm:p-10 lg:grid-cols-[1fr_0.95fr] lg:items-center">
           <div>
-            <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Les installations</div>
+            <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Les installations</div>
             <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-blue-950 sm:text-4xl">Trois manèges, une grande carrière et un club-house chaleureux</h2>
             <p className="mt-5 max-w-xl font-body text-sm leading-relaxed text-slate-500">Des espaces pensés pour monter toute l’année, du matériel pédagogique adapté et une cavalerie qui vit majoritairement en extérieur.</p>
             <Link href="/installations" className="group mt-7 inline-flex items-center gap-2 rounded-xl bg-blue-700 px-5 py-3.5 font-body text-sm font-bold text-white no-underline shadow-lg transition-transform hover:-translate-y-0.5">
@@ -176,7 +176,7 @@ export default function HomePage() {
       <section className="bg-blue-950 px-6 py-20 text-white sm:py-24">
         <div className="mx-auto grid max-w-[1100px] gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:items-center">
           <div>
-            <div className="mb-3 font-body text-xs font-bold uppercase tracking-[0.2em] text-gold-300">Le club depuis 1976</div>
+            <div className="mb-3 font-body text-[11px] font-bold uppercase tracking-[0.2em] text-gold-300">Le club depuis 1976</div>
             <h2 className="font-display text-3xl font-bold leading-tight text-white sm:text-4xl">Une histoire de poneys, de plage et de transmission</h2>
             <p className="mt-5 max-w-xl font-body text-base leading-relaxed text-white/65">
               Créé par la famille Richard, le centre a grandi avec une idée simple : faire découvrir l&apos;équitation dans une ambiance accessible, inventive et exigeante sur le bien-être des poneys.
@@ -239,7 +239,7 @@ export default function HomePage() {
       <section className="px-6 py-20 sm:py-24">
         <div className="mx-auto grid max-w-[1100px] overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#06130e_0%,#0a3324_48%,#0f6846_100%)] shadow-[0_25px_70px_rgba(5,35,24,0.18)] lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="p-7 sm:p-10">
-            <div className="mb-3 flex items-center gap-2 font-body text-xs font-bold uppercase tracking-[0.18em] text-emerald-300">
+            <div className="mb-3 flex items-center gap-2 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-300">
               <Target size={15} /> Aussi à Agon-Coutainville
             </div>
             <h2 className="font-display text-3xl font-bold text-white">LaserBay, l’aventure laser en plein air</h2>
@@ -280,7 +280,7 @@ export default function HomePage() {
       <section className="relative overflow-hidden bg-cream px-6 py-24 text-center">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(32,80,160,0.06)_0%,transparent_52%)]" />
         <div className="relative z-10 mx-auto max-w-2xl">
-          <div className="mb-4 font-body text-xs font-bold uppercase tracking-[0.2em] text-gold-500">Votre prochaine aventure</div>
+          <div className="mb-4 font-body text-[11px] font-bold uppercase tracking-[0.2em] text-gold-500">Votre prochaine aventure</div>
           <h2 className="font-display text-3xl font-bold leading-tight text-blue-900 sm:text-4xl">Prêt à monter à cheval à Agon ?</h2>
           <p className="mx-auto mt-5 max-w-lg font-body text-base leading-relaxed text-gray-500">Consultez les créneaux, ajoutez vos cavaliers et réservez directement depuis votre espace famille.</p>
           <div className="mt-8 flex flex-wrap justify-center gap-3">

@@ -8,6 +8,12 @@ import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, Che
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { calculerForfaitAnnuel, type ForfaitTarifs, type FamilyDiscountRule } from "@/lib/forfait-pricing";
+import {
+  emailLayout, emailPanneau, emailTitre, emailParagraphe as P,
+  emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
+
+const POLICE_DEVIS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 interface DevisItem {
   label: string;
@@ -277,45 +283,33 @@ export default function DevisPage() {
       // Générer le HTML du devis
       const lignesHtml = d.items.map(i => `
         <tr>
-          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#1e3a5f;">${i.label}${i.description ? `<br><span style="font-size:11px;color:#94a3b8;">${i.description}</span>` : ""}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:center;font-size:13px;color:#475569;">${i.qty}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;color:#475569;">${i.priceTTC.toFixed(2)}€${i.remisePct ? ` <span style="color:#dc2626;">(-${i.remisePct}%)</span>` : ""}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;font-weight:600;color:#1e3a5f;">${lineTTC(i).toFixed(2)}€</td>
+          <td style="padding:9px 10px;border-bottom:1px solid ${CE.bord};font-family:${POLICE_DEVIS};font-size:13px;color:${CE.encre};">${i.label}${i.description ? `<br/><span style="font-size:11px;color:${CE.gris};">${i.description}</span>` : ""}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid ${CE.bord};text-align:center;font-family:${POLICE_DEVIS};font-size:13px;color:${CE.texte};">${i.qty}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid ${CE.bord};text-align:right;font-family:${POLICE_DEVIS};font-size:13px;color:${CE.texte};">${i.priceTTC.toFixed(2).replace(".", ",")}&nbsp;€${i.remisePct ? ` <span style="color:${CE.rouge};">(−${i.remisePct} %)</span>` : ""}</td>
+          <td style="padding:9px 10px;border-bottom:1px solid ${CE.bord};text-align:right;font-family:${POLICE_DEVIS};font-size:13px;font-weight:600;color:${CE.encre};">${lineTTC(i).toFixed(2).replace(".", ",")}&nbsp;€</td>
         </tr>`).join("");
 
-      const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-        <div style="background:#0C1A2E;padding:24px;border-radius:12px 12px 0 0;">
-          <h1 style="color:#F0A010;margin:0;font-size:22px;">🐴 Centre Équestre d'Agon-Coutainville</h1>
-          <p style="color:#94a3b8;margin:4px 0 0;font-size:13px;">Devis ${d.numero}</p>
-        </div>
-        <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;">
-          <p style="color:#1e3a5f;">Bonjour <strong>${d.familyName}</strong>,</p>
-          ${d.serviceFacture ? `<p style="color:#1e3a5f;margin:0 0 8px;">Service : <strong>${d.serviceFacture}</strong></p>` : ""}
-          <p style="color:#555;">Voici votre devis pour la saison équestre :</p>
-          <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-            <thead>
-              <tr style="background:#f8fafc;">
-                <th style="padding:10px 12px;text-align:left;font-size:11px;color:#64748b;text-transform:uppercase;">Prestation</th>
-                <th style="padding:10px 12px;text-align:center;font-size:11px;color:#64748b;text-transform:uppercase;">Qté</th>
-                <th style="padding:10px 12px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Prix unit.</th>
-                <th style="padding:10px 12px;text-align:right;font-size:11px;color:#64748b;text-transform:uppercase;">Total</th>
-              </tr>
-            </thead>
-            <tbody>${lignesHtml}</tbody>
-            <tfoot>
-              <tr style="background:#f0fdf4;">
-                <td colspan="3" style="padding:12px;font-weight:bold;color:#1e3a5f;">Total TTC</td>
-                <td style="padding:12px;text-align:right;font-size:20px;font-weight:bold;color:#1e3a5f;">${d.totalTTC.toFixed(2)}€</td>
-              </tr>
-            </tfoot>
-          </table>
-          ${d.note ? `<div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;"><p style="margin:0;color:#854d0e;font-size:13px;">📝 ${d.note}</p></div>` : ""}
-          <p style="color:#555;font-size:13px;">Ce devis est valable jusqu'au <strong>${d.validUntil ? new Date(d.validUntil).toLocaleDateString("fr-FR") : "30 jours"}</strong>.</p>
-          <p style="color:#555;font-size:13px;">Pour accepter ou refuser ce devis, rendez-vous dans votre <strong>espace famille</strong> sur notre site (rubrique Paiements). Pour toute question, contactez-nous au centre équestre.</p>
-          <hr style="margin:24px 0;border:none;border-top:1px solid #e2e8f0;">
-          <p style="color:#94a3b8;font-size:11px;text-align:center;">Centre Équestre d'Agon-Coutainville — Agon-Coutainville, Normandie</p>
-        </div>
-      </div>`;
+      const html = emailLayout([
+        emailTitre(`Devis ${d.numero}`),
+        P(`Bonjour <strong>${d.familyName}</strong>,`),
+        d.serviceFacture ? P(`Service : <strong>${d.serviceFacture}</strong>`) : "",
+        P("Voici votre devis pour la saison équestre."),
+        `<table style="width:100%;border-collapse:collapse;margin:18px 0;">
+          <thead><tr>
+            ${["Prestation", "Qté", "Prix unit.", "Total"].map((t, n) =>
+              `<th style="padding:8px 10px;text-align:${n === 0 ? "left" : n === 1 ? "center" : "right"};font-family:${POLICE_DEVIS};font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${CE.gris};border-bottom:1px solid ${CE.bord};">${t}</th>`).join("")}
+          </tr></thead>
+          <tbody>${lignesHtml}</tbody>
+          <tfoot><tr>
+            <td colspan="3" style="padding:12px 10px 0;font-family:${POLICE_DEVIS};font-size:13px;font-weight:700;color:${CE.encre};">Total TTC</td>
+            <td style="padding:12px 10px 0;text-align:right;font-family:Georgia,serif;font-size:20px;color:${CE.encre};">${d.totalTTC.toFixed(2).replace(".", ",")}&nbsp;€</td>
+          </tr></tfoot>
+        </table>`,
+        d.note ? emailPanneau("Note", P(d.note, 13)) : "",
+        P(`Ce devis est valable jusqu'au <strong>${d.validUntil ? new Date(d.validUntil).toLocaleDateString("fr-FR") : "30 jours"}</strong>.`, 14),
+        P("Pour accepter ou refuser ce devis, rendez-vous dans votre espace famille, rubrique Paiements. Pour toute question, appelez-nous au centre équestre.", 14),
+        emailSignature(),
+      ].join("\n"), `Devis ${d.numero} — ${d.totalTTC.toFixed(2).replace(".", ",")} €`);
 
       await authFetch("/api/send-email", {
         method: "POST",

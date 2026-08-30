@@ -3,6 +3,10 @@ import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { addDaysParis } from "@/lib/date-local";
+import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -111,40 +115,26 @@ export async function GET(req: NextRequest) {
         : `Rappel — ${items.length} séances demain`;
       try {
         // Grouper les items par enfant pour un email lisible
-        const lignes = items.map(item => `
-          <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin:8px 0;">
-            <p style="margin:0;color:#1e40af;font-weight:600;font-size:14px;">
-              ${item.isStage ? "🏕️" : "🐴"} ${item.coursTitle}
-              ${items.length > 1 ? `<span style="color:#64748b;font-size:12px;"> — ${item.childName}</span>` : ""}
-            </p>
-            <p style="margin:6px 0 0;color:#555;font-size:13px;">📅 ${item.date}</p>
-            <p style="margin:4px 0 0;color:#555;font-size:13px;">🕐 ${item.horaire}</p>
-            ${item.moniteur ? `<p style="margin:4px 0 0;color:#555;font-size:13px;">👤 ${item.moniteur}</p>` : ""}
-          </div>
-        `).join("");
+        // Une séance par encadré, aux mêmes briques que le reste : les
+        // émojis 🏕️ 🐴 📅 🕐 👤 tenaient lieu d'intitulés et se rendaient
+        // en carrés vides sous Outlook.
+        const lignes = items.map(item => emailPanneau(
+          `${item.coursTitle}${items.length > 1 && item.childName ? ` · ${item.childName}` : ""}`,
+          [
+            emailLigne("Date", item.date),
+            emailLigne("Horaire", item.horaire),
+            item.moniteur ? emailLigne("Encadrement", item.moniteur) : "",
+          ].join(""),
+        )).join("");
 
-        const html = `
-          <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-            <div style="background:#0C1A2E;padding:16px 24px;border-radius:12px 12px 0 0;text-align:center;">
-              <p style="color:#F0A010;font-size:18px;font-weight:bold;margin:0;">🐴 Centre Équestre d'Agon-Coutainville</p>
-            </div>
-            <div style="background:#fff;padding:24px;border:1px solid #e2e8f0;border-radius:0 0 12px 12px;">
-              <p style="color:#1e3a5f;font-size:15px;">Bonjour <strong>${parentName || "cher parent"}</strong>,</p>
-              <p style="color:#555;">Petit rappel pour demain${childrenStr ? ` — <strong>${childrenStr}</strong>` : ""} :</p>
-              ${lignes}
-              <div style="background:#fefce8;border:1px solid #fde68a;border-radius:8px;padding:12px;margin:16px 0;">
-                <p style="margin:0;color:#854d0e;font-size:13px;">
-                  💡 N'oubliez pas : casque obligatoire, tenue adaptée recommandée.
-                </p>
-              </div>
-              <p style="color:#555;font-size:13px;">À demain au centre équestre !</p>
-              <hr style="border:none;border-top:1px solid #e2e8f0;margin:20px 0;">
-              <p style="color:#94a3b8;font-size:11px;text-align:center;">
-                Centre Équestre d'Agon-Coutainville — Agon-Coutainville, Normandie
-              </p>
-            </div>
-          </div>
-        `;
+        const html = emailLayout([
+          emailTitre("C'est demain"),
+          P(`Bonjour <strong>${parentName || "cher parent"}</strong>,`),
+          P(`Petit rappel pour demain${childrenStr ? ` — <strong>${childrenStr}</strong>` : ""} :`),
+          lignes,
+          emailPanneau("", P("Casque obligatoire, tenue adaptée recommandée.", 13)),
+          emailSignature("À demain au centre équestre."),
+        ].join("\n"), `Rappel — demain${childrenStr ? ` : ${childrenStr}` : ""}`);
 
         const resendRes = await fetch("https://api.resend.com/emails", {
           method: "POST",

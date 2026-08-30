@@ -31,7 +31,7 @@ export function Footer() {
               <Image src="/images/logo-ce-agon.png" alt="Centre Équestre d’Agon-Coutainville" width={48} height={48} className="h-12 w-12 rounded-xl object-contain" />
               <div>
                 <div className="font-display text-lg font-bold text-white">Centre Équestre</div>
-                <div className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Agon-Coutainville</div>
+                <div className="font-body text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">Agon-Coutainville</div>
               </div>
             </Link>
             <p className="mt-5 max-w-sm font-body text-sm leading-relaxed text-white/46">
@@ -48,7 +48,7 @@ export function Footer() {
           </div>
 
           <div>
-            <div className="mb-4 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">Découvrir</div>
+            <div className="mb-4 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-white/30">Découvrir</div>
             <div className="flex flex-col gap-3">
               {discoverLinks.map((link) => (
                 <Link key={link.href} href={link.href} className="font-body text-sm text-white/50 no-underline transition-colors hover:text-white">{link.label}</Link>
@@ -57,7 +57,7 @@ export function Footer() {
           </div>
 
           <div>
-            <div className="mb-4 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">Le club</div>
+            <div className="mb-4 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-white/30">Le club</div>
             <div className="flex flex-col gap-3">
               {clubLinks.map((link) => (
                 <Link key={link.href} href={link.href} className="font-body text-sm text-white/50 no-underline transition-colors hover:text-white">{link.label}</Link>
@@ -66,7 +66,7 @@ export function Footer() {
           </div>
 
           <div>
-            <div className="mb-4 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">Nous trouver</div>
+            <div className="mb-4 font-body text-[11px] font-bold uppercase tracking-[0.18em] text-white/30">Nous trouver</div>
             <div className="space-y-4">
               <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${SITE_CONFIG.address.street} ${SITE_CONFIG.address.zip} ${SITE_CONFIG.address.city}`)}`} target="_blank" rel="noopener noreferrer" className="flex items-start gap-3 font-body text-sm leading-relaxed text-white/50 no-underline transition-colors hover:text-white">
                 <MapPin size={17} className="mt-0.5 flex-shrink-0 text-gold-300" />

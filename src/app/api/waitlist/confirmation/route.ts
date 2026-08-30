@@ -3,6 +3,10 @@ import { verifyAuth } from "@/lib/api-auth";
 import { logEmail } from "@/lib/email-log";
 import { refreshEmailMode, isRecipientAllowed } from "@/lib/email-guard";
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
+import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
 
 /**
  * POST /api/waitlist/confirmation  { creneauId, childName, activityTitle, date, startTime, endTime }
@@ -50,22 +54,16 @@ export async function POST(req: NextRequest) {
       : lisible(String(date)))
     : "";
   const subject = `Inscription en liste d'attente — ${activityTitle}`;
-  const html = `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-    <p>Bonjour <strong>${parentName || ""}</strong>,</p>
-    <p><strong>${childName || "Votre cavalier"}</strong> est bien inscrit(e) en liste d'attente pour :</p>
-    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin:16px 0;">
-      <p style="margin:0;color:#1e40af;font-weight:600;">${activityTitle}</p>
-      <p style="margin:8px 0 0;color:#555;font-size:13px;">📅 ${dateLisible}${startTime ? ` — ${startTime}–${endTime || ""}` : ""}</p>
-    </div>
-    <p style="font-size:14px;line-height:1.6;color:#334155;"><strong>Vous n'avez rien d'autre à faire.</strong>
-      Si une place se libère, vous recevrez un email et elle vous sera
-      <strong>réservée pendant 24 heures</strong> pour confirmer votre inscription.</p>
-    <p style="font-size:13px;color:#555;line-height:1.6;">Cette activité ne vous intéresse plus ?
-      Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message,
-      nous libérerons votre place pour une autre famille.</p>
-    ${encadreConditionsPourType(String(activityType || ""))}
-    <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
-  </div>`;
+  const html = emailLayout([
+    emailTitre("Inscription en liste d'attente"),
+    P(`Bonjour <strong>${parentName || ""}</strong>,`),
+    P(`<strong>${childName || "Votre cavalier"}</strong> est bien inscrit(e) en liste d'attente.`),
+    emailPanneau(activityTitle, emailLigne("Séance", `${dateLisible}${startTime ? ` — ${startTime}–${endTime || ""}` : ""}`)),
+    P("<strong>Vous n'avez rien d'autre à faire.</strong> Si une place se libère, vous recevrez un email et elle vous sera <strong>réservée pendant 24 heures</strong> pour confirmer l'inscription."),
+    P("Cette activité ne vous intéresse plus ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message, nous libérerons votre place pour une autre famille.", 13),
+    encadreConditionsPourType(String(activityType || "")),
+    emailSignature(),
+  ].join("\n"), `${activityTitle} — ${dateLisible}`);
 
   const r = await fetch("https://api.resend.com/emails", {
     method: "POST",

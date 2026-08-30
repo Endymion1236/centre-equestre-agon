@@ -205,7 +205,7 @@ export default function TimelineReservation({
       {/* Choix du cavalier */}
       {children.length > 1 && (
         <section className="mb-5">
-          <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Pour qui ?</div>
+          <div className="font-body text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Pour qui ?</div>
           <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
             <button
               type="button"
@@ -238,7 +238,7 @@ export default function TimelineReservation({
 
       {/* Catégories principales */}
       <section className="mb-5">
-        <div className="font-body text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Que recherchez-vous ?</div>
+        <div className="font-body text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Que recherchez-vous ?</div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {filterOptions.map((option) => (
             <button
@@ -306,9 +306,9 @@ export default function TimelineReservation({
                       : "bg-white text-slate-600 border-gray-200"
                 }`}
               >
-                <span className="font-body text-[10px] uppercase block opacity-75">{DAYS_FR[date.getDay()]}</span>
+                <span className="font-body text-[11px] uppercase block opacity-75">{DAYS_FR[date.getDay()]}</span>
                 <span className="font-body text-base font-bold block">{date.getDate()}</span>
-                <span className={`font-body text-[10px] block mt-0.5 ${active ? "text-blue-100" : count > 0 ? "text-blue-500" : "text-gray-300"}`}>
+                <span className={`font-body text-xs block mt-0.5 ${active ? "text-blue-100" : count > 0 ? "text-blue-500" : "text-gray-300"}`}>
                   {count > 0 ? count : "·"}
                 </span>
               </button>

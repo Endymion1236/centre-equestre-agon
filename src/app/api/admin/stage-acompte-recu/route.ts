@@ -29,7 +29,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { encadreConditionsStage } from "@/lib/cgv-clauses";
-import { datesStage } from "@/lib/email-prestations";
+import { datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -79,8 +79,9 @@ export async function POST(req: NextRequest) {
       .join(", ") || "Cavalier(s)";
 
     const modeLabel = MODE_LABELS[String(mode || "")] || "";
+    const echeance = dateEcheanceSolde(p.stageDate);
     const soldePhrase = solde > 0
-      ? `Un email avec le lien de paiement du solde (${solde.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`
+      ? `Le lien de paiement du solde vous sera envoyé ${echeance ? `le ${echeance}` : "environ une semaine avant le début du stage"}.`
       : "Le stage est intégralement réglé. Merci !";
 
     const { subject, html: corps } = await loadTemplate("confirmationStageAcompte", {
@@ -94,16 +95,17 @@ export async function POST(req: NextRequest) {
       montant: acompte.toFixed(2),
       acompte: acompte.toFixed(2),
       solde: solde.toFixed(2),
+      dateSolde: dateEcheanceSolde(p.stageDate),
       total: total.toFixed(2),
       soldePhrase: modeLabel
         ? `Acompte réglé au centre équestre en ${modeLabel}. ${soldePhrase}`
         : soldePhrase,
-    });
-
     // Rappel des conditions d'annulation, comme sur les deux chemins CAWL :
     // la famille doit recevoir la même chose, que son acompte soit passé par
     // la banque ou par la caisse du bureau.
-    const html = corps + encadreConditionsStage();
+    }, encadreConditionsStage());
+
+    const html = corps;
 
     const resendKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";

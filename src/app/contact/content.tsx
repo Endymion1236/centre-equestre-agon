@@ -31,7 +31,7 @@ export function ContactPageContent() {
           <div className="pointer-events-none absolute -right-32 -top-48 h-[520px] w-[520px] rounded-full border border-white/[0.06] bg-white/[0.03]" />
           <div className="relative mx-auto max-w-[1120px]">
             <div className="max-w-3xl">
-              <div className="mb-4 font-body text-xs font-bold uppercase tracking-[0.2em] text-gold-300">Une question avant de réserver ?</div>
+              <div className="mb-4 font-body text-[11px] font-bold uppercase tracking-[0.2em] text-gold-300">Une question avant de réserver ?</div>
               <h1 className="font-display text-4xl font-bold leading-tight text-white sm:text-5xl md:text-6xl">Parlons de votre projet équestre</h1>
               <p className="mt-6 max-w-2xl font-body text-base leading-relaxed text-white/65 sm:text-lg">Stage, balade, cours à l’année, anniversaire ou groupe : donnez-nous quelques informations et nous vous orienterons vers la formule la plus adaptée.</p>
             </div>
@@ -39,15 +39,15 @@ export function ContactPageContent() {
             <div className="mt-10 grid gap-3 md:grid-cols-3">
               <a href={`tel:${phone.replace(/\s/g, "")}`} className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-white no-underline backdrop-blur-sm transition-colors hover:bg-white/10">
                 <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-gold-400 text-blue-950"><Phone size={20} /></div>
-                <div><div className="font-body text-[10px] font-bold uppercase tracking-wide text-white/35">Appeler</div><div className="mt-1 font-body text-sm font-bold text-white">{phone}</div></div>
+                <div><div className="font-body text-[11px] font-bold uppercase tracking-wide text-white/35">Appeler</div><div className="mt-1 font-body text-sm font-bold text-white">{phone}</div></div>
               </a>
               <a href={`mailto:${email}`} className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-white no-underline backdrop-blur-sm transition-colors hover:bg-white/10">
                 <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 text-gold-300"><Mail size={20} /></div>
-                <div className="min-w-0"><div className="font-body text-[10px] font-bold uppercase tracking-wide text-white/35">Écrire</div><div className="mt-1 truncate font-body text-sm font-bold text-white">{email}</div></div>
+                <div className="min-w-0"><div className="font-body text-[11px] font-bold uppercase tracking-wide text-white/35">Écrire</div><div className="mt-1 truncate font-body text-sm font-bold text-white">{email}</div></div>
               </a>
               <a href={`https://www.google.com/maps/search/?api=1&query=${mapQuery}`} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-white no-underline backdrop-blur-sm transition-colors hover:bg-white/10">
                 <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-white/10 text-gold-300"><Navigation size={20} /></div>
-                <div><div className="font-body text-[10px] font-bold uppercase tracking-wide text-white/35">Itinéraire</div><div className="mt-1 font-body text-sm font-bold text-white">Agon-Coutainville</div></div>
+                <div><div className="font-body text-[11px] font-bold uppercase tracking-wide text-white/35">Itinéraire</div><div className="mt-1 font-body text-sm font-bold text-white">Agon-Coutainville</div></div>
               </a>
             </div>
           </div>
@@ -56,7 +56,7 @@ export function ContactPageContent() {
         <section className="px-5 py-16 sm:px-6 sm:py-20">
           <div className="mx-auto grid max-w-[1120px] gap-10 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
             <div>
-              <div className="font-body text-xs font-bold uppercase tracking-[0.18em] text-gold-500">Informations pratiques</div>
+              <div className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-gold-500">Informations pratiques</div>
               <h2 className="mt-3 font-display text-3xl font-bold text-blue-950">Venez nous rencontrer</h2>
               <p className="mt-4 font-body text-sm leading-relaxed text-slate-500">Le centre se trouve à environ {SITE_CONFIG.distanceToBeach} de la mer, à proximité des dunes et du littoral d’Agon-Coutainville.</p>
 
@@ -81,7 +81,7 @@ export function ContactPageContent() {
                   {Object.values(SCHEDULE).map((schedule) => (
                     <div key={schedule.period} className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
                       <div className="font-body text-xs font-semibold text-slate-500">{schedule.period}</div>
-                      <div className={`text-right font-body text-xs font-bold ${schedule.days === "Fermé" ? "text-red-500" : "text-blue-700"}`}>{schedule.days}<br /><span className="font-medium text-slate-400">{schedule.hours}</span></div>
+                      <div className="text-right font-body text-xs font-bold text-blue-700">{schedule.days}<br /><span className="font-medium text-slate-400">{schedule.hours}</span></div>
                     </div>
                   ))}
                 </div>

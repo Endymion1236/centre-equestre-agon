@@ -211,7 +211,7 @@ function AddChildForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
             <option value="?">Je ne sais pas — m'aider à évaluer</option>
           </select>
           {!autoEval && galop && (
-            <p className="font-body text-[11px] text-slate-500 mt-1 mb-0">
+            <p className="font-body text-xs text-slate-500 mt-1 mb-0">
               🐴 Niveau adapté aux <strong>{promenadePour(galop)}</strong>.
             </p>
           )}
@@ -227,7 +227,7 @@ function AddChildForm({ onDone, onCancel }: { onDone: () => void; onCancel: () =
                   <span className="text-slate-500"> · {promenadePour(niveau)}</span>
                 </button>
               ))}
-              <p className="font-body text-[10px] text-slate-500 mt-1.5 mb-0">Simple estimation — le niveau sera affiné avec les moniteurs.</p>
+              <p className="font-body text-xs text-slate-500 mt-1.5 mb-0">Simple estimation — le niveau sera affiné avec les moniteurs.</p>
             </div>
           )}
         </div>
@@ -516,7 +516,7 @@ export default function ProfilPage() {
             type="button"
             key={id}
             onClick={() => setTab(id)}
-            className={`relative flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 py-3 rounded-xl border font-body text-xs sm:text-sm font-bold cursor-pointer transition-all ${
+            className={`relative flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-2 py-3 rounded-xl border font-body text-xs font-bold cursor-pointer transition-all ${
               tab === id
                 ? "bg-blue-800 text-white border-blue-800 shadow-sm"
                 : "bg-white text-gray-600 border-gray-200"
@@ -524,7 +524,7 @@ export default function ProfilPage() {
           >
             <Icon size={17} />
             <span>{label}</span>
-            {note && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-[10px] flex items-center justify-center">{note}</span>}
+            {note && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-orange-500 text-white text-xs flex items-center justify-center">{note}</span>}
           </button>
         ))}
       </div>

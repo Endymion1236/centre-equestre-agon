@@ -20,6 +20,15 @@
  */
 
 /** Delai au-dela duquel un stage n'est plus remboursable. */
+/**
+ * Les encadrés de conditions reprennent la brique `emailPanneau` du design
+ * des emails. Ils étaient auparavant collés APRÈS la carte du message, dans
+ * un cadre orange de 520 px : le rappel légal — celui qu'il faut justement
+ * que la famille lise — flottait sous le pied de page comme une pièce
+ * rapportée. Il est maintenant dans le corps du message.
+ */
+import { emailPanneau, emailParagraphe } from "@/lib/email-templates";
+
 export const STAGE_DELAI_ANNULATION = "3 semaines";
 
 /**
@@ -83,7 +92,7 @@ export const CGV_STAGES_LONG = CGV_STAGES_CAS
 
 /** Bloc HTML en liste, plus lisible qu'un paragraphe dans un email. */
 export const CGV_STAGES_HTML = `
-  <ul style="margin:8px 0 0;padding-left:18px;color:#555;font-size:13px;line-height:1.6;">
+  <ul style="margin:0;padding-left:18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#3D4859;font-size:13px;line-height:1.7;">
     ${CGV_STAGES_CAS.map((c) => `<li><strong>${c.quand}</strong> : ${c.consequence}</li>`).join("")}
   </ul>`;
 
@@ -141,12 +150,7 @@ export const CGV_BALADES_PETIT_GROUPE =
  * surprise et desamorce les litiges.
  */
 export function encadreConditionsStage(): string {
-  return `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
-     <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
-     <div style="font-size:12px;line-height:1.6;color:#7c2d12;">
-       ${CGV_STAGES_HTML}
-     </div>
-   </div>`;
+  return emailPanneau("Conditions d'annulation", CGV_STAGES_HTML);
 }
 
 export const CGV_ANNULATION_CENTRE =
@@ -154,25 +158,17 @@ export const CGV_ANNULATION_CENTRE =
 
 /** Même encadré que pour les stages, avec les clauses balades. */
 export function encadreConditionsBalade(): string {
-  return `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
-     <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
-     <div style="font-size:12px;line-height:1.6;color:#7c2d12;">
-       <p style="margin:0 0 6px;">${CGV_BALADES}</p>
-       <p style="margin:0 0 6px;">${CGV_BALADES_PETIT_GROUPE}</p>
-       <p style="margin:0;">${CGV_ANNULATION_CENTRE}</p>
-     </div>
-   </div>`;
+  return emailPanneau("Conditions d'annulation",
+    emailParagraphe(CGV_BALADES, 13)
+    + emailParagraphe(CGV_BALADES_PETIT_GROUPE, 13)
+    + emailParagraphe(CGV_ANNULATION_CENTRE, 13));
 }
 
 /** Encadré générique (cours, anniversaires…) : clause utile + renvoi aux CGV. */
 export function encadreConditionsGenerique(clause?: string): string {
-  return `<div style="max-width:520px;margin:16px auto 0;padding:14px 16px;border:1px solid #fed7aa;background:#fff7ed;border-radius:10px;font-family:sans-serif;">
-     <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#9a3412;">Conditions d'annulation</p>
-     <div style="font-size:12px;line-height:1.6;color:#7c2d12;">
-       ${clause ? `<p style="margin:0 0 6px;">${clause}</p>` : ""}
-       <p style="margin:0;">${CGV_ANNULATION_CENTRE} Conditions complètes sur la page CGV du site.</p>
-     </div>
-   </div>`;
+  return emailPanneau("Conditions d'annulation",
+    (clause ? emailParagraphe(clause, 13) : "")
+    + emailParagraphe(`${CGV_ANNULATION_CENTRE} Conditions complètes sur la page CGV du site.`, 13));
 }
 
 /**

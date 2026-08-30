@@ -191,7 +191,7 @@ export default function ProgressionPage() {
                       <MessageCircle size={19} className="text-purple-600" />
                     </div>
                     <div>
-                      <div className="font-body text-xs font-bold uppercase tracking-wider text-purple-700">Dernier message du moniteur</div>
+                      <div className="font-body text-[11px] font-bold uppercase tracking-wider text-purple-700">Dernier message du moniteur</div>
                       <p className="font-body text-sm text-slate-700 leading-relaxed mt-2">{featuredNote.text}</p>
                       <div className="font-body text-xs text-purple-500 mt-2">
                         {new Date(featuredNote.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
@@ -232,7 +232,7 @@ export default function ProgressionPage() {
 
                     {niveauxPrecedents.length > 0 && (
                       <div className="flex flex-col gap-2 mt-2">
-                        <div className="font-body text-xs font-bold uppercase tracking-wider text-gray-500 px-1">Niveaux précédents</div>
+                        <div className="font-body text-[11px] font-bold uppercase tracking-wider text-gray-500 px-1">Niveaux précédents</div>
                         {niveauxPrecedents.map((niveau) => (
                           <NiveauAccordeon
                             key={niveau.id}
@@ -334,7 +334,7 @@ function NiveauAccordeon({
           ) : (
             <div className="text-right">
               <div className="font-body text-xs font-bold text-blue-600">{pctProgression}%</div>
-              <div className="font-body text-[10px] text-gray-400">{totalAcquis}/{total} validées</div>
+              <div className="font-body text-xs text-gray-400">{totalAcquis}/{total} validées</div>
             </div>
           )}
           {isOpen ? <ChevronDown size={17} className="text-gray-400" /> : <ChevronRight size={17} className="text-gray-400" />}
@@ -388,7 +388,7 @@ function NiveauAccordeon({
                                 <CheckCircle2 size={16} className="text-green-500 flex-shrink-0 mt-0.5" />
                               ) : level > 0 ? (
                                 <div
-                                  className="w-4 h-4 rounded-full flex-shrink-0 mt-0.5 flex items-center justify-center font-body text-[9px] font-bold text-white"
+                                  className="w-4 h-4 rounded-full flex-shrink-0 mt-0.5 flex items-center justify-center font-body text-xs font-bold text-white"
                                   style={{ background: `linear-gradient(135deg, hsl(${(level - 1) * 30}, 75%, 50%), hsl(${(level - 1) * 30}, 70%, 45%))` }}
                                 >
                                   {level}

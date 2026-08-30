@@ -176,6 +176,9 @@ export default function FacturesPage() {
   const [declareSending, setDeclareSending] = useState(false);
   const [cancelling, setCancelling] = useState<string | null>(null);
   const [declareSuccess, setDeclareSuccess] = useState(false);
+  // Vrai quand la lecture des paiements a échoué : mieux vaut dire qu'on ne
+  // sait pas que laisser croire à une ardoise vide.
+  const [erreurChargement, setErreurChargement] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -184,13 +187,19 @@ export default function FacturesPage() {
       try {
         const snapshot = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
         setPayments(snapshot.docs.map((item) => ({ id: item.id, ...item.data() })) as Payment[]);
-      } catch {
-        try {
-          const snapshot = await getDocs(collection(db, "payments"));
-          setPayments(snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as Payment)).filter((item) => item.familyId === user.uid));
-        } catch {
-          setPayments([]);
-        }
+      } catch (e) {
+        // Le repli lisait TOUTE la collection `payments` puis filtrait dans le
+        // navigateur. Il ne se déclenche que si la requête filtrée échoue —
+        // c'est-à-dire au moment le plus délicat : des règles fraîchement
+        // publiées qui refusent, ou un index absent. Ce jour-là, chaque
+        // famille connectée aurait téléchargé l'intégralité des paiements du
+        // club. Le coût se multiplie par le nombre d'inscrits, et contourner
+        // un refus de règle n'est de toute façon pas le rôle d'un repli.
+        //
+        // Un échec doit se voir. La page affiche donc une erreur explicite.
+        console.error("[factures] lecture des paiements refusée :", e);
+        setPayments([]);
+        setErreurChargement(true);
       }
 
       try {
@@ -610,7 +619,7 @@ export default function FacturesPage() {
           const datePrelev = d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
           const carteOk = Boolean(payment.cofToken || payment.cardOnFileToken);
           return (
-            <div className={`mt-3 rounded-lg px-3 py-2 font-body text-[11px] leading-snug ${carteOk ? "bg-blue-50 text-blue-800" : "bg-amber-50 text-amber-800 border border-amber-200"}`}>
+            <div className={`mt-3 rounded-lg px-3 py-2 font-body text-xs leading-snug ${carteOk ? "bg-blue-50 text-blue-800" : "bg-amber-50 text-amber-800 border border-amber-200"}`}>
               {carteOk
                 ? <>💳 Le solde sera <strong>prélevé automatiquement</strong> sur votre carte enregistrée vers le <strong>{datePrelev}</strong>. Aucune action n'est requise — vous pouvez aussi régler dès maintenant.</>
                 : <>⚠️ Votre carte n'est pas enregistrée : le solde ne sera <strong>pas prélevé automatiquement</strong>. Un lien de paiement vous sera envoyé vers le <strong>{datePrelev}</strong> — ou réglez dès maintenant ci-dessous.</>}
@@ -696,6 +705,19 @@ export default function FacturesPage() {
         <p className="font-body text-sm text-gray-600">Ce qu'il reste à régler, vos avoirs et vos factures.</p>
       </div>
 
+      {/* Un écran vide se lit « vous ne devez rien ». Quand la lecture a
+          échoué, il faut le dire : sans cela, une famille repart persuadée
+          d'être à jour. */}
+      {erreurChargement && (
+        <Card padding="md" className="mb-5 !bg-red-50 !border-red-200">
+          <div className="font-body text-sm font-bold text-red-800 mb-1">Vos paiements n&apos;ont pas pu être chargés</div>
+          <div className="font-body text-xs text-red-700 leading-relaxed">
+            Cette page ne montre donc pas votre situation réelle. Réessayez dans quelques minutes ;
+            si le problème persiste, contactez le centre — nous vérifierons de notre côté.
+          </div>
+        </Card>
+      )}
+
       {totalDue > 0 ? (
         <Card padding="md" className="mb-5 !bg-gradient-to-br !from-orange-50 !to-amber-50 !border-orange-200">
           <div className="flex items-start justify-between gap-4">
@@ -748,7 +770,7 @@ export default function FacturesPage() {
           <div className="flex items-center gap-2 mb-3">
             <h2 className="font-display text-lg font-bold text-blue-800">Mes devis</h2>
             {devisList.some((item) => item.status === "sent") && (
-              <span className="font-body text-[11px] font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+              <span className="font-body text-xs font-bold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
                 {devisList.filter((item) => item.status === "sent").length} à valider
               </span>
             )}
@@ -808,7 +830,7 @@ export default function FacturesPage() {
                     {devis.status === "sent" && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
                         {expired && (
-                          <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 font-body text-[11px] text-amber-800">
+                          <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 font-body text-xs text-amber-800">
                             ⚠️ La date de validité de ce devis est dépassée. Vous pouvez encore répondre : le club confirmera si le tarif est maintenu.
                           </div>
                         )}
@@ -835,7 +857,7 @@ export default function FacturesPage() {
                     )}
 
                     {devis.status === "accepted" && (
-                      <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 font-body text-[11px] text-green-800">
+                      <div className="mt-3 rounded-lg bg-green-50 px-3 py-2 font-body text-xs text-green-800">
                         {devisContientForfait(devis)
                           ? "✅ Devis accepté — le club finalise l'inscription aux cours et vous recontacte. La facturation se fera à l'inscription."
                           : "✅ Devis accepté — le club prépare la facturation. Elle apparaîtra ici, dans « À régler »."}

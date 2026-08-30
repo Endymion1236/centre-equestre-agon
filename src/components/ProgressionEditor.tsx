@@ -6,6 +6,10 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { GALOPS_PROGRAMME, DOMAINE_LABELS, getNiveauById, galopLevelToNiveauId, type Domaine } from "@/lib/galops-programme";
 import { CheckCircle2, Circle, ChevronDown, ChevronRight, Save } from "lucide-react";
 import {
+  emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
+  emailParagraphe as P, emailSignature, emailCouleurs as CE,
+} from "@/lib/email-templates";
+import {
   type Acquis,
   type AcquisValue,
   isDomaineEchelle,
@@ -748,18 +752,17 @@ Réponds uniquement avec le texte reformulé, sans guillemets.`,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: famData.parentEmail,
-              subject: `💬 Un mot du moniteur pour ${childName}`,
+              subject: `Un mot du moniteur pour ${childName}`,
               context: "admin_note_moniteur",
               familyId,
-              html: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
-                <p>Bonjour <strong>${famData.parentName || ""}</strong>,</p>
-                <p>Le moniteur a laissé un mot à propos de <strong>${childName}</strong> :</p>
-                <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:16px;margin:16px 0;font-style:italic;color:#6b21a8;">
-                  ${noteText.trim().replace(/\n/g, "<br/>")}
-                </div>
-                <p style="color:#555;font-size:13px;">Retrouvez ce mot et la progression complète dans votre espace famille, rubrique Progression.</p>
-                <p style="color:#666;font-size:12px;">À bientôt au centre équestre !</p>
-              </div>`,
+              html: emailLayout([
+                emailTitre("Un mot du moniteur"),
+                P(`Bonjour <strong>${famData.parentName || ""}</strong>,`),
+                P(`Le moniteur a laissé un mot à propos de <strong>${childName}</strong> :`),
+                emailPanneau("", `<div style="font-family:Georgia,serif;font-size:16px;font-style:italic;line-height:1.7;color:${CE.encre};">${noteText.trim().replace(/\n/g, "<br/>")}</div>`),
+                P("Retrouvez ce mot et la progression complète dans votre espace famille, rubrique Progression.", 14),
+                emailSignature(),
+              ].join("\n"), `Un mot du moniteur à propos de ${childName}`),
             }),
           }).catch(e => console.warn("Email note moniteur:", e));
         }
