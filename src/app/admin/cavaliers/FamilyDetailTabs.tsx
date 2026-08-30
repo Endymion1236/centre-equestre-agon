@@ -135,15 +135,21 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const [pastExpanded, setPastExpanded] = useState<string | null>(null);
   const [sanitaryExpanded, setSanitaryExpanded] = useState<string | null>(null);
 
-  const [editingMandat, setEditingMandat] = useState(false);
-  const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", dateSignature: new Date().toISOString().split("T")[0], address: family.address || "", zipCode: family.zipCode || "", city: family.city || "" });
+  // Identifiant du mandat en cours d'édition, "__new__" pour une création,
+  // null quand aucun formulaire n'est ouvert. Une famille peut porter
+  // plusieurs mandats actifs (pensions / forfaits, parents séparés) : un
+  // simple booléen ne disait pas LEQUEL on modifiait.
+  const [editingMandat, setEditingMandat] = useState<string | null>(null);
+  const [mandatForm, setMandatForm] = useState({ iban: "", bic: "", titulaire: family.parentName || "", libelle: "", dateSignature: new Date().toISOString().split("T")[0], address: family.address || "", zipCode: family.zipCode || "", city: family.city || "" });
   const [mandatSaving, setMandatSaving] = useState(false);
   // Photo de l'autorisation de prélèvement signée. scanOverride :
   //   undefined = pas de changement (on affiche mandat.scanUrl)
   //   string    = URL fraîchement uploadée
   //   null      = retirée
-  const [scanUploading, setScanUploading] = useState(false);
-  const [scanOverride, setScanOverride] = useState<string | null | undefined>(undefined);
+  const [scanUploading, setScanUploading] = useState<string | null>(null);
+  // Indexé par identifiant de mandat : chaque mandat a sa propre autorisation
+  // signée, une valeur unique les aurait mélangées.
+  const [scanOverride, setScanOverride] = useState<Record<string, string | null>>({});
   const [mandatPdfLoading, setMandatPdfLoading] = useState(false);
 
   // Télécharger l'autorisation de prélèvement pré-remplie (PDF), même sans email ni mandat existant.
@@ -189,10 +195,10 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
         city: mandatForm.city.trim(),
         updatedAt: serverTimestamp(),
       });
-      if (mandat) {
-        await updateDoc(doc(db, "mandats-sepa", mandat.id), { iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, dateSignature: mandatForm.dateSignature, updatedAt: serverTimestamp() });
+      if (editingMandat && editingMandat !== "__new__") {
+        await updateDoc(doc(db, "mandats-sepa", editingMandat), { iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, libelle: mandatForm.libelle.trim(), dateSignature: mandatForm.dateSignature, updatedAt: serverTimestamp() });
       } else {
-        const mandatRef = await addDoc(collection(db, "mandats-sepa"), { familyId: fid, familyName: family.parentName, iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, mandatId: `SEPA-${Date.now().toString(36).toUpperCase()}`, dateSignature: mandatForm.dateSignature, status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        const mandatRef = await addDoc(collection(db, "mandats-sepa"), { familyId: fid, familyName: family.parentName, iban: cleanIban, bic: mandatForm.bic, titulaire: mandatForm.titulaire, libelle: mandatForm.libelle.trim(), mandatId: `SEPA-${Date.now().toString(36).toUpperCase()}`, dateSignature: mandatForm.dateSignature, status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
         // Confirmation de mandat + PRENOTIFICATION de l'echeancier. Le SEPA
         // impose d'informer le debiteur avant tout prelevement ; les montants
         // et dates etant connus des la signature, un envoi unique suffit.
@@ -209,7 +215,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
           })
           .catch(() => {});
       }
-      setEditingMandat(false); fetchFamilies();
+      setEditingMandat(null); fetchFamilies();
     } catch (e) { console.error(e); }
     setMandatSaving(false);
   };
@@ -223,9 +229,42 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const totalDue = Math.max(0, totalFacture - totalPaid);
   const avoirs = allAvoirs.filter((a: any) => a.familyId === fid);
   const famCartes = allCartes.filter((c: any) => c.familyId === fid);
-  const mandat = allMandats.find((m: any) => m.familyId === fid && m.status === "active");
+  // .find() ne renvoyait QUE le premier mandat actif : une famille qui en a
+  // deux (un pour les pensions, un pour les forfaits) n'en voyait qu'un, et
+  // « Modifier » agissait sur celui-là — pas forcément le bon.
+  const mandatsActifs = allMandats
+    .filter((m: any) => m.familyId === fid && m.status === "active")
+    .sort((a: any, b: any) => (b.dateSignature || "").localeCompare(a.dateSignature || ""));
   const fidData = allFidelite.find((f: any) => f.id === fid);
   const currentChildId = tab.startsWith("child_") ? tab.replace("child_", "") : null;
+
+  // Champs du formulaire de mandat, partagés entre la création et l'édition
+  // d'un mandat existant : le même bloc rendu à deux endroits, pour ne pas
+  // maintenir deux copies qui divergent.
+  const mandatFormChamps = (
+    <>
+      <input placeholder="IBAN *" value={mandatForm.iban} onChange={e => setMandatForm({ ...mandatForm, iban: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs font-mono focus:outline-none focus:border-blue-500 bg-white" />
+      <div className="flex gap-2">
+        <input placeholder="BIC" value={mandatForm.bic} onChange={e => setMandatForm({ ...mandatForm, bic: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+        <input placeholder="Titulaire *" value={mandatForm.titulaire} onChange={e => setMandatForm({ ...mandatForm, titulaire: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+      </div>
+      {/* Libellé : ce qui rend deux mandats d'une même famille lisibles
+          (« Pensions » / « Forfaits », ou « Père » / « Mère ») — et ce qui
+          évite qu'ils soient signalés comme un doublon accidentel. */}
+      <input placeholder="Libellé — à quoi sert ce mandat ? (ex : Pensions, Forfaits, Père, Mère)" value={mandatForm.libelle} onChange={e => setMandatForm({ ...mandatForm, libelle: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+      <input type="date" value={mandatForm.dateSignature} onChange={e => setMandatForm({ ...mandatForm, dateSignature: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+      <input placeholder="Adresse (n° et rue)" value={mandatForm.address} onChange={e => setMandatForm({ ...mandatForm, address: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+      <div className="flex gap-2">
+        <input placeholder="Code postal" value={mandatForm.zipCode} onChange={e => setMandatForm({ ...mandatForm, zipCode: e.target.value })} className="w-28 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+        <input placeholder="Ville" value={mandatForm.city} onChange={e => setMandatForm({ ...mandatForm, city: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
+      </div>
+      <div className="flex gap-2">
+        <button onClick={handleSaveMandat} disabled={mandatSaving || !mandatForm.iban || !mandatForm.titulaire} className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">{mandatSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer</button>
+        <button onClick={() => setEditingMandat(null)} className="font-body text-xs text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+      </div>
+    </>
+  );
+
   const currentChild = currentChildId ? children.find((c: any) => c.id === currentChildId) : null;
 
   return (
@@ -707,89 +746,109 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
           )}
           <div>
             <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-              <span>🏦 Mandat SEPA</span>
+              <span>🏦 Mandat{mandatsActifs.length > 1 ? "s" : ""} SEPA{mandatsActifs.length > 1 ? ` (${mandatsActifs.length})` : ""}</span>
               <div className="flex items-center gap-3">
                 <button onClick={downloadMandatePdf} disabled={mandatPdfLoading} className="font-body text-[10px] text-slate-500 hover:text-blue-600 bg-transparent border-none cursor-pointer flex items-center gap-1 disabled:opacity-50" title="Télécharger l'autorisation de prélèvement pré-remplie (à imprimer / faire signer)">
                   {mandatPdfLoading ? <Loader2 size={10} className="animate-spin" /> : <span>📄</span>} Autorisation pré-remplie
                 </button>
-                {!editingMandat && <button onClick={() => { setMandatForm({ iban: mandat?.iban || "", bic: mandat?.bic || "", titulaire: mandat?.titulaire || family.parentName || "", dateSignature: mandat?.dateSignature || new Date().toISOString().split("T")[0], address: family.address || "", zipCode: family.zipCode || "", city: family.city || "" }); setEditingMandat(true); }} className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1"><Plus size={10} /> {mandat ? "Modifier" : "Ajouter"}</button>}
+                {!editingMandat && (
+                  <button onClick={() => {
+                    setMandatForm({ iban: "", bic: "", titulaire: family.parentName || "", libelle: "", dateSignature: new Date().toISOString().split("T")[0], address: family.address || "", zipCode: family.zipCode || "", city: family.city || "" });
+                    setEditingMandat("__new__");
+                  }} className="font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1"><Plus size={10} /> Ajouter</button>
+                )}
               </div>
             </div>
-            {editingMandat ? (
-              <div className="bg-blue-50 rounded-lg p-3 flex flex-col gap-2">
-                <input placeholder="IBAN *" value={mandatForm.iban} onChange={e => setMandatForm({ ...mandatForm, iban: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs font-mono focus:outline-none focus:border-blue-500 bg-white" />
-                <div className="flex gap-2">
-                  <input placeholder="BIC" value={mandatForm.bic} onChange={e => setMandatForm({ ...mandatForm, bic: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
-                  <input placeholder="Titulaire *" value={mandatForm.titulaire} onChange={e => setMandatForm({ ...mandatForm, titulaire: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
-                </div>
-                <input type="date" value={mandatForm.dateSignature} onChange={e => setMandatForm({ ...mandatForm, dateSignature: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
-                <input placeholder="Adresse (n° et rue)" value={mandatForm.address} onChange={e => setMandatForm({ ...mandatForm, address: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
-                <div className="flex gap-2">
-                  <input placeholder="Code postal" value={mandatForm.zipCode} onChange={e => setMandatForm({ ...mandatForm, zipCode: e.target.value })} className="w-28 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
-                  <input placeholder="Ville" value={mandatForm.city} onChange={e => setMandatForm({ ...mandatForm, city: e.target.value })} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-xs focus:outline-none focus:border-blue-500 bg-white" />
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={handleSaveMandat} disabled={mandatSaving || !mandatForm.iban || !mandatForm.titulaire} className="flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">{mandatSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Enregistrer</button>
-                  <button onClick={() => setEditingMandat(false)} className="font-body text-xs text-slate-500 bg-white px-3 py-1.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-                </div>
+
+            {/* Formulaire de création — l'édition d'un mandat existant s'ouvre
+                dans sa propre carte, plus bas. */}
+            {editingMandat === "__new__" && (
+              <div className="bg-blue-50 rounded-lg p-3 flex flex-col gap-2 mb-2">
+                {mandatFormChamps}
               </div>
-            ) : mandat ? (
-              <div className="font-body text-xs py-2 px-3 bg-blue-50 rounded-lg border border-blue-100">
-                <div className="flex items-center gap-2 mb-1"><Badge color="green">Actif</Badge><span className="text-blue-800 font-semibold">{mandat.mandatId}</span></div>
-                <div className="text-slate-500">IBAN : {mandat.iban?.slice(0,4)}...{mandat.iban?.slice(-4)}</div>
-                <div className="text-slate-500">Titulaire : {mandat.titulaire}</div>
-                {/* Photo de l'autorisation de prélèvement signée */}
-                {(() => {
-                  const scanUrl = scanOverride !== undefined ? scanOverride : (mandat.scanUrl || null);
-                  const uploadInput = (
-                    <input type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0]; if (!file) return;
-                        setScanUploading(true);
-                        try {
-                          const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-                          const storageRef = ref(storage, `mandats-sepa/${fid}/${Date.now()}_${safe}`);
-                          const task = uploadBytesResumable(storageRef, file);
-                          await new Promise((res, rej) => task.on("state_changed", null, rej, () => res(null)));
-                          const url = await getDownloadURL(task.snapshot.ref);
-                          await updateDoc(doc(db, "mandats-sepa", mandat.id), { scanUrl: url, scanUploadedAt: serverTimestamp() });
-                          setScanOverride(url);
-                          fetchFamilies();
-                        } catch (err) { console.error(err); alert("Échec de l'envoi de la photo."); }
-                        finally { setScanUploading(false); e.target.value = ""; }
-                      }} />
-                  );
-                  return (
-                    <div className="mt-2 pt-2 border-t border-blue-100 flex items-center gap-2 flex-wrap">
-                      {scanUrl ? (
-                        <>
-                          <a href={scanUrl} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 font-body text-[11px] font-semibold text-blue-600 hover:text-blue-800 no-underline">
-                            <Eye size={12} /> Voir l'autorisation signée
-                          </a>
-                          <label className="flex items-center gap-1 font-body text-[11px] text-slate-400 hover:text-blue-500 cursor-pointer">
-                            {scanUploading ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />} Remplacer
-                            {uploadInput}
-                          </label>
-                          <button onClick={async () => {
-                            if (!confirm("Retirer la photo de l'autorisation ?")) return;
-                            await updateDoc(doc(db, "mandats-sepa", mandat.id), { scanUrl: "", updatedAt: serverTimestamp() });
-                            setScanOverride(null); fetchFamilies();
-                          }} className="flex items-center gap-1 font-body text-[11px] text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0">
-                            <Trash2 size={11} /> Retirer
-                          </button>
-                        </>
-                      ) : (
-                        <label className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-blue-600 bg-white border border-blue-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-blue-50">
-                          {scanUploading ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />} Prendre en photo / joindre l'autorisation
-                          {uploadInput}
-                        </label>
-                      )}
+            )}
+
+            {mandatsActifs.length === 0 && editingMandat !== "__new__" ? (
+              <p className="font-body text-xs text-slate-400 italic">Aucun mandat SEPA. Ajoutez le mandat (IBAN) pour pouvoir y joindre la photo de l'autorisation signée.</p>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {mandatsActifs.map((m: any) => (
+                  editingMandat === m.id ? (
+                    <div key={m.id} className="bg-blue-50 rounded-lg p-3 flex flex-col gap-2">
+                      {mandatFormChamps}
                     </div>
-                  );
-                })()}
+                  ) : (
+                    <div key={m.id} className="font-body text-xs py-2 px-3 bg-blue-50 rounded-lg border border-blue-100">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <Badge color="green">Actif</Badge>
+                        <span className="text-blue-800 font-semibold">{m.mandatId}</span>
+                        {m.libelle && <span className="text-blue-600 bg-white px-1.5 py-0.5 rounded border border-blue-200">{m.libelle}</span>}
+                        {!editingMandat && (
+                          <button onClick={() => {
+                            setMandatForm({ iban: m.iban || "", bic: m.bic || "", titulaire: m.titulaire || family.parentName || "", libelle: m.libelle || "", dateSignature: m.dateSignature || new Date().toISOString().split("T")[0], address: family.address || "", zipCode: family.zipCode || "", city: family.city || "" });
+                            setEditingMandat(m.id);
+                          }} className="ml-auto font-body text-[10px] text-blue-500 bg-transparent border-none cursor-pointer">Modifier</button>
+                        )}
+                      </div>
+                      <div className="text-slate-500">IBAN : {m.iban?.slice(0,4)}...{m.iban?.slice(-4)}</div>
+                      <div className="text-slate-500">Titulaire : {m.titulaire}</div>
+                      {/* Photo de l'autorisation de prélèvement signée — propre
+                          à CE mandat : deux mandats, deux autorisations. */}
+                      {(() => {
+                        const scanUrl = m.id in scanOverride ? scanOverride[m.id] : (m.scanUrl || null);
+                        const enCours = scanUploading === m.id;
+                        const uploadInput = (
+                          <input type="file" accept="image/*,application/pdf" capture="environment" className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0]; if (!file) return;
+                              setScanUploading(m.id);
+                              try {
+                                const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+                                const storageRef = ref(storage, `mandats-sepa/${fid}/${Date.now()}_${safe}`);
+                                const task = uploadBytesResumable(storageRef, file);
+                                await new Promise((res, rej) => task.on("state_changed", null, rej, () => res(null)));
+                                const url = await getDownloadURL(task.snapshot.ref);
+                                await updateDoc(doc(db, "mandats-sepa", m.id), { scanUrl: url, scanUploadedAt: serverTimestamp() });
+                                setScanOverride(prev => ({ ...prev, [m.id]: url }));
+                                fetchFamilies();
+                              } catch (err) { console.error(err); alert("Échec de l'envoi de la photo."); }
+                              finally { setScanUploading(null); e.target.value = ""; }
+                            }} />
+                        );
+                        return (
+                          <div className="mt-2 pt-2 border-t border-blue-100 flex items-center gap-2 flex-wrap">
+                            {scanUrl ? (
+                              <>
+                                <a href={scanUrl} target="_blank" rel="noopener noreferrer"
+                                  className="flex items-center gap-1 font-body text-[11px] font-semibold text-blue-600 hover:text-blue-800 no-underline">
+                                  <Eye size={12} /> Voir l'autorisation signée
+                                </a>
+                                <label className="flex items-center gap-1 font-body text-[11px] text-slate-400 hover:text-blue-500 cursor-pointer">
+                                  {enCours ? <Loader2 size={11} className="animate-spin" /> : <Camera size={11} />} Remplacer
+                                  {uploadInput}
+                                </label>
+                                <button onClick={async () => {
+                                  if (!confirm("Retirer la photo de l'autorisation ?")) return;
+                                  await updateDoc(doc(db, "mandats-sepa", m.id), { scanUrl: "", updatedAt: serverTimestamp() });
+                                  setScanOverride(prev => ({ ...prev, [m.id]: null })); fetchFamilies();
+                                }} className="flex items-center gap-1 font-body text-[11px] text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-0">
+                                  <Trash2 size={11} /> Retirer
+                                </button>
+                              </>
+                            ) : (
+                              <label className="flex items-center gap-1.5 font-body text-[11px] font-semibold text-blue-600 bg-white border border-blue-200 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-blue-50">
+                                {enCours ? <Loader2 size={12} className="animate-spin" /> : <Camera size={12} />} Prendre en photo / joindre l'autorisation
+                                {uploadInput}
+                              </label>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )
+                ))}
               </div>
-            ) : <p className="font-body text-xs text-slate-400 italic">Aucun mandat SEPA. Ajoutez le mandat (IBAN) pour pouvoir y joindre la photo de l'autorisation signée.</p>}
+            )}
           </div>
           {fidData && (fidData.points || 0) > 0 && (
             <div>
