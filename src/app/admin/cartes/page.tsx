@@ -4,6 +4,7 @@ import { useAgentContext } from "@/hooks/useAgentContext";
 import { useState, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { reglementCarte } from "@/lib/carte-reglement";
 import { Card, Badge } from "@/components/ui";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { Plus, Minus, Search, Loader2, Ticket, X, Check, History } from "lucide-react";
@@ -50,6 +51,7 @@ export default function CartesPage() {
   const [tab, setTab] = useState<"active" | "create" | "history">("active");
   const [cards, setCards] = useState<Card10[]>([]);
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
+  const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [openCardId, setOpenCardId] = useState<string | null>(null);
@@ -78,12 +80,15 @@ export default function CartesPage() {
 
   const fetchData = async () => {
     try {
-      const [cSnap, fSnap] = await Promise.all([
+      const [cSnap, fSnap, pSnap] = await Promise.all([
         getDocs(collection(db, "cartes")),
         getDocs(collection(db, "families")),
+        // Les commandes : c'est là qu'on lit si la carte a été réglée.
+        getDocs(collection(db, "payments")),
       ]);
       setCards(cSnap.docs.map(d => ({ id: d.id, ...d.data() })) as Card10[]);
       setFamilies(fSnap.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
+      setPayments(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (e) { console.error(e); }
     setLoading(false);
   };
@@ -112,12 +117,14 @@ export default function CartesPage() {
     if (!carteFamiliale && !selChild) return; // enfant requis si pas familiale
     setCreating(true);
     const child = children.find((c: any) => c.id === selChild);
+    // Bénéficiaire affiché partout : un enfant, ou la famille entière.
+    const beneficiaire = carteFamiliale ? "Toute la famille" : ((child as any)?.firstName || "—");
 
     const cardRef = await addDoc(collection(db, "cartes"), {
       familyId: selFamily,
       familyName: family.parentName || "—",
       childId: carteFamiliale ? null : selChild,
-      childName: carteFamiliale ? "Toute la famille" : ((child as any)?.firstName || "—"),
+      childName: beneficiaire,
       familiale: carteFamiliale,
       activityType: selActivityType,
       totalSessions: template.sessions,
@@ -138,9 +145,11 @@ export default function CartesPage() {
       familyId: selFamily,
       familyName: family.parentName || "—",
       items: [{
-        activityTitle: `${template.label} — ${(child as any)?.firstName}`,
-        childId: selChild,
-        childName: (child as any)?.firstName || "—",
+        // Une carte familiale n'a pas d'enfant : le libellé affichait
+        // « Carte 10 séances — undefined » sur la facture et dans les impayés.
+        activityTitle: `${template.label} — ${beneficiaire}`,
+        childId: carteFamiliale ? null : selChild,
+        childName: beneficiaire,
         cardId: cardRef.id,
         priceHT: Math.round(totalHT * 100) / 100,
         tva: 5.5,
@@ -254,6 +263,30 @@ export default function CartesPage() {
                         {card.remainingSessions}/{card.totalSessions}
                       </Badge>
                     </div>
+
+                    {/* Règlement de la carte. Rien ne l'indiquait : une carte
+                        remise sans encaissement donnait droit à dix séances et
+                        ressemblait en tout point à une carte payée. Le bandeau
+                        disparaît de lui-même dès que la commande est soldée. */}
+                    {(() => {
+                      const reg = reglementCarte(payments, card.id);
+                      if (reg.etat === "regle" || reg.etat === "inconnu") return null;
+                      const lien = `/admin/paiements?tab=impayes${reg.familyId ? `&family=${encodeURIComponent(reg.familyId)}` : `&search=${encodeURIComponent(card.familyName || "")}`}`;
+                      return (
+                        <div className={`mb-3 flex items-center justify-between gap-2 rounded-lg px-3 py-2 border ${
+                          reg.etat === "impaye" ? "bg-red-50 border-red-200" : "bg-orange-50 border-orange-200"
+                        }`}>
+                          <span className={`font-body text-xs font-semibold ${reg.etat === "impaye" ? "text-red-600" : "text-orange-600"}`}>
+                            {reg.etat === "impaye"
+                              ? `Carte non réglée — ${reg.total.toFixed(2)}€ dus`
+                              : `Réglée en partie — ${reg.regle.toFixed(2)}€ sur ${reg.total.toFixed(2)}€, reste ${reg.reste.toFixed(2)}€`}
+                          </span>
+                          <a href={lien} className="shrink-0 font-body text-[11px] font-semibold text-white bg-blue-500 px-2.5 py-1 rounded-md no-underline hover:bg-blue-400">
+                            Encaisser →
+                          </a>
+                        </div>
+                      );
+                    })()}
 
                     {/* Progress bar */}
                     <div className="mb-3">
