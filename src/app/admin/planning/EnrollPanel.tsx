@@ -4501,7 +4501,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <div className="flex gap-2">
                         {(["1x", "3x", "10x"] as const).map(p => (
                           <button key={p} onClick={() => setPayPlan(p)} className={`flex-1 py-2 rounded-lg font-body text-xs font-semibold cursor-pointer border ${payPlan === p ? "bg-green-500 text-white border-green-500" : "bg-white text-slate-600 border-gray-200"}`}>
-                            {p === "1x" ? `1× ${totalAnnuel.toFixed(0)}€` : p === "3x" ? `3× ${(totalAnnuel / 3).toFixed(0)}€` : `10× ${(totalAnnuel / 10).toFixed(0)}€`}
+                            {/* Montant réel de l'échéance, aux centimes : arrondi à
+                                l'entier, « 10× 70€ » annonçait 700 € pour un forfait
+                                à 699 €, et l'écart se retrouvait au journal. */}
+                            {(() => {
+                              const n = p === "1x" ? 1 : p === "3x" ? 3 : 10;
+                              const parEcheance = Math.round((totalAnnuel / n) * 100) / 100;
+                              const libelle = parEcheance % 1 === 0
+                                ? parEcheance.toFixed(0)
+                                : parEcheance.toFixed(2).replace(".", ",");
+                              return `${n}× ${libelle}€`;
+                            })()}
                           </button>
                         ))}
                       </div>

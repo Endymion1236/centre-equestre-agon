@@ -12,7 +12,7 @@ import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
-import { isForfaitActif, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
+import { isForfaitActif, montantRegleForfait, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
 import { estSemaineAttendue } from "@/lib/rythme";
 
 interface Forfait {
@@ -416,14 +416,7 @@ export default function ForfaitsPage() {
   // source de verite). Le champ f.totalPaidTTC stocke dans le doc forfait
   // n'est PAS mis a jour a l'encaissement, donc on ne s'en sert pas pour
   // les compteurs (sinon "encaisse" reste a 0 alors que c'est paye).
-  const getPaidForForfait = (f: Forfait) => {
-    const related = payments.filter(p =>
-      p.familyId === f.familyId &&
-      (p.status === "paid" || p.status === "sepa_scheduled") &&
-      (p.items || []).some((i: any) => i.activityTitle?.includes("Forfait") && i.activityTitle?.includes(f.activityTitle || ""))
-    );
-    return related.reduce((s, p) => s + (p.paidAmount || (p.status === "paid" ? p.totalTTC : 0) || 0), 0);
-  };
+  const getPaidForForfait = (f: Forfait) => montantRegleForfait(payments, f as any);
 
   const totalCA = forfaits.filter(f => f.status !== "cancelled").reduce((s, f) => s + (f.forfaitPriceTTC || 0), 0);
   // totalPaid base sur le vrai paiement (getPaidForForfait), pas sur le champ

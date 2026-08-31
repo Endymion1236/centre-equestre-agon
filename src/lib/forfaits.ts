@@ -69,3 +69,53 @@ export function rangEnfantPourSaison(
   }
   return autresEnfants.size + 1;
 }
+
+// ─── Ce qu'un forfait annuel a réellement encaissé ──────────────────────────
+//
+// Le champ `totalPaidTTC` du document forfait n'est pas tenu à jour à
+// l'encaissement : il ne sert à rien. La vérité est dans `payments`.
+//
+// Deux pièges, tous deux constatés le 31/08/2026 sur un forfait à 699 € réglé
+// en dix prélèvements :
+//
+//   1. Le filtre ne retenait que les commandes `paid` ou `sepa_scheduled`.
+//      Or, au dépôt de la première remise, la commande de référence passe en
+//      `partial` — elle disparaissait donc du calcul, et l'écran Forfaits
+//      affichait « 0 € / 699 € » alors que 69,90 € étaient au journal.
+//
+//   2. Le rattachement se faisait par libellé (« Forfait … »). Les échéances
+//      2 à 10 d'un paiement en plusieurs fois s'intitulent « Échéance 2/10 —
+//      Prénom » : elles n'étaient jamais comptées. On passe donc d'abord par
+//      `forfaitRef`, posé sur chaque échéance et égal au `slotKey` du forfait.
+
+export interface ForfaitRegle {
+  familyId?: string | null;
+  slotKey?: string | null;
+  activityTitle?: string | null;
+}
+
+/** La commande se rapporte-t-elle à ce forfait ? */
+export function commandeDuForfait(paiement: any, forfait: ForfaitRegle): boolean {
+  if (!paiement || paiement.familyId !== forfait.familyId) return false;
+  if (paiement.status === "cancelled") return false;
+  // Rattachement explicite : couvre toutes les échéances d'un 3× ou 10×.
+  if (paiement.forfaitRef && forfait.slotKey && paiement.forfaitRef === forfait.slotKey) return true;
+  // Repli sur le libellé, pour les forfaits saisis avant `forfaitRef`.
+  return (paiement.items || []).some((i: any) =>
+    String(i?.activityTitle || "").includes("Forfait") &&
+    String(i?.activityTitle || "").includes(forfait.activityTitle || ""),
+  );
+}
+
+/** Montant réellement encaissé sur ce forfait, toutes échéances confondues. */
+export function montantRegleForfait(paiements: any[], forfait: ForfaitRegle): number {
+  const total = (paiements || [])
+    .filter((p) => commandeDuForfait(p, forfait))
+    .reduce((s: number, p: any) => {
+      const regle = Number(p.paidAmount) || 0;
+      // Anciennes commandes soldées sans `paidAmount` renseigné.
+      if (regle === 0 && p.status === "paid") return s + (Number(p.totalTTC) || 0);
+      return s + regle;
+    }, 0);
+  return Math.round(total * 100) / 100;
+}
