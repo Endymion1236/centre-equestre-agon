@@ -90,32 +90,77 @@ export function rangEnfantPourSaison(
 
 export interface ForfaitRegle {
   familyId?: string | null;
+  /** Cavalier du forfait : ce qui distingue trois frères et sœurs sur le même créneau. */
+  childId?: string | null;
   slotKey?: string | null;
   activityTitle?: string | null;
 }
 
-/** La commande se rapporte-t-elle à ce forfait ? */
+/**
+ * Somme des lignes d'une commande qui concernent ce cavalier.
+ *
+ * Les remises portent aussi le childId (montant négatif) : la part obtenue
+ * est donc bien ce que l'enfant coûte, remise déduite.
+ */
+function partEnfant(paiement: any, childId: string): number {
+  const total = (paiement?.items || [])
+    .filter((i: any) => i?.childId === childId)
+    .reduce((s: number, i: any) => s + (Number(i.priceTTC) || 0), 0);
+  return Math.round(total * 100) / 100;
+}
+
+/**
+ * La commande se rapporte-t-elle à ce forfait ?
+ *
+ * Le cavalier d'abord : `forfaitRef` vaut « activité — jour heure », sans le
+ * moindre nom. Trois enfants d'une même famille inscrits au même créneau — le
+ * cas Duhem du 31/08/2026 — partagent donc la MÊME référence, et chacun
+ * s'attribuait les règlements des trois : 213,30 € affichés sur les trois
+ * forfaits alors qu'une seule remise de 213,30 € couvrait deux d'entre eux.
+ */
 export function commandeDuForfait(paiement: any, forfait: ForfaitRegle): boolean {
   if (!paiement || paiement.familyId !== forfait.familyId) return false;
   if (paiement.status === "cancelled") return false;
-  // Rattachement explicite : couvre toutes les échéances d'un 3× ou 10×.
+
+  const items = paiement.items || [];
+  // Une commande qui ne porte aucune ligne de ce cavalier ne le concerne pas.
+  if (forfait.childId && !items.some((i: any) => i?.childId === forfait.childId)) return false;
+
+  // Rattachement explicite : couvre toutes les échéances d'un 3× ou 10×,
+  // dont les libellés ne disent que « Échéance 2/10 ».
   if (paiement.forfaitRef && forfait.slotKey && paiement.forfaitRef === forfait.slotKey) return true;
   // Repli sur le libellé, pour les forfaits saisis avant `forfaitRef`.
-  return (paiement.items || []).some((i: any) =>
+  return items.some((i: any) =>
     String(i?.activityTitle || "").includes("Forfait") &&
     String(i?.activityTitle || "").includes(forfait.activityTitle || ""),
   );
 }
 
-/** Montant réellement encaissé sur ce forfait, toutes échéances confondues. */
+/**
+ * Montant réellement encaissé sur ce forfait, toutes échéances confondues.
+ *
+ * Une commande peut porter plusieurs cavaliers — la fratrie inscrite en 1×
+ * est regroupée dans une seule commande. Ce qui est encaissé est alors réparti
+ * au prorata de ce que chaque enfant y pèse : à commande soldée, chacun voit
+ * exactement sa part ; à mi-parcours, une approximation honnête plutôt que le
+ * total de la fratrie affiché sur chacun.
+ */
 export function montantRegleForfait(paiements: any[], forfait: ForfaitRegle): number {
   const total = (paiements || [])
     .filter((p) => commandeDuForfait(p, forfait))
     .reduce((s: number, p: any) => {
-      const regle = Number(p.paidAmount) || 0;
+      let regle = Number(p.paidAmount) || 0;
       // Anciennes commandes soldées sans `paidAmount` renseigné.
-      if (regle === 0 && p.status === "paid") return s + (Number(p.totalTTC) || 0);
-      return s + regle;
+      if (regle === 0 && p.status === "paid") regle = Number(p.totalTTC) || 0;
+      if (regle === 0) return s;
+
+      const totalCommande = Number(p.totalTTC) || 0;
+      const part = forfait.childId ? partEnfant(p, forfait.childId) : totalCommande;
+      // Commande dédiée à ce cavalier (le cas courant) : rien à répartir.
+      if (!forfait.childId || totalCommande <= 0 || part <= 0 || Math.abs(part - totalCommande) < 0.01) {
+        return s + regle;
+      }
+      return s + regle * (part / totalCommande);
     }, 0);
   return Math.round(total * 100) / 100;
 }

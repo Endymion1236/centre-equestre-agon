@@ -1314,13 +1314,17 @@ export default function ForfaitsPage() {
                       <div>
                         <div className="flex justify-between mb-1">
                           <span className="font-body text-[10px] text-slate-500 uppercase">Paiement</span>
-                          <span className="font-body text-xs font-semibold text-blue-500">{paid.toFixed(0)}€ / {(f.forfaitPriceTTC || 0).toFixed(0)}€</span>
+                          {/* Aux centimes : arrondis à l'entier, 213,30 € réglés
+                              sur 1 139 € s'affichaient « 213€ / 1139€ » — le
+                              rapprochement avec le journal devenait un exercice
+                              de devinette. */}
+                          <span className="font-body text-xs font-semibold text-blue-500">{paid.toFixed(2)}€ / {(f.forfaitPriceTTC || 0).toFixed(2)}€</span>
                         </div>
                         <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${pctPaid >= 100 ? "bg-green-500" : pctPaid > 50 ? "bg-blue-400" : "bg-orange-400"}`} style={{ width: `${pctPaid}%` }} />
                         </div>
                         <div className="font-body text-[10px] text-slate-500 mt-0.5">
-                          {f.paymentPlan === "1x" ? "Paiement unique" : `${f.paymentPlan} · ${installment.toFixed(0)}€/échéance`}
+                          {f.paymentPlan === "1x" ? "Paiement unique" : `${f.paymentPlan} · ${installment.toFixed(2)}€/échéance`}
                         </div>
                       </div>
                       <div>
