@@ -582,6 +582,138 @@ export default function SepaPage() {
     fetchAll();
   };
 
+  // ─── Prélèvement rejeté par la banque ───
+  //
+  // La banque crédite toute la remise, puis rejette une opération quelques
+  // jours plus tard. On le découvre au rapprochement bancaire. Trois gestes
+  // devaient alors être faits à la main, et le second était systématiquement
+  // oublié : contre-passer l'encaissement au journal, remettre l'échéance en
+  // rejet, recalculer la commande. Ce bouton les enchaîne.
+  //
+  // Le journal n'est jamais modifié — NF525 : écritures inaltérables et
+  // chaînées. On écrit une ligne NÉGATIVE liée à l'originale (`correctionDe`),
+  // exactement comme la correction du journal des paiements. Les deux lignes
+  // se neutralisent dans les bordereaux de remise et le livre de caisse.
+  const handleRejet = async (ech: EcheanceSepa) => {
+    const dateRepresentation = (() => {
+      const d = new Date(ech.dateEcheance);
+      d.setMonth(d.getMonth() + 1);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    })();
+
+    if (!confirm(
+      `Prélèvement rejeté par la banque ?\n\n`
+      + `${ech.familyName} — ${ech.montant.toFixed(2)}€ du ${new Date(ech.dateEcheance).toLocaleDateString("fr-FR")}\n\n`
+      + `L'encaissement sera contre-passé au journal (écriture négative, l'originale reste),\n`
+      + `l'échéance passera en « rejeté » et la commande redeviendra due.`
+    )) return;
+
+    const representer = confirm(
+      `Représenter ce prélèvement ?\n\n`
+      + `OK : une nouvelle échéance de ${ech.montant.toFixed(2)}€ est créée au ${new Date(dateRepresentation).toLocaleDateString("fr-FR")},\n`
+      + `prête à partir dans la prochaine remise.\n\n`
+      + `Annuler : le rejet est enregistré, la famille reste à relancer autrement.`
+    );
+
+    try {
+      // 1. Contre-passation des encaissements de cette échéance.
+      const encSnap = await getDocs(query(
+        collection(db, "encaissements"), where("sepaEcheanceId", "==", ech.id),
+      ));
+      const dejaContrePassees = new Set(
+        encSnap.docs.map(d => (d.data() as any).correctionDe).filter(Boolean),
+      );
+      let contrePassees = 0;
+      const paymentIds = new Set<string>();
+      for (const d of encSnap.docs) {
+        const e = d.data() as any;
+        if ((e.montant || 0) <= 0) continue;          // déjà une contre-passation
+        if (dejaContrePassees.has(d.id)) continue;    // rejet déjà enregistré
+        await createEncaissement({
+          paymentId: e.paymentId,
+          familyId: e.familyId,
+          familyName: e.familyName,
+          montant: -(e.montant || 0),
+          mode: e.mode,
+          modeLabel: `ANNUL. ${e.modeLabel || "Prélèvement SEPA"}`,
+          ref: e.ref || "",
+          activityTitle: e.activityTitle,
+          raison: `Rejet bancaire du prélèvement du ${new Date(ech.dateEcheance).toLocaleDateString("fr-FR")}`,
+          correctionDe: d.id,
+        });
+        contrePassees++;
+        if (e.paymentId) paymentIds.add(e.paymentId);
+      }
+      if (ech.paymentId) paymentIds.add(ech.paymentId);
+
+      // 2. L'échéance porte le rejet — l'écran SEPA disait « prélevé » alors
+      //    que l'argent était reparti.
+      await updateDoc(doc(db, "echeances-sepa", ech.id), {
+        status: "rejete",
+        rejeteLe: new Date().toISOString(),
+        motifRejet: "Rejet bancaire constaté au rapprochement",
+      });
+
+      // 3. Recalculer les commandes concernées depuis le journal, jamais de
+      //    tête : c'est la somme des encaissements qui fait foi.
+      for (const pid of paymentIds) {
+        const encPay = await getDocs(query(
+          collection(db, "encaissements"), where("paymentId", "==", pid),
+        ));
+        const totalEnc = Math.round(
+          encPay.docs.reduce((sum, d) => sum + ((d.data() as any).montant || 0), 0) * 100,
+        ) / 100;
+        const paySnap = await getDoc(doc(db, "payments", pid));
+        if (!paySnap.exists()) continue;
+        const totalTTC = (paySnap.data() as any).totalTTC || 0;
+        // Représenté : la commande reste planifiée en SEPA, elle n'a pas à
+        // réapparaître dans les impayés. Sinon elle y retourne, c'est bien
+        // de l'argent qui n'est pas rentré.
+        const statut = totalEnc >= totalTTC - 0.01 ? "paid"
+          : representer ? "sepa_scheduled"
+          : totalEnc > 0 ? "partial"
+          : "pending";
+        await updateDoc(doc(db, "payments", pid), {
+          paidAmount: Math.max(0, totalEnc),
+          status: statut,
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      // 4. Représentation : une NOUVELLE échéance, pour que le rejet reste
+      //    lisible dans l'historique.
+      if (representer) {
+        await addDoc(collection(db, "echeances-sepa"), {
+          familyId: ech.familyId,
+          familyName: ech.familyName,
+          mandatId: ech.mandatId,
+          montant: ech.montant,
+          dateEcheance: dateRepresentation,
+          reference: ech.reference || "",
+          description: `${ech.description || "Échéance"} (représentation)`,
+          status: "pending",
+          remiseId: null,
+          paymentId: ech.paymentId || null,
+          orderId: ech.orderId || null,
+          echeance: ech.echeance ?? null,
+          echeancesTotal: ech.echeancesTotal ?? null,
+          representationDe: ech.id,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      toast(
+        `Rejet enregistré — ${contrePassees} écriture(s) contre-passée(s)`
+        + (representer ? ` · représentation au ${new Date(dateRepresentation).toLocaleDateString("fr-FR")}` : ""),
+        "success",
+      );
+      fetchAll();
+    } catch (e: any) {
+      console.error("[sepa] rejet:", e);
+      toast(`Échec de l'enregistrement du rejet : ${e?.message || e}`, "error");
+    }
+  };
+
   // ─── Supprimer une échéance ───
   const handleDeleteEcheance = async (id: string) => {
     if (!confirm("Supprimer cette échéance ?")) return;
@@ -1234,7 +1366,17 @@ export default function SepaPage() {
                         <span className="font-semibold text-gray-600">{ech.familyName}</span>
                         <span>{new Date(ech.dateEcheance).toLocaleDateString("fr-FR")}</span>
                         <span className="font-semibold">{ech.montant.toFixed(2)}€</span>
-                        <span className="text-gray-400">{ech.description}</span>
+                        <span className="text-gray-400 flex-1 truncate">{ech.description}</span>
+                        {/* La banque crédite la remise entière puis rejette
+                            quelques jours plus tard : le rejet se constate au
+                            rapprochement, il s'enregistre ici. */}
+                        {(ech.status === "preleve" || ech.status === "remis") && (
+                          <button type="button" onClick={() => handleRejet(ech)}
+                            title="La banque a rejeté ce prélèvement : contre-passation au journal, échéance en rejet, commande redevenue due"
+                            className="font-body text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-md border-none cursor-pointer hover:bg-red-100 whitespace-nowrap">
+                            Rejeté
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>

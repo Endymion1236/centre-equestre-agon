@@ -2381,6 +2381,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               date: serverTimestamp(),
             });
             createdPaymentIds.push(docRef.id);
+
+            // Pré-notification : montant, dates et mandat. La famille doit
+            // savoir ce qui sera prélevé et quand — les règles SEPA l'imposent
+            // au créancier avant le premier prélèvement.
+            authFetch("/api/admin/sepa-prenotification", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ paymentId: docRef.id }),
+            }).catch(e => console.warn("Pré-notification SEPA:", e));
           } else {
             for (let i = 0; i < nbEcheances; i++) {
               const echeanceDate = new Date();
