@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Providers } from "@/components/Providers";
 import { SITE_CONFIG } from "@/lib/config";
 import "./globals.css";
+import CompteurVisites from "@/components/CompteurVisites";
 
 // Image de partage aux dimensions annoncées (1200x630). L'ancienne était
 // verticale (940x1672) : Facebook, WhatsApp et LinkedIn la recadraient.
@@ -110,6 +111,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="antialiased">
         <Providers>{children}</Providers>
+        {/* Compteur de fréquentation : posé ici pour suivre la navigation
+            interne, qui ne recharge pas la page. Il s'abstient de lui-même
+            sur les écrans du club (cf. components/CompteurVisites). */}
+        <CompteurVisites />
       </body>
     </html>
   );
