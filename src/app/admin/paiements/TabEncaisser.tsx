@@ -4,6 +4,7 @@ import { updateDoc, addDoc, doc, getDoc, getDocs, query, where, collection, serv
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
 import { lignesDetailHtml } from "@/lib/email-prestations";
+import { estPrelevementSepa } from "@/lib/sepa";
 import { safeNumber, generateOrderId } from "@/lib/utils";
 import {
   applyDiscounts,
@@ -582,9 +583,8 @@ export function TabEncaisser({
         // ne la regroupe pas dans l'encaissement « tout d'un coup » : son
         // règlement suit déjà son cours, l'inclure créerait un double paiement.
         const aReglementEnCours = (p: any) =>
-          p.status === "sepa_scheduled" ||
+          estPrelevementSepa(p) ||
           p.paymentMode === "cheque_differe" ||
-          p.paymentMode === "prelevement_sepa" ||
           encaissements.some((e: any) => e.paymentId === p.id);
         const familyPending = allUnpaid.filter(p => !aReglementEnCours(p));
         const enCours = allUnpaid.filter(p => aReglementEnCours(p));

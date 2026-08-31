@@ -2,6 +2,7 @@
 import React, { useState, useMemo } from "react";
 import { updateDoc, deleteDoc, doc, getDocs, collection, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { estPrelevementSepa } from "@/lib/sepa";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, ChevronDown, Check, X, AlertTriangle, CreditCard, Search } from "lucide-react";
@@ -47,10 +48,16 @@ export function TabEcheances({ loading, payments, toast, setPayments, refreshAll
     const monthEnd = new Date(todayDate.getFullYear(), todayDate.getMonth() + 1, 0).toISOString().split("T")[0];
     const threeMonthsEnd = new Date(todayDate.getFullYear(), todayDate.getMonth() + 3, todayDate.getDate()).toISOString().split("T")[0];
 
-    // Tous les paiements faisant partie d'un échéancier (hors SEPA et annulés)
+    // Tous les paiements faisant partie d'un échéancier (hors SEPA et annulés).
+    //
+    // Le prélèvement se reconnaît à son MODE, pas à son statut : au dépôt de
+    // la première remise, une commande SEPA passe de `sepa_scheduled` à
+    // `partial` et retombait ici — affichée « Échéance 1/10 » au montant de
+    // l'année entière (699 € au lieu de 69,90 €), avec des boutons pour
+    // l'encaisser en espèces. Elle est suivie dans Prélèvements SEPA.
     const echeances = payments.filter(p =>
       (p as any).echeancesTotal > 1 &&
-      p.status !== "sepa_scheduled" &&
+      !estPrelevementSepa(p) &&
       p.status !== "cancelled"
     );
 

@@ -5,6 +5,7 @@ import AnnulationModal from "./AnnulationModal";
 import { useSearchParams } from "next/navigation";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, Timestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { estPrelevementSepa } from "@/lib/sepa";
 import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { Card, Badge, Button } from "@/components/ui";
@@ -1438,8 +1439,9 @@ export default function PaiementsPage() {
             {id === "impayes" && (() => {
               const todayBadge = new Date().toISOString().split("T")[0];
               const count = payments.filter(p => {
-                if (p.status === "cancelled" || p.status === "paid" || p.status === "sepa_scheduled") return false;
+                if (p.status === "cancelled" || p.status === "paid") return false;
                 if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
+                if (estPrelevementSepa(p)) return false; // prélevé, pas à relancer
                 if ((p as any).echeancesTotal > 1) return (p as any).echeanceDate && (p as any).echeanceDate < todayBadge;
                 return true;
               }).length;

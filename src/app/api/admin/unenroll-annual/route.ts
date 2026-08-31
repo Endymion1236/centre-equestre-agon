@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { estPrelevementSepa } from "@/lib/sepa";
 import { verifyAuth } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
       // Est-ce un paiement lié à un forfait annuel de cet enfant ?
       const isForfaitOfChild =
         // Paiement de référence SEPA (sepa_scheduled)
-        p.status === "sepa_scheduled" && (p.items || []).some((i: any) => i.childId === childId) ||
+        estPrelevementSepa(p) && (p.items || []).some((i: any) => i.childId === childId) ||
         // Échéances classiques (pending, 3x/10x)
         (p.status === "pending" || p.status === "partial") && (
           // Via items

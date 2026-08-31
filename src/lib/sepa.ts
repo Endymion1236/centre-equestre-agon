@@ -36,6 +36,69 @@ export const SEPA_CREDITOR: SepaCreditor = {
   ics: "FR57ZZZ852487",
 };
 
+/**
+ * Cette commande est-elle réglée par prélèvement automatique ?
+ *
+ * À sa création, une commande SEPA porte le statut `sepa_scheduled`. Mais au
+ * dépôt de la première remise, elle passe en `partial` — puis en `paid` à la
+ * dernière. Les écrans qui la reconnaissaient à son STATUT la perdaient donc
+ * dès le premier prélèvement : elle réapparaissait dans les échéanciers
+ * classiques comme « Échéance 1/10 » du montant de l'ANNÉE, avec des boutons
+ * pour l'encaisser en espèces — alors qu'elle est prélevée chaque mois et
+ * suivie dans Prélèvements SEPA.
+ *
+ * Le mode de règlement, lui, ne bouge pas : c'est lui qui fait foi.
+ */
+export function estPrelevementSepa(paiement: any): boolean {
+  return paiement?.paymentMode === "prelevement_sepa" || paiement?.status === "sepa_scheduled";
+}
+
+/** Longueur maximale du libellé d'une opération (balise Ustrd, norme SEPA). */
+const USTRD_MAX = 140;
+
+/**
+ * Regroupe en UNE opération les prélèvements portés par le même mandat.
+ *
+ * Deux enfants d'une même famille inscrits à l'année en dix fois, c'est deux
+ * échéanciers — donc, jusqu'ici, deux lignes de 69,90 € sur le relevé de la
+ * famille chaque mois. Rien de faux, mais deux débits pour une seule décision
+ * d'inscription, et deux lignes à rapprocher.
+ *
+ * Le regroupement se fait ICI, au moment de fabriquer le fichier : les
+ * échéances restent séparées en base, une par enfant, avec leur suivi et leur
+ * encaissement propres. La banque voit un débit de 139,80 €, l'écran Forfaits
+ * garde le détail par cavalier, et le dépôt de la remise continue de créer une
+ * écriture par échéance.
+ *
+ * Le regroupement porte sur le mandat ET le compte débité : deux mandats d'une
+ * même famille (père et mère, par exemple) restent deux opérations, puisque ce
+ * sont deux comptes.
+ */
+export function regrouperParMandat(transactions: SepaTransaction[]): SepaTransaction[] {
+  const parMandat = new Map<string, SepaTransaction[]>();
+  for (const t of transactions) {
+    const cle = `${t.mandatId}__${t.debtorIban}`;
+    const lot = parMandat.get(cle);
+    if (lot) lot.push(t);
+    else parMandat.set(cle, [t]);
+  }
+
+  const groupees: SepaTransaction[] = [];
+  for (const lot of parMandat.values()) {
+    if (lot.length === 1) { groupees.push(lot[0]); continue; }
+    const montant = Math.round(lot.reduce((s, t) => s + t.amount, 0) * 100) / 100;
+    // Libellé : ce que la famille lira sur son relevé. On énumère les
+    // échéances réunies, tronqué à la longueur admise par la norme.
+    const detail = lot.map((t) => t.remittanceInfo).filter(Boolean).join(" + ");
+    groupees.push({
+      ...lot[0],
+      amount: montant,
+      remittanceInfo: detail.length > USTRD_MAX ? `${detail.slice(0, USTRD_MAX - 1)}…` : detail,
+    });
+  }
+  return groupees;
+}
+
 function escapeXml(s: string): string {
   return s
     .replace(/&/g, "&amp;")

@@ -6,7 +6,7 @@ import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, serverT
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import { generateSepaXml, SEPA_CREDITOR } from "@/lib/sepa";
+import { generateSepaXml, regrouperParMandat, SEPA_CREDITOR } from "@/lib/sepa";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import type { SepaTransaction, SepaRemise } from "@/lib/sepa";
 import { validateIban, validateBic, formatIban } from "@/lib/sepa-validation";
@@ -56,6 +56,10 @@ interface RemiseSepa {
   dateRemise: string;
   datePrelevement: string;
   nbTransactions: number;
+  /** Échéances réunies dans la remise — supérieur à nbTransactions quand une
+   *  famille a plusieurs cavaliers sur le même mandat. Absent avant le
+   *  regroupement par mandat. */
+  nbEcheances?: number;
   montantTotal: number;
   status: "draft" | "generated" | "deposited";
   xmlFileName: string | null;
@@ -358,8 +362,8 @@ export default function SepaPage() {
       // Trouver la date de prélèvement (= date la plus proche parmi les échéances)
       const datePrlv = selected.map(e => e.dateEcheance).sort()[0];
 
-      // Construire les transactions XML
-      const transactions: SepaTransaction[] = selected.map((ech, i) => {
+      // Construire les transactions XML — une par échéance à ce stade.
+      const transactionsParEcheance: SepaTransaction[] = selected.map((ech, i) => {
         const mandat = mandats.find(m => m.mandatId === ech.mandatId);
         return {
           instrId: `${msgId}M${i + 1}P${ech.id.slice(-5)}`,
@@ -373,6 +377,12 @@ export default function SepaPage() {
           remittanceInfo: ech.reference || ech.description,
         };
       });
+
+      // Une famille = un débit : les échéances d'un même mandat sont réunies
+      // en une seule opération. Deux enfants inscrits à l'année ne font plus
+      // deux lignes sur le relevé — les échéances, elles, restent séparées en
+      // base, avec leur suivi et leur encaissement par enfant.
+      const transactions = regrouperParMandat(transactionsParEcheance);
 
       const remiseData: SepaRemise = {
         msgId,
@@ -396,7 +406,10 @@ export default function SepaPage() {
         numero: nextNum,
         dateRemise: todayStr,
         datePrelevement: datePrlv,
-        nbTransactions: selected.length,
+        // Ce que la banque verra (opérations) et ce qu'on suit (échéances) :
+        // les deux diffèrent dès qu'une famille a plusieurs cavaliers.
+        nbTransactions: transactions.length,
+        nbEcheances: selected.length,
         montantTotal: Math.round(total * 100) / 100,
         status: "generated",
         xmlFileName: fileName,
@@ -1451,7 +1464,10 @@ export default function SepaPage() {
                               Remise n°{r.numero} — {r.xmlFileName}
                             </div>
                             <div className="font-body text-xs text-gray-500 mt-0.5">
-                              {r.nbTransactions} prélèvement{r.nbTransactions > 1 ? "s" : ""} · <strong>{r.montantTotal.toFixed(2)}€</strong> · Prélèvement le {new Date(r.datePrelevement).toLocaleDateString("fr-FR")}
+                              {r.nbTransactions} prélèvement{r.nbTransactions > 1 ? "s" : ""}
+                              {(r.nbEcheances || 0) > r.nbTransactions && (
+                                <span title="Les échéances d'une même famille sont réunies en un seul débit"> ({r.nbEcheances} échéances)</span>
+                              )} · <strong>{r.montantTotal.toFixed(2)}€</strong> · Prélèvement le {new Date(r.datePrelevement).toLocaleDateString("fr-FR")}
                             </div>
                             <div className="font-body text-[10px] text-gray-400 mt-0.5">
                               Créée le {r.dateRemise ? new Date(r.dateRemise).toLocaleDateString("fr-FR") : "—"}

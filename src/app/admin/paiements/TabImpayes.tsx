@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { updateDoc, getDoc, setDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { estPrelevementSepa } from "@/lib/sepa";
 import { safeNumber, generateOrderId } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Search, X, AlertTriangle, Receipt, Check, ChevronDown, Plus, Trash2, FileText, Calendar } from "lucide-react";
@@ -94,8 +95,13 @@ export function TabImpayes({
     (() => {
       const todayStr = new Date().toISOString().split("T")[0];
       const unpaid = payments.filter(p => {
-        if (p.status === "cancelled" || p.status === "paid" || p.status === "sepa_scheduled") return false;
+        if (p.status === "cancelled" || p.status === "paid") return false;
         if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
+        // Prélèvement automatique : rien à relancer, l'argent arrive tout seul.
+        // Reconnu au MODE et non au statut, qui passe en « partiel » dès la
+        // première remise déposée — la commande revenait alors ici comme un
+        // impayé de 699 €.
+        if (estPrelevementSepa(p)) return false;
         // Paiement converti en chèques différés : plus dans les impayés, il est
         // suivi dans l'onglet dédié "Chèques différés" (chaque chèque y est déposé
         // individuellement le jour venu).
@@ -225,7 +231,7 @@ export function TabImpayes({
           {(() => {
             const reglable = (p: any) =>
               p.paymentMode !== "cheque_differe" &&
-              p.status !== "sepa_scheduled" &&
+              !estPrelevementSepa(p) &&
               !((p as any).echeancesTotal > 1) &&
               (p.totalTTC || 0) - (p.paidAmount || 0) > 0.005;
             const parFamille = new Map<string, { name: string; pays: any[]; total: number }>();
