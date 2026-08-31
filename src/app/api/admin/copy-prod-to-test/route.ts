@@ -152,8 +152,8 @@ export async function POST(req: NextRequest) {
         ? "La base Firestore du projet de test n'existe probablement pas encore. Console Firebase → projet de test → Firestore Database → Créer une base de données (mode production, même région que la production)."
       : /PERMISSION_DENIED|Missing or insufficient|403/i.test(message)
         ? "Le compte de service n'a pas les droits sur le projet de test : vérifiez que la clé provient bien de ce projet-là."
-      : /invalid_grant|DECODER|PEM|private key|Getting metadata|invalid_client/i.test(message)
-        ? "Les identifiants sont refusés : clé supprimée, clé d'un autre projet, ou FIREBASE_TEST_PRIVATE_KEY mal collée (le bloc doit commencer par -----BEGIN PRIVATE KEY----- et finir par -----END PRIVATE KEY-----, sans guillemets)."
+      : /UNAUTHENTICATED|invalid_grant|DECODER|PEM|private key|Getting metadata|invalid_client/i.test(message)
+        ? "Identifiants refusés par Google. Trois causes, dans l'ordre de fréquence : (1) la clé a été supprimée dans la console — il en faut une nouvelle ; (2) FIREBASE_TEST_CLIENT_EMAIL et FIREBASE_TEST_PRIVATE_KEY ne viennent pas du MÊME fichier JSON ; (3) la clé est tronquée — le bloc doit commencer par -----BEGIN PRIVATE KEY----- et finir par -----END PRIVATE KEY-----, sans guillemets. Après correction, redéployez : les variables ne sont relues qu'au démarrage."
       : undefined;
     return NextResponse.json({
       error: `Copie interrompue — ${etape} : ${message}`,
