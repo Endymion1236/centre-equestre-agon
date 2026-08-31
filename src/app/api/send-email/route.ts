@@ -34,6 +34,27 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 const TEST_MODE = !process.env.RESEND_FROM_EMAIL || process.env.RESEND_TEST_MODE === "true";
 const TEST_EMAIL = process.env.RESEND_OWNER_EMAIL || "";
 
+/**
+ * Insère un bloc à la FIN du corps du message.
+ *
+ * Les gabarits renvoient désormais un document HTML complet — c'est ce qui
+ * permet de déclarer `color-scheme` et d'éviter que certaines messageries
+ * n'inversent l'email en mode sombre. Concaténer après coup placerait donc le
+ * bloc après `</html>`, où plus rien n'est rendu de façon fiable.
+ */
+function inserer(document: string, bloc: string): string {
+  const i = document.lastIndexOf("</body>");
+  return i === -1 ? document + bloc : document.slice(0, i) + bloc + document.slice(i);
+}
+
+/** Même chose, mais au DÉBUT du corps — pour le bandeau du mode test. */
+function enTete(document: string, bloc: string): string {
+  const i = document.indexOf("<body");
+  if (i === -1) return bloc + document;
+  const fin = document.indexOf(">", i);
+  return fin === -1 ? bloc + document : document.slice(0, fin + 1) + bloc + document.slice(fin + 1);
+}
+
 export async function POST(request: NextRequest) {
   // 🔒 Auth obligatoire — route admin
   const auth = await verifyAuth(request, { adminOnly: true });
@@ -166,7 +187,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true, skipped: "desabonne" });
       }
       const base = process.env.NEXT_PUBLIC_SITE_URL || "https://centre-equestre-agon.vercel.app";
-      htmlFinal = html + piedDesabonnement(familyId, base);
+      htmlFinal = inserer(html, piedDesabonnement(familyId, base));
     }
 
     const finalTo = TEST_MODE ? [TEST_EMAIL] : allowedRecipients;
@@ -180,9 +201,9 @@ export async function POST(request: NextRequest) {
       ...(bccList.length > 0 && !TEST_MODE ? { bcc: bccList } : {}),
       subject: finalSubject,
       html: TEST_MODE
-        ? `<div style="background:#fff3cd;padding:10px;border:1px solid #ffc107;border-radius:6px;margin-bottom:12px;font-family:sans-serif;font-size:12px;color:#856404;">
-            <strong>⚠️ MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${allowedRecipients.join(", ")}</strong>
-          </div>${htmlFinal}`
+        ? enTete(htmlFinal, `<div style="background:#fff3cd;padding:10px;border:1px solid #ffc107;border-radius:6px;margin-bottom:12px;font-family:sans-serif;font-size:12px;color:#856404;">
+            <strong>MODE TEST</strong> — Cet email aurait été envoyé à : <strong>${allowedRecipients.join(", ")}</strong>
+          </div>`)
         : htmlFinal,
       replyTo: replyTo || REPLY_TO,
       ...(safeAttachments.length > 0 ? { attachments: safeAttachments } : {}),
