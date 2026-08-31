@@ -29,6 +29,7 @@ export interface EditForm {
   priceTTC: number | string;
   color: string;
   allowDayBooking?: boolean;
+  tarifForfaitaire?: boolean;
   priceTTCDay?: number | string;
   themeStage?: string;
 }
@@ -306,6 +307,26 @@ export default function EditCreneauModal({
               <div className="font-body text-[10px] text-purple-500">
                 Utilisé par l'IA pour recommander les thèmes non encore vus par les cavaliers.
               </div>
+            </div>
+          )}
+
+          {/* Tarif forfaitaire — balades privatisées et sorties vendues au groupe */}
+          {(creneau.activityType === "balade" || creneau.activityType === "cours") && (
+            <div className="bg-amber-50 rounded-xl p-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={!!form.tarifForfaitaire}
+                  onChange={e => onFormChange({ ...form, tarifForfaitaire: e.target.checked })}
+                  className="accent-amber-600 w-4 h-4 mt-0.5"/>
+                <div>
+                  <div className="font-body text-sm font-semibold text-amber-800">Tarif forfaitaire — prix de la sortie</div>
+                  <div className="font-body text-xs text-slate-600 mt-0.5">
+                    Le prix est celui de la <strong>sortie</strong>, pas du cavalier : une balade
+                    privatisée à 250&nbsp;€ coûte 250&nbsp;€ que la famille vienne à un ou à deux.
+                    Le premier inscrit d&apos;une famille porte le montant, les suivants sont à 0&nbsp;€.
+                    Ce créneau est aussi exclu du mécanisme « petit groupe ».
+                  </div>
+                </div>
+              </label>
             </div>
           )}
 

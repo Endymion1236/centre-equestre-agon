@@ -14,6 +14,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { compareCreneauxByDate } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
+import { prixInscriptionCavalier } from "@/lib/tarif-forfaitaire";
 import { useToast } from "@/components/ui/Toast";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
@@ -549,16 +550,25 @@ export default function ReserverPage() {
     // le second ECRASAIT le premier — une seule personne etait facturee.
     setCart((prev) => {
       if (prev.some(i => i.childId === childId && i.creneauIds.includes(creneau.id))) return prev;
+      // Créneau au tarif forfaitaire (balade privatisée) : le prix est celui
+      // de la sortie, pas du cavalier. Le premier de la famille le porte, les
+      // suivants sont à 0 € — qu'ils soient ajoutés au panier maintenant ou
+      // déjà inscrits sur ce créneau.
+      const dejaFamille =
+        prev.filter(i => i.creneauIds.includes(creneau.id)).length
+        + ((creneau as any).enrolled || []).filter((e: any) => e?.familyId === user?.uid).length;
+      const prix = prixInscriptionCavalier(creneau as any, dejaFamille);
       return [...prev, {
         creneauIds: [creneau.id],
-        activityTitle: creneau.activityTitle,
+        activityTitle: creneau.activityTitle
+          + ((creneau as any).tarifForfaitaire && prix <= 0 ? " — inclus au forfait" : ""),
         dates: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
         childId,
         childName: cleanName,
-        prixBase: Math.round(priceTTC * 100) / 100,
+        prixBase: Math.round(prix * 100) / 100,
         remiseEuros: 0,
         rang: 0,
-        prixFinal: Math.round(priceTTC * 100) / 100,
+        prixFinal: Math.round(prix * 100) / 100,
         isStage: false,
         ...(sourceFamilyId ? { sourceFamilyId } : {}),
       }];

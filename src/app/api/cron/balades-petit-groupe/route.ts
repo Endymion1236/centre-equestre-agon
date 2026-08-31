@@ -82,6 +82,13 @@ export async function GET(req: NextRequest) {
     // tout index composite : type balade, non fermé, pas déjà traité.
     const balades = creneauxSnap.docs.filter((d) => {
       const c = d.data() as any;
+      // Un créneau au tarif forfaitaire — une privatisation — est vendu à la
+      // sortie, pas au cavalier : son prix ne dépend pas du nombre de
+      // participants, un supplément « petit groupe » n'y a aucun sens. Sans
+      // cette exclusion, une privatisation à deux tombait sous le seuil d'une
+      // balade collective et la famille recevait « maintien avec supplément,
+      // report ou avoir » deux jours avant sa sortie.
+      if (c.tarifForfaitaire) return false;
       return c.activityType === "balade" && c.status !== "closed" && !c.petitGroupePropose;
     });
 

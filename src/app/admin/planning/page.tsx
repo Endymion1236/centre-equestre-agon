@@ -31,6 +31,7 @@ import {
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage } from "./types";
+import { inscritsMemeFamille, prixInscriptionCavalier, prixCreneauTTC, libellePrixCreneau } from "@/lib/tarif-forfaitaire";
 import EnrollPanel from "./EnrollPanel";
 import PeriodGenerator from "./PeriodGenerator";
 import SimpleCreneauForm from "./SimpleCreneauForm";
@@ -420,7 +421,7 @@ export default function PlanningPage() {
   };
 
   const openEdit = (c: Creneau & { id: string }) => {
-    setEditCreneau(c);    setEditForm({ date: c.date, activityId: (c as any).activityId || "", activityType: c.activityType, tvaTaux: (c as any).tvaTaux || 5.5, activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "" });
+    setEditCreneau(c);    setEditForm({ date: c.date, activityId: (c as any).activityId || "", activityType: c.activityType, tvaTaux: (c as any).tvaTaux || 5.5, activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "", tarifForfaitaire: !!(c as any).tarifForfaitaire });
     setEditApplyAll(false);
     // Pour un stage multi-jours : appliquer par défaut à tous les jours du stage
     setEditApplyStage(c.activityType === "stage" || c.activityType === "stage_journee");
@@ -673,6 +674,8 @@ export default function PlanningPage() {
         maxPlaces: parseInt(editForm.maxPlaces) || editCreneau.maxPlaces,
         priceTTC: parseFloat(editForm.priceTTC) || 0,
         allowDayBooking: !!editForm.allowDayBooking,
+        // Prix de la sortie et non du cavalier (cf. lib/tarif-forfaitaire).
+        tarifForfaitaire: !!editForm.tarifForfaitaire,
         priceTTCDay: editForm.allowDayBooking ? (parseFloat(editForm.priceTTCDay as string) || 0) : 0,
         themeStage: editForm.themeStage || null,
         updatedAt: serverTimestamp(),
@@ -983,7 +986,14 @@ export default function PlanningPage() {
       }
 
       // skipPayment = true pour les inscriptions stage multi-jours
-      const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
+      //
+      // Créneau au tarif forfaitaire (balade privatisée) : le montant est
+      // celui de la SORTIE, pas du cavalier. Le premier inscrit de la famille
+      // le porte, les suivants sont à 0 € — `c` vient d'être relu, il contient
+      // déjà le cavalier qu'on inscrit, d'où son exclusion du compte.
+      const dejaFamille = inscritsMemeFamille(c.enrolled, child.familyId, child.childId);
+      const priceTTC = prixInscriptionCavalier(c, dejaFamille);
+      const forfaitDejaFacture = !!c.tarifForfaitaire && dejaFamille > 0;
 
       // ⚠️ GARDE-FOU : créneau sans prix défini
       // Sans cette vérification, handleEnroll aurait sauté tout le bloc de
@@ -991,7 +1001,7 @@ export default function PlanningPage() {
       // inscrit au planning sans aucune trace financière. Nicolas nous a
       // confirmé que tous ses créneaux DOIVENT avoir un prix — un priceTTC
       // à 0 ou manquant est donc un oubli, pas un cas volontaire.
-      if (!options?.skipPayment && !options?.freeReason && priceTTC <= 0) {
+      if (!options?.skipPayment && !options?.freeReason && !forfaitDejaFacture && priceTTC <= 0) {
         console.error("[handleEnroll] Créneau sans prix !", {
           creneauId: cid,
           activityTitle: c.activityTitle,
@@ -1013,6 +1023,36 @@ export default function PlanningPage() {
       // Identifiant de la commande créée ou fusionnée — renvoyé à l'appelant
       // (déclaré ici pour rester visible jusqu'au `return` en fin de fonction).
       let payRefId = "";
+
+      // Cavalier supplémentaire d'une famille sur un créneau au forfait : rien
+      // à facturer — la sortie est déjà payée. On écrit tout de même une ligne
+      // à 0 €, soldée : sans elle, aucune commande ne couvrirait ce cavalier,
+      // le planning l'afficherait « non réglé » à vie et rien n'expliquerait
+      // pourquoi il ne paie pas.
+      if (!options?.skipPayment && forfaitDejaFacture) {
+        const forfait = prixCreneauTTC(c);
+        await addDoc(collection(db, "payments"), {
+          orderId: generateOrderId(),
+          familyId: child.familyId, familyName: child.familyName,
+          items: [{
+            activityTitle: `${c.activityTitle} — inclus au forfait`,
+            childId: child.childId, childName: child.childName,
+            creneauId: cid, activityType: c.activityType, date: c.date,
+            startTime: c.startTime, endTime: c.endTime,
+            priceHT: 0, tva: c.tvaTaux || 5.5, priceTTC: 0,
+            originalPriceTTC: 0,
+          }],
+          totalTTC: 0, paidAmount: 0,
+          paymentMode: "forfait_creneau",
+          paymentRef: "",
+          status: "paid",
+          tarifForfaitaire: true,
+          note: `Compris dans le forfait de la sortie (${forfait.toFixed(2)}€), réglé par le premier cavalier de la famille`,
+          date: serverTimestamp(),
+        });
+        await refreshCreneaux();
+        return;
+      }
 
       if (!options?.skipPayment && priceTTC > 0) {
 
@@ -2168,8 +2208,8 @@ export default function PlanningPage() {
         <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
-              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${ttc.toFixed(0)}€`:""}{(c as any).allowDayBooking&&<span className="ml-1.5 inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 align-middle" title="Ce jour est réservable à l'unité par les familles">📅 journée{(c as any).priceTTCDay>0?` ${Number((c as any).priceTTCDay).toFixed(0)}€`:""}</span>}</div></div></div><div className="flex items-center gap-2">{(()=>{/* Impayé = rien d'encaissé. Une commande créée, même relancée par lien de paiement, en fait partie tant qu'aucun euro n'est arrivé. */
-                const unpaid=en.filter((e:any)=>statutPaiementCavalier(e,payments,c).etat==="impaye").length;return unpaid>0?<span className="font-body text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-lg">⚠️ {unpaid} impayé{unpaid>1?"s":""}</span>:null;})()}{waitCounts[c.id]>0&&<span className="font-body text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-1 rounded-lg whitespace-nowrap" title="Enfants en liste d'attente sur ce créneau">🔔 {waitCounts[c.id]} en attente</span>}<Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button type="button" onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({date:c.date,activityId:(c as any).activityId||"",activityType:c.activityType,tvaTaux:(c as any).tvaTaux||5.5,activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||"",allowDayBooking:(c as any).allowDayBooking||false,priceTTCDay:(c as any).priceTTCDay||"",themeStage:(c as any).themeStage||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button type="button" onClick={e=>{e.stopPropagation();openDelete(c);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
+              <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${libellePrixCreneau(c as any)}`:""}{(c as any).allowDayBooking&&<span className="ml-1.5 inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 align-middle" title="Ce jour est réservable à l'unité par les familles">📅 journée{(c as any).priceTTCDay>0?` ${Number((c as any).priceTTCDay).toFixed(0)}€`:""}</span>}</div></div></div><div className="flex items-center gap-2">{(()=>{/* Impayé = rien d'encaissé. Une commande créée, même relancée par lien de paiement, en fait partie tant qu'aucun euro n'est arrivé. */
+                const unpaid=en.filter((e:any)=>statutPaiementCavalier(e,payments,c).etat==="impaye").length;return unpaid>0?<span className="font-body text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-lg">⚠️ {unpaid} impayé{unpaid>1?"s":""}</span>:null;})()}{waitCounts[c.id]>0&&<span className="font-body text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-1 rounded-lg whitespace-nowrap" title="Enfants en liste d'attente sur ce créneau">🔔 {waitCounts[c.id]} en attente</span>}<Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button type="button" onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({date:c.date,activityId:(c as any).activityId||"",activityType:c.activityType,tvaTaux:(c as any).tvaTaux||5.5,activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||"",allowDayBooking:(c as any).allowDayBooking||false,priceTTCDay:(c as any).priceTTCDay||"",themeStage:(c as any).themeStage||"",tarifForfaitaire:!!(c as any).tarifForfaitaire});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button type="button" onClick={e=>{e.stopPropagation();openDelete(c);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
                 // Rouge rien reçu, orange partiellement réglé, vert réglé :
                 // une seule règle pour les quatre vues (types.ts). Le mode de
