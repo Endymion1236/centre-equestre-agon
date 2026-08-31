@@ -4527,8 +4527,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           </button>
                         ))}
                       </div>
-                      {annualPayMode === "prelevement_sepa" && (
+                      {annualPayMode === "prelevement_sepa" ? (
                         <SepaWarning familyId={selFam} onStatus={setSepaStatus} />
+                      ) : (
+                        /* Une inscription à l'année n'encaisse JAMAIS : elle
+                           crée la commande, qui part en impayés. Rien ne le
+                           disait — le bouton vert « Inscrire à l'année (699 €) »
+                           et le choix d'un mode laissaient croire au contraire. */
+                        <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 font-body text-[11px] text-blue-800">
+                          Aucun encaissement maintenant : la commande part dans <strong>Impayés</strong>,
+                          à encaisser quand le règlement arrive.
+                          {payPlan === "1x"
+                            ? " Un frère ou une sœur inscrit ensuite en 1× rejoint la même commande — un seul règlement pour la fratrie."
+                            : " En 3× ou 10×, chaque cavalier a son propre échéancier."}
+                        </div>
                       )}
                     </div>
                   </div>
