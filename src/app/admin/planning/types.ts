@@ -331,32 +331,48 @@ export function statutPaiementCavalier(
       return habiller("impaye", "forfait à régler", "Forfait annuel enregistré, mais aucune commande retrouvée.");
     }
 
-    // Prélèvement SEPA : les échéances vivent dans `echeances-sepa`, pas dans
-    // les commandes — la commande de référence reste à 0 € encaissé toute
-    // l'année. La rougir dirait le contraire de la vérité (l'argent arrive
-    // chaque mois), la verdir aussi. Elle est « en cours ».
-    if (echeances.some((p: any) => p.status === "sepa_scheduled")) {
-      return habiller("partiel", "forfait (SEPA)", "Prélèvement mensuel programmé — le détail est dans Paiements › Prélèvements SEPA.");
-    }
-
     // Ici on compte les échéances, pas le statut d'une commande : un forfait
     // en dix fois dont la première est encaissée a bien une commande `paid`,
     // et c'est ce raccourci qui le faisait passer pour réglé toute l'année.
     const { regle, total, reste } = argentRecu(echeances);
-    const payees = echeances.filter((p: any) =>
-      p.status === "paid" || (Number(p.paidAmount) || 0) >= (Number(p.totalTTC) || 0) - 0.01).length;
 
-    if (payees === echeances.length || (total > 0 && reste < 0.01)) {
-      return habiller("regle", "forfait", `Forfait annuel réglé — ${eur(regle || total)}.`);
+    // Combien d'échéances sont effectivement rentrées.
+    //
+    // Deux formes coexistent. Le paiement en trois ou dix fois crée une
+    // commande par échéance : il suffit de compter celles qui sont réglées.
+    // Le prélèvement SEPA n'en crée qu'UNE, de référence, dont le montant
+    // encaissé grossit à chaque remise déposée (cf. Prélèvements SEPA,
+    // markDeposited) — le nombre de prélèvements passés s'en déduit.
+    const sepa = echeances.some((p: any) =>
+      p.status === "sepa_scheduled" || p.paymentMode === "prelevement_sepa");
+    const nbEcheances = Math.max(
+      echeances.length,
+      ...echeances.map((p: any) => Number(p.echeancesTotal) || 0),
+    );
+    const parEcheance = nbEcheances > 0 ? total / nbEcheances : 0;
+    const payees = echeances.length > 1
+      ? echeances.filter((p: any) =>
+          p.status === "paid" || (Number(p.paidAmount) || 0) >= (Number(p.totalTTC) || 0) - 0.01).length
+      : parEcheance > 0 ? Math.round(regle / parEcheance) : 0;
+    const mention = sepa ? " Les prélèvements sont suivis dans Paiements › Prélèvements SEPA." : "";
+
+    if ((payees >= nbEcheances && payees > 0) || (total > 0 && reste < 0.01)) {
+      return habiller("regle", sepa ? "forfait (SEPA)" : "forfait", `Forfait annuel réglé — ${eur(regle || total)}.`);
     }
     if (regle > 0.009) {
       return habiller(
         "partiel",
-        echeances.length > 1 ? `forfait ${payees}/${echeances.length}` : "forfait partiellement réglé",
-        `${eur(regle)} reçus sur ${eur(total)} — reste ${eur(reste)} sur le forfait.`,
+        nbEcheances > 1 ? `forfait ${payees}/${nbEcheances}${sepa ? " SEPA" : ""}` : "forfait partiellement réglé",
+        `${eur(regle)} reçus sur ${eur(total)} — reste ${eur(reste)} sur le forfait.${mention}`,
       );
     }
-    return habiller("impaye", "forfait à régler", `Aucune échéance encaissée — ${eur(total)} dus.`);
+    return habiller(
+      "impaye",
+      sepa ? "SEPA, rien prélevé" : "forfait à régler",
+      sepa
+        ? `Prélèvement mensuel programmé, mais aucune remise encaissée à ce jour — ${eur(total)}.${mention}`
+        : `Aucune échéance encaissée — ${eur(total)} dus.`,
+    );
   }
 
   // ── Commandes de la famille qui couvrent cette inscription ──────────────

@@ -126,15 +126,26 @@ console.log("\n✓ Un forfait annuel se juge échéance par échéance :");
   assert("forfait soldé : vert", toutes.etat === "regle", toutes.etat);
   assert("le libellé redevient « forfait »", toutes.label === "forfait", toutes.label);
 
-  // Prélèvement SEPA : les échéances vivent hors des commandes, la commande
-  // de référence reste à 0 € encaissé. Ni rouge, ni vert : en cours.
-  const sepa = statutPaiementCavalier(inscritForfait, [{
-    familyId: "favory", forfaitRef: "mercredi-14h", status: "sepa_scheduled",
-    paidAmount: 0, totalTTC: 680, echeancesTotal: 10,
+  // Prélèvement SEPA : une seule commande de référence, dont le montant
+  // encaissé grossit à chaque remise déposée (cf. markDeposited). Le nombre de
+  // prélèvements passés s'en déduit — inutile de charger les échéances SEPA.
+  const sepa = (paidAmount: number, status: string) => ([{
+    familyId: "favory", forfaitRef: "mercredi-14h", status,
+    paymentMode: "prelevement_sepa", paidAmount, totalTTC: 680, echeancesTotal: 10,
     items: [{ childId: "c1", activityTitle: "Forfait annuel — Romane" }],
-  }], CRENEAU);
-  assert("prélèvement SEPA programmé : orange", sepa.etat === "partiel", sepa.etat);
-  assert("le libellé dit SEPA", sepa.label === "forfait (SEPA)", sepa.label);
+  }]);
+
+  const avantRemise = statutPaiementCavalier(inscritForfait, sepa(0, "sepa_scheduled"), CRENEAU);
+  assert("mandat signé mais rien prélevé : rouge", avantRemise.etat === "impaye", avantRemise.etat);
+  assert("le libellé le dit sans ambiguïté", avantRemise.label === "SEPA, rien prélevé", avantRemise.label);
+
+  const troisPreleves = statutPaiementCavalier(inscritForfait, sepa(204, "partial"), CRENEAU);
+  assert("trois prélèvements passés : orange", troisPreleves.etat === "partiel", troisPreleves.etat);
+  assert("le libellé compte les prélèvements", troisPreleves.label === "forfait 3/10 SEPA", troisPreleves.label);
+  assert("le survol renvoie au module SEPA", troisPreleves.detail.includes("Prélèvements SEPA"), troisPreleves.detail);
+
+  const tousPreleves = statutPaiementCavalier(inscritForfait, sepa(680, "paid"), CRENEAU);
+  assert("année soldée : vert", tousPreleves.etat === "regle", tousPreleves.etat);
 
   const sansCommande = statutPaiementCavalier(inscritForfait, [], CRENEAU);
   assert("forfait sans commande : rouge", sansCommande.etat === "impaye", sansCommande.etat);
