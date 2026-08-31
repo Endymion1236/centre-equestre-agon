@@ -19,6 +19,7 @@ const CONTEXT_LABELS: Record<string, string> = {
   // Admin (appels send-email avec context précisé)
   admin_manual: "Manuel (admin)",
   admin_confirmation_stage: "Inscription stage",
+  confirmation_stage_groupee: "Inscription stage (groupée)",
   admin_confirmation_cours: "Réservation cours",
   admin_confirmation_forfait: "Forfait annuel",
   admin_confirmation_paiement: "Confirmation paiement",

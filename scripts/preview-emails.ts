@@ -55,6 +55,35 @@ const EXEMPLES = [
     dates: "Du lundi 19 au vendredi 23 octobre 2026",
     totalTTC: 275, acompte: 82.5, solde: 192.5, lienSepare: true,
   }),
+  // Inscription depuis l'administration : cinq cavaliers, trois stages, une
+  // seule lettre — et rien d'encaissé, donc une place retenue, pas confirmée.
+  T.confirmationStages({
+    parentName: "Marie Lefèvre",
+    stages: [
+      {
+        stageTitle: "Stage poney — Toussaint",
+        dates: "lun. 19, mar. 20, mer. 21, jeu. 22, ven. 23 octobre",
+        enfants: [
+          { name: "Léa Lefèvre", prix: 145, remise: 0 },
+          { name: "Tom Lefèvre", prix: 130, remise: 15 },
+        ],
+      },
+      {
+        stageTitle: "Stage galop 2 — Toussaint",
+        dates: "lun. 26, mar. 27, mer. 28 octobre",
+        enfants: [
+          { name: "Jules Lefèvre", prix: 120, remise: 0 },
+          { name: "Alice Lefèvre", prix: 105, remise: 15 },
+        ],
+      },
+      {
+        stageTitle: "Stage baby-poney",
+        dates: "jeu. 29 octobre",
+        enfants: [{ name: "Rose Lefèvre", prix: 45, remise: 0 }],
+      },
+    ],
+    totalTTC: 545, aRegler: 545, solde: 0,
+  }),
   // Acompte encaissé au comptoir : place acquise, solde à venir.
   T.confirmationStage({
     parentName: "Marie Lefèvre",

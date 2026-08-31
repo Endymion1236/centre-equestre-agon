@@ -34,6 +34,70 @@ function buildPreviews(): PreviewItem[] {
       }),
     },
     {
+      id: "stages-groupes-a-regler",
+      label: "Stages · 5 cavaliers, 3 stages, 1 email",
+      description:
+        "Ce que reçoit une famille inscrite depuis l'administration : un seul message pour tous "
+        + "les stages inscrits dans la foulée, et une place retenue tant que rien n'est encaissé.",
+      email: T.confirmationStages({
+        parentName: "Marie Lefèvre",
+        stages: [
+          {
+            stageTitle: "Stage poney — Toussaint",
+            dates: "lun. 19, mar. 20, mer. 21, jeu. 22, ven. 23 octobre",
+            enfants: [
+              { name: "Léa Lefèvre", prix: 145, remise: 0 },
+              { name: "Tom Lefèvre", prix: 130, remise: 15 },
+            ],
+          },
+          {
+            stageTitle: "Stage galop 2 — Toussaint",
+            dates: "lun. 26, mar. 27, mer. 28 octobre",
+            enfants: [
+              { name: "Jules Lefèvre", prix: 120, remise: 0 },
+              { name: "Alice Lefèvre", prix: 105, remise: 15 },
+            ],
+          },
+          {
+            stageTitle: "Stage baby-poney",
+            dates: "jeu. 29 octobre",
+            enfants: [{ name: "Rose Lefèvre", prix: 45, remise: 0 }],
+          },
+        ],
+        totalTTC: 545,
+        aRegler: 545,
+        solde: 0,
+      }),
+    },
+    {
+      id: "stages-groupes-acompte",
+      label: "Stages groupés · acompte à régler",
+      description: "Même message, quand l'acompte de 30 € par enfant est demandé par lien de paiement.",
+      email: T.confirmationStages({
+        parentName: "Marie Lefèvre",
+        stages: [
+          {
+            stageTitle: "Stage poney — Toussaint",
+            dates: "lun. 19 au ven. 23 octobre",
+            enfants: [
+              { name: "Léa Lefèvre", prix: 145, remise: 0 },
+              { name: "Tom Lefèvre", prix: 130, remise: 15 },
+            ],
+          },
+          {
+            stageTitle: "Stage galop 2 — Toussaint",
+            dates: "lun. 26 au mer. 28 octobre",
+            enfants: [{ name: "Jules Lefèvre", prix: 120, remise: 0 }],
+          },
+        ],
+        totalTTC: 395,
+        aRegler: 90,
+        solde: 305,
+        dateSolde: "12 octobre",
+        lienSepare: true,
+      }),
+    },
+    {
       id: "stage-acompte-recu",
       label: "Stage · acompte reçu",
       description: "La place est acquise, le solde reste à venir.",

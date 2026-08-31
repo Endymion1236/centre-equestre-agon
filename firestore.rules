@@ -779,6 +779,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Confirmations de stage en attente d'envoi groupé ─────────────────
+    // Un document par famille, écrit UNIQUEMENT côté serveur (Admin SDK, qui
+    // ignore ces règles) : c'est la file qui permet d'envoyer UNE lettre pour
+    // plusieurs stages inscrits à la suite. Rien à lire depuis le navigateur,
+    // l'administration passe par /api/admin/confirmation-stage, où l'accès
+    // admin est vérifié.
+    match /stage_confirmations/{familyId} {
+      allow read, write: if false;
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {

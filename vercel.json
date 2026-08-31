@@ -5,6 +5,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/confirmations-stage",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/daily-emails",
       "schedule": "0 20 * * *"
     },

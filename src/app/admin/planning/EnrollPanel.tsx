@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
-import { renderDerouleStage } from "@/lib/stage-deroule";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
 import { db, storage } from "@/lib/firebase";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
@@ -11,7 +10,6 @@ import {
   emailTemplates, emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe, emailParagraphe as P, emailSignature, emailCouleurs as CE,
 } from "@/lib/email-templates";
-import { dateEcheanceSolde } from "@/lib/email-prestations";
 import { generateOrderId, emailValide } from "@/lib/utils";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "@/app/admin/paiements/types";
@@ -19,6 +17,37 @@ import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
 import { tarifPourFrequence } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
+
+/**
+ * Minuteries d'envoi des confirmations groupées.
+ *
+ * Hors du composant à dessein : le panneau se démonte entre deux inscriptions
+ * (on change de créneau, de jour, de semaine), la confirmation en attente,
+ * elle, reste due. Le cron `/api/cron/confirmations-stage` reste le filet :
+ * si l'onglet est fermé avant l'échéance, c'est lui qui envoie.
+ */
+const minuteriesConfirmation = new Map<string, ReturnType<typeof setTimeout>>();
+
+function programmerEnvoiConfirmation(familyId: string, envoiPrevuA: string) {
+  const precedente = minuteriesConfirmation.get(familyId);
+  if (precedente) clearTimeout(precedente);
+  const attente = Math.max(3000, (Date.parse(envoiPrevuA) || 0) - Date.now() + 2000);
+  minuteriesConfirmation.set(familyId, setTimeout(() => {
+    minuteriesConfirmation.delete(familyId);
+    // `force: false` : si une inscription de dernière minute a repoussé
+    // l'échéance, l'envoi est simplement laissé au cron.
+    authFetch("/api/admin/confirmation-stage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "envoyer", familyId, force: false }),
+    }).catch(e => console.warn("Envoi confirmation groupée:", e));
+  }, attente));
+}
+
+function annulerMinuterieConfirmation(familyId: string) {
+  const t = minuteriesConfirmation.get(familyId);
+  if (t) { clearTimeout(t); minuteriesConfirmation.delete(familyId); }
+}
 
 /** Libellé lisible d'un moyen de règlement d'acompte, aligné sur la caisse. */
 function libelleModeAcompte(mode: string): string {
@@ -99,6 +128,53 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const { isAdmin, isMoniteur, user } = useAuth();
   const [search, setSearch] = useState(""); const [selFam, setSelFam] = useState(""); const [selChild, setSelChild] = useState("");
   const [enrolling, setEnrolling] = useState(false); const [justEnrolled, setJustEnrolled] = useState("");
+
+  // Confirmation de stage en attente d'envoi groupé (lib/stage-confirmations) :
+  // ce qui partira, quand, et de quoi le devancer d'un clic.
+  const [confirmationEnAttente, setConfirmationEnAttente] = useState<{
+    familyId: string; familyName: string; nbStages: number; envoiPrevuA: string;
+  } | null>(null);
+  const [envoiConfirmation, setEnvoiConfirmation] = useState<"" | "envoi" | "envoye" | "annule">("");
+
+  const envoyerConfirmationMaintenant = async () => {
+    if (!confirmationEnAttente) return;
+    setEnvoiConfirmation("envoi");
+    annulerMinuterieConfirmation(confirmationEnAttente.familyId);
+    try {
+      const res = await authFetch("/api/admin/confirmation-stage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "envoyer", familyId: confirmationEnAttente.familyId, force: true }),
+      });
+      const json = await res.json().catch(() => null);
+      if (json?.sent) {
+        setEnvoiConfirmation("envoye");
+        panelToast(`Confirmation envoyée — 1 email pour ${confirmationEnAttente.nbStages} stage(s)`, "success");
+      } else {
+        setEnvoiConfirmation("");
+        panelToast(`Envoi impossible : ${json?.reason || "erreur"}`, "error");
+      }
+    } catch (e: any) {
+      setEnvoiConfirmation("");
+      panelToast(`Envoi impossible : ${e?.message || e}`, "error");
+    }
+  };
+
+  const annulerConfirmationEnAttente = async () => {
+    if (!confirmationEnAttente) return;
+    annulerMinuterieConfirmation(confirmationEnAttente.familyId);
+    try {
+      await authFetch("/api/admin/confirmation-stage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "annuler", familyId: confirmationEnAttente.familyId }),
+      });
+      setEnvoiConfirmation("annule");
+      panelToast("Confirmation annulée — aucun email ne partira", "success");
+    } catch (e: any) {
+      panelToast(`Annulation impossible : ${e?.message || e}`, "error");
+    }
+  };
 
   // ── Inscription établissement sur TOUTE la saison ──
   // Inscrit l'enfant dans tous les créneaux récurrents à venir (même titre,
@@ -1837,8 +1913,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
         const openOrder = pendingDocs.length > 0 ? pendingDocs[0] : null;
 
+        // Commande à laquelle ces stages sont rattachés : la confirmation
+        // groupée la relit au moment de l'envoi pour savoir ce qui a déjà été
+        // encaissé entre-temps.
+        let commandeId = "";
+
         if (openOrder) {
           // Fusionner avec la commande existante
+          commandeId = openOrder.id;
           const existingData = openOrder.data();
           const mergedItems = [...(existingData.items || []), ...newItems];
           const mergedTotal = Math.round(mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
@@ -1926,6 +2008,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             ...(showAcompte ? { acompteAmount: stageAcompte, soldeAmount: stageSolde } : {}),
             date: serverTimestamp(),
           });
+          commandeId = newPayRef.id;
 
           // Acompte réglé au comptoir : on encaisse ici, sans lien de paiement.
           if (showAcompte && acompteReglement === "sur_place") {
@@ -1971,7 +2054,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const noms = stageLines.map(l => l.childName).join(", ");
         setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7)` : ""}`);
 
-        // Envoyer email de confirmation stage automatiquement.
+        // Confirmation d'inscription — mise en file, pas envoi immédiat.
+        //
+        // Inscrire cinq enfants répartis sur trois stages, c'est trois
+        // passages ici : la famille recevait trois lettres presque identiques
+        // dans la même minute pour ce qui est, de son côté, une seule
+        // inscription et un seul règlement. La confirmation attend donc
+        // quelques minutes que les stages suivants de la même famille la
+        // rejoignent (lib/stage-confirmations), puis part une seule fois —
+        // un panneau par stage, un total unique.
         //
         // Sauf quand l'acompte vient d'être encaissé au comptoir : dans ce
         // cas /api/admin/stage-acompte-recu a déjà envoyé « Acompte confirmé —
@@ -1980,58 +2071,70 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         const acompteEncaisseAuComptoir = showAcompte && acompteReglement === "sur_place";
         if (fam.parentEmail && !acompteEncaisseAuComptoir) {
           try {
-            const dates = creneauxAInscrire.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })).join(", ");
-            // Deroule des 2 sequences : chaine vide si le reglage n'est pas
-            // saisi, auquel cas l'email part comme avant.
-            const derouleSnap = await getDoc(doc(db, "settings", "stageDeroule"));
-            const derouleHtml = renderDerouleStage(derouleSnap.exists() ? (derouleSnap.data() as any) : null);
-            const confirmEmail = emailTemplates.confirmationStage({
-              parentName: fam.parentName || "",
-              enfants: stageLines.map(l => ({ name: l.childName, prix: l.prixReduit, remise: l.remiseEuros })),
-              stageTitle: creneau.activityTitle,
-              dates: stageMode === "jour" ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : dates,
-              totalTTC: stageTotalTTC,
-              acompte: showAcompte ? stageAcompte : undefined,
-              solde: showAcompte ? stageSolde : undefined,
-              // L'acompte n'est pas encore réglé : le message doit annoncer
-              // une place retenue, pas une inscription acquise. Le lien de
-              // paiement part dans un message séparé (send-payment-link).
-              lienSepare: showAcompte && acompteReglement === "lien",
-              // Date réelle d'échéance du solde plutôt que « 7 jours avant le
-              // stage » : la famille n'a pas à compter, et une date se retient.
-              dateSolde: showAcompte ? dateEcheanceSolde(creneauxAInscrire[0]?.date || creneau.date) : undefined,
-              derouleHtml,
-            });
-            authFetch("/api/send-email", {
+            const dates = stageMode === "jour"
+              ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+              : creneauxAInscrire.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })).join(", ");
+            const res = await authFetch("/api/admin/confirmation-stage", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                to: fam.parentEmail,
-                ...confirmEmail,
-                context: "admin_confirmation_stage",
-                template: "confirmationStage",
                 familyId: fam.firestoreId,
-                creneauId: creneau.id,
+                familyName: fam.parentName || "",
+                email: fam.parentEmail,
+                paymentId: commandeId,
+                // L'acompte part dans un lien de paiement séparé
+                // (send-payment-link) : la lettre ne porte pas de bouton.
+                lienSepare: showAcompte && acompteReglement === "lien",
+                stage: {
+                  stageKey,
+                  stageTitle: creneau.activityTitle,
+                  dates,
+                  dateDebut: creneauxAInscrire[0]?.date || creneau.date,
+                  creneauId: creneau.id,
+                  enfants: stageLines.map(l => ({ name: l.childName, prix: l.prixReduit, remise: l.remiseEuros })),
+                  // Ce qui est réclamé maintenant : l'acompte quand il y en a
+                  // un, le prix entier sinon — l'inscription part alors aux
+                  // impayés et le lien de paiement suit. Dans les deux cas la
+                  // lettre annonce une place retenue, jamais une inscription
+                  // « confirmée » que rien n'a payée.
+                  aRegler: showAcompte ? stageAcompte : stageTotalTTC,
+                  solde: showAcompte ? stageSolde : 0,
+                },
               }),
-            }).catch(e => console.warn("Email stage:", e));
-          } catch (e) { console.error("Email confirmation stage:", e); }
+            });
+            const fileConfirmation = await res.json().catch(() => null);
+            if (fileConfirmation?.queued) {
+              setConfirmationEnAttente({
+                familyId: fam.firestoreId,
+                familyName: fam.parentName || "",
+                nbStages: fileConfirmation.nbStages || 1,
+                envoiPrevuA: fileConfirmation.envoiPrevuA || "",
+              });
+              setEnvoiConfirmation("");
+              programmerEnvoiConfirmation(fam.firestoreId, fileConfirmation.envoiPrevuA || "");
+            }
+          } catch (e) { console.error("Confirmation stage (mise en file):", e); }
         }
 
         // Notification push — hors du bloc email : elle doit partir aussi quand
         // l'acompte a été encaissé au comptoir, cas où l'email de confirmation
         // est volontairement omis. Son titre suit l'état réel de la place.
         {
-          const enAttenteAcompte = showAcompte && acompteReglement === "lien";
+          // « Confirmée » est réservé à ce qui est payé : tant que rien n'est
+          // encaissé — le cas courant depuis l'administration, où le lien de
+          // paiement part après l'inscription — la place est seulement retenue.
+          const regleAuComptoir = showAcompte && acompteReglement === "sur_place";
+          const enAttenteReglement = !regleAuComptoir;
           authFetch("/api/push", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               familyId: fam.firestoreId,
-              title: enAttenteAcompte ? "Inscription enregistrée — acompte à régler" : "Inscription confirmée",
-              body: enAttenteAcompte
-                ? `${noms} : la place au stage ${creneau.activityTitle} est retenue jusqu'au règlement de l'acompte.`
+              title: enAttenteReglement ? "Inscription enregistrée — règlement à venir" : "Inscription confirmée",
+              body: enAttenteReglement
+                ? `${noms} : la place au stage ${creneau.activityTitle} est retenue jusqu'au règlement.`
                 : `${noms} inscrit(s) au stage ${creneau.activityTitle}`,
-              url: enAttenteAcompte ? "/espace-cavalier/factures" : "/espace-cavalier/reservations",
+              url: enAttenteReglement ? "/espace-cavalier/factures" : "/espace-cavalier/reservations",
             }),
           }).catch(() => {});
         }
@@ -2974,6 +3077,48 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         )}
         <div ref={inscritsRef} className="p-5">
           {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
+          {confirmationEnAttente && (
+            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg font-body text-sm text-blue-800">
+              <div className="flex items-start gap-2">
+                <Mail size={16} className="shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  {envoiConfirmation === "envoye" ? (
+                    <>Confirmation envoyée à {confirmationEnAttente.familyName || "la famille"} —
+                    {" "}<strong>1 seul email</strong> pour {confirmationEnAttente.nbStages} stage{confirmationEnAttente.nbStages > 1 ? "s" : ""}.</>
+                  ) : envoiConfirmation === "annule" ? (
+                    <>Confirmation annulée — aucun email ne partira pour ces inscriptions.</>
+                  ) : (
+                    <>
+                      <strong>1 seul email</strong> de confirmation partira pour cette famille
+                      {confirmationEnAttente.nbStages > 1
+                        ? <> — {confirmationEnAttente.nbStages} stages y sont déjà réunis</>
+                        : <> — inscrivez d&apos;autres stages, ils s&apos;y ajouteront</>}
+                      {confirmationEnAttente.envoiPrevuA && (
+                        <> ; envoi vers {new Date(confirmationEnAttente.envoiPrevuA).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.</>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+              {!envoiConfirmation && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button type="button" onClick={envoyerConfirmationMaintenant}
+                    className="inline-flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
+                    <Send size={12} /> Envoyer maintenant
+                  </button>
+                  <button type="button" onClick={annulerConfirmationEnAttente}
+                    className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:underline">
+                    Ne pas envoyer
+                  </button>
+                </div>
+              )}
+              {envoiConfirmation === "envoi" && (
+                <div className="mt-2 inline-flex items-center gap-1 font-body text-xs text-blue-600">
+                  <Loader2 size={12} className="animate-spin" /> Envoi…
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-body text-sm font-semibold text-blue-800"><Users size={16} className="inline mr-1"/>Inscrits ({enrolled.length})</h3>
             {enrolled.length > 0 && (

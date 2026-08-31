@@ -337,6 +337,127 @@ export const emailTemplates = {
     };
   },
 
+  /**
+   * Confirmation d'inscription à un stage — un seul message par famille.
+   *
+   * Remplace `confirmationStage` sur le chemin du planning, pour deux raisons.
+   *
+   * 1. Inscrire cinq enfants répartis sur trois stages, c'est trois passages
+   *    dans le panneau du planning : la famille recevait trois confirmations
+   *    presque identiques dans la même minute, pour ce qui était à ses yeux
+   *    une seule inscription — et un seul lien de paiement. Les stages sont
+   *    maintenant mis en attente quelques minutes (lib/stage-confirmations)
+   *    puis réunis ici : un panneau par stage, un total unique.
+   *
+   * 2. Le message annonçait « Votre inscription est confirmée » alors que
+   *    rien n'était encaissé — c'est justement le cas courant depuis
+   *    l'administration : on inscrit, la commande part aux impayés, le lien
+   *    de paiement est envoyé ensuite. Tant que rien n'est reçu, la lettre
+   *    parle donc de place retenue et de règlement attendu ; « confirmée »
+   *    est réservé à ce qui est payé.
+   */
+  confirmationStages: (vars: {
+    parentName: string;
+    stages: {
+      stageTitle: string;
+      dates: string;
+      enfants: { name: string; prix: number; remise: number }[];
+    }[];
+    totalTTC: number;
+    /** Ce qui est réclamé maintenant : l'acompte, ou la totalité s'il n'y a pas d'acompte. */
+    aRegler: number;
+    /** Reste dû après ce règlement (solde d'acompte). 0 quand tout est demandé maintenant. */
+    solde: number;
+    /** Déjà encaissé sur cette commande. */
+    dejaRegle?: number;
+    /** Le lien de paiement part dans un message séparé (pas de bouton ici). */
+    lienSepare?: boolean;
+    dateSolde?: string;
+    derouleHtml?: string;
+  }) => {
+    const stages = vars.stages || [];
+    const nbStages = stages.length;
+    const nbInscriptions = stages.reduce((n, s) => n + s.enfants.length, 0);
+    const prenoms = [...new Set(stages.flatMap((s) => s.enfants.map((e) => e.name)))];
+    const intitule = nbStages === 1 ? stages[0]?.stageTitle || "Stage" : `${nbStages} stages`;
+    const datesToutes = [...new Set(stages.map((s) => s.dates).filter(Boolean))].join(" · ");
+
+    const dejaRegle = vars.dejaRegle || 0;
+    const toutRegle = dejaRegle >= vars.totalTTC - 0.01;
+    // Acompte : une partie maintenant, le reste avant le stage.
+    const acompteDu = !toutRegle && vars.solde > 0 && vars.aRegler > 0;
+    // Rien d'encaissé et pas d'acompte : c'est la totalité qui reste à régler.
+    const totaliteDue = !toutRegle && !acompteDu && vars.aRegler > 0;
+    // Acompte déjà reçu : il ne reste que le solde, réclamé automatiquement.
+    const soldeSeul = !toutRegle && vars.aRegler <= 0 && vars.solde > 0;
+
+    return {
+      subject: toutRegle || soldeSeul
+        ? `Inscription confirmée — ${intitule}`
+        : acompteDu
+          ? `Inscription enregistrée — acompte à régler — ${intitule}`
+          : `Inscription enregistrée — règlement à venir — ${intitule}`,
+      html: wrap(`
+        ${toutRegle
+          ? etat("Paiement confirmé", `${euros(dejaRegle)} réglés`, C.vert)
+          : dejaRegle > 0
+            ? etat(soldeSeul ? "Acompte reçu" : "Déjà réglé", euros(dejaRegle), C.vert)
+            : ""}
+        ${titre(toutRegle || soldeSeul
+          ? (nbStages > 1 ? "Vos inscriptions sont confirmées" : "Votre inscription est confirmée")
+          : "Il reste une étape")}
+        ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
+        ${p(nbStages > 1
+          ? `Nous avons enregistré ${nbInscriptions} inscription${nbInscriptions > 1 ? "s" : ""} sur ${nbStages} stages :`
+          : "Nous avons enregistré l'inscription au stage :")}
+        ${nbStages === 1 ? vedette(stages[0]?.stageTitle || "Stage") : ""}
+        ${!toutRegle && !soldeSeul ? p(nbStages > 1
+          ? "Les places sont retenues ; elles seront définitivement acquises dès réception du règlement."
+          : "La place est retenue ; elle sera définitivement acquise dès réception du règlement.") : ""}
+        ${stages.map((s) => panneau(
+          nbStages === 1 ? `Votre stage · ${s.dates}` : `${s.stageTitle} · ${s.dates}`,
+          `${s.enfants.map((e) => ligne(
+            e.name + (e.remise > 0 ? ` <span style="color:${C.gris};font-size:12px;">(remise ${e.remise} €)</span>` : ""),
+            euros(e.prix),
+          )).join("")}`,
+          "calendrier",
+        )).join("")}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 0 8px;border-top:1px solid ${C.bord};">
+          <tr>
+            <td style="padding:12px 0 0;font-family:${POLICE_TEXTE};font-size:12px;font-weight:700;color:${C.encre};">${nbStages > 1 ? `Total des ${nbStages} stages` : "Total"}</td>
+            <td align="right" style="padding:10px 0 0;font-family:${POLICE};font-size:24px;color:${C.encre};">${euros(vars.totalTTC)}</td>
+          </tr>
+        </table>
+        ${vars.derouleHtml || ""}
+        ${acompteDu ? panneau("Ce qu'il reste à faire", `
+          ${ligne(nbStages > 1 ? "Acompte aujourd'hui, pour l'ensemble des stages" : "Acompte aujourd'hui", euros(vars.aRegler))}
+          ${ligne(vars.dateSolde ? `Solde avant le ${vars.dateSolde}` : "Solde, 7 jours avant le stage", euros(vars.solde))}
+          ${p(vars.lienSepare
+            ? "Le lien de paiement de l'acompte vous parvient dans un message séparé : un seul règlement couvre l'ensemble. Le solde vous sera réclamé automatiquement une semaine avant le stage."
+            : "L'acompte se règle depuis votre espace client, en une seule fois. Le solde vous sera réclamé automatiquement une semaine avant le stage.", 12)}
+        `, "carte") : ""}
+        ${totaliteDue ? panneau("Ce qu'il reste à faire", `
+          ${ligne(nbStages > 1 ? "À régler, pour l'ensemble des stages" : "À régler", euros(vars.aRegler))}
+          ${p(vars.lienSepare
+            ? "Le lien de paiement vous parvient dans un message séparé : un seul règlement couvre l'ensemble des inscriptions ci-dessus."
+            : "Vous recevrez sous peu un lien de paiement par email — un seul règlement pour l'ensemble. Le règlement reste possible depuis votre espace client ou directement au centre équestre.", 12)}
+        `, "carte") : ""}
+        ${soldeSeul ? panneau("Reste à venir", `
+          ${ligne(vars.dateSolde ? `Solde avant le ${vars.dateSolde}` : "Solde, 7 jours avant le stage", euros(vars.solde))}
+          ${p("Un rappel avec le lien de paiement vous sera envoyé automatiquement.", 12)}
+        `, "carte") : ""}
+        ${(acompteDu || totaliteDue) && !vars.lienSepare
+          ? button(acompteDu ? "Régler l'acompte" : "Régler mon inscription", `${SITE_URL}/espace-cavalier/factures`)
+          : ""}
+        ${signature()}
+      `, toutRegle || soldeSeul
+          ? `${datesToutes} · ${prenoms.join(", ")}`
+          : acompteDu
+            ? `Acompte de ${euros(vars.aRegler)} · ${intitule}`
+            : `${euros(vars.aRegler)} à régler · ${intitule}`),
+    };
+  },
+
   confirmationCours: (vars: {
     parentName: string;
     childName: string;
