@@ -270,7 +270,7 @@ function renderMagicLinkEmail({
             <td style="background:#f8fafc;padding:24px;text-align:center;border-top:1px solid #e2e8f0;">
               <p style="margin:0;font-size:13px;color:#64748b;line-height:1.6;">
                 EARL Centre Équestre Poney Club d'Agon-Coutainville<br>
-                Une question ? <a href="mailto:ceagon@orange.fr" style="color:#2563eb;text-decoration:none;">ceagon@orange.fr</a>
+                Une question ? <a href="mailto:ceagon50@gmail.com" style="color:#2563eb;text-decoration:none;">ceagon50@gmail.com</a>
               </p>
             </td>
           </tr>

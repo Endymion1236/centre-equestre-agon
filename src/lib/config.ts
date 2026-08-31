@@ -14,7 +14,7 @@ export const SITE_CONFIG = {
   contact: {
     phone: "02 44 84 99 96",
     mobile: "06 09 02 71 59",
-    email: "ceagon@orange.fr",
+    email: "ceagon50@gmail.com",
   },
   social: {
     facebook: "https://www.facebook.com/ceagon50230",

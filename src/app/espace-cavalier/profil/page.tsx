@@ -635,7 +635,7 @@ export default function ProfilPage() {
             <div className="font-body text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Données personnelles</div>
             <p className="font-body text-xs text-gray-500 leading-relaxed mb-3">Vous pouvez demander la suppression de votre compte. Les données de facturation soumises à une obligation légale restent conservées pendant la durée prévue par la réglementation.</p>
             <a
-              href={`mailto:ceagon@orange.fr?subject=Demande de suppression de compte RGPD&body=Bonjour,%0A%0AJe souhaite demander la suppression de mon compte.%0A%0ACompte : ${user?.email || ""}`}
+              href={`mailto:ceagon50@gmail.com?subject=Demande de suppression de compte RGPD&body=Bonjour,%0A%0AJe souhaite demander la suppression de mon compte.%0A%0ACompte : ${user?.email || ""}`}
               className="inline-flex items-center gap-2 font-body text-sm text-red-500 no-underline border border-red-200 px-4 py-2 rounded-lg"
             >
               Demander la suppression de mon compte

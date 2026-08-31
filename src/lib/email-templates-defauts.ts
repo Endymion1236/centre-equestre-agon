@@ -34,17 +34,17 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       emailTitre("La place est réservée"),
       P("Bonjour <strong>{parentName}</strong>,"),
       P('Votre acompte a bien été reçu : la place au stage <strong style="color:' + C.encre + ';">{stageTitle}</strong> est réservée.'),
-      emailPanneau("{dates}", [
+      emailPanneau("Votre stage · {dates}", [
         emailLigne("Horaires", "{horaires}"),
         emailLigne("Cavaliers", "{enfants}"),
-      ].join("")),
+      ].join(""), "calendrier"),
       "{deroule}",
       emailPanneau("Récapitulatif du paiement", [
         emailLigne("Total du stage", "{total}&nbsp;€"),
         emailLigne("Acompte réglé ce jour", "−{acompte}&nbsp;€"),
         emailLigne('<strong style="color:' + C.encre + ';">Solde, avant le {dateSolde}</strong>', '<span style="color:' + C.rouge + ';">{solde}&nbsp;€</span>'),
         P("{soldePhrase}", 12),
-      ].join("")),
+      ].join(""), "carte"),
       "{fidelite}",
       P(A_PREVOIR, 14),
       emailSignature(),
@@ -57,11 +57,11 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       emailTitre("Inscription validée et payée"),
       P("Bonjour <strong>{parentName}</strong>,"),
       P('L\'inscription au stage <strong style="color:' + C.encre + ';">{stageTitle}</strong> est validée et payée.'),
-      emailPanneau("{dates}", [
+      emailPanneau("Votre stage · {dates}", [
         emailLigne("Horaires", "{horaires}"),
         emailLigne("Cavaliers", "{enfants}"),
         emailLigne('<strong style="color:' + C.encre + ';">Total réglé</strong>', "{montant}&nbsp;€"),
-      ].join("")),
+      ].join(""), "calendrier"),
       "{deroule}",
       "{fidelite}",
       P(A_PREVOIR, 14),
@@ -145,7 +145,7 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       emailPanneau("Détail", [
         emailLigne("Prestations", "{prestations}"),
         emailLigne("Mode de règlement", "{mode}"),
-      ].join("")),
+      ].join(""), "carte"),
       "{fidelite}",
       emailButton("Voir mes factures", SITE_URL + "/espace-cavalier/factures"),
       emailSignature("Merci de votre confiance."),

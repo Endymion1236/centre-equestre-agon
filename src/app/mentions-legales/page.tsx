@@ -24,7 +24,7 @@ export default function MentionsLegalesPage() {
               <p><strong>Siège social :</strong> 56 Charrière du Commerce, 50230 Agon-Coutainville, France</p>
               <p><strong>SIRET :</strong> 507 569 184 00017</p>
               <p><strong>Téléphone :</strong> 02 44 84 99 96</p>
-              <p><strong>E-mail :</strong> ceagon@orange.fr</p>
+              <p><strong>E-mail :</strong> ceagon50@gmail.com</p>
             </div>
           </section>
 
@@ -57,7 +57,7 @@ export default function MentionsLegalesPage() {
               Le traitement des données personnelles collectées via ce site est détaillé dans notre{" "}
               <a href="/confidentialite" className="text-blue-500 no-underline hover:underline">Politique de confidentialité</a>.
               Conformément au RGPD, vous disposez d'un droit d'accès, de rectification, d'opposition et d'effacement de vos données.
-              Pour exercer ces droits, contactez-nous à ceagon@orange.fr.
+              Pour exercer ces droits, contactez-nous à ceagon50@gmail.com.
             </p>
           </section>
 
