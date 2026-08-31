@@ -448,6 +448,40 @@ export default function SepaPage() {
     } catch (e: any) { toast(e.message, "error"); }
   };
 
+  /**
+   * Numéro de facture d'une commande soldée par prélèvement.
+   *
+   * Toute commande soldée en reçoit un, séquentiel et continu (CGI art. 242
+   * nonies A) — la caisse le fait depuis `enregistrerEncaissement`. Le dépôt
+   * d'une remise SEPA, lui, écrivait l'encaissement puis mettait la commande
+   * à « réglé » de son côté : elle passait donc payée SANS numéro. Avec une
+   * cinquantaine de familles au prélèvement, c'est le gros des factures de
+   * l'année qui manquait à la séquence.
+   *
+   * Comme à la caisse : aucun repli local en cas d'échec. Mieux vaut une
+   * commande sans numéro, régularisable, qu'un numéro hors séquence qui
+   * casserait la continuité.
+   */
+  const numeroFactureSiSoldee = async (paymentId: string, payData: any) => {
+    if (payData?.invoiceNumber) return {};
+    try {
+      const res = await authFetch("/api/invoice/next-number", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId }),
+      });
+      if (!res.ok) {
+        console.error("Attribution numéro facture (SEPA) — API error:", res.status, await res.text().catch(() => ""));
+        return {};
+      }
+      const data = await res.json().catch(() => null);
+      return data?.invoiceNumber ? { invoiceNumber: data.invoiceNumber } : {};
+    } catch (e) {
+      console.error("Attribution numéro facture (SEPA) — erreur réseau:", e);
+      return {};
+    }
+  };
+
   // ─── Marquer une remise comme déposée ───
   const markDeposited = async (remiseId: string) => {
     // Verrou : deux clics rapprochés (ou deux postes) créeraient deux
@@ -513,12 +547,14 @@ export default function SepaPage() {
         for (const payDoc of paySnap.docs) {
           const payData = payDoc.data();
           if (payData.status === "cancelled") continue;
+          const facture = allPreleve ? await numeroFactureSiSoldee(payDoc.id, payData) : {};
           await updateDoc(doc(db, "payments", payDoc.id), allPreleve ? {
             status: "paid",
             paidAmount: Math.round(totalPreleve * 100) / 100,
             paidAt: serverTimestamp(),
             paymentMode: "prelevement_sepa",
             paymentRef: `SEPA prélevé — remise n°${remiseDoc?.numero || remiseId.slice(-6)}`,
+            ...facture,
           } : {
             status: "partial",
             paidAmount: Math.round(totalPreleve * 100) / 100,
@@ -538,12 +574,17 @@ export default function SepaPage() {
         .filter(e => e.remiseId === remiseId || e.status === "preleve")
         .reduce((s, e) => s + (e.montant || 0), 0);
       try {
+        const paySnapDirect = allPreleve ? await getDoc(doc(db, "payments", payId)) : null;
+        const facture = allPreleve
+          ? await numeroFactureSiSoldee(payId, paySnapDirect?.exists() ? paySnapDirect.data() : null)
+          : {};
         await updateDoc(doc(db, "payments", payId), allPreleve ? {
           status: "paid",
           paidAmount: Math.round(totalPreleve * 100) / 100,
           paidAt: serverTimestamp(),
           paymentMode: "prelevement_sepa",
           paymentRef: `SEPA prélevé — remise n°${remiseDoc?.numero || remiseId.slice(-6)}`,
+          ...facture,
         } : {
           status: "partial",
           paidAmount: Math.round(totalPreleve * 100) / 100,
