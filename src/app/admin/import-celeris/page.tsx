@@ -161,7 +161,14 @@ export default function ImportCelerisPage() {
       }
       const res = await authFetch(url, { method: "POST" });
       const data = await res.json();
-      if (!res.ok) { setErreur(data.error || "Erreur"); setLoading(false); return; }
+      if (!res.ok) {
+        // `indice` porte la marche à suivre quand l'erreur est reconnue
+        // (base de test jamais créée, clé refusée…) : l'afficher évite un
+        // aller-retour par les logs Vercel.
+        setErreur([data.error || "Erreur", data.indice].filter(Boolean).join("\n\n"));
+        setLoading(false);
+        return;
+      }
       setRapport({
         kind: "reset",
         mode: `${data.mode} — COPIE ${data.source} → ${data.destination}`,
@@ -356,8 +363,9 @@ export default function ImportCelerisPage() {
         </button>
       </div>
 
+      {/* whitespace-pre-line : l'indice de réparation s'affiche sur sa propre ligne. */}
       {erreur && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 font-body text-sm text-red-700 mb-4">{erreur}</div>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 font-body text-sm text-red-700 mb-4 whitespace-pre-line">{erreur}</div>
       )}
 
       {rapport && (

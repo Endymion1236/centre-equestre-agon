@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
 
   const apply = req.nextUrl.searchParams.get("apply") === "true";
   const confirm = req.nextUrl.searchParams.get("confirm") || "";
+  let etape = "initialisation";
 
   try {
     if (!destination) {
@@ -85,6 +86,17 @@ export async function POST(req: NextRequest) {
     // Lève si la destination ne se présente pas comme une base de test.
     const dbTest = firestoreDeTest();
 
+    // Étape en cours, pour que l'échec dise OÙ il s'est produit. Une copie qui
+    // ne renvoie que « Erreur interne » n'est pas diagnosticable depuis
+    // l'écran : il faut aller lire les logs Vercel, ce qui n'est pas à la
+    // portée de qui administre le club.
+    etape = "connexion à la base de test";
+
+    // Un aller-retour minimal avant de tout lire : identifiants refusés ou
+    // base Firestore jamais créée se voient ici, en une seconde, plutôt
+    // qu'après plusieurs minutes de lecture.
+    await dbTest.listCollections();
+
     // Toutes les collections de la source, découvertes à l'exécution : aucune
     // liste à maintenir, et rien qui puisse être oublié à l'ajout d'un module.
     const collections = await adminDb.listCollections();
@@ -93,12 +105,14 @@ export async function POST(req: NextRequest) {
     let total = 0;
 
     for (const coll of collections) {
+      etape = `lecture de « ${coll.id} » dans ${source}`;
       const snap = await coll.get();
       parCollection[coll.id] = snap.size;
       total += snap.size;
 
       if (!apply || snap.empty) continue;
 
+      etape = `écriture de « ${coll.id} » (${snap.size} documents) vers ${destination}`;
       let lot = dbTest.batch();
       let dansLeLot = 0;
       for (const docSnap of snap.docs) {
@@ -130,6 +144,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: e.message, projectId: source }, { status: 400 });
     }
     console.error("[copy-prod-to-test]", e);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    // Message réel plutôt que « Erreur interne » : la route est réservée à
+    // l'administration, et sans le motif la copie est impossible à réparer.
+    const message = e instanceof Error ? e.message : String(e);
+    const indice =
+      /NOT_FOUND|does not exist|database .* not found/i.test(message)
+        ? "La base Firestore du projet de test n'existe probablement pas encore. Console Firebase → projet de test → Firestore Database → Créer une base de données (mode production, même région que la production)."
+      : /PERMISSION_DENIED|Missing or insufficient|403/i.test(message)
+        ? "Le compte de service n'a pas les droits sur le projet de test : vérifiez que la clé provient bien de ce projet-là."
+      : /invalid_grant|DECODER|PEM|private key|Getting metadata|invalid_client/i.test(message)
+        ? "Les identifiants sont refusés : clé supprimée, clé d'un autre projet, ou FIREBASE_TEST_PRIVATE_KEY mal collée (le bloc doit commencer par -----BEGIN PRIVATE KEY----- et finir par -----END PRIVATE KEY-----, sans guillemets)."
+      : undefined;
+    return NextResponse.json({
+      error: `Copie interrompue — ${etape} : ${message}`,
+      ...(indice ? { indice } : {}),
+      source,
+      destination,
+      projectId: source,
+    }, { status: 500 });
   }
 }
