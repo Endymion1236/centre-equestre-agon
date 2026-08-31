@@ -287,18 +287,62 @@ const APPARENCE: Record<EtatPaiement, Omit<StatutPaiement, "etat" | "label" | "d
 
 const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
 
+/**
+ * Ce qu'un ensemble de commandes a réellement encaissé.
+ *
+ * Un même calcul sert deux fois : les commandes qui couvrent l'inscription,
+ * et celle qui a vendu la carte de séances dont la place est décomptée.
+ */
+function argentRecu(commandes: any[]): {
+  etat: EtatPaiement; regle: number; total: number; reste: number;
+} {
+  const arrondi = (n: number) => Math.round(n * 100) / 100;
+  const regle = arrondi(commandes.reduce((s: number, p: any) => s + (Number(p.paidAmount) || 0), 0));
+  const total = arrondi(commandes.reduce((s: number, p: any) => s + (Number(p.totalTTC) || 0), 0));
+  const reste = arrondi(Math.max(0, total - regle));
+  // Le statut de la commande ne fait foi que dans un sens : `paid` suffit à
+  // dire réglé, mais `pending` ne prouve rien — c'est le montant qui tranche.
+  const etat: EtatPaiement =
+    commandes.some((p: any) => p.status === "paid") || (total > 0 && reste < 0.01) ? "regle"
+      : regle > 0.009 ? "partiel"
+      : "impaye";
+  return { etat, regle, total, reste };
+}
+
 export function statutPaiementCavalier(
-  enrolled: { childId: string; familyId?: string; stageKey?: string; paymentSource?: string },
+  enrolled: { childId: string; familyId?: string; stageKey?: string; paymentSource?: string; cardId?: string },
   payments: any[],
   creneau: { id?: string; activityTitle: string },
 ): StatutPaiement {
   const habiller = (etat: EtatPaiement, label: string, detail: string): StatutPaiement =>
     ({ etat, label, detail, ...APPARENCE[etat] });
+  const vivantes = payments.filter((p: any) => p.status !== "cancelled");
 
-  // Règlements portés par l'inscription elle-même, sans commande à retrouver.
+  // ── Carte de séances ────────────────────────────────────────────────────
+  // La place n'est pas facturée ici : elle est décomptée d'une carte, vendue
+  // une fois pour dix séances. C'est donc le règlement de LA CARTE qui décide
+  // de la couleur — une carte remise sans encaissement n'est pas une place
+  // payée.
   if (enrolled.paymentSource === "card") {
-    return habiller("regle", "carte", "Réglé par carte en ligne.");
+    const carteId = enrolled.cardId;
+    const commandes = carteId
+      ? vivantes.filter((p: any) =>
+          p.cardId === carteId || (p.items || []).some((i: any) => i.cardId === carteId))
+      : [];
+    if (commandes.length === 0) {
+      // Carte importée ou saisie avant que les cartes soient rattachées à une
+      // commande : rien ne permet de dire qu'elle n'est pas payée.
+      return habiller("regle", "carte", "Séance décomptée d'une carte — aucune commande retrouvée pour cette carte.");
+    }
+    const { etat, regle, total, reste } = argentRecu(commandes);
+    if (etat === "regle") return habiller("regle", "carte", `Séance décomptée d'une carte réglée (${eur(total)}).`);
+    if (etat === "partiel") {
+      return habiller("partiel", "carte à solder", `Carte réglée en partie : ${eur(regle)} sur ${eur(total)} — reste ${eur(reste)}.`);
+    }
+    return habiller("impaye", "carte à régler", `Carte remise sans encaissement — ${eur(total)} dus.`);
   }
+
+  // ── Règlements portés par l'inscription elle-même ───────────────────────
   if (enrolled.paymentSource === "celeris") {
     return habiller("regle", "réglé (Celeris)", "Encaissé dans Celeris, avant la reprise.");
   }
@@ -308,10 +352,9 @@ export function statutPaiementCavalier(
       : habiller("impaye", "forfait à régler", "Forfait annuel enregistré, mais aucune échéance encaissée.");
   }
 
-  // Commandes de la famille qui couvrent cette inscription.
-  const commandes = payments.filter((p: any) =>
+  // ── Commandes de la famille qui couvrent cette inscription ──────────────
+  const commandes = vivantes.filter((p: any) =>
     p.familyId === enrolled.familyId &&
-    p.status !== "cancelled" &&
     (p.items || []).some((i: any) => itemMatchesCreneau(i, enrolled, creneau)),
   );
 
@@ -319,19 +362,14 @@ export function statutPaiementCavalier(
     return habiller("impaye", "non réglé", "Aucune commande enregistrée pour cette inscription.");
   }
 
-  const arrondi = (n: number) => Math.round(n * 100) / 100;
-  const regle = arrondi(commandes.reduce((s: number, p: any) => s + (Number(p.paidAmount) || 0), 0));
-  const total = arrondi(commandes.reduce((s: number, p: any) => s + (Number(p.totalTTC) || 0), 0));
-  const reste = arrondi(Math.max(0, total - regle));
+  const { etat, regle, total, reste } = argentRecu(commandes);
   // Une commande peut porter plusieurs cavaliers (le panier unique d'une
   // famille) : les montants sont ceux de la commande, on le dit.
   const portee = commandes.length > 1 ? "des commandes" : "de la commande";
 
-  if (commandes.some((p: any) => p.status === "paid") || (total > 0 && reste < 0.01)) {
-    return habiller("regle", "réglé", `Réglé — ${eur(regle || total)}.`);
-  }
+  if (etat === "regle") return habiller("regle", "réglé", `Réglé — ${eur(regle || total)}.`);
 
-  if (regle > 0.009) {
+  if (etat === "partiel") {
     // « Acompte versé » quand le montant reçu correspond à l'acompte attendu :
     // c'est le mot qu'emploie la famille, et il dit que le reste est prévu.
     const estAcompte = commandes.some((p: any) =>

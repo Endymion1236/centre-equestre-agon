@@ -70,12 +70,37 @@ console.log("\n✓ Une commande soldée passe au vert :");
   assert("la pastille est verte", s.point.includes("green"), s.point);
 }
 
+console.log("\n✓ Une carte de séances suit le règlement de la carte :");
+{
+  // La place n'est pas facturée : elle est décomptée d'une carte de dix
+  // séances, vendue une fois. C'est donc l'encaissement de LA CARTE qui
+  // décide — une carte remise sans règlement n'est pas une place payée.
+  const carteVendue = (paidAmount: number, status: string) => ([{
+    familyId: "favory", status, paidAmount, totalTTC: 190, cardId: "carte1",
+    items: [{ childId: "c1", cardId: "carte1", activityTitle: "Carte 10 séances — Romane" }],
+  }]);
+  const inscritCarte = { ...INSCRIT, paymentSource: "card", cardId: "carte1" };
+
+  const reglee = statutPaiementCavalier(inscritCarte, carteVendue(190, "paid"), CRENEAU);
+  assert("carte réglée : vert", reglee.etat === "regle", reglee.etat);
+  assert("le libellé dit « carte »", reglee.label === "carte", reglee.label);
+
+  const impayee = statutPaiementCavalier(inscritCarte, carteVendue(0, "pending"), CRENEAU);
+  assert("carte remise sans encaissement : rouge", impayee.etat === "impaye", impayee.etat);
+  assert("le libellé dit ce qu'il manque", impayee.label === "carte à régler", impayee.label);
+  assert("le survol donne le montant de la carte", impayee.detail.includes("190,00"), impayee.detail);
+
+  const partielle = statutPaiementCavalier(inscritCarte, carteVendue(90, "partial"), CRENEAU);
+  assert("carte réglée en partie : orange", partielle.etat === "partiel", partielle.etat);
+
+  const orpheline = statutPaiementCavalier(inscritCarte, [], CRENEAU);
+  assert("carte sans commande retrouvée : vert, faute de preuve du contraire",
+    orpheline.etat === "regle", orpheline.etat);
+  assert("et le survol le dit", orpheline.detail.includes("aucune commande"), orpheline.detail);
+}
+
 console.log("\n✓ Le mode de règlement reste dans le libellé, pas dans la couleur :");
 {
-  const carte = statutPaiementCavalier({ ...INSCRIT, paymentSource: "card" }, [], CRENEAU);
-  assert("payé par carte : vert", carte.etat === "regle" && carte.point.includes("green"), carte.point);
-  assert("le libellé dit « carte »", carte.label === "carte", carte.label);
-
   const celeris = statutPaiementCavalier({ ...INSCRIT, paymentSource: "celeris" }, [], CRENEAU);
   assert("réglé dans Celeris : vert", celeris.etat === "regle", celeris.etat);
 
