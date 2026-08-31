@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prestationsCourtes } from "@/lib/email-prestations";
+import { jetonPaiement, JOURS_VALIDITE } from "@/lib/jeton-paiement";
 import {
   emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe, emailSignature, emailCouleurs as COULEURS, euros, eurosTexte,
@@ -47,45 +48,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Montant supérieur au reste dû (${resteDu.toFixed(2)}€)` }, { status: 400 });
     }
 
-    // 2. Générer le lien CAWL
+    // 2. Fabriquer le lien de paiement
     const origin = req.nextUrl.origin;
-    const authHeader = req.headers.get("authorization") || "";
-    // Si ce lien correspond à l'ACOMPTE de la commande (montant ≈ acompteAmount,
-    // rien encore payé), on le déclare comme acompte au checkout : CAWL
-    // TOKENISE alors la carte (Card-On-File), indispensable au prélèvement
-    // automatique du solde à J-7 (MIT/delayedCharge). Le montant reste `amount`.
-    const acompteAttendu = typeof payData.acompteAmount === "number" ? payData.acompteAmount : 0;
-    const estLienAcompte =
-      acompteAttendu > 0 &&
-      (payData.paidAmount || 0) < 0.01 &&
-      Math.abs(amount - acompteAttendu) < 0.02 &&
-      (payData.totalTTC || 0) > amount;
-    const depositPercentLien = estLienAcompte
-      ? Math.min(99, Math.max(1, Math.round((amount / (payData.totalTTC || amount)) * 100)))
-      : 0;
-    const cawlRes = await fetch(`${origin}/api/cawl/checkout`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": authHeader },
-      body: JSON.stringify({
-        items: (payData.items || []).map((i: any) => ({
-          name: i.activityTitle || i.description || "Prestation",
-          priceTTC: 0, // on utilise totalTTC direct
-        })),
-        totalTTC: amount,
-        ...(depositPercentLien > 0 ? { depositPercent: depositPercentLien } : {}),
-        familyId: familyId || payData.familyId,
-        familyEmail: recipientEmail,
-        familyName: familyName || payData.familyName,
-        paymentId,
-      }),
-    });
-
-    if (!cawlRes.ok) {
-      const err = await cawlRes.json().catch(() => ({}));
-      return NextResponse.json({ error: err.error || "Erreur CAWL" }, { status: 500 });
-    }
-
-    const { url: paymentUrl } = await cawlRes.json();
+    // ── Le lien envoyé ne mène PAS directement à CAWL ────────────────────
+    //
+    // On créait ici la session de paiement, et l'email portait son URL. Or une
+    // session CAWL vit deux heures, son URL de redirection trois : un lien
+    // envoyé le soir était mort le lendemain matin. Une famille l'a découvert
+    // le 31/08/2026 en essayant de régler son acompte.
+    //
+    // L'email porte désormais un lien vers nous, signé, valable trente jours.
+    // C'est le clic qui fabrique une session neuve, et qui revérifie au
+    // passage ce qui reste dû (cf. /api/payer/[paymentId]).
+    //
+    // C'est aussi cette route qui décide si le règlement est un acompte, à
+    // partir de `acompteAmount` : la carte doit alors être tokenisée
+    // (Card-On-File) pour permettre le prélèvement automatique du solde à J-7.
+    // Le décider ici, à l'envoi, aurait figé une information que trente jours
+    // suffisent à périmer.
+    const paymentUrl = `${origin}/api/payer/${paymentId}?t=${jetonPaiement(paymentId)}`;
 
     // 3. Envoyer l'email avec le lien
     // Le panier a DÉJÀ mis le prénom dans activityTitle : le recoller donnait
@@ -150,7 +131,7 @@ export async function POST(req: NextRequest) {
         amount < resteDu ? emailLigne("Reste dû après ce paiement", euros(resteDu - amount)) : "",
       ].join("")),
       qrSection,
-      emailParagraphe(`<span style="color:${COULEURS.discret};">Paiement sécurisé par CAWL — Crédit Agricole. Ce lien est valable 2 heures.</span>`, 11),
+      emailParagraphe(`<span style="color:${COULEURS.discret};">Paiement sécurisé par CAWL — Crédit Agricole. Ce lien reste valable ${JOURS_VALIDITE} jours.</span>`, 11),
       emailSignature(),
     ].join("\n"), `${euros(amount)} — ${prestations}`);
 
