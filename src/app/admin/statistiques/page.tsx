@@ -5,9 +5,11 @@ import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
+import { authFetch } from "@/lib/auth-fetch";
 import { Card, Badge } from "@/components/ui";
 import {
   Loader2,
+  Globe,
   TrendingUp,
   BarChart3,
   PieChart,
@@ -133,16 +135,43 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 // ═══════════════════════════════════════════
 // COMPOSANT PRINCIPAL
 // ═══════════════════════════════════════════
+/** Ce que renvoie /api/visites : des compteurs par jour, et rien d'autre. */
+type Frequentation = {
+  jours: number;
+  parJour: { jour: string; vues: number; visiteurs: number; pages: Record<string, number> }[];
+  pages: Record<string, number>;
+  totalVues: number;
+  totalVisiteurs: number;
+};
+
 export default function StatistiquesPage() {
   // Page RÉSERVÉE aux admins. Elle n'apparaît pas dans le menu des moniteurs,
   // mais sans garde interne une URL tapée à la main donnait accès à tout le
   // chiffre d'affaires. L'absence de lien n'est pas un contrôle d'accès.
   const { isAdmin, loading: authLoading } = useAuth();
-  const [tab, setTab] = useState<"ca" | "finances" | "remplissage" | "moniteurs" | "cavaliers">("ca");
+  const [tab, setTab] = useState<"ca" | "finances" | "remplissage" | "moniteurs" | "cavaliers" | "frequentation">("ca");
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
   // Catégories dépliées dans "CA par catégorie" (détail par niveau/titre).
   const [caExpanded, setCaExpanded] = useState<Record<string, boolean>>({});
+
+  // Fréquentation du site public. Chargée seulement quand l'onglet est ouvert :
+  // elle passe par une route serveur, inutile de la demander à chaque visite
+  // de la page Statistiques.
+  const [freq, setFreq] = useState<Frequentation | null>(null);
+  const [freqJours, setFreqJours] = useState(30);
+  const [freqEtat, setFreqEtat] = useState<"vide" | "chargement" | "ok" | "erreur">("vide");
+
+  useEffect(() => {
+    if (tab !== "frequentation") return;
+    let annule = false;
+    setFreqEtat("chargement");
+    authFetch(`/api/visites?jours=${freqJours}`)
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(String(r.status))))
+      .then(d => { if (!annule) { setFreq(d); setFreqEtat("ok"); } })
+      .catch(() => { if (!annule) setFreqEtat("erreur"); });
+    return () => { annule = true; };
+  }, [tab, freqJours]);
 
   // Data
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -492,6 +521,7 @@ export default function StatistiquesPage() {
     { id: "remplissage" as const, label: "Remplissage & heures", icon: BarChart3 },
     { id: "moniteurs" as const, label: "Moniteurs", icon: Clock },
     { id: "cavaliers" as const, label: "Cavaliers", icon: Users },
+    { id: "frequentation" as const, label: "Fréquentation du site", icon: Globe },
   ];
 
   // Accès refusé aux non-admins (URL tapée directement).
@@ -1101,6 +1131,156 @@ export default function StatistiquesPage() {
               </div>
             </Card>
           </div>
+        </>
+      )}
+
+      {/* ═══ ONGLET FRÉQUENTATION DU SITE ═══ */}
+      {tab === "frequentation" && (
+        <>
+          <div className="flex flex-wrap items-center gap-2 mb-5">
+            {[7, 30, 90, 365].map(n => (
+              <button type="button" key={n} onClick={() => setFreqJours(n)}
+                className={`px-3.5 py-2 rounded-full font-body text-xs font-semibold cursor-pointer border transition-colors
+                  ${freqJours === n
+                    ? "bg-blue-500 text-white border-blue-500"
+                    : "bg-white text-gray-500 border-gray-200 hover:border-blue-200"}`}>
+                {n === 365 ? "1 an" : `${n} jours`}
+              </button>
+            ))}
+          </div>
+
+          {freqEtat === "chargement" && (
+            <Card padding="lg"><div className="flex items-center gap-3 font-body text-sm text-gray-500">
+              <Loader2 size={18} className="animate-spin" /> Chargement de la fréquentation…
+            </div></Card>
+          )}
+
+          {freqEtat === "erreur" && (
+            <Card padding="lg"><div className="font-body text-sm text-red-600">
+              La fréquentation n'a pas pu être chargée. Ce n'est pas qu'il n'y a eu aucune visite :
+              la page ne sait simplement pas les lire pour l'instant.
+            </div></Card>
+          )}
+
+          {freqEtat === "ok" && freq && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+                <Card padding="md">
+                  <SectionTitle>Visiteurs</SectionTitle>
+                  <div className="font-body text-3xl font-bold text-blue-600">{freq.totalVisiteurs}</div>
+                  <div className="font-body text-xs text-gray-400 mt-1">sur {freq.jours} jours</div>
+                </Card>
+                <Card padding="md">
+                  <SectionTitle>Pages vues</SectionTitle>
+                  <div className="font-body text-3xl font-bold text-blue-950">{freq.totalVues}</div>
+                  <div className="font-body text-xs text-gray-400 mt-1">
+                    {freq.totalVisiteurs > 0
+                      ? `${(freq.totalVues / freq.totalVisiteurs).toFixed(1)} pages par visiteur`
+                      : "—"}
+                  </div>
+                </Card>
+                <Card padding="md">
+                  <SectionTitle>Moyenne par jour</SectionTitle>
+                  <div className="font-body text-3xl font-bold text-blue-950">
+                    {freq.jours > 0 ? Math.round(freq.totalVisiteurs / freq.jours) : 0}
+                  </div>
+                  <div className="font-body text-xs text-gray-400 mt-1">visiteurs</div>
+                </Card>
+                <Card padding="md">
+                  <SectionTitle>Meilleure journée</SectionTitle>
+                  {(() => {
+                    const top = [...freq.parJour].sort((a, b) => b.visiteurs - a.visiteurs)[0];
+                    return top
+                      ? <>
+                          <div className="font-body text-3xl font-bold text-blue-950">{top.visiteurs}</div>
+                          <div className="font-body text-xs text-gray-400 mt-1">
+                            {new Date(top.jour).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}
+                          </div>
+                        </>
+                      : <div className="font-body text-sm text-gray-400">—</div>;
+                  })()}
+                </Card>
+              </div>
+
+              {freq.parJour.length === 0 ? (
+                <Card padding="lg"><div className="font-body text-sm text-gray-500">
+                  Aucune visite enregistrée sur cette période. Le compteur ne connaît que les jours
+                  postérieurs à sa mise en service : avant, rien n'était mesuré.
+                </div></Card>
+              ) : (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Card padding="md">
+                    <SectionTitle>Jour par jour</SectionTitle>
+                    <div className="mt-3 space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
+                      {(() => {
+                        const max = Math.max(...freq.parJour.map(j => j.visiteurs), 1);
+                        return [...freq.parJour].reverse().map(j => (
+                          <div key={j.jour} className="flex items-center gap-3">
+                            <div className="font-body text-xs text-gray-500 w-24 flex-shrink-0">
+                              {new Date(j.jour).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })}
+                            </div>
+                            <div className="flex-1 h-4 rounded bg-gray-100 overflow-hidden">
+                              <div className="h-full rounded bg-blue-400" style={{ width: `${(j.visiteurs / max) * 100}%` }} />
+                            </div>
+                            <div className="font-body text-xs font-semibold text-blue-950 w-16 text-right flex-shrink-0">
+                              {j.visiteurs} <span className="font-normal text-gray-400">/ {j.vues}</span>
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                    <div className="font-body text-xs text-gray-400 mt-3">Visiteurs / pages vues</div>
+                  </Card>
+
+                  <Card padding="md">
+                    <SectionTitle>Pages les plus consultées</SectionTitle>
+                    <div className="mt-3 space-y-1.5">
+                      {(() => {
+                        const rangs = Object.entries(freq.pages).sort((a, b) => b[1] - a[1]);
+                        const max = Math.max(...rangs.map(([, n]) => n), 1);
+                        return rangs.map(([rubrique, n]) => (
+                          <div key={rubrique} className="flex items-center gap-3">
+                            <div className="font-body text-xs text-gray-600 w-32 flex-shrink-0 capitalize">
+                              {rubrique.replace(/-/g, " ")}
+                            </div>
+                            <div className="flex-1 h-4 rounded bg-gray-100 overflow-hidden">
+                              <div className="h-full rounded bg-gold-400" style={{ width: `${(n / max) * 100}%` }} />
+                            </div>
+                            <div className="font-body text-xs font-semibold text-blue-950 w-12 text-right flex-shrink-0">{n}</div>
+                          </div>
+                        ));
+                      })()}
+                    </div>
+                  </Card>
+                </div>
+              )}
+
+              <Card padding="md" className="mt-4">
+                <SectionTitle>Ce que ce compteur mesure</SectionTitle>
+                <div className="font-body text-xs leading-relaxed text-gray-500 mt-2 space-y-1.5">
+                  <p>
+                    Un <strong>visiteur</strong> est compté une fois par session, quel que soit le nombre de
+                    pages qu'il consulte. Une <strong>page vue</strong> est comptée à chaque page.
+                  </p>
+                  <p>
+                    Les robots sont écartés de deux façons : le compteur s'exécute dans le navigateur, ce que
+                    la plupart des robots d'indexation ne font pas ; et ceux qui le font sont reconnus à leur
+                    signature. Un robot qui exécute le JavaScript <em>et</em> se fait passer pour un navigateur
+                    passera malgré tout — c'est vrai de tous les compteurs. Le chiffre est une bonne mesure,
+                    pas une mesure exacte.
+                  </p>
+                  <p>
+                    Vos propres écrans ne sont pas comptés : administration, espace famille, espace moniteur
+                    et borne en sont exclus.
+                  </p>
+                  <p>
+                    Aucune adresse IP, aucun cookie, aucun identifiant de visiteur n'est enregistré — seulement
+                    des totaux par jour. C'est ce qui dispense le site de bandeau cookies.
+                  </p>
+                </div>
+              </Card>
+            </>
+          )}
         </>
       )}
     </div>

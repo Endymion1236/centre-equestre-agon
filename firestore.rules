@@ -767,6 +767,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Compteur de fréquentation du site public ──────────────────────────
+    // Un document par jour, qui ne contient que des compteurs — ni adresse IP,
+    // ni identifiant de visiteur. Ecrit UNIQUEMENT cote serveur (Admin SDK,
+    // qui ignore ces regles) : c'est la route /api/visites qui filtre les
+    // robots et range la page dans une rubrique connue. Ouvrir l'ecriture au
+    // navigateur laisserait gonfler le compteur depuis la console.
+    // La lecture reste fermee ici aussi : l'administration passe par la meme
+    // route, en GET, ou l'acces admin est verifie.
+    match /visites/{jour} {
+      allow read, write: if false;
+    }
+
     // ── Bloc par défaut — DENY ALL ────────────────────────────────────────
     // Toute collection non listée ci-dessus est bloquée
     match /{document=**} {
