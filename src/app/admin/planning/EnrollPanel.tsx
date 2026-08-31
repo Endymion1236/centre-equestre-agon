@@ -288,6 +288,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [licence, setLicence] = useState(true);
   const [assuranceOccasionnelle, setAssuranceOccasionnelle] = useState(false);
   const [payPlan, setPayPlan] = useState<"1x" | "3x" | "10x">("1x");
+  // Remise famille ajustée à la main : le barème (settings/degressivite) ne
+  // prévoit pas tout — une famille de cinq cavaliers qui montent beaucoup ne
+  // rentre dans aucune ligne. Vide = barème appliqué tel quel.
+  const [remisePctManuel, setRemisePctManuel] = useState("");
+  const [remiseMotif, setRemiseMotif] = useState("");
+  const [editRemise, setEditRemise] = useState(false);
   const [annualPayMode, setAnnualPayMode] = useState<string>("cb_terminal");
   // Verdict du controle de mandat, remonte par SepaWarning : sans lui, le
   // bouton restait actif et l'inscription echouait au clic.
@@ -1455,7 +1461,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, []);
 
   const familyRule = familyDiscountRules.find(r => r.nth === rangEnfantFamille);
-  const familyDiscountPercent = familyRule?.discount || 0;
+  const remiseBaremePercent = familyRule?.discount || 0;
+  // Une saisie manuelle prend le pas sur le barème — y compris pour le
+  // descendre, ou pour en accorder une là où le barème n'en prévoit aucune.
+  const remiseSaisie = remisePctManuel.trim() !== "" && Number.isFinite(Number(remisePctManuel));
+  const familyDiscountPercent = remiseSaisie
+    ? Math.min(100, Math.max(0, Number(remisePctManuel)))
+    : remiseBaremePercent;
+  const remiseHorsBareme = remiseSaisie && familyDiscountPercent !== remiseBaremePercent;
   const familyDiscountAmount = familyDiscountPercent > 0 ? Math.round(prixForfaitBrut * familyDiscountPercent / 100 * 100) / 100 : 0;
   const prixForfait = prixForfaitBrut - familyDiscountAmount;
 
@@ -2246,6 +2259,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           licenceType,
           adhesion,
           prixForfaitAnnuel,
+          remiseFamillePercent: familyDiscountPercent,
+          ...(remiseHorsBareme ? { remiseHorsBareme: true, remiseBaremePercent, remiseMotif: remiseMotif.trim() || null } : {}),
           prorata: Math.round(prorata * 100),
           forfaitPriceTTC: totalAnnuel,
           totalPaidTTC: 0,
@@ -2285,7 +2300,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         }
         // Ligne de réduction famille si applicable
         if (familyDiscountAmount > 0) {
-          items.push({ activityTitle: `Réduction famille (${rangEnfantFamille}ème enfant, -${familyDiscountPercent}%)`, childId: selChild, childName, priceHT: -familyDiscountAmount / 1.055, tva: 5.5, priceTTC: -familyDiscountAmount });
+          // Le motif figure sur la facture : une remise hors barème doit dire
+          // pourquoi, sans quoi personne ne saura la justifier dans six mois.
+          const motif = remiseMotif.trim();
+          const libelleRemise = `Réduction famille (${rangEnfantFamille}ème enfant, -${familyDiscountPercent}%`
+            + (remiseHorsBareme ? ` — ${motif || "remise exceptionnelle"}` : "")
+            + ")";
+          items.push({ activityTitle: libelleRemise, childId: selChild, childName, priceHT: -familyDiscountAmount / 1.055, tva: 5.5, priceTTC: -familyDiscountAmount,
+            ...(remiseHorsBareme ? { remiseHorsBareme: true, remiseBaremePercent, remiseMotif: motif || null } : {}) });
         }
 
         // Chercher un paiement annuel pending existant pour cette famille (pour regrouper la fratrie)
@@ -2578,6 +2600,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     // Nicolas : a inscrit Suzanne puis click Marianne, mais Suzanne inscrite
     // 2x.
     setSelChild(""); setSelectedChildren([]); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage"); setUseRattrapage(null); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
+    // La remise ajustée vaut pour l'inscription qu'on vient de faire, pas pour
+    // la suivante : on repart du barème.
+    setRemisePctManuel(""); setRemiseMotif(""); setEditRemise(false);
     setTimeout(() => setJustEnrolled(""), 5000);
   };
 
@@ -4483,11 +4508,50 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         {prorata >= 1 && <> · Tarif plein (début de saison)</>}
                       </div>
                     </div>
-                    {/* Réduction famille */}
-                    {familyDiscountAmount > 0 && (
-                      <div className="flex items-center justify-between">
-                        <span className="font-body text-sm text-green-700">👨‍👩‍👧‍👦 Réduction famille ({rangEnfantFamille}ème enfant, -{familyDiscountPercent}%)</span>
-                        <span className="font-body text-sm font-semibold text-green-600">-{familyDiscountAmount.toFixed(2)}€</span>
+                    {/* Réduction famille — barème, ajustable à la main.
+                        Le barème ne prévoit pas tout : une fratrie nombreuse
+                        qui monte beaucoup ne rentre dans aucune de ses lignes,
+                        et le tarif était jusqu'ici impossible à négocier sans
+                        passer par une remise ajoutée après coup à la commande. */}
+                    <div className="flex items-center justify-between">
+                      <span className="font-body text-sm text-green-700">
+                        👨‍👩‍👧‍👦 Réduction famille {rangEnfantFamille > 1 ? `(${rangEnfantFamille}ème enfant, ` : "("}−{familyDiscountPercent}%)
+                        {remiseHorsBareme && (
+                          <span className="ml-1 text-[10px] font-semibold text-orange-600">hors barème ({remiseBaremePercent}%)</span>
+                        )}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <span className="font-body text-sm font-semibold text-green-600">−{familyDiscountAmount.toFixed(2)}€</span>
+                        <button type="button" onClick={() => setEditRemise(v => !v)}
+                          title="Ajuster la remise de cette famille"
+                          className="font-body text-[11px] font-semibold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-md border-none cursor-pointer hover:bg-blue-100">
+                          Ajuster
+                        </button>
+                      </span>
+                    </div>
+                    {editRemise && (
+                      <div className="bg-white border border-blue-200 rounded-lg p-2.5 flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <input type="number" min="0" max="100" step="1"
+                            value={remisePctManuel} onChange={e => setRemisePctManuel(e.target.value)}
+                            placeholder={String(remiseBaremePercent)}
+                            className="w-20 px-2 py-1.5 rounded-lg border border-gray-200 font-body text-sm" />
+                          <span className="font-body text-xs text-slate-600">% sur le forfait ({prixForfaitBrut.toFixed(2)}€)</span>
+                          {remiseSaisie && (
+                            <button type="button" onClick={() => { setRemisePctManuel(""); setRemiseMotif(""); }}
+                              className="ml-auto font-body text-[11px] text-slate-500 bg-transparent border-none cursor-pointer hover:underline">
+                              Revenir au barème ({remiseBaremePercent}%)
+                            </button>
+                          )}
+                        </div>
+                        {remiseHorsBareme && (
+                          <input value={remiseMotif} onChange={e => setRemiseMotif(e.target.value)}
+                            placeholder="Motif (fratrie de 5, fidélité, geste commercial…)"
+                            className="w-full px-2 py-1.5 rounded-lg border border-gray-200 font-body text-xs" />
+                        )}
+                        <div className="font-body text-[10px] text-slate-500">
+                          Le motif est repris sur la facture, à côté de la remise.
+                        </div>
                       </div>
                     )}
                     {/* Total */}
