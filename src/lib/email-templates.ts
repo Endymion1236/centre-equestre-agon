@@ -59,7 +59,27 @@ function wrap(content: string, preheader = "") {
     ? `<div style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;font-size:1px;line-height:1px;color:${C.fond};">${preheader}${"&#847;&zwnj;&nbsp;".repeat(40)}</div>`
     : "";
 
-  return `${apercu}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.fond};margin:0;padding:18px 8px;">
+  // Document complet plutôt que fragment : c'est le seul endroit où une
+  // messagerie lit `color-scheme`, et sans elle plusieurs d'entre elles
+  // inversent l'email en mode sombre — fond blanc devenu noir, sable devenu
+  // gris anthracite. Apple Mail et Outlook respectent cette déclaration et
+  // laissent le message tel quel. L'application Gmail sur Android, non : elle
+  // inverse quoi qu'on écrive, et aucune balise ne l'en empêche.
+  //
+  // C'est pourquoi rien ici ne repose sur la clarté d'un fond : les textes
+  // portent tous une couleur explicite, et l'en-tête bleu nuit reste lisible
+  // dans les deux sens. Le message inversé est moins beau, jamais illisible.
+  return `<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="color-scheme" content="light" />
+<meta name="supported-color-schemes" content="light" />
+<style>:root{color-scheme:light;supported-color-schemes:light;}</style>
+</head>
+<body style="margin:0;padding:0;background:${C.fond};">
+${apercu}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${C.fond};margin:0;padding:18px 8px;">
   <tr><td align="center">
     <table role="presentation" width="620" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:620px;border-collapse:separate;border-spacing:0;">
 
@@ -69,7 +89,7 @@ function wrap(content: string, preheader = "") {
             <tr>
               <td width="54" style="width:54px;vertical-align:middle;padding-right:14px;">
                 <img src="${SITE_URL}/images/logo-ce-agon.png" width="46" height="46" alt="Centre Équestre d'Agon-Coutainville"
-                     style="display:block;width:46px;height:46px;border:0;border-radius:9px;background:#ffffff;" />
+                     style="display:block;width:46px;height:46px;border:0;" />
               </td>
               <td style="vertical-align:middle;">
                 <div style="font-family:${POLICE};font-size:21px;line-height:1.15;color:#ffffff;font-weight:normal;">Centre Équestre</div>
@@ -116,7 +136,9 @@ function wrap(content: string, preheader = "") {
 
     </table>
   </td></tr>
-</table>`;
+</table>
+</body>
+</html>`;
 }
 
 function button(text: string, url: string, color: string = C.encre) {
