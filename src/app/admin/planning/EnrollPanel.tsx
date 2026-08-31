@@ -109,7 +109,7 @@ import {
 } from "@/lib/discounts";
 import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, itemMatchesCreneau, isForfaitChildPaye, sameStage } from "./types";
+import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, statutPaiementCavalier, sameStage } from "./types";
 import { MOTIFS_OFFERT } from "@/lib/offerts";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
@@ -3173,53 +3173,26 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           )}
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
-            const isCard = e.paymentSource === "card";
-            const isCeleris = e.paymentSource === "celeris";
-            // ── Cas forfait annuel ─────────────────────────────────────
-            // Quand l'enfant est inscrit via un forfait annuel, on
-            // distingue 2 sous-cas selon que le forfait est encaisse ou pas :
-            //  - forfait paye    → vert emeraude "forfait" (couvert)
-            //  - forfait pending → orange "forfait en attente" (commande
-            //    cree mais non encore encaissee)
-            // Sans cette distinction, on avait un faux positif (vert)
-            // sur tous les creneaux d'un eleve qui n'avait pas encore paye.
-            const isForfait = e.paymentSource === "forfait";
-            const isForfaitPaid = isForfait && isForfaitChildPaye(payments, e.familyId, e.childId);
-            const isForfaitPending = isForfait && !isForfaitPaid;
-            const matchesThisEnrollment = (item: any) => itemMatchesCreneau(item, e, creneau);
-            const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((p: any) =>
-              p.familyId === e.familyId &&
-              p.status === "paid" &&
-              (p.items || []).some(matchesThisEnrollment)
-            );
-            const hasPending = !hasPaid && !isCeleris && (isForfaitPending || payments.some((p: any) =>
-              p.familyId === e.familyId &&
-              (p.status === "pending" || p.status === "partial") &&
-              (p.items || []).some(matchesThisEnrollment)
-            ));
+            // Rouge rien reçu, orange partiellement réglé, vert réglé.
+            //
+            // Le planning regardait le STATUT de la commande, et rangeait
+            // `pending` (créée, jamais payée) avec `partial` (acompte reçu)
+            // sous le même « en attente » orange : une famille relancée par
+            // lien de paiement, qui n'a rien envoyé, s'affichait comme celle
+            // qui avait versé son acompte. La couleur suit maintenant
+            // l'argent encaissé — cf. statutPaiementCavalier dans types.ts,
+            // partagé avec les trois autres vues.
+            const statut = statutPaiementCavalier(e, payments, creneau);
             const enrolledFam = allFamilies.find(f => f.firestoreId === e.familyId);
             const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
             const age = calcAge(enrolledChild?.birthDate);
             const galop = (enrolledChild as any)?.galopLevel || "—";
-            // Label : carte > celeris > forfait payé > forfait en attente > réglé > en attente > rien
-            const statusLabel = isCard ? "carte"
-              : isCeleris ? "réglé (Celeris)"
-              : isForfaitPaid ? "forfait"
-              : isForfaitPending ? "forfait à régler"
-              : hasPaid ? "réglé"
-              : hasPending ? "en attente"
-              : "";
-            const statusColor = isCard ? "bg-blue-500"
-              : isCeleris ? "bg-teal-500"
-              : isForfaitPaid ? "bg-emerald-500"
-              : isForfaitPending ? "bg-amber-500"
-              : hasPaid ? "bg-green-500"
-              : hasPending ? "bg-orange-400"
-              : "bg-gray-300";
+            const statusLabel = statut.label;
+            const statusColor = statut.point;
             return (
               <div key={e.childId} className="flex flex-wrap items-center justify-between gap-y-1.5 bg-sand rounded-lg px-3 py-2">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 flex-1">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} title={statusLabel || undefined}></span>
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} title={`${statusLabel} — ${statut.detail}`}></span>
                   <a
                     href={
                       isMoniteur && !isAdmin
@@ -3236,7 +3209,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
-                  {statusLabel && <span className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${isForfaitPaid ? "text-emerald-700 bg-emerald-50" : isForfaitPending ? "text-amber-700 bg-amber-50" : hasPaid ? "text-green-700 bg-green-50" : "text-orange-600 bg-orange-50"}`}>{statusLabel}</span>}
+                  {statusLabel && <span title={statut.detail} className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${statut.etat === "regle" ? "text-green-700 bg-green-50" : statut.etat === "partiel" ? "text-orange-600 bg-orange-50" : "text-red-600 bg-red-50"}`}>{statusLabel}</span>}
                   {(e as any).preinscription && (
                     <span title="Pré-inscription : aucun paiement ni facture n'a été créé"
                       className="font-body text-[10px] font-semibold px-1.5 py-0.5 rounded-full flex-shrink-0 text-indigo-700 bg-indigo-100">

@@ -1,6 +1,6 @@
 "use client";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
-import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye } from "./types";
+import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, statutPaiementCavalier } from "./types";
 import type { Creneau } from "./types";
 
 interface Props {
@@ -233,19 +233,10 @@ export default function TimelineView({
                                 {en.length > 0 && (
                                   <div style={{ display: "flex", gap: 1 }}>
                                     {en.slice(0, 5).map((e: any) => {
-                                      const isCard = e.paymentSource === "card";
-                                      const isCeleris = e.paymentSource === "celeris";
-                                      const isForfait = e.paymentSource === "forfait";
-                                      const isForfaitPaid = isForfait && isForfaitChildPaye(payments, e.familyId, e.childId);
-                                      const isForfaitPending = isForfait && !isForfaitPaid;
-                                      const matchesThis = (i: any) => itemMatchesCreneau(i, e, c);
-                                      const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((p: any) =>
-                                        p.familyId === e.familyId &&
-                                        p.status === "paid" &&
-                                        (p.items || []).some(matchesThis)
-                                      );
-                                      const dotColor = isCeleris ? "#14b8a6" : isForfaitPaid ? "#10b981" : isForfaitPending ? "#f59e0b" : hasPaid ? "#22c55e" : "#fb923c";
-                                      return <span key={e.childId} style={{ width: 6, height: 6, borderRadius: "50%", background: dotColor, display: "inline-block" }} />;
+                                      // Rouge rien reçu, orange partiel, vert réglé
+                                      // (statutPaiementCavalier, cf. types.ts).
+                                      const statut = statutPaiementCavalier(e, payments, c);
+                                      return <span key={e.childId} title={`${e.childName} · ${statut.label}`} style={{ width: 6, height: 6, borderRadius: "50%", background: statut.couleur, display: "inline-block" }} />;
                                     })}
                                   </div>
                                 )}

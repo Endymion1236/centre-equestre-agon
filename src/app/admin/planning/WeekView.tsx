@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight, Loader2, Plus, Settings, Trash2, Users } from "lucide-react";
-import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, itemMatchesCreneau, isForfaitChildPaye } from "./types";
+import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, statutPaiementCavalier } from "./types";
 import type { Creneau } from "./types";
 import { dateSaisieComplete } from "@/lib/date-saisie";
 
@@ -66,39 +66,21 @@ function PaymentDot({ enrolled, payments, childId, childName, creneauId, activit
   creneauId: string;
   activityTitle: string;
 }) {
-  const isCard = enrolled.paymentSource === "card";
-  const isCeleris = enrolled.paymentSource === "celeris";
-  const isForfait = enrolled.paymentSource === "forfait";
-  const isForfaitPaid = isForfait && isForfaitChildPaye(payments, enrolled.familyId, childId);
-  const isForfaitPending = isForfait && !isForfaitPaid;
-  const matchesThis = (item: any) => itemMatchesCreneau(item, enrolled, { id: creneauId, activityTitle });
-  const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((payment: any) =>
-    payment.familyId === enrolled.familyId && payment.status === "paid" && (payment.items || []).some(matchesThis)
+  // Rouge rien reçu, orange partiellement réglé, vert réglé — règle commune
+  // aux quatre vues du planning (cf. statutPaiementCavalier dans types.ts).
+  const statut = statutPaiementCavalier(
+    { ...enrolled, childId },
+    payments,
+    { id: creneauId, activityTitle },
   );
-  const hasPending = !hasPaid && !isCard && !isCeleris && (isForfaitPending || payments.some((payment: any) =>
-    payment.familyId === enrolled.familyId &&
-    (payment.status === "pending" || payment.status === "partial") &&
-    (payment.items || []).some(matchesThis)
-  ));
-  const status = isCard ? "carte"
-    : isCeleris ? "réglé (Celeris)"
-    : isForfaitPaid ? "forfait"
-    : isForfaitPending ? "forfait à régler"
-    : hasPaid ? "réglé"
-    : hasPending ? "en attente"
-    : "non réglé";
 
   return (
     <span
-      title={`${childName} · ${status}`}
-      className={`h-2.5 w-2.5 flex-shrink-0 rounded-full border border-white ring-1 ${
-        isCard ? "bg-blue-500 ring-blue-200"
-          : isCeleris ? "bg-teal-500 ring-teal-200"
-          : isForfaitPaid ? "bg-emerald-500 ring-emerald-200"
-          : isForfaitPending ? "bg-amber-400 ring-amber-200"
-          : hasPaid ? "bg-green-500 ring-green-200"
-          : hasPending ? "bg-orange-400 ring-orange-200"
-          : "bg-slate-300 ring-slate-200"
+      title={`${childName} · ${statut.label} — ${statut.detail}`}
+      className={`h-2.5 w-2.5 flex-shrink-0 rounded-full border border-white ring-1 ${statut.point} ${
+        statut.etat === "regle" ? "ring-green-200"
+          : statut.etat === "partiel" ? "ring-orange-200"
+          : "ring-red-200"
       }`}
     />
   );
@@ -116,23 +98,12 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
   const tone = fillTone(fill);
   const color = (c as any).color || typeColors[c.activityType] || "#64748b";
 
-  const unpaidCount = enrolled.filter((person: any) => {
-    const isCard = person.paymentSource === "card";
-    const isCeleris = person.paymentSource === "celeris";
-    const isForfait = person.paymentSource === "forfait";
-    const isForfaitPaid = isForfait && isForfaitChildPaye(payments, person.familyId, person.childId);
-    const isForfaitPending = isForfait && !isForfaitPaid;
-    const matchesThis = (item: any) => itemMatchesCreneau(item, person, c);
-    const hasPaid = isCard || isCeleris || isForfaitPaid || payments.some((payment: any) =>
-      payment.familyId === person.familyId && payment.status === "paid" && (payment.items || []).some(matchesThis)
-    );
-    const hasPending = !hasPaid && !isCard && !isCeleris && (isForfaitPending || payments.some((payment: any) =>
-      payment.familyId === person.familyId &&
-      (payment.status === "pending" || payment.status === "partial") &&
-      (payment.items || []).some(matchesThis)
-    ));
-    return !hasPaid && !hasPending && !isCard && !isCeleris;
-  }).length;
+  // Compte les cavaliers dont rien n'a été encaissé. Une commande créée mais
+  // jamais réglée en fait partie : un lien de paiement envoyé n'est pas un
+  // paiement reçu.
+  const unpaidCount = enrolled.filter(
+    (person: any) => statutPaiementCavalier(person, payments, c).etat === "impaye",
+  ).length;
 
   return (
     <div

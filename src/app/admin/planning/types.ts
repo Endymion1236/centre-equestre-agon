@@ -239,6 +239,113 @@ export function isForfaitChildPaye(
   });
 }
 
+// ─── Statut de règlement d'un cavalier sur un créneau ───────────────────────
+//
+// Trois états, trois couleurs, et la même règle partout :
+//
+//   rouge  — rien reçu (ni carte, ni acompte, ni espèces)
+//   orange — payé partiellement (l'acompte de stage, une échéance…)
+//   vert   — réglé
+//
+// Avant, « payé partiellement » et « rien reçu » partageaient le même orange
+// « en attente » : le planning regardait le STATUT de la commande, et les
+// statuts `pending` et `partial` tombaient dans la même branche. Une famille
+// ayant versé 150 € d'acompte pour cinq enfants était affichée comme celle
+// qui n'avait rien envoyé. La couleur suit désormais l'argent réellement
+// encaissé (`paidAmount`), pas le statut.
+//
+// Le mode de règlement (carte en ligne, Celeris, forfait) ne change plus la
+// couleur — il reste dans le libellé. Une pastille verte veut dire « c'est
+// payé », quelle que soit la façon dont c'est arrivé.
+//
+// Ce calcul vivait recopié dans les quatre vues du planning (jour, semaine,
+// timeline, panneau d'inscription), ce qui explique qu'il n'ait jamais
+// évolué : il est désormais ici, une seule fois.
+
+export type EtatPaiement = "regle" | "partiel" | "impaye";
+
+export interface StatutPaiement {
+  etat: EtatPaiement;
+  /** Libellé court, affiché à côté du nom : « carte », « acompte versé »… */
+  label: string;
+  /** Phrase de survol, avec les montants. */
+  detail: string;
+  /** Classe Tailwind de la pastille ronde. */
+  point: string;
+  /** Couleur du texte et de la pastille (styles en ligne). */
+  couleur: string;
+  /** Fond de la pilule (vue jour). */
+  fond: string;
+  icone: string;
+}
+
+const APPARENCE: Record<EtatPaiement, Omit<StatutPaiement, "etat" | "label" | "detail">> = {
+  regle:   { point: "bg-green-500",  couleur: "#16a34a", fond: "#f0fdf4", icone: "✓" },
+  partiel: { point: "bg-orange-400", couleur: "#d97706", fond: "#fffbeb", icone: "◐" },
+  impaye:  { point: "bg-red-500",    couleur: "#dc2626", fond: "#fef2f2", icone: "✗" },
+};
+
+const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+
+export function statutPaiementCavalier(
+  enrolled: { childId: string; familyId?: string; stageKey?: string; paymentSource?: string },
+  payments: any[],
+  creneau: { id?: string; activityTitle: string },
+): StatutPaiement {
+  const habiller = (etat: EtatPaiement, label: string, detail: string): StatutPaiement =>
+    ({ etat, label, detail, ...APPARENCE[etat] });
+
+  // Règlements portés par l'inscription elle-même, sans commande à retrouver.
+  if (enrolled.paymentSource === "card") {
+    return habiller("regle", "carte", "Réglé par carte en ligne.");
+  }
+  if (enrolled.paymentSource === "celeris") {
+    return habiller("regle", "réglé (Celeris)", "Encaissé dans Celeris, avant la reprise.");
+  }
+  if (enrolled.paymentSource === "forfait") {
+    return isForfaitChildPaye(payments, enrolled.familyId || "", enrolled.childId)
+      ? habiller("regle", "forfait", "Couvert par le forfait annuel, déjà encaissé.")
+      : habiller("impaye", "forfait à régler", "Forfait annuel enregistré, mais aucune échéance encaissée.");
+  }
+
+  // Commandes de la famille qui couvrent cette inscription.
+  const commandes = payments.filter((p: any) =>
+    p.familyId === enrolled.familyId &&
+    p.status !== "cancelled" &&
+    (p.items || []).some((i: any) => itemMatchesCreneau(i, enrolled, creneau)),
+  );
+
+  if (commandes.length === 0) {
+    return habiller("impaye", "non réglé", "Aucune commande enregistrée pour cette inscription.");
+  }
+
+  const arrondi = (n: number) => Math.round(n * 100) / 100;
+  const regle = arrondi(commandes.reduce((s: number, p: any) => s + (Number(p.paidAmount) || 0), 0));
+  const total = arrondi(commandes.reduce((s: number, p: any) => s + (Number(p.totalTTC) || 0), 0));
+  const reste = arrondi(Math.max(0, total - regle));
+  // Une commande peut porter plusieurs cavaliers (le panier unique d'une
+  // famille) : les montants sont ceux de la commande, on le dit.
+  const portee = commandes.length > 1 ? "des commandes" : "de la commande";
+
+  if (commandes.some((p: any) => p.status === "paid") || (total > 0 && reste < 0.01)) {
+    return habiller("regle", "réglé", `Réglé — ${eur(regle || total)}.`);
+  }
+
+  if (regle > 0.009) {
+    // « Acompte versé » quand le montant reçu correspond à l'acompte attendu :
+    // c'est le mot qu'emploie la famille, et il dit que le reste est prévu.
+    const estAcompte = commandes.some((p: any) =>
+      Number(p.acompteAmount) > 0 && regle + 0.01 >= Number(p.acompteAmount));
+    return habiller(
+      "partiel",
+      estAcompte ? "acompte versé" : "partiellement réglé",
+      `${eur(regle)} reçus sur ${eur(total)} — reste ${eur(reste)} ${portee}.`,
+    );
+  }
+
+  return habiller("impaye", "non réglé", `Rien d'encaissé — ${eur(total)} dus ${portee}.`);
+}
+
 /**
  * Extrait la liste dédoublonnée des noms de moniteurs depuis un snapshot
  * Firestore. La base peut contenir des doublons (ex. "Alice" et "Alice "
