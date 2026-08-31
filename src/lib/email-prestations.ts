@@ -106,7 +106,10 @@ export function lignesDetailHtml(items: LigneEmail[]): string {
     .map((i) => {
       const infos: string[] = [];
       if (i.date) {
-        const d = new Date(i.date);
+        // Midi plutôt que minuit : « 2026-10-23 » seul est lu comme minuit
+        // UTC, et une messagerie rendue depuis un fuseau en retard affichait
+        // la veille. Même précaution que `datesStage` plus bas.
+        const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(i.date) ? `${i.date}T12:00:00` : i.date);
         if (!Number.isNaN(d.getTime())) {
           infos.push(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }));
         }

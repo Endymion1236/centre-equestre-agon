@@ -13,6 +13,7 @@ import { writeFileSync } from "node:fs";
 import { emailTemplates as T, emailLayout, emailFidelite } from "../src/lib/email-templates";
 import { DEFAULT_TEMPLATES } from "../src/lib/email-templates-defauts";
 import { encadreConditionsStage } from "../src/lib/cgv-clauses";
+import { lignesDetailHtml } from "../src/lib/email-prestations";
 
 /**
  * Rend un gabarit du chargeur sans passer par Firestore.
@@ -43,8 +44,15 @@ const EXEMPLES = [
     soldePhrase: "Le solde de 192,50 € sera prélevé automatiquement sur votre carte enregistrée environ une semaine avant le début du stage. Aucune action n'est requise.",
   }, encadreConditionsStage()),
   rendre("confirmationPaiement", {
-    parentName: "Marie Lefèvre", montant: "82,50",
-    prestations: "Stage poney Toussaint — Léa, Tom", mode: "Carte bancaire",
+    parentName: "Marie Lefèvre", montant: "45,00",
+    // Le détail — jour, horaires, moniteur — vient de lignesDetailHtml : c'est
+    // ce que reçoivent maintenant la famille ET le club en copie.
+    prestations: lignesDetailHtml([{
+      activityTitle: "Promenade débrouillés — Léa Lefèvre",
+      childName: "Léa Lefèvre",
+      date: "2026-10-23", startTime: "14:00", endTime: "16:00", monitor: "Nicolas",
+    }]),
+    mode: "Carte bancaire",
   }),
   // ── Gabarits de lib/email-templates ──
   // Acompte encore dû : la place est retenue, pas acquise.

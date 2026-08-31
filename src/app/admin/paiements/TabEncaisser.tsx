@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { updateDoc, addDoc, doc, getDoc, getDocs, query, where, collection, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
+import { lignesDetailHtml } from "@/lib/email-prestations";
 import { safeNumber, generateOrderId } from "@/lib/utils";
 import {
   applyDiscounts,
@@ -857,7 +858,11 @@ export function TabEncaisser({
                         parentName: selectedFam.parentName || "",
                         montant,
                         mode: paymentModes.find(m => m.id === paymentMode)?.label || paymentMode,
-                        prestations: familyPending.flatMap(p => (p.items || []).map((i: any) => i.activityTitle)).join(", "),
+                        // Date, horaires et moniteur sous chaque prestation —
+                        // même détail que la confirmation d'un paiement en
+                        // ligne. La liste des seuls libellés ne disait pas à
+                        // la famille de quelle séance il s'agissait.
+                        prestations: lignesDetailHtml(familyPending.flatMap(p => p.items || [])),
                       });
                       authFetch("/api/send-email", {
                         method: "POST",

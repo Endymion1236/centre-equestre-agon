@@ -127,6 +127,21 @@ test("le bloc détaillé porte date, horaires et moniteur", () => {
   assert.ok(html.includes("septembre"));
 });
 
+test("une promenade porte son jour et son horaire", () => {
+  // Signalé le 31/08/2026 : la confirmation de paiement d'une promenade
+  // n'indiquait ni la date ni l'heure — ni pour le client, ni sur la copie
+  // reçue par le club. Les trois chemins d'envoi passent maintenant par ce
+  // bloc détaillé.
+  const html = lignesDetailHtml([{
+    activityTitle: "Promenade débrouillés — Léa Lefèvre", childName: "Léa Lefèvre",
+    date: "2026-10-23", startTime: "14:00", endTime: "16:00", monitor: "Nicolas",
+  }]);
+  assert.ok(html.includes("Promenade débrouillés — Léa Lefèvre"));
+  assert.ok(html.includes("23 octobre"), "le jour manque");
+  assert.ok(html.includes("14:00–16:00"), "l'horaire manque");
+  assert.ok(html.includes("vendredi"), "le jour de la semaine manque");
+});
+
 test("une date invalide n'affiche pas « Invalid Date »", () => {
   const html = lignesDetailHtml([{ activityTitle: "Cours", date: "pas-une-date" }]);
   assert.ok(!html.toLowerCase().includes("invalid"));

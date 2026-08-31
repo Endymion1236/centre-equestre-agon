@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prestationsCourtes } from "@/lib/email-prestations";
+import { prestationsCourtes, lignesDetailHtml } from "@/lib/email-prestations";
 import {
   emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe, emailSignature, emailCouleurs as COULEURS, euros, eurosTexte,
@@ -92,6 +92,10 @@ export async function POST(req: NextRequest) {
     // « Stage galop de bronze — Aurèle COSTEGROSSE — Aurèle COSTEGROSSE »
     // dans le mail reçu. prestationsCourtes ne l'ajoute que s'il manque.
     const prestations = prestationsCourtes(payData.items || []);
+    // Version détaillée pour le panneau : date, horaires et moniteur sous
+    // chaque prestation. Le libellé seul — « Promenade débrouillés — Léa » —
+    // laissait la famille sans le jour ni l'heure de ce qu'elle règle.
+    const prestationsDetail = lignesDetailHtml(payData.items || []) || prestations;
 
     const htmlMessage = message
       ? emailParagraphe(message.replace(/\n/g, "<br/>"))
@@ -145,7 +149,7 @@ export async function POST(req: NextRequest) {
       emailButton(`Payer ${euros(amount)}`, paymentUrl),
       emailPanneau("Détail", [
         emailLigne("Famille", String(payData.familyName || "")),
-        emailLigne("Prestations", prestations),
+        emailLigne("Prestations", prestationsDetail),
         emailLigne("Montant", euros(amount)),
         amount < resteDu ? emailLigne("Reste dû après ce paiement", euros(resteDu - amount)) : "",
       ].join("")),

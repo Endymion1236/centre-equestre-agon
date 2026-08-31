@@ -14,7 +14,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
+import { prestationsCourtes, lignesDetailHtml, libelleModePaiement, titreSansEnfant, datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 
 export const dynamic = "force-dynamic";
@@ -337,13 +337,19 @@ export async function POST(req: NextRequest) {
               // le panier intègre déjà le prénom dans `activityTitle`, le
               // recoller donnait « Galop de bronze — ambre — ambre ».
               const prestations = prestationsCourtes(pData.items || []);
+              // Détail avec date, horaires et moniteur — comme la route de
+              // retour. Le webhook s'en tenait au libellé nu : une famille qui
+              // ferme son onglet après avoir payé (c'est alors le webhook qui
+              // confirme) recevait « Promenade débrouillés — Léa » sans jamais
+              // savoir quel jour ni à quelle heure. Le club, en copie, non plus.
+              const prestationsDetail = lignesDetailHtml(pData.items || []) || prestations;
               const hasStage = (pData.items || []).some((i: any) => i.activityType === "stage");
 
               let templateKey = "confirmationPaiement";
               let vars: Record<string, string | number> = {
                 parentName,
                 montant: paidAmount.toFixed(2),
-                prestations,
+                prestations: prestationsDetail,
                 mode: libelleModePaiement(pData.paymentMode || "cb_online"),
                 // Permet au gabarit de résoudre {fidelite} : les points
                 // viennent d'être crédités ci-dessus, le solde est à jour.

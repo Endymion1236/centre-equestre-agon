@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Monitor, Smartphone, Mail, RefreshCw } from "lucide-react";
 import { emailTemplates as T } from "@/lib/email-templates";
+import { lignesDetailHtml } from "@/lib/email-prestations";
 
 type PreviewItem = {
   id: string;
@@ -146,12 +147,16 @@ function buildPreviews(): PreviewItem[] {
     {
       id: "paiement",
       label: "Paiement reçu",
-      description: "Accusé de réception d'un règlement.",
+      description: "Accusé de réception d'un règlement, avec le jour et l'heure de la séance réglée.",
       email: T.confirmationPaiement({
         parentName: "Marie Lefèvre",
         montant: 82.5,
         mode: "Carte bancaire",
-        prestations: "Acompte stage Toussaint",
+        prestations: lignesDetailHtml([{
+          activityTitle: "Promenade débrouillés — Léa Lefèvre",
+          childName: "Léa Lefèvre",
+          date: "2026-10-23", startTime: "14:00", endTime: "16:00", monitor: "Nicolas",
+        }]),
         pointsGagnes: 82,
         pointsTotal: 340,
         tauxFidelite: 100,
