@@ -207,38 +207,6 @@ export function itemMatchesCreneau(
   return String(item.activityTitle || "").includes(creneau.activityTitle);
 }
 
-// ─── Forfait : couverture financière effective ──────────────────────────────
-// Vérifie si le forfait annuel d'un enfant a été ENCAISSÉ (au moins
-// partiellement). Sans ça, on aurait des inscriptions affichées "forfait"
-// (vert émeraude) alors que la commande est encore en attente d'encaissement.
-//
-// Stratégie : on cherche dans les paiements de la famille un paiement
-// `paid` qui contient un item "Forfait" pour CET enfant. On considère
-// que ça atteste d'un encaissement (peu importe le montant exact —
-// pour les 3x/10x, on accepte qu'une seule échéance soit payée).
-//
-// Pour un check strict (montant total atteint), il faudrait sommer
-// tous les paiements paid avec forfaitRef ou item "Forfait" et comparer
-// à forfaitPriceTTC. Pas fait pour l'instant : le but est juste de
-// distinguer "rien encore encaissé" vs "au moins un encaissement".
-export function isForfaitChildPaye(
-  payments: any[],
-  familyId: string,
-  childId: string,
-): boolean {
-  return payments.some((p: any) => {
-    if (p.familyId !== familyId) return false;
-    if (p.status !== "paid") return false;
-    return (p.items || []).some((i: any) => {
-      if (i.childId !== childId) return false;
-      const t = String(i.activityTitle || "").toLowerCase();
-      // Match : item "Forfait XXX", ou un paiement explicitement lié
-      // à un forfait via forfaitRef (cas des échéances 3x/10x).
-      return t.includes("forfait") || !!p.forfaitRef;
-    });
-  });
-}
-
 // ─── Statut de règlement d'un cavalier sur un créneau ───────────────────────
 //
 // Trois états, trois couleurs, et la même règle partout :
@@ -346,10 +314,49 @@ export function statutPaiementCavalier(
   if (enrolled.paymentSource === "celeris") {
     return habiller("regle", "réglé (Celeris)", "Encaissé dans Celeris, avant la reprise.");
   }
+  // ── Forfait annuel ──────────────────────────────────────────────────────
+  // La séance n'est pas facturée non plus : elle est couverte par le forfait,
+  // payé comptant ou en trois à dix fois. C'est donc l'avancement du forfait
+  // qui décide, échéance par échéance — une seule encaissée sur dix, ce n'est
+  // pas « réglé ».
   if (enrolled.paymentSource === "forfait") {
-    return isForfaitChildPaye(payments, enrolled.familyId || "", enrolled.childId)
-      ? habiller("regle", "forfait", "Couvert par le forfait annuel, déjà encaissé.")
-      : habiller("impaye", "forfait à régler", "Forfait annuel enregistré, mais aucune échéance encaissée.");
+    const echeances = vivantes.filter((p: any) =>
+      p.familyId === enrolled.familyId &&
+      (p.items || []).some((i: any) => i.childId === enrolled.childId) &&
+      (!!p.forfaitRef || (p.items || []).some((i: any) =>
+        /forfait|adh[ée]sion|[ée]ch[ée]ance/i.test(String(i.activityTitle || "")))),
+    );
+
+    if (echeances.length === 0) {
+      return habiller("impaye", "forfait à régler", "Forfait annuel enregistré, mais aucune commande retrouvée.");
+    }
+
+    // Prélèvement SEPA : les échéances vivent dans `echeances-sepa`, pas dans
+    // les commandes — la commande de référence reste à 0 € encaissé toute
+    // l'année. La rougir dirait le contraire de la vérité (l'argent arrive
+    // chaque mois), la verdir aussi. Elle est « en cours ».
+    if (echeances.some((p: any) => p.status === "sepa_scheduled")) {
+      return habiller("partiel", "forfait (SEPA)", "Prélèvement mensuel programmé — le détail est dans Paiements › Prélèvements SEPA.");
+    }
+
+    // Ici on compte les échéances, pas le statut d'une commande : un forfait
+    // en dix fois dont la première est encaissée a bien une commande `paid`,
+    // et c'est ce raccourci qui le faisait passer pour réglé toute l'année.
+    const { regle, total, reste } = argentRecu(echeances);
+    const payees = echeances.filter((p: any) =>
+      p.status === "paid" || (Number(p.paidAmount) || 0) >= (Number(p.totalTTC) || 0) - 0.01).length;
+
+    if (payees === echeances.length || (total > 0 && reste < 0.01)) {
+      return habiller("regle", "forfait", `Forfait annuel réglé — ${eur(regle || total)}.`);
+    }
+    if (regle > 0.009) {
+      return habiller(
+        "partiel",
+        echeances.length > 1 ? `forfait ${payees}/${echeances.length}` : "forfait partiellement réglé",
+        `${eur(regle)} reçus sur ${eur(total)} — reste ${eur(reste)} sur le forfait.`,
+      );
+    }
+    return habiller("impaye", "forfait à régler", `Aucune échéance encaissée — ${eur(total)} dus.`);
   }
 
   // ── Commandes de la famille qui couvrent cette inscription ──────────────

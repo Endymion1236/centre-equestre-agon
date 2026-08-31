@@ -99,14 +99,52 @@ console.log("\n✓ Une carte de séances suit le règlement de la carte :");
   assert("et le survol le dit", orpheline.detail.includes("aucune commande"), orpheline.detail);
 }
 
+console.log("\n✓ Un forfait annuel se juge échéance par échéance :");
+{
+  // Payé en dix fois : dix commandes, une par mois. La première encaissée
+  // suffisait à afficher « forfait » en vert toute l'année — une commande
+  // `paid` existait bel et bien.
+  const echeances = (nbPayees: number) => Array.from({ length: 10 }, (_, i) => ({
+    familyId: "favory", forfaitRef: "mercredi-14h",
+    status: i < nbPayees ? "paid" : "pending",
+    paidAmount: i < nbPayees ? 68 : 0,
+    totalTTC: 68,
+    items: [{ childId: "c1", activityTitle: i === 0 ? "Forfait annuel — Romane" : `Échéance ${i + 1}/10 — Romane` }],
+  }));
+  const inscritForfait = { ...INSCRIT, paymentSource: "forfait" };
+
+  const rien = statutPaiementCavalier(inscritForfait, echeances(0), CRENEAU);
+  assert("aucune échéance encaissée : rouge", rien.etat === "impaye", rien.etat);
+  assert("le survol donne le montant dû", rien.detail.includes("680,00"), rien.detail);
+
+  const une = statutPaiementCavalier(inscritForfait, echeances(1), CRENEAU);
+  assert("une échéance sur dix : orange, plus vert", une.etat === "partiel", une.etat);
+  assert("le libellé compte les échéances", une.label === "forfait 1/10", une.label);
+  assert("le survol donne le reste", une.detail.includes("612,00"), une.detail);
+
+  const toutes = statutPaiementCavalier(inscritForfait, echeances(10), CRENEAU);
+  assert("forfait soldé : vert", toutes.etat === "regle", toutes.etat);
+  assert("le libellé redevient « forfait »", toutes.label === "forfait", toutes.label);
+
+  // Prélèvement SEPA : les échéances vivent hors des commandes, la commande
+  // de référence reste à 0 € encaissé. Ni rouge, ni vert : en cours.
+  const sepa = statutPaiementCavalier(inscritForfait, [{
+    familyId: "favory", forfaitRef: "mercredi-14h", status: "sepa_scheduled",
+    paidAmount: 0, totalTTC: 680, echeancesTotal: 10,
+    items: [{ childId: "c1", activityTitle: "Forfait annuel — Romane" }],
+  }], CRENEAU);
+  assert("prélèvement SEPA programmé : orange", sepa.etat === "partiel", sepa.etat);
+  assert("le libellé dit SEPA", sepa.label === "forfait (SEPA)", sepa.label);
+
+  const sansCommande = statutPaiementCavalier(inscritForfait, [], CRENEAU);
+  assert("forfait sans commande : rouge", sansCommande.etat === "impaye", sansCommande.etat);
+  assert("le libellé dit ce qu'il manque", sansCommande.label === "forfait à régler", sansCommande.label);
+}
+
 console.log("\n✓ Le mode de règlement reste dans le libellé, pas dans la couleur :");
 {
   const celeris = statutPaiementCavalier({ ...INSCRIT, paymentSource: "celeris" }, [], CRENEAU);
   assert("réglé dans Celeris : vert", celeris.etat === "regle", celeris.etat);
-
-  const forfait = statutPaiementCavalier({ ...INSCRIT, paymentSource: "forfait" }, [], CRENEAU);
-  assert("forfait sans encaissement : rouge", forfait.etat === "impaye", forfait.etat);
-  assert("le libellé dit ce qu'il manque", forfait.label === "forfait à régler", forfait.label);
 }
 
 console.log("\n✓ Cas limites :");
