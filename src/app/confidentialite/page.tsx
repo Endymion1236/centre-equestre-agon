@@ -23,7 +23,7 @@ export default function ConfidentialitePage() {
               <p>Représenté par Nicolas Richard, gérant</p>
               <p>56 Charrière du Commerce, 50230 Agon-Coutainville</p>
               <p>SIRET : 507 569 184 00017</p>
-              <p>Contact DPO : ceagon@orange.fr</p>
+              <p>Contact DPO : ceagon50@gmail.com</p>
             </div>
           </section>
 
@@ -90,7 +90,7 @@ export default function ConfidentialitePage() {
                 <div>✅ <strong>Droit de retrait du consentement</strong> — à tout moment pour les traitements basés sur le consentement</div>
               </div>
               <p className="mt-3">
-                Pour exercer ces droits : <strong>ceagon@orange.fr</strong> ou par courrier à l'adresse du centre.<br />
+                Pour exercer ces droits : <strong>ceagon50@gmail.com</strong> ou par courrier à l'adresse du centre.<br />
                 Délai de réponse : 1 mois maximum. En cas de réponse insatisfaisante, vous pouvez saisir la{" "}
                 <a href="https://www.cnil.fr" target="_blank" rel="noopener noreferrer" className="text-blue-500 no-underline">CNIL</a>.
               </p>

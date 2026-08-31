@@ -14,6 +14,20 @@ const SITE_URL = "https://centre-equestre-agon.vercel.app";
 const SITE_VITRINE = "https://www.centreequestreagon.com";
 const ADRESSE = { rue: "56 Charrière du Commerce", cp: "50230", ville: "Agon-Coutainville" } as const;
 
+/**
+ * Dessins au trait (cf. scripts/generer-icones-email.mjs).
+ *
+ * Images distantes : une messagerie qui bloque les images les fera
+ * disparaître. Ils restent donc purement décoratifs — alt vide, dimensions
+ * fixées — et aucune information ne repose sur eux. Le message tient debout
+ * sans une seule image, logo compris : l'en-tête porte le nom du club en
+ * texte.
+ */
+function dessin(nom: string, px = 20) {
+  return `<img src="${SITE_URL}/images/email/${nom}.png" width="${px}" height="${px}" alt="" `
+    + `style="display:block;width:${px}px;height:${px}px;border:0;" />`;
+}
+
 const C = {
   encre: "#102C50",
   texte: "#3E4959",
@@ -66,6 +80,16 @@ function wrap(content: string, preheader = "") {
         </td>
       </tr>
 
+      <tr>
+        <td align="center" style="background:${C.encre};padding:0 24px 16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+            <td width="78" style="width:78px;height:1px;background:${C.or};opacity:0.3;font-size:0;line-height:0;">&nbsp;</td>
+            <td style="padding:0 13px;">${dessin("fer", 22)}</td>
+            <td width="78" style="width:78px;height:1px;background:${C.or};opacity:0.3;font-size:0;line-height:0;">&nbsp;</td>
+          </tr></table>
+        </td>
+      </tr>
+
       <tr><td style="height:2px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td></tr>
 
       <tr>
@@ -76,10 +100,27 @@ function wrap(content: string, preheader = "") {
 
       <tr>
         <td style="background:#F8F6F2;padding:15px 24px 17px;border:1px solid ${C.bord};border-top:none;border-radius:0 0 14px 14px;text-align:center;font-family:${POLICE_TEXTE};font-size:10px;line-height:1.65;color:#818A96;">
-          <div style="font-family:${POLICE};font-size:12px;color:${C.encre};padding-bottom:3px;">${CLUB_NAME}</div>
-          <div>${ADRESSE.rue} · ${ADRESSE.cp} ${ADRESSE.ville}</div>
-          <div>${CLUB_TEL} · ${CLUB_MOBILE} · <a href="mailto:${CLUB_EMAIL}" style="color:${C.encre};text-decoration:none;">${CLUB_EMAIL}</a></div>
-          <div style="padding-top:5px;"><a href="${SITE_VITRINE}" style="color:${C.encre};text-decoration:none;">${SITE_VITRINE.replace(/^https?:\/\//, "")}</a></div>
+          <div style="font-family:${POLICE};font-size:12px;color:${C.encre};padding-bottom:9px;">${CLUB_NAME}</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;"><tr>
+            <td style="padding:0 9px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="padding-right:6px;">${dessin("epingle", 14)}</td>
+              <td style="font-family:${POLICE_TEXTE};font-size:10px;line-height:1.45;color:#818A96;text-align:left;">${ADRESSE.rue}<br/>${ADRESSE.cp} ${ADRESSE.ville}</td>
+            </tr></table></td>
+            <td style="padding:0 9px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="padding-right:6px;">${dessin("telephone", 14)}</td>
+              <td style="font-family:${POLICE_TEXTE};font-size:10px;line-height:1.45;color:#818A96;text-align:left;">${CLUB_TEL}<br/>${CLUB_MOBILE}</td>
+            </tr></table></td>
+          </tr></table>
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:9px auto 0;"><tr>
+            <td style="padding:0 9px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="padding-right:6px;">${dessin("enveloppe", 14)}</td>
+              <td><a href="mailto:${CLUB_EMAIL}" style="font-family:${POLICE_TEXTE};font-size:10px;color:${C.encre};text-decoration:none;">${CLUB_EMAIL}</a></td>
+            </tr></table></td>
+            <td style="padding:0 9px;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+              <td style="padding-right:6px;">${dessin("globe", 14)}</td>
+              <td><a href="${SITE_VITRINE}" style="font-family:${POLICE_TEXTE};font-size:10px;color:${C.encre};text-decoration:none;">${SITE_VITRINE.replace(/^https?:\/\//, "")}</a></td>
+            </tr></table></td>
+          </tr></table>
         </td>
       </tr>
 
@@ -98,11 +139,17 @@ function button(text: string, url: string, color: string = C.encre) {
   </table>`;
 }
 
-function panneau(titrePanneau: string, contenu: string) {
+function panneau(titrePanneau: string, contenu: string, icone?: string) {
+  const entete = titrePanneau
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="padding-bottom:10px;margin-bottom:5px;border-bottom:1px solid ${C.bord};"><tr>
+         ${icone ? `<td width="28" style="width:28px;padding-right:9px;vertical-align:middle;">${dessin(icone, 19)}</td>` : ""}
+         <td style="vertical-align:middle;font-family:${POLICE_TEXTE};font-size:10px;font-weight:700;letter-spacing:0.10em;text-transform:uppercase;color:${C.encre};">${titrePanneau}</td>
+       </tr></table>`
+    : "";
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:19px 0;border-collapse:separate;border-spacing:0;">
     <tr>
       <td style="background:${C.sable};padding:17px 18px;border:1px solid ${C.bord};border-radius:10px;">
-        ${titrePanneau ? `<div style="font-family:${POLICE_TEXTE};font-size:10px;font-weight:750;letter-spacing:0.10em;text-transform:uppercase;color:${C.encre};padding-bottom:10px;margin-bottom:5px;border-bottom:1px solid ${C.bord};">${titrePanneau}</div>` : ""}
+        ${entete}
         ${contenu}
       </td>
     </tr>
@@ -122,8 +169,32 @@ function montant(valeur: number, couleur: string = C.encre) {
   return `<div style="font-family:${POLICE};font-size:27px;line-height:1.2;color:${couleur};padding:3px 0;">${euros(valeur)}</div>`;
 }
 
+/**
+ * Titre de message : centré, sous un losange doré, souligné d'un filet court.
+ *
+ * Aligné à gauche et à peine plus gros que le texte, il s'y confondait. Le
+ * centrage et l'ornement — un caractère, pas une image, donc rien à charger
+ * et rien qu'une messagerie puisse bloquer — donnent au message l'allure d'un
+ * courrier plutôt que celle d'une notification.
+ */
 function titre(texte: string) {
-  return `<h1 style="margin:0 0 18px;font-family:${POLICE};font-size:24px;line-height:1.3;font-weight:normal;color:${C.encre};text-align:left;">${texte}</h1>`;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0 0 18px;">
+    <tr><td align="center">
+      <div style="font-family:${POLICE};font-size:12px;color:${C.or};padding-bottom:11px;">&#9671;</div>
+      <h1 style="margin:0;font-family:${POLICE};font-size:26px;line-height:1.28;font-weight:normal;color:${C.encre};">${texte}</h1>
+      <div style="width:48px;height:2px;background:${C.or};margin:13px auto 0;font-size:0;line-height:0;">&nbsp;</div>
+    </td></tr>
+  </table>`;
+}
+
+/**
+ * Ligne mise en vedette : le nom du stage, de l'activité, du forfait.
+ *
+ * Il était noyé dans la phrase, en gras, à la taille du texte. Sur sa propre
+ * ligne il devient ce que la famille cherche en ouvrant le message.
+ */
+function vedette(texte: string) {
+  return `<div style="text-align:center;font-family:${POLICE};font-size:21px;line-height:1.3;color:${C.encre};margin:0 0 20px;">${texte}</div>`;
 }
 
 function p(texte: string, taille = 15) {
@@ -179,6 +250,7 @@ export const emailCouleurs = C;
 export const emailEtat = etat;
 export const emailMontant = montant;
 export const emailSignature = signature;
+export const emailVedette = vedette;
 export const emailFidelite = fidelite;
 
 export const emailTemplates = {
@@ -217,9 +289,11 @@ export const emailTemplates = {
           : acompteDu ? "Il reste une étape" : "Votre inscription est confirmée")}
         ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
         ${p(acompteDu
-          ? `Nous avons enregistré l'inscription au stage <strong style="color:${C.encre};">${vars.stageTitle}</strong>. La place est retenue ; elle sera définitivement acquise dès réception de l'acompte.`
-          : `L'inscription au stage <strong style="color:${C.encre};">${vars.stageTitle}</strong> est ${vars.paiementConfirme ? "validée et payée" : "confirmée"}.`)}
-        ${panneau(vars.dates, `
+          ? "Nous avons enregistré l'inscription au stage :"
+          : "Nous sommes ravis de vous confirmer l'inscription au stage :")}
+        ${vedette(vars.stageTitle)}
+        ${acompteDu ? p("La place est retenue ; elle sera définitivement acquise dès réception de l'acompte.") : ""}
+        ${panneau(`Votre stage · ${vars.dates}`, `
           ${vars.enfants.map(e => ligne(
             e.name + (e.remise > 0 ? ` <span style="color:${C.gris};font-size:12px;">(remise ${e.remise} €)</span>` : ""),
             euros(e.prix),
@@ -230,19 +304,19 @@ export const emailTemplates = {
               <td align="right" style="padding:8px 0 0;font-family:${POLICE};font-size:24px;color:${C.encre};">${euros(vars.totalTTC)}</td>
             </tr>
           </table>
-        `)}
+        `, "calendrier")}
         ${vars.derouleHtml || ""}
-        ${acompteDu ? panneau("Modalités de paiement", `
-          ${ligne("Acompte à régler maintenant", euros(vars.acompte!))}
+        ${acompteDu ? panneau("Ce qu'il reste à faire", `
+          ${ligne("Acompte aujourd'hui", euros(vars.acompte!))}
           ${ligne(vars.dateSolde ? `Solde avant le ${vars.dateSolde}` : "Solde, 7 jours avant le stage", euros(vars.solde!))}
           ${p(vars.lienSepare
             ? "Vous recevez le lien de paiement de l'acompte dans un message séparé. Le solde vous sera réclamé automatiquement une semaine avant le stage."
             : "L'acompte se règle depuis votre espace client. Le solde vous sera réclamé automatiquement une semaine avant le stage.", 12)}
-        `) : ""}
-        ${vars.acompteRegle && vars.solde && vars.solde > 0 ? panneau("Modalités de paiement", `
+        `, "carte") : ""}
+        ${vars.acompteRegle && vars.solde && vars.solde > 0 ? panneau("Reste à venir", `
           ${ligne(vars.dateSolde ? `Solde avant le ${vars.dateSolde}` : "Solde, 7 jours avant le stage", euros(vars.solde))}
           ${p("Un rappel avec le lien de paiement vous sera envoyé automatiquement.", 12)}
-        `) : ""}
+        `, "carte") : ""}
         ${acompteDu && !vars.lienSepare ? button("Régler l'acompte", `${SITE_URL}/espace-cavalier/factures`) : ""}
         ${signature()}
       `, acompteDu

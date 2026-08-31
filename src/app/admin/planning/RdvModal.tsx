@@ -81,7 +81,7 @@ export default function RdvModal({ form, onChange, onClose, onSave }: Props) {
                 <label className="font-body text-[10px] text-slate-600 block mb-1">Email de rappel</label>
                 <input type="email" className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2.5 bg-white focus:outline-none focus:border-blue-400"
                   value={form.reminderEmail} onChange={e => onChange({...form, reminderEmail: e.target.value})}
-                  placeholder="ceagon@orange.fr" />
+                  placeholder="ceagon50@gmail.com" />
               </div>
               <div>
                 <label className="font-body text-[10px] text-slate-600 block mb-1">Combien de jours avant</label>

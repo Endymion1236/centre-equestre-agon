@@ -58,7 +58,7 @@ export default function ParametresPage() {
     legalName: "E.A.R.L. Centre Equestre Poney Club d'Agon-Coutainville",
     address: "56 Charrière du Commerce, 50230 Agon-Coutainville",
     tel: "02 44 84 99 96",
-    email: "ceagon@orange.fr",
+    email: "ceagon50@gmail.com",
     siret: "50756918400017",
     tvaIntra: "",
     iban: "FR76 1660 6100 6400 1353 9343 253",

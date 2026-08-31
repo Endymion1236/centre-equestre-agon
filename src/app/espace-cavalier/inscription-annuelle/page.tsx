@@ -1012,7 +1012,7 @@ export default function InscriptionAnnuellePage() {
                   <div className="font-body text-sm font-semibold text-green-800 mb-1">🎁 Première inscription ?</div>
                   <p className="font-body text-xs text-green-700">
                     Une réduction est prévue pour votre première inscription au club.
-                    Contactez-nous pour en savoir plus : <a href="mailto:ceagon@orange.fr" className="underline font-semibold">ceagon@orange.fr</a>.
+                    Contactez-nous pour en savoir plus : <a href="mailto:ceagon50@gmail.com" className="underline font-semibold">ceagon50@gmail.com</a>.
                   </p>
                 </div>
               )}

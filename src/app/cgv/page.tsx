@@ -23,7 +23,7 @@ export default function CGVPage() {
               <p><strong>EARL Centre Équestre Poney Club d'Agon-Coutainville</strong></p>
               <p>56 Charrière du Commerce, 50230 Agon-Coutainville</p>
               <p>SIRET : 507 569 184 00017 — Téléphone : 02 44 84 99 96</p>
-              <p>E-mail : ceagon@orange.fr</p>
+              <p>E-mail : ceagon50@gmail.com</p>
             </div>
           </section>
 
