@@ -80,16 +80,6 @@ function wrap(content: string, preheader = "") {
         </td>
       </tr>
 
-      <tr>
-        <td align="center" style="background:${C.encre};padding:0 24px 16px;">
-          <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-            <td width="78" style="width:78px;height:1px;background:${C.or};opacity:0.3;font-size:0;line-height:0;">&nbsp;</td>
-            <td style="padding:0 13px;">${dessin("fer", 22)}</td>
-            <td width="78" style="width:78px;height:1px;background:${C.or};opacity:0.3;font-size:0;line-height:0;">&nbsp;</td>
-          </tr></table>
-        </td>
-      </tr>
-
       <tr><td style="height:2px;background:${C.or};font-size:0;line-height:0;">&nbsp;</td></tr>
 
       <tr>

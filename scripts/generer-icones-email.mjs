@@ -5,8 +5,12 @@
  * la taille de rendu suivent alors la palette du code, et on peut les refaire
  * si elle change. Rasterisés à 3× pour rester nets sur écran Retina.
  *
- * Une tête de cheval figurait dans cette liste : au trait et à 34 px elle ne
- * se lisait pas. Un ornement qu'il faut deviner vaut moins que pas d'ornement.
+ * Deux dessins ont été retirés de cette liste. Une tête de cheval : au trait
+ * et à 34 px elle ne se lisait pas. Un fer à cheval en en-tête : il était
+ * encadré de deux filets d'un pixel posés dans des cellules de tableau, et
+ * Gmail mobile impose une hauteur minimale à une cellule — les filets
+ * devenaient deux pavés dorés pleins. Un ornement qu'il faut deviner, ou qui
+ * se rend mal quelque part, vaut moins que pas d'ornement.
  *
  * Ce sont des images distantes : une messagerie qui bloque les images les fera
  * disparaître. C'est pourquoi ils restent purement décoratifs — alt vide,
@@ -16,7 +20,6 @@ import sharp from "sharp";
 import { writeFileSync } from "node:fs";
 
 const OR = "#B8860B";       // doré lisible sur fond sable
-const OR_CLAIR = "#D5B16B"; // doré sur le bleu nuit de l'en-tête
 
 const svg = (d, stroke) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -32,16 +35,10 @@ const FORMES = {
   telephone: `<path d="M6.5 3.5h3l1.6 4-2 1.4a12.5 12.5 0 0 0 6 6l1.4-2 4 1.6v3a2 2 0 0 1-2.2 2A17.5 17.5 0 0 1 4.5 5.7 2 2 0 0 1 6.5 3.5z"/>`,
   enveloppe: `<rect x="2.5" y="5" width="19" height="14" rx="2.2"/><path d="m3.4 6.6 8.6 6.2 8.6-6.2"/>`,
   globe: `<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 2.6 15.4 0 18M12 3c-2.6 2.6-2.6 15.4 0 18"/>`,
-  // Fer à cheval : deux branches ouvertes vers le bas, et les clous.
-  fer: `<path d="M7 20.5V14a5 5 0 0 1 10 0v6.5"/><path d="M7 20.5h2.6M14.4 20.5H17"/>
-        <circle cx="8.4" cy="12.4" r=".75" fill="__C__" stroke="none"/>
-        <circle cx="15.6" cy="12.4" r=".75" fill="__C__" stroke="none"/>
-        <circle cx="9.1" cy="16" r=".75" fill="__C__" stroke="none"/>
-        <circle cx="14.9" cy="16" r=".75" fill="__C__" stroke="none"/>`,
 };
 
-const COULEUR = { fer: OR_CLAIR };
-const TAILLE = { fer: 26 };
+const COULEUR = {};
+const TAILLE = {};
 
 for (const [nom, forme] of Object.entries(FORMES)) {
   const stroke = COULEUR[nom] || OR;
