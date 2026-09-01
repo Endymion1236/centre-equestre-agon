@@ -49,6 +49,7 @@ console.log("\n✓ Commande soldée sans numéro de facture (CGI art. 242 nonies
   });
   assert("signalée", codes(a).includes("facture-sans-numero"), codes(a).join(", "));
   assert("classée à traiter", a[0].gravite === "bloquant");
+  assert("une réparation est proposée", a[0].action === "attribuer-numero", String(a[0].action));
   const offerte = analyserCoherence({
     ...vide,
     paiements: [{ id: "p2", status: "paid", totalTTC: 0, paidAmount: 0, isFree: true, items: [] }],

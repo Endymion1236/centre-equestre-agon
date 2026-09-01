@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, CalendarCheck, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, CalendarCheck, ExternalLink, Receipt } from "lucide-react";
 import type { Anomalie, GraviteAnomalie } from "@/lib/coherence";
 
 interface Groupe {
@@ -60,6 +60,26 @@ export default function CoherencePage() {
   }, [user]);
 
   useEffect(() => { if (isAdmin && user) analyser(); }, [isAdmin, user, analyser]);
+
+  const attribuerNumero = async (paymentId: string) => {
+    setReparation(paymentId);
+    try {
+      const res = await authFetch("/api/admin/attribuer-numero-facture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Échec");
+      alert(json?.deja
+        ? `Cette commande portait déjà le numéro ${json.invoiceNumber}.`
+        : `Numéro de facture attribué : ${json.invoiceNumber}.`);
+      await analyser();
+    } catch (e: any) {
+      alert(`Échec : ${e?.message || e}`);
+    }
+    setReparation("");
+  };
 
   const replacer = async (paymentId: string) => {
     setReparation(paymentId);
@@ -166,6 +186,17 @@ export default function CoherencePage() {
                                 ? <Loader2 size={11} className="animate-spin" />
                                 : <CalendarCheck size={11} />}
                               Replacer
+                            </button>
+                          )}
+                          {a.action === "attribuer-numero" && a.paymentId && (
+                            <button type="button" onClick={() => attribuerNumero(a.paymentId!)}
+                              disabled={reparation === a.paymentId}
+                              title="Attribuer le prochain numéro de la séquence à cette commande soldée"
+                              className="inline-flex items-center gap-1 font-body text-[11px] font-semibold text-white bg-blue-600 px-2 py-1 rounded-md border-none cursor-pointer hover:bg-blue-500 disabled:opacity-50">
+                              {reparation === a.paymentId
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <Receipt size={11} />}
+                              Attribuer le numéro
                             </button>
                           )}
                           {a.lien && (

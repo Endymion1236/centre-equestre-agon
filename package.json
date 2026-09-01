@@ -30,7 +30,8 @@
     "test:all": "./scripts/run-tests.sh all",
     "test:unit": "node scripts/run-unit-tests.mjs",
     "validate:rules": "node scripts/validate-rules.mjs",
-    "preview:emails": "tsx scripts/preview-emails.ts"
+    "preview:emails": "tsx scripts/preview-emails.ts",
+    "test:argent": "playwright test --project=admin tests/e2e/admin/25-parcours-argent.spec.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

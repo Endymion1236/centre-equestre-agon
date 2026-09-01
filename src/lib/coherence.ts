@@ -33,7 +33,7 @@ export interface Anomalie {
   /** Écran où le traiter. */
   lien?: string;
   /** Réparation proposée par l'écran, quand elle existe. */
-  action?: "replacer-au-planning";
+  action?: "replacer-au-planning" | "attribuer-numero";
 }
 
 export interface DonneesCoherence {
@@ -78,6 +78,7 @@ export function analyserCoherence(d: DonneesCoherence): Anomalie[] {
       famille: p.familyName,
       paymentId: p.id,
       lien: "/admin/paiements?tab=historique",
+      action: "attribuer-numero",
     });
   }
 
