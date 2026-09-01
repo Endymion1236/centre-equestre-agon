@@ -358,7 +358,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("invoice-pdf error:", error);
-    console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    // Message réel plutôt que « Erreur interne » : ces routes sont réservées à
+    // l'administration, et sans le motif une facture qui refuse de sortir est
+    // indiagnosticable depuis l'écran — il faut aller lire les logs Vercel.
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json({ error: `Facture PDF — ${message}` }, { status: 500 });
   }
 }

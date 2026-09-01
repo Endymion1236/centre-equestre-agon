@@ -21,7 +21,14 @@ export async function downloadAvoirPdf(params: {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),
   });
-  if (!res.ok) throw new Error("Erreur génération PDF avoir");
+  if (!res.ok) {
+    const motif = await res.json().then((d) => d?.error).catch(() => "");
+    const message = motif || `Erreur génération PDF avoir (HTTP ${res.status})`;
+    if (typeof window !== "undefined") {
+      window.alert(`L'avoir n'a pas pu être généré.\n\n${message}`);
+    }
+    throw new Error(message);
+  }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

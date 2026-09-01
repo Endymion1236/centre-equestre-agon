@@ -87,6 +87,10 @@ export async function GET(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[facturx]", e);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    // Message réel plutôt que « Erreur interne » : ces routes sont réservées à
+    // l'administration, et sans le motif une facture qui refuse de sortir est
+    // indiagnosticable depuis l'écran — il faut aller lire les logs Vercel.
+    const message = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: `Factur-X — ${message}` }, { status: 500 });
   }
 }
