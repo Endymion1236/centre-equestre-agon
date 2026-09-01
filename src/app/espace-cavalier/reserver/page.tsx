@@ -348,14 +348,23 @@ export default function ReserverPage() {
   // En mode jour, stageCreneaux ne contient QUE les jours sélectionnés ; il faut
   // donc passer prixJourParam (prix d'UN jour) et totalJoursStageParam (nombre
   // total de jours du stage) calculés par l'appelant, sinon le prorata est faux.
-  const addStageToCart = (stageCreneaux: Creneau[], prixJourParam?: number, totalJoursStageParam?: number) => {
+  const addStageToCart = (
+    stageCreneaux: Creneau[],
+    prixJourParam?: number,
+    totalJoursStageParam?: number,
+    // Cavaliers explicites : la carte du stage passe par la sélection à
+    // l'écran, mais un jour de stage ajouté depuis un autre chemin (lien
+    // ?creneau=, place tenue) ne connaît qu'un cavalier à la fois.
+    childIdsParam?: string[],
+  ) => {
     if (reservationsFermees) {
       alert(messageFermeture ||
         "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande.");
       return;
     }
 
-    if (selectedChildren.length === 0) return;
+    const enfantsAAjouter = childIdsParam ?? selectedChildren;
+    if (enfantsAAjouter.length === 0) return;
     const first = stageCreneaux[0];
     const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
     const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
@@ -416,7 +425,7 @@ export default function ReserverPage() {
     };
 
     const conflits: { childName: string; date: string }[] = [];
-    const childrenToAdd = selectedChildren.filter(childId => {
+    const childrenToAdd = enfantsAAjouter.filter(childId => {
       const alreadyInCart = cart.some(i => i.childId === childId && i.creneauIds.includes(firstCrId));
       if (alreadyInCart) {
         console.log(`Doublon panier ignoré: childId=${childId} créneau=${firstCrId}`);
@@ -502,6 +511,21 @@ export default function ReserverPage() {
     if (reservationsFermees) {
       alert(messageFermeture ||
         "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande.");
+      return;
+    }
+
+    // Un jour de STAGE arrivé par un chemin « cours » — lien ?creneau= reçu
+    // par email, place tenue en liste d'attente — était traité comme une
+    // séance ordinaire : prix plein de la semaine facturé d'un coup, sans
+    // acompte, et pour la seule journée cliquée. Une famille a ainsi réglé
+    // 350 € le 31/08/2026 au lieu des 60 € d'acompte pour ses deux enfants.
+    // On le renvoie sur la logique stage : semaine complète et acompte.
+    if (isStage(creneau)) {
+      const d = new Date(creneau.date);
+      const lundi = new Date(d); lundi.setDate(lundi.getDate() - ((d.getDay() + 6) % 7));
+      const cle = `${(creneau as any).stageGroupId || creneau.activityId}_${fmtDate(lundi)}`;
+      const jours = (stageGroups[cle] || [creneau]).slice().sort((a, b) => a.date.localeCompare(b.date));
+      addStageToCart(jours, undefined, undefined, [childId]);
       return;
     }
 
