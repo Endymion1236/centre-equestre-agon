@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
+  ShieldCheck,
   BarChart3,
   Bell,
   BellOff,
@@ -125,6 +126,10 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/sepa", icon: Building2, label: "Prélèvements SEPA" },
       { href: "/admin/preinscrits", icon: UserPlus, label: "Pré-inscrits" },
       { href: "/admin/inscriptions-impayees", icon: AlertTriangle, label: "Inscriptions non payées" },
+      // Ce que la machine vérifie seule : argent encaissé sans inscription,
+      // commande soldée sans numéro de facture, journal en désaccord avec la
+      // commande. À ouvrir le lundi matin.
+      { href: "/admin/coherence", icon: ShieldCheck, label: "Cohérence" },
       { href: "/admin/doublons", icon: GitMerge, label: "Doublons" },
       { href: "/admin/comptes-orphelins", icon: UserX, label: "Comptes orphelins" },
     ],
