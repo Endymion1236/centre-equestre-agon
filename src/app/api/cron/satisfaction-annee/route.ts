@@ -4,6 +4,7 @@
  * Params : ?saison=N  ?dry=1  ?to=email
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { runSatisfactionAnnee } from "@/lib/satisfaction/run";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e: any) {
     console.error("satisfaction-annee (cron):", e);
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }
 export async function POST(req: NextRequest) { return GET(req); }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { estPrelevementSepa } from "@/lib/sepa";
 import { Resend } from "resend";
@@ -136,6 +137,6 @@ export async function GET(req: NextRequest) {
   } catch (e: any) {
     console.error("echeances-sepa-reminder:", e);
     console.error("[echeances-sepa-reminder]", e);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

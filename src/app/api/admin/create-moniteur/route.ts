@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminAuth } from "@/lib/firebase-admin";
 
 // POST — créer un compte moniteur (email/mdp) + custom claim moniteur:true
@@ -76,7 +77,7 @@ export async function POST(req: NextRequest) {
     }
     console.error("Erreur création moniteur:", error);
     console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }
 
@@ -104,6 +105,6 @@ export async function DELETE(req: NextRequest) {
   } catch (error: any) {
     console.error("Erreur suppression moniteur:", error);
     console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

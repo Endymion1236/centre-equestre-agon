@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -35,6 +36,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(d, { status: r.status });
   } catch (e: any) {
     console.error("[test-charge-balances]", e);
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

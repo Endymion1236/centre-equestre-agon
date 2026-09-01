@@ -15,6 +15,7 @@
  * dryRun=true : ne modifie rien, renvoie le décompte de ce qui serait déplacé.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 
@@ -173,6 +174,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, apercu });
   } catch (e: any) {
     console.error("doublons-merge:", e);
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

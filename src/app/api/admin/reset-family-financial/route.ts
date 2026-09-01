@@ -34,6 +34,7 @@
  * ⚠️ Opération irréversible quand apply=true.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 
@@ -247,6 +248,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[reset-family-financial] Erreur:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

@@ -14,6 +14,7 @@
  * du header Authorization avec CRON_SECRET défini en variable d'env).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { toParisDateString } from "@/lib/date-local";
 import { compteDeCategorie } from "@/lib/categories-comptables";
@@ -143,6 +144,6 @@ export async function GET(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("[cron/recurrences-monthly] Erreur:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

@@ -15,6 +15,7 @@
  * avoirs € non utilisés, points fidélité.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 
@@ -184,7 +185,7 @@ async function handle(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("reinscriptions:", e);
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }
 

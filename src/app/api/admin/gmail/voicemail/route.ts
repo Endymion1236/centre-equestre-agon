@@ -14,6 +14,7 @@
  * Body : { messageId, attachmentId, subject }
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { paramsTranscription } from "@/lib/transcription-params";
 import OpenAI from "openai";
 import { verifyAuth } from "@/lib/api-auth";
@@ -158,6 +159,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("[voicemail]", e?.message || e);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

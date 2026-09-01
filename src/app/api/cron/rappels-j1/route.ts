@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
@@ -189,6 +190,6 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error("Cron rappels J-1 error:", error);
     console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

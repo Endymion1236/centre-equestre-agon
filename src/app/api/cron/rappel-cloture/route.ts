@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { Resend } from "resend";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
@@ -119,6 +120,6 @@ export async function GET(req: NextRequest) {
   } catch (e: any) {
     console.error("rappel-cloture:", e);
     console.error("[rappel-cloture]", e);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

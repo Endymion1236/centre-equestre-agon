@@ -11,6 +11,7 @@
  * (clé = idA__idB triés) et exclues du scan.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 
@@ -92,7 +93,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ total: fams.length, paires, nbPaires: paires.length });
   } catch (e: any) {
     console.error("doublons:", e);
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }
 

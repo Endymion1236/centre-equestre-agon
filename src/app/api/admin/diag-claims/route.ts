@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminAuth } from "@/lib/firebase-admin";
 
 // GET /api/admin/diag-claims?email=xxx@yyy.com
@@ -45,6 +46,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Aucun compte Firebase Auth avec cet email" }, { status: 404 });
     }
     console.error("diag-claims error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

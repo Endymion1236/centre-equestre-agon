@@ -18,6 +18,7 @@
  *                GET ?dry=1 (calcule sans écrire ni envoyer)
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
@@ -303,6 +304,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(result);
   } catch (error: any) {
     console.error("Cron balades-petit-groupe error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

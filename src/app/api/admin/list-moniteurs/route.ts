@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminAuth } from "@/lib/firebase-admin";
 
 // GET — lister tous les utilisateurs avec custom claim moniteur:true
@@ -38,6 +39,6 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error("Erreur listage moniteurs:", error);
     console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

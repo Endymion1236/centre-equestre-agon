@@ -6,6 +6,7 @@
  * admins reçoivent réellement — sinon l'envoi est "bloqué" (rien n'est envoyé).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { Resend } from "resend";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
@@ -45,6 +46,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

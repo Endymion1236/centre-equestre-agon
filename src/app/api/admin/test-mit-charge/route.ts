@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 import { CAWL_PSPID } from "@/lib/cawl";
@@ -111,6 +112,6 @@ export async function POST(request: NextRequest) {
   } catch (e: any) {
     console.error("test-mit-charge:", e);
     console.error("[test-mit-charge]", e);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

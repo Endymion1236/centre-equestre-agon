@@ -4,6 +4,7 @@
  * Params : ?saison=N  ?dry=1  ?to=email  ?limit=N  ?bcc=0 (retire la copie cachée)
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { runSatisfactionAnnee } from "@/lib/satisfaction/run";
 
@@ -22,7 +23,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e: any) {
     console.error("satisfaction-annee (admin):", e);
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }
 export async function GET(req: NextRequest) { return handle(req); }

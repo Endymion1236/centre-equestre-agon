@@ -5,6 +5,7 @@
  * La logique est dans @/lib/satisfaction/run (partagée avec la route admin de test).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { runSatisfactionStages, runSatisfactionPromenades } from "@/lib/satisfaction/run";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ stages, promenades });
   } catch (e: any) {
     console.error("satisfaction-stages (cron):", e);
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }
 

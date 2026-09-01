@@ -24,6 +24,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 
@@ -128,6 +129,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error("change-family-email fatal:", e);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

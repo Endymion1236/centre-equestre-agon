@@ -4,6 +4,7 @@
  *   pairId = "idA__idB" (ids triés). undo=true pour réintégrer la paire au scan.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 
@@ -21,6 +22,6 @@ export async function POST(req: NextRequest) {
     else await ref.set({ ignoredAt: new Date() });
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

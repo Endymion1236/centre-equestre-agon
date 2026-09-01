@@ -5,6 +5,7 @@
  * Même logique que le cron, mais accessible à un admin connecté pour tester.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { verifyAuth } from "@/lib/api-auth";
 import { runSatisfactionStages, runSatisfactionPromenades } from "@/lib/satisfaction/run";
 
@@ -29,7 +30,7 @@ async function handle(req: NextRequest) {
     return NextResponse.json(result);
   } catch (e: any) {
     console.error("satisfaction-stages (admin):", e);
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }
 

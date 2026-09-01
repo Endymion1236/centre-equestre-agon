@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { estPrelevementSepa } from "@/lib/sepa";
 import { verifyAuth } from "@/lib/api-auth";
@@ -425,6 +426,6 @@ export async function POST(req: NextRequest) {
   } catch (error: any) {
     console.error("Erreur désinscription en masse:", error);
     console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

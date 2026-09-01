@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
@@ -95,9 +96,6 @@ export async function GET(req: NextRequest) {
         : `⚠️ ${totalConcernes} créneau(x) sans prix, impactant ${totalInscritsImpactes} inscription(s). Corrige leur priceTTC depuis le planning, ou s'ils sont obsolètes, supprime-les.`,
     });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: "Erreur serveur" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

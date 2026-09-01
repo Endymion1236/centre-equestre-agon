@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { sendPush } from "@/lib/push";
 import { loadTemplate } from "@/lib/email-template-loader";
@@ -656,6 +657,6 @@ export async function GET(req: NextRequest) {
   } catch (error: any) {
     console.error("Cron daily-notifications error:", error);
     console.error("API error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

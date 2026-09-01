@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 
@@ -21,6 +22,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, count: equides.length, equides: equides.map((e, i) => ({ ordre: i+1, name: e.name })) });
   } catch (e: any) {
-    return NextResponse.json({ error: "Erreur interne"}, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(e)}` }, { status: 500 });
   }
 }

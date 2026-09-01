@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { renderToBuffer, Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { readFileSync } from "fs";
 import { join } from "path";
@@ -208,6 +209,6 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("sepa-mandate-pdf error:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }

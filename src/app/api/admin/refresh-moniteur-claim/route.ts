@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { messageErreur } from "@/lib/message-erreur";
 import { adminAuth } from "@/lib/firebase-admin";
 
 // POST — réappliquer le custom claim moniteur:true sur un user existant.
@@ -43,6 +44,6 @@ export async function POST(req: NextRequest) {
     });
   } catch (error: any) {
     console.error("Erreur réapplication claim moniteur:", error);
-    return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
+    return NextResponse.json({ error: `Erreur interne — ${messageErreur(error)}` }, { status: 500 });
   }
 }
