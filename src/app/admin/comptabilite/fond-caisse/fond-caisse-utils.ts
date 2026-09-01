@@ -2,7 +2,8 @@ export const BILLETS = [500, 200, 100, 50, 20, 10, 5] as const;
 export const PIECES = [2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01] as const;
 
 export function arrondirCaisse(valeur: number): number {
-  return Math.round(valeur * 100) / 100;
+  const arrondi = Math.round(valeur * 100) / 100;
+  return Object.is(arrondi, -0) ? 0 : arrondi;
 }
 
 export function initialiserComptage(denominations: readonly number[]): Record<number, number> {
