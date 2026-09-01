@@ -17,6 +17,7 @@ import {
   parserDateBancaire,
   parserDetailCa,
 } from "./rapprochement-utils";
+import { construireFecVentes } from "./fec-utils";
 
 interface Payment {
   id: string;
@@ -1754,32 +1755,7 @@ export default function ComptabilitePage() {
     setIaAnswerLoading(false);
   };
   const generateFEC = () => {
-    const header = "JournalCode\tJournalLib\tEcritureNum\tEcritureDate\tCompteNum\tCompteLib\tCompAuxNum\tCompAuxLib\tPieceRef\tPieceDate\tEcritureLib\tDebit\tCredit\tEcritureLet\tDateLet\tValidDate\tMontantdevise\tIdevise";
-    const rows: string[] = [];
-    let ecritureNum = 1;
-
-    filteredPayments.forEach((p, idx) => {
-      const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-      const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-      const pieceRef = `F${d.getFullYear()}-${String(idx + 1).padStart(3, "0")}`;
-
-      // Ligne produit
-      (p.items || []).forEach((item) => {
-        rows.push(`VE\tVentes\t${ecritureNum}\t${dateStr}\t70611400\tStages équitation\t\t\t${pieceRef}\t${dateStr}\t${item.activityTitle}\t\t${(item.priceHT || 0).toFixed(2)}\t\t\t${dateStr}\t\t`);
-        ecritureNum++;
-        // TVA
-        const tvaAmount = (item.priceTTC || 0) - (item.priceHT || 0);
-        if (tvaAmount > 0) {
-          rows.push(`VE\tVentes\t${ecritureNum}\t${dateStr}\t44571\tTVA collectée\t\t\t${pieceRef}\t${dateStr}\tTVA ${item.tva || 5.5}%\t\t${tvaAmount.toFixed(2)}\t\t\t${dateStr}\t\t`);
-          ecritureNum++;
-        }
-      });
-      // Créance client
-      rows.push(`VE\tVentes\t${ecritureNum}\t${dateStr}\t411000\tClients\t${p.familyName}\t${p.familyName}\t${pieceRef}\t${dateStr}\tCréance ${p.familyName}\t${(p.totalTTC || 0).toFixed(2)}\t\t\t\t${dateStr}\t\t`);
-      ecritureNum++;
-    });
-
-    const content = header + "\n" + rows.join("\n");
+    const content = construireFecVentes(filteredPayments);
     const blob = new Blob([content], { type: "text/tab-separated-values;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
