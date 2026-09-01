@@ -18,6 +18,7 @@ import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { toParisDateString } from "@/lib/date-local";
 import { compteDeCategorie } from "@/lib/categories-comptables";
+import { moisDejaFacture } from "@/lib/recurrences";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -45,6 +46,14 @@ export async function GET(req: NextRequest) {
       .where("statut", "==", "actif")
       .get();
 
+    // Les paiements réellement présents en base parmi ceux nés d'une
+    // récurrence. Une trace de facturation survit à la disparition de son
+    // paiement (une réinitialisation des données financières efface
+    // `payments` et laisse `recurrences` intact) : sans cette lecture, le
+    // mois passait pour facturé et n'était jamais rattrapé.
+    const paiementsSnap = await adminDb.collection("payments").where("recurrenceId", "!=", null).get();
+    const paiementsExistants = new Set(paiementsSnap.docs.map((d) => d.id));
+
     const generated: { recurrenceId: string; label: string; paymentId: string }[] = [];
     const skipped: { recurrenceId: string; reason: string }[] = [];
 
@@ -71,8 +80,9 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      // Idempotence : déjà facturée ce mois ?
-      const dejaFact = (r.facturesGenerees || []).some((f: any) => f.mois === moisKey);
+      // Idempotence : déjà facturée ce mois — et la facture existe-t-elle
+      // encore ? Une trace orpheline ne bloque plus la refacturation.
+      const dejaFact = moisDejaFacture(r.facturesGenerees, moisKey, paiementsExistants);
       if (dejaFact) {
         skipped.push({ recurrenceId: recDoc.id, reason: `Déjà facturée pour ${moisKey}` });
         continue;
@@ -118,7 +128,9 @@ export async function GET(req: NextRequest) {
 
       // Mise à jour de la récurrence
       const newHistorique = [
-        ...(r.facturesGenerees || []),
+        // La trace orpheline du même mois est écartée : sinon le mois
+        // figurerait deux fois dans l'historique.
+        ...(r.facturesGenerees || []).filter((f: any) => f?.mois !== moisKey),
         { mois: moisKey, paymentId: paymentRef.id, generatedAt: new Date().toISOString() },
       ];
       // Limite : 12 dernières factures conservées dans l'historique

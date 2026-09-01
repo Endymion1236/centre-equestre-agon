@@ -2,7 +2,7 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { Family } from "@/types";
 import { CATEGORIES_COMPTABLES, compteDeCategorie } from "@/lib/categories-comptables";
+import { historiqueRecurrence, moisDejaFacture } from "@/lib/recurrences";
 
 // ─────────────────────────────────────────────────────────────────────
 // Types
@@ -57,6 +58,10 @@ export default function RecurrencesPage() {
 
   const [recurrences, setRecurrences] = useState<Recurrence[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
+  /** Identifiants des paiements issus d'une récurrence, tels qu'ils existent
+   *  vraiment en base. Sans eux, une trace de facturation laissée par un
+   *  paiement effacé passerait pour une facture émise. */
+  const [paiementsExistants, setPaiementsExistants] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"actif" | "suspendu" | "resilie" | "tous">("actif");
   const [search, setSearch] = useState("");
@@ -75,12 +80,16 @@ export default function RecurrencesPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [rSnap, fSnap] = await Promise.all([
+      const [rSnap, fSnap, pSnap] = await Promise.all([
         getDocs(collection(db, "recurrences")),
         getDocs(collection(db, "families")),
+        // Les paiements nés d'une récurrence, et eux seuls : ils portent tous
+        // un recurrenceId. On ne lit pas toute la collection payments.
+        getDocs(query(collection(db, "payments"), where("recurrenceId", "!=", null))),
       ]);
       const rs = rSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Recurrence[];
       const fs = fSnap.docs.map(d => ({ firestoreId: d.id, ...(d.data() as any) })) as Family[];
+      setPaiementsExistants(new Set(pSnap.docs.map(d => d.id)));
       setRecurrences(rs.sort((a, b) => (a.familyName || "").localeCompare(b.familyName || "")));
       setFamilies(fs.sort((a: any, b: any) => (a.parentName || "").localeCompare(b.parentName || "")));
     } catch (e) {
@@ -232,7 +241,7 @@ export default function RecurrencesPage() {
       ) : (
         <div className="flex flex-col gap-2">
           {filtered.map(r => (
-            <RecurrenceRow key={r.id} recurrence={r}
+            <RecurrenceRow key={r.id} recurrence={r} paiementsExistants={paiementsExistants}
               onEdit={() => setEditRec(r)}
               onSuspend={() => handleSuspend(r)}
               onResume={() => handleResume(r)}
@@ -253,6 +262,7 @@ export default function RecurrencesPage() {
       {facturationOpen && (
         <FacturationModal
           recurrences={recurrences.filter(r => r.statut === "actif")}
+          paiementsExistants={paiementsExistants}
           onClose={() => setFacturationOpen(false)}
           onDone={(count) => { setFacturationOpen(false); showToast(`${count} facture(s) générée(s)`); fetchData(); }}
         />
@@ -264,12 +274,17 @@ export default function RecurrencesPage() {
 // ─────────────────────────────────────────────────────────────────────
 // Ligne récurrence
 // ─────────────────────────────────────────────────────────────────────
-function RecurrenceRow({ recurrence, onEdit, onSuspend, onResume, onResilier }: {
+function RecurrenceRow({ recurrence, paiementsExistants, onEdit, onSuspend, onResume, onResilier }: {
   recurrence: Recurrence;
+  paiementsExistants: Set<string>;
   onEdit: () => void; onSuspend: () => void; onResume: () => void; onResilier: () => void;
 }) {
   const statusColor = recurrence.statut === "actif" ? "green" : recurrence.statut === "suspendu" ? "orange" : "gray";
-  const nbFactures = recurrence.facturesGenerees?.length || 0;
+  // On ne compte que les factures dont le paiement existe encore : annoncer
+  // « 1 facture générée » alors que la base financière a été réinitialisée
+  // envoyait chercher une facture introuvable.
+  const { vivantes, orphelines } = historiqueRecurrence(recurrence.facturesGenerees, paiementsExistants);
+  const nbFactures = vivantes.length;
   return (
     <Card padding="md">
       <div className="flex items-start justify-between flex-wrap gap-3">
@@ -280,6 +295,12 @@ function RecurrenceRow({ recurrence, onEdit, onSuspend, onResume, onResilier }: 
             <span className="font-body text-[10px] text-slate-400">·</span>
             <span className="font-body text-[11px] text-slate-600">facturé le {recurrence.jourFacturation} du mois</span>
             {nbFactures > 0 && <span className="font-body text-[10px] text-blue-500">· {nbFactures} facture{nbFactures > 1 ? "s" : ""} générée{nbFactures > 1 ? "s" : ""}</span>}
+            {orphelines.length > 0 && (
+              <span title={`Mois concerné${orphelines.length > 1 ? "s" : ""} : ${orphelines.map(o => o.mois).join(", ")}. Ces mois sont de nouveau facturables.`}
+                className="font-body text-[10px] text-orange-600">
+                · {orphelines.length} facture{orphelines.length > 1 ? "s" : ""} effacée{orphelines.length > 1 ? "s" : ""} (à refaire)
+              </span>
+            )}
           </div>
           <div className="font-body text-xs text-slate-600">
             {recurrence.familyName} · depuis le {new Date(recurrence.dateDebut).toLocaleDateString("fr-FR")}
@@ -500,8 +521,9 @@ function RecurrenceModal({ recurrence, families, onClose, onSaved }: {
 // ─────────────────────────────────────────────────────────────────────
 // Modale facturation manuelle (génère pour le mois en cours)
 // ─────────────────────────────────────────────────────────────────────
-function FacturationModal({ recurrences, onClose, onDone }: {
+function FacturationModal({ recurrences, paiementsExistants, onClose, onDone }: {
   recurrences: Recurrence[];
+  paiementsExistants: Set<string>;
   onClose: () => void;
   onDone: (count: number) => void;
 }) {
@@ -515,7 +537,7 @@ function FacturationModal({ recurrences, onClose, onDone }: {
   const [selected, setSelected] = useState<Set<string>>(() => {
     const s = new Set<string>();
     for (const r of recurrences) {
-      const dejaFact = (r.facturesGenerees || []).some(f => f.mois === moisKey);
+      const dejaFact = moisDejaFacture(r.facturesGenerees, moisKey, paiementsExistants);
       if (!dejaFact) s.add(r.id);
     }
     return s;
@@ -525,11 +547,11 @@ function FacturationModal({ recurrences, onClose, onDone }: {
   useEffect(() => {
     const s = new Set<string>();
     for (const r of recurrences) {
-      const dejaFact = (r.facturesGenerees || []).some(f => f.mois === moisKey);
+      const dejaFact = moisDejaFacture(r.facturesGenerees, moisKey, paiementsExistants);
       if (!dejaFact) s.add(r.id);
     }
     setSelected(s);
-  }, [moisIdx, annee, moisKey, recurrences]);
+  }, [moisIdx, annee, moisKey, recurrences, paiementsExistants]);
 
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
@@ -555,7 +577,7 @@ function FacturationModal({ recurrences, onClose, onDone }: {
     try {
       for (const r of recurrences) {
         if (!selected.has(r.id)) continue;
-        const dejaFact = (r.facturesGenerees || []).some(f => f.mois === moisKey);
+        const dejaFact = moisDejaFacture(r.facturesGenerees, moisKey, paiementsExistants);
         if (dejaFact) continue; // garde-fou : ne jamais re-facturer
 
         const moisLabel = `${MOIS[moisIdx]} ${annee}`;
@@ -594,8 +616,13 @@ function FacturationModal({ recurrences, onClose, onDone }: {
           date: serverTimestamp(),
         });
 
-        // Mettre à jour la récurrence : tracer la facture générée
-        const newHistorique = [...(r.facturesGenerees || []), { mois: moisKey, paymentId: paymentDoc.id, generatedAt: new Date().toISOString() }];
+        // Mettre à jour la récurrence : tracer la facture générée. On écarte
+        // au passage la trace orpheline du même mois, s'il y en avait une —
+        // sinon le mois apparaîtrait deux fois dans l'historique.
+        const newHistorique = [
+          ...(r.facturesGenerees || []).filter(f => f.mois !== moisKey),
+          { mois: moisKey, paymentId: paymentDoc.id, generatedAt: new Date().toISOString() },
+        ];
         // Garder uniquement les 12 dernières pour limiter la taille du doc
         if (newHistorique.length > 12) newHistorique.shift();
         await updateDoc(doc(db, "recurrences", r.id), {
@@ -641,7 +668,7 @@ function FacturationModal({ recurrences, onClose, onDone }: {
             <p className="font-body text-sm text-slate-500 italic text-center py-6">Aucune récurrence active</p>
           )}
           {recurrences.map(r => {
-            const dejaFact = (r.facturesGenerees || []).some(f => f.mois === moisKey);
+            const dejaFact = moisDejaFacture(r.facturesGenerees, moisKey, paiementsExistants);
             return (
               <div key={r.id} className={`flex items-center gap-3 p-3 rounded-lg border ${selected.has(r.id) ? "bg-blue-50 border-blue-200" : dejaFact ? "bg-gray-50 border-gray-200" : "bg-white border-gray-200"}`}>
                 <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)}

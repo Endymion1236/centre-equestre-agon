@@ -118,5 +118,24 @@ export async function POST(req: NextRequest) {
   // NB : on conserve les réservations ET les inscrits des créneaux (enrolled).
   // Seul le financier pur est effacé. Le planning reste intact et cohérent.
 
+  // Les récurrences sont de la structure : on les garde. Mais elles portent un
+  // historique de facturation (`facturesGenerees`) qui désigne des paiements
+  // qu'on vient d'effacer. Laissé tel quel, il annonçait des factures
+  // introuvables ET interdisait de refacturer les mois concernés — le mois
+  // restait impayé sans que rien ne le réclame. On vide donc cet historique,
+  // et lui seul : le montant, la famille et le calendrier ne bougent pas.
+  try {
+    const recSnap = await adminDb.collection("recurrences").get();
+    const aVider = recSnap.docs.filter((d) => ((d.data() as any).facturesGenerees || []).length > 0);
+    if (apply && aVider.length > 0) {
+      const batch = adminDb.batch();
+      aVider.forEach((d) => batch.update(d.ref, { facturesGenerees: [], updatedAt: new Date() }));
+      await batch.commit();
+    }
+    rapport.recurrences_historique_vide = aVider.length;
+  } catch (e: any) {
+    rapport.recurrences_historique_vide = `ERREUR: ${e?.message || e}`;
+  }
+
   return NextResponse.json(rapport);
 }
