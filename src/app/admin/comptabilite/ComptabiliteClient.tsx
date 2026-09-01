@@ -28,6 +28,10 @@ import {
   calculerTotauxJournaliers,
   filtrerFacturesPeriode,
 } from "./synthese-compta-utils";
+import {
+  construireExportComptable,
+  type TypeExportComptable,
+} from "./exports-csv-utils";
 
 interface Payment {
   id: string;
@@ -3715,34 +3719,11 @@ export default function ComptabilitePage() {
                   <div className="font-body text-sm font-semibold text-blue-800 mb-1">{exp.label}</div>
                   <div className="font-body text-xs text-slate-500 mb-3 flex-1">{exp.desc}</div>
                   <button onClick={() => {
-                    let csv = "";
-                    const sep = ";";
-                    if (exp.id === "ventes") {
-                      csv = "Date;Client;Article;HT;TVA%;TVA;TTC;Mode\n";
-                      filteredPayments.forEach(p => {
-                        const d = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
-                        (p.items || []).forEach((i: any) => {
-                          csv += [d, p.familyName, i.activityTitle, (i.priceHT||0).toFixed(2), (i.tva||5.5), ((i.priceTTC||0)-(i.priceHT||0)).toFixed(2), (i.priceTTC||0).toFixed(2), p.paymentMode].join(sep) + "\n";
-                        });
-                      });
-                    } else if (exp.id === "reglements") {
-                      csv = "Date;Client;Montant;Mode;Référence\n";
-                      filteredPayments.forEach(p => {
-                        const d = p.date?.seconds ? new Date(p.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
-                        csv += [d, p.familyName, (p.totalTTC||0).toFixed(2), p.paymentMode, p.paymentRef||""].join(sep) + "\n";
-                      });
-                    } else {
-                      csv = "Client;Total facturé;Total payé;Solde dû\n";
-                      const byClient: Record<string, { facture: number; paye: number }> = {};
-                      payments.forEach(p => {
-                        if (!byClient[p.familyName]) byClient[p.familyName] = { facture: 0, paye: 0 };
-                        byClient[p.familyName].facture += p.totalTTC || 0;
-                        byClient[p.familyName].paye += p.paidAmount || p.totalTTC || 0;
-                      });
-                      Object.entries(byClient).forEach(([name, c]) => {
-                        csv += [name, c.facture.toFixed(2), c.paye.toFixed(2), (c.facture - c.paye).toFixed(2)].join(sep) + "\n";
-                      });
-                    }
+                    const csv = construireExportComptable(
+                      exp.id as TypeExportComptable,
+                      filteredPayments,
+                      payments,
+                    );
                     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement("a");
