@@ -3633,7 +3633,7 @@ export default function ComptabilitePage() {
         };
 
         const blAmount = bl.amount;
-        const parsed = caDetailText ? parseCaText(caDetailText) : [];
+        const parsed = caDetailText ? parserDetailCa(caDetailText) : [];
         const parsedTotal = parsed.reduce((s, a) => s + a, 0);
         const totalMatches = Math.abs(parsedTotal - blAmount) < 0.02;
 
