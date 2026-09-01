@@ -6,54 +6,40 @@ import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Receipt, Loader2, RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
 import { POSTES_DEPENSES as POSTES_DEFAUT } from "@/lib/postes-depenses";
+import {
+  MOIS_EXERCICE,
+  NOMS_MOIS,
+  NOMS_MOIS_LONGS,
+  attenduAdate,
+  construirePostes,
+  cumulPoste,
+  exerciceDe,
+  exercicesDisponibles,
+  facturesDe as filtrerFactures,
+  formaterEuros as eur,
+  moisCourant,
+  moisDe,
+  nombreMoisEcoules,
+  posteEnDepassement,
+  totalDe as totalDepensesDe,
+  totalMois,
+  type Depense,
+} from "./depenses-utils";
 
 /**
- * Dépenses par poste — le pendant « charges » de la trésorerie.
- *
- * Le bilan n'arrive qu'une fois par an, six mois après la clôture : quand un
- * poste a doublé (entretien, fournitures, véto…), c'est trop tard pour réagir.
- * Ici : une matrice postes × mois sur l'exercice comptable (juillet → juin).
- * Chaque case est la somme des FACTURES du poste sur le mois — une ligne par
- * facture, avec le fournisseur — et se compare au dernier exercice validé par
- * le cabinet (bilan 2024-25). Montants HT de préférence, comme au bilan —
- * l'important est surtout d'être constant d'un mois à l'autre.
+ * Dépenses par poste, le pendant « charges » de la trésorerie.
+ * Une matrice postes × mois sur l'exercice comptable juillet → juin permet
+ * de voir un dérapage pendant l'exercice plutôt qu'après le bilan.
  */
-
-interface Depense { id: string; mois: string; poste: string; fournisseur: string; montant: number; note: string; }
-
-// Même exercice comptable que la masse salariale : juillet → juin, comme le bilan.
-const MOIS_EXERCICE = ["07", "08", "09", "10", "11", "12", "01", "02", "03", "04", "05", "06"] as const;
-const NOMS_MOIS: Record<string, string> = {
-  "07": "Juil", "08": "Août", "09": "Sept", "10": "Oct", "11": "Nov", "12": "Déc",
-  "01": "Janv", "02": "Févr", "03": "Mars", "04": "Avr", "05": "Mai", "06": "Juin",
-};
-const NOMS_MOIS_LONGS: Record<string, string> = {
-  "07": "Juillet", "08": "Août", "09": "Septembre", "10": "Octobre", "11": "Novembre", "12": "Décembre",
-  "01": "Janvier", "02": "Février", "03": "Mars", "04": "Avril", "05": "Mai", "06": "Juin",
-};
-function exerciceDe(mois: string): string {
-  const [a, m] = mois.split("-").map(Number);
-  return m >= 7 ? `${a}-${a + 1}` : `${a - 1}-${a}`;
-}
-function moisDe(exercice: string, mm: string): string {
-  const [a1, a2] = exercice.split("-");
-  return `${Number(mm) >= 7 ? a1 : a2}-${mm}`;
-}
-const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
-const moisCourant = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
-
 export default function DepensesPage() {
   const { isAdmin, user } = useAuth();
   const [depenses, setDepenses] = useState<Depense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [exercice, setExercice] = useState(exerciceDe(moisCourant()));
-  // Case sélectionnée : ouvre le détail des factures du (poste, mois) sous la matrice.
+  const [exercice, setExercice] = useState(() => exerciceDe(moisCourant()));
   const [sel, setSel] = useState<{ mois: string; poste: string } | null>(null);
-  // Formulaire d'ajout / correction d'une facture (editId = correction).
   const [form, setForm] = useState<{ editId: string | null; fournisseur: string; montant: string }>({ editId: null, fournisseur: "", montant: "" });
   const [saving, setSaving] = useState(false);
-  // Postes ajoutés à la main (au-delà de la liste par défaut), le temps de la session.
   const [postesPerso, setPostesPerso] = useState<string[]>([]);
   const [nouveauPoste, setNouveauPoste] = useState<string | null>(null);
 
@@ -64,53 +50,46 @@ export default function DepensesPage() {
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d?.error || "Erreur");
-    return d;
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || "Erreur");
+    return data;
   }, [user]);
 
   const load = useCallback(async () => {
     if (!user) return;
-    setLoading(true); setError("");
-    try { setDepenses((await api()).depenses || []); }
-    catch (e: any) { setError(e?.message || String(e)); }
-    finally { setLoading(false); }
+    setLoading(true);
+    setError("");
+    try {
+      setDepenses((await api()).depenses || []);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setLoading(false);
+    }
   }, [user, api]);
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
-  const exercices = useMemo(() => {
-    const s = new Set(depenses.map(d => exerciceDe(d.mois)));
-    s.add(exerciceDe(moisCourant()));
-    return [...s].sort();
-  }, [depenses]);
-
-  // Tous les postes à afficher : la liste par défaut + ceux trouvés dans les
-  // données (un poste renommé ou historique reste visible) + ceux ajoutés là.
-  const postes = useMemo(() => {
-    const connus = new Set(POSTES_DEFAUT.map(p => p.nom));
-    const extra = [...new Set([...depenses.map(d => d.poste), ...postesPerso])]
-      .filter(p => !connus.has(p)).sort((a, b) => a.localeCompare(b, "fr"));
-    return [...POSTES_DEFAUT, ...extra.map(nom => ({ nom, ref: null as number | null }))];
-  }, [depenses, postesPerso]);
-
-  const facturesDe = useCallback((poste: string, mois: string) =>
-    depenses.filter(d => d.poste === poste && d.mois === mois), [depenses]);
-  const totalDe = useCallback((poste: string, mois: string) =>
-    facturesDe(poste, mois).reduce((s, f) => s + f.montant, 0), [facturesDe]);
-
-  // Combien de mois de l'exercice affiché sont déjà écoulés (mois courant
-  // compris) — pour comparer le cumul à un « attendu à date », pas à l'année entière.
-  const moisEcoules = useMemo(() => {
-    const courant = moisCourant();
-    return MOIS_EXERCICE.filter(mm => moisDe(exercice, mm) <= courant).length;
-  }, [exercice]);
-
+  const exercices = useMemo(() => exercicesDisponibles(depenses), [depenses]);
+  const postes = useMemo(
+    () => construirePostes(POSTES_DEFAUT, depenses, postesPerso),
+    [depenses, postesPerso],
+  );
+  const facturesDe = useCallback(
+    (poste: string, mois: string) => filtrerFactures(depenses, poste, mois),
+    [depenses],
+  );
+  const totalDe = useCallback(
+    (poste: string, mois: string) => totalDepensesDe(depenses, poste, mois),
+    [depenses],
+  );
+  const moisEcoules = useMemo(() => nombreMoisEcoules(exercice), [exercice]);
   const facturesSel = sel ? facturesDe(sel.poste, sel.mois) : [];
 
   const enregistrerFacture = async () => {
     if (!sel || saving || form.montant.trim() === "") return;
-    setSaving(true); setError("");
+    setSaving(true);
+    setError("");
     try {
       if (form.editId) {
         await api({ action: "modifier", id: form.editId, fournisseur: form.fournisseur, montant: form.montant });
@@ -119,14 +98,21 @@ export default function DepensesPage() {
       }
       setForm({ editId: null, fournisseur: "", montant: "" });
       await load();
-    } catch (e: any) { setError(e?.message || String(e)); }
-    finally { setSaving(false); }
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const supprimerFacture = async (f: Depense) => {
-    if (!confirm(`Retirer la facture ${f.fournisseur ? `« ${f.fournisseur} » ` : ""}de ${eur(f.montant)} ?`)) return;
-    try { await api({ action: "supprimer", id: f.id }); await load(); }
-    catch (e: any) { setError(e?.message || String(e)); }
+  const supprimerFacture = async (facture: Depense) => {
+    if (!confirm(`Retirer la facture ${facture.fournisseur ? `« ${facture.fournisseur} » ` : ""}de ${eur(facture.montant)} ?`)) return;
+    try {
+      await api({ action: "supprimer", id: facture.id });
+      await load();
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    }
   };
 
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
@@ -141,8 +127,7 @@ export default function DepensesPage() {
           <div>
             <h1 className="font-display text-2xl font-bold text-blue-800">Dépenses par poste</h1>
             <p className="font-body text-sm text-slate-500">
-              Une ligne par facture (fournisseur, montant), comparée au bilan 2024-25 —
-              pour voir un dérapage en octobre, pas dans dix-huit mois.
+              Une ligne par facture (fournisseur, montant), comparée au bilan 2024-25, pour voir un dérapage en octobre, pas dans dix-huit mois.
             </p>
           </div>
         </div>
@@ -194,21 +179,21 @@ export default function DepensesPage() {
                 </tr>
               </thead>
               <tbody>
-                {postes.map(p => {
-                  const cumul = MOIS_EXERCICE.reduce((s, mm) => s + totalDe(p.nom, moisDe(exercice, mm)), 0);
-                  const attendu = p.ref != null ? (p.ref * moisEcoules) / 12 : null;
-                  const depassement = attendu != null && cumul > attendu * 1.1;
+                {postes.map(poste => {
+                  const cumul = cumulPoste(depenses, poste.nom, exercice);
+                  const attendu = attenduAdate(poste.ref, moisEcoules);
+                  const depassement = posteEnDepassement(cumul, attendu);
                   return (
-                    <tr key={p.nom} className="border-b border-gray-100 hover:bg-orange-50/30">
-                      <td className="px-3 py-1.5 text-slate-700 font-medium sticky left-0 bg-white max-w-56 truncate" title={p.nom}>{p.nom}</td>
+                    <tr key={poste.nom} className="border-b border-gray-100 hover:bg-orange-50/30">
+                      <td className="px-3 py-1.5 text-slate-700 font-medium sticky left-0 bg-white max-w-56 truncate" title={poste.nom}>{poste.nom}</td>
                       {MOIS_EXERCICE.map(mm => {
                         const mois = moisDe(exercice, mm);
-                        const factures = facturesDe(p.nom, mois);
-                        const total = factures.reduce((s, f) => s + f.montant, 0);
-                        const active = sel && sel.mois === mois && sel.poste === p.nom;
+                        const factures = facturesDe(poste.nom, mois);
+                        const total = factures.reduce((s, facture) => s + facture.montant, 0);
+                        const active = sel && sel.mois === mois && sel.poste === poste.nom;
                         return (
                           <td key={mm} className="px-1 py-1 text-right">
-                            <button type="button" onClick={() => { setSel({ mois, poste: p.nom }); setForm({ editId: null, fournisseur: "", montant: "" }); }}
+                            <button type="button" onClick={() => { setSel({ mois, poste: poste.nom }); setForm({ editId: null, fournisseur: "", montant: "" }); }}
                               title={factures.length > 0 ? `${factures.length} facture(s) — cliquer pour le détail` : "Cliquer pour saisir les factures"}
                               className={`w-full text-right border-none cursor-pointer px-1 py-0.5 rounded font-body text-[13px] ${active ? "bg-orange-200/70" : "bg-transparent hover:bg-orange-100/60"}`}>
                               {factures.length > 0
@@ -222,23 +207,23 @@ export default function DepensesPage() {
                         {cumul > 0 ? eur(cumul) : "—"}{depassement ? " ⚠" : ""}
                       </td>
                       <td className="px-2 py-1.5 text-right text-amber-700/80 italic">{attendu != null ? eur(attendu) : "—"}</td>
-                      <td className="px-2 py-1.5 text-right text-slate-400">{p.ref != null ? eur(p.ref) : "—"}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-400">{poste.ref != null ? eur(poste.ref) : "—"}</td>
                     </tr>
                   );
                 })}
                 <tr className="bg-orange-50/60 font-semibold text-orange-900">
                   <td className="px-3 py-2 sticky left-0 bg-orange-50/60">Total</td>
                   {MOIS_EXERCICE.map(mm => {
-                    const t = postes.reduce((s, p) => s + totalDe(p.nom, moisDe(exercice, mm)), 0);
-                    return <td key={mm} className="px-1.5 py-2 text-right">{t > 0 ? eur(t) : "—"}</td>;
+                    const total = totalMois(depenses, postes, exercice, mm);
+                    return <td key={mm} className="px-1.5 py-2 text-right">{total > 0 ? eur(total) : "—"}</td>;
                   })}
                   <td className="px-2 py-2 text-right">
-                    {eur(postes.reduce((s, p) => s + MOIS_EXERCICE.reduce((s2, mm) => s2 + totalDe(p.nom, moisDe(exercice, mm)), 0), 0))}
+                    {eur(postes.reduce((s, poste) => s + cumulPoste(depenses, poste.nom, exercice), 0))}
                   </td>
                   <td className="px-2 py-2 text-right text-amber-800 italic">
-                    {eur(postes.reduce((s, p) => s + (p.ref || 0), 0) * moisEcoules / 12)}
+                    {eur(postes.reduce((s, poste) => s + (poste.ref || 0), 0) * moisEcoules / 12)}
                   </td>
-                  <td className="px-2 py-2 text-right text-slate-500">{eur(postes.reduce((s, p) => s + (p.ref || 0), 0))}</td>
+                  <td className="px-2 py-2 text-right text-slate-500">{eur(postes.reduce((s, poste) => s + (poste.ref || 0), 0))}</td>
                 </tr>
               </tbody>
             </table>
@@ -268,7 +253,6 @@ export default function DepensesPage() {
             </div>
           </Card>
 
-          {/* ── Détail des factures de la case sélectionnée ── */}
           {sel && (
             <Card padding="md" className="mt-4">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
@@ -283,14 +267,14 @@ export default function DepensesPage() {
                 <p className="font-body text-xs text-slate-400 italic mb-2">Aucune facture ce mois-ci sur ce poste.</p>
               ) : (
                 <div className="flex flex-col gap-1 mb-2">
-                  {facturesSel.map(f => (
-                    <div key={f.id} className="flex items-center justify-between gap-2 rounded-lg bg-orange-50/60 border border-orange-100 px-3 py-1.5 font-body text-sm">
-                      <span className="text-slate-700">{f.fournisseur || <span className="text-slate-400 italic">(sans fournisseur)</span>}</span>
+                  {facturesSel.map(facture => (
+                    <div key={facture.id} className="flex items-center justify-between gap-2 rounded-lg bg-orange-50/60 border border-orange-100 px-3 py-1.5 font-body text-sm">
+                      <span className="text-slate-700">{facture.fournisseur || <span className="text-slate-400 italic">(sans fournisseur)</span>}</span>
                       <span className="flex items-center gap-1">
-                        <strong className="text-orange-900">{eur(f.montant)}</strong>
-                        <button type="button" onClick={() => setForm({ editId: f.id, fournisseur: f.fournisseur, montant: String(f.montant) })}
+                        <strong className="text-orange-900">{eur(facture.montant)}</strong>
+                        <button type="button" onClick={() => setForm({ editId: facture.id, fournisseur: facture.fournisseur, montant: String(facture.montant) })}
                           title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={12} /></button>
-                        <button type="button" onClick={() => supprimerFacture(f)} title="Retirer"
+                        <button type="button" onClick={() => supprimerFacture(facture)} title="Retirer"
                           className="text-slate-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={12} /></button>
                       </span>
                     </div>
@@ -298,7 +282,7 @@ export default function DepensesPage() {
                   {facturesSel.length > 1 && (
                     <div className="flex items-center justify-between px-3 py-1 font-body text-xs font-semibold text-orange-900">
                       <span>Total du poste sur le mois</span>
-                      <span>{eur(facturesSel.reduce((s, f) => s + f.montant, 0))}</span>
+                      <span>{eur(facturesSel.reduce((s, facture) => s + facture.montant, 0))}</span>
                     </div>
                   )}
                 </div>
