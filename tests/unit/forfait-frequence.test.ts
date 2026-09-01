@@ -191,6 +191,55 @@ console.log("\n✓ Affichage des demi-fréquences :");
   assert("pas de point décimal à l'anglaise", !formatFrequence(2.5).includes("."));
 }
 
+// ─── La remise famille saisie à la main ───────────────────────────
+console.log("\n✓ Remise famille : le barème, et ce qu'on décide contre lui :");
+{
+  // Barème d'usage : rien au 1er, 10 % au 2e, 20 % au 3e. Il s'arrête là —
+  // une famille de cinq cavaliers sortait de l'échelle sans recours.
+  const BAREME = [{ nth: 2, discount: 10 }, { nth: 3, discount: 20 }];
+  const calcul = (rang: number, remise: number | null = null) =>
+    calculerForfaitAnnuel({
+      frequence: 1, sessionsRestantes: 1, sessionsTotalSaison: 1,
+      rangEnfant: rang, avecAdhesion: false, avecLicence: false, licenceMoins18: true,
+      tarifs: TARIFS, familyDiscountRules: BAREME,
+      remisePersonnaliseePercent: remise,
+    });
+
+  const troisieme = calcul(3);
+  assertEgal("3e enfant : le barème donne 20 %", troisieme.familyDiscountPercent, 20);
+  assertEgal("soit 130 € sur un forfait de 650 €", troisieme.familyDiscountAmount, 130);
+  assert("et rien d'anormal à signaler", !troisieme.remiseHorsBareme);
+
+  const cinquieme = calcul(5);
+  assertEgal("5e enfant : le barème ne prévoit rien", cinquieme.familyDiscountPercent, 0);
+
+  // Ce que la remise manuelle permet : accorder 30 % là où le barème est muet.
+  const cinquiemeRemise = calcul(5, 30);
+  assertEgal("remise imposée à 30 %", cinquiemeRemise.familyDiscountPercent, 30);
+  assertEgal("soit 195 € de réduction", cinquiemeRemise.familyDiscountAmount, 195);
+  assertEgal("le barème seul reste consultable", cinquiemeRemise.remiseBaremePercent, 0);
+  assert("l'écart au barème est signalé", cinquiemeRemise.remiseHorsBareme);
+
+  // Elle peut aussi descendre en dessous du barème.
+  const troisiemeReduite = calcul(3, 5);
+  assertEgal("on peut descendre à 5 %", troisiemeReduite.familyDiscountPercent, 5);
+  assert("l'écart est signalé aussi", troisiemeReduite.remiseHorsBareme);
+
+  // Une saisie égale au barème n'est pas un écart.
+  const troisiemeIdentique = calcul(3, 20);
+  assert("saisir la valeur du barème n'est pas un écart", !troisiemeIdentique.remiseHorsBareme);
+
+  // Bornes : pas de remise négative, pas de plus de 100 %.
+  assertEgal("une saisie négative est ramenée à 0", calcul(3, -10).familyDiscountPercent, 0);
+  assertEgal("une saisie de 150 % est ramenée à 100", calcul(3, 150).familyDiscountPercent, 100);
+  assertEgal("à 100 %, le forfait est offert", calcul(3, 100).prixForfaitNet, 0);
+  assert("un forfait offert ne devient jamais négatif", calcul(3, 100).totalAnnuel >= 0);
+
+  // Absence de saisie = barème, sans exception.
+  assertEgal("null suit le barème", calcul(2, null).familyDiscountPercent, 10);
+  assertEgal("NaN suit le barème", calcul(2, NaN).familyDiscountPercent, 10);
+}
+
 console.log("\n══════════════════════════════════════════════════════════════");
 console.log(`  ${passed} réussis · ${failed} échoués`);
 if (failed > 0) {

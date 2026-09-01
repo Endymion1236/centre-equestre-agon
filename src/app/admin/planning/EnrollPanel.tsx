@@ -15,7 +15,7 @@ import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "@/app/admin/paiements/types";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
-import { tarifPourFrequence } from "@/lib/forfait-pricing";
+import { tarifPourFrequence, calculerForfaitAnnuel } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
 
 /**
@@ -1445,10 +1445,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // le tarif 1×/semaine au lieu de grimper vers le 2×/semaine.
   const freqAjouteeAdmin = frequenceCours * coefRythme;
   const freqCumuleeAdmin = Math.min(3, frequenceDejaInscrite + freqAjouteeAdmin);
-  const prixForfaitAnnuel = ajoutHeureAdmin
-    ? Math.max(0, prixForfaitPlein(freqCumuleeAdmin) - prixForfaitPlein(frequenceDejaInscrite))
-    : prixForfaitPlein(freqAjouteeAdmin);
-  const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
 
   // Réduction famille sur le forfait (chargée depuis settings/degressivite)
   const [familyDiscountRules, setFamilyDiscountRules] = useState<{ nth: number; discount: number }[]>([]);
@@ -1460,25 +1456,44 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     }).catch(() => {});
   }, []);
 
-  const familyRule = familyDiscountRules.find(r => r.nth === rangEnfantFamille);
-  const remiseBaremePercent = familyRule?.discount || 0;
-  // Une saisie manuelle prend le pas sur le barème — y compris pour le
-  // descendre, ou pour en accorder une là où le barème n'en prévoit aucune.
+  // Le prix du forfait annuel vient de calculerForfaitAnnuel, la même fonction
+  // que l'espace famille et les devis. Cet écran le recalculait à la main :
+  // les deux versions avaient déjà divergé, et la remise saisie à la main
+  // n'existait qu'ici. Un tarif annoncé à la famille ne peut pas différer de
+  // celui que l'inscription facture.
   const remiseSaisie = remisePctManuel.trim() !== "" && Number.isFinite(Number(remisePctManuel));
-  const familyDiscountPercent = remiseSaisie
-    ? Math.min(100, Math.max(0, Number(remisePctManuel)))
-    : remiseBaremePercent;
-  const remiseHorsBareme = remiseSaisie && familyDiscountPercent !== remiseBaremePercent;
-  const familyDiscountAmount = familyDiscountPercent > 0 ? Math.round(prixForfaitBrut * familyDiscountPercent / 100 * 100) / 100 : 0;
-  const prixForfait = prixForfaitBrut - familyDiscountAmount;
+  const calculForfait = useMemo(() => calculerForfaitAnnuel({
+    frequence: freqAjouteeAdmin,
+    sessionsRestantes,
+    sessionsTotalSaison,
+    rangEnfant: rangEnfantFamille,
+    avecAdhesion: adhesion,
+    avecLicence: licence,
+    licenceMoins18: licenceType === "moins18",
+    tarifs: inscParams,
+    familyDiscountRules,
+    frequenceDejaInscrite,
+    remisePersonnaliseePercent: remiseSaisie ? Number(remisePctManuel) : null,
+  }), [
+    freqAjouteeAdmin, sessionsRestantes, sessionsTotalSaison, rangEnfantFamille,
+    adhesion, licence, licenceType, inscParams, familyDiscountRules,
+    frequenceDejaInscrite, remiseSaisie, remisePctManuel,
+  ]);
 
-  const prixAdhesionDegressif =
+  const prixForfaitAnnuel = calculForfait.prixForfaitAnnuelPlein;
+  const prixForfaitBrut = calculForfait.prixForfaitBrut;
+  const remiseBaremePercent = calculForfait.remiseBaremePercent;
+  const familyDiscountPercent = calculForfait.familyDiscountPercent;
+  const remiseHorsBareme = calculForfait.remiseHorsBareme;
+  const familyDiscountAmount = calculForfait.familyDiscountAmount;
+  const prixForfait = calculForfait.prixForfaitNet;
+  const prixAdhesionDegressif = calculForfait.prixAdhesion || (
     rangEnfantFamille === 1 ? inscParams.adhesion1 :
     rangEnfantFamille === 2 ? inscParams.adhesion2 :
     rangEnfantFamille === 3 ? inscParams.adhesion3 :
-    inscParams.adhesion4plus;
-
-  const totalAnnuel = (adhesion ? prixAdhesionDegressif : 0) + (licence ? prixLicence : 0) + prixForfait;
+    inscParams.adhesion4plus
+  );
+  const totalAnnuel = calculForfait.totalAnnuel;
 
   // Calcul stage : réductions fratrie uniquement sur les enfants inscrits EN MÊME TEMPS
   // Pas de cumul avec les inscriptions passées — une fois encaissé, compteur reset
