@@ -8,23 +8,20 @@ import {
   ventiler, compteDeLigne, libelleCompte, baseHT, versCsv, NON_VENTILE,
   type LigneFacture,
 } from "@/lib/ventilation-comptable";
+import {
+  MOIS_EXPORT_CA as MOIS,
+  aplatirLignesFactures,
+  dateFacture as dateDe,
+  filtrerFacturesExport,
+  libellePeriodeExport,
+  resumerExportCa,
+  suffixeFichierExport,
+} from "./export-ca-utils";
 
 /**
  * Export du chiffre d'affaires ventilé par compte comptable.
- *
- * Base retenue : les FACTURES ÉMISES sur la période (créances acquises), pas
- * les encaissements — c'est la base du compte de résultat. Les factures
- * annulées sont exclues ; les factures non réglées sont incluses par défaut,
- * et peuvent être écartées pour un comptable qui travaille sur encaissements.
+ * Base retenue : les factures émises sur la période, annulées exclues.
  */
-
-const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
-
-function dateDe(p: any): Date | null {
-  const d = p?.date?.seconds ? new Date(p.date.seconds * 1000) : p?.date ? new Date(p.date) : null;
-  return d && !isNaN(d.getTime()) ? d : null;
-}
-
 export default function ExportCaPage() {
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,32 +39,30 @@ export default function ExportCaPage() {
     })();
   }, []);
 
-  const factures = useMemo(() => payments.filter(p => {
-    if (p.status === "cancelled") return false;
-    if (!inclureNonReglees && (p.paidAmount || 0) <= 0) return false;
-    const d = dateDe(p);
-    if (!d || d.getFullYear() !== annee) return false;
-    return mois === "all" || d.getMonth() === mois;
-  }), [payments, annee, mois, inclureNonReglees]);
+  const factures = useMemo(
+    () => filtrerFacturesExport(payments, annee, mois, inclureNonReglees),
+    [payments, annee, mois, inclureNonReglees],
+  );
 
-  // Toutes les lignes des factures retenues, à plat.
   const lignes: (LigneFacture & { facture: any })[] = useMemo(
-    () => factures.flatMap(p => (p.items || []).map((i: any) => ({ ...i, facture: p }))),
+    () => aplatirLignesFactures(factures),
     [factures],
   );
 
   const ventilation = useMemo(() => ventiler(lignes), [lignes]);
-  const totalTTC = ventilation.reduce((s, l) => s + l.ttc, 0);
-  const totalHT = ventilation.reduce((s, l) => s + l.ht, 0);
-  const nonVentile = ventilation.filter(l => l.compte === NON_VENTILE);
-  const totalNonVentile = nonVentile.reduce((s, l) => s + l.ttc, 0);
+  const {
+    totalTTC,
+    totalHT,
+    totalNonVentile,
+    totalFactures,
+    ecart,
+  } = useMemo(
+    () => resumerExportCa(factures, ventilation, NON_VENTILE),
+    [factures, ventilation],
+  );
 
-  // Écart entre le total des factures et la somme de leurs lignes : une remise
-  // posée sur la facture n'apparaît dans aucune ligne. Signalé plutôt que noyé.
-  const totalFactures = factures.reduce((s, p) => s + Number(p.totalTTC || 0), 0);
-  const ecart = Math.round((totalFactures - totalTTC) * 100) / 100;
-
-  const periode = mois === "all" ? `${annee}` : `${MOIS[mois as number]} ${annee}`;
+  const periode = libellePeriodeExport(annee, mois);
+  const suffixeFichier = suffixeFichierExport(annee, mois);
 
   const telecharger = (nom: string, contenu: string) => {
     const blob = new Blob([contenu], { type: "text/csv;charset=utf-8" });
@@ -81,7 +76,7 @@ export default function ExportCaPage() {
 
   const exportRecap = () => {
     telecharger(
-      `CA-ventile-${mois === "all" ? annee : `${annee}-${String((mois as number) + 1).padStart(2, "0")}`}.csv`,
+      `CA-ventile-${suffixeFichier}.csv`,
       versCsv(
         ["Compte", "Libellé", "Taux TVA", "Base HT", "TVA", "Total TTC", "Nb lignes"],
         ventilation.map(l => [l.compte, l.libelle, `${l.taux}%`, l.ht, l.tvaMontant, l.ttc, l.nb]),
@@ -91,7 +86,7 @@ export default function ExportCaPage() {
 
   const exportDetail = () => {
     telecharger(
-      `CA-detail-${mois === "all" ? annee : `${annee}-${String((mois as number) + 1).padStart(2, "0")}`}.csv`,
+      `CA-detail-${suffixeFichier}.csv`,
       versCsv(
         ["Date", "N° commande", "Client", "Prestation", "Compte", "Libellé compte", "Origine du compte", "Taux TVA", "Base HT", "TVA", "TTC"],
         lignes.filter(l => Number(l.priceTTC || 0) !== 0).map(l => {
@@ -152,11 +147,11 @@ export default function ExportCaPage() {
             Inclure les factures non réglées
           </label>
           <div className="flex-1" />
-          <button onClick={exportRecap} disabled={ventilation.length === 0}
+          <button type="button" onClick={exportRecap} disabled={ventilation.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-600 border-none cursor-pointer hover:bg-blue-700 disabled:opacity-50">
             <FileSpreadsheet size={16} /> Récapitulatif CSV
           </button>
-          <button onClick={exportDetail} disabled={lignes.length === 0}
+          <button type="button" onClick={exportDetail} disabled={lignes.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-700 bg-blue-50 border-none cursor-pointer hover:bg-blue-100 disabled:opacity-50">
             <Download size={16} /> Détail ligne à ligne
           </button>
