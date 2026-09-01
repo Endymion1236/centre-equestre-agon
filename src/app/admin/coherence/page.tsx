@@ -81,6 +81,26 @@ export default function CoherencePage() {
     setReparation("");
   };
 
+  const corrigerDate = async (reservationId: string) => {
+    setReparation(reservationId);
+    try {
+      const res = await authFetch("/api/admin/corriger-date-reservation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservationId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Échec");
+      alert(json?.deja
+        ? "La réservation portait déjà la bonne date."
+        : `Réservation recalée : ${json.avant || "sans date"} → ${json.apres}.`);
+      await analyser();
+    } catch (e: any) {
+      alert(`Échec : ${e?.message || e}`);
+    }
+    setReparation("");
+  };
+
   const replacer = async (paymentId: string) => {
     setReparation(paymentId);
     try {
@@ -173,7 +193,7 @@ export default function CoherencePage() {
                   </div>
                   <div className="divide-y divide-black/5 bg-white/60">
                     {groupe.items.map((a, i) => (
-                      <div key={`${a.code}-${a.paymentId || a.creneauId || i}`}
+                      <div key={`${a.code}-${a.paymentId || a.reservationId || a.creneauId || i}`}
                         className="px-4 py-2.5 flex items-start justify-between gap-3">
                         <span className="font-body text-xs text-slate-700 flex-1">{a.detail}</span>
                         <span className="flex items-center gap-1.5 shrink-0">
@@ -186,6 +206,17 @@ export default function CoherencePage() {
                                 ? <Loader2 size={11} className="animate-spin" />
                                 : <CalendarCheck size={11} />}
                               Replacer
+                            </button>
+                          )}
+                          {a.action === "corriger-date-reservation" && a.reservationId && (
+                            <button type="button" onClick={() => corrigerDate(a.reservationId!)}
+                              disabled={reparation === a.reservationId}
+                              title="Recaler la réservation sur la date de son créneau"
+                              className="inline-flex items-center gap-1 font-body text-[11px] font-semibold text-white bg-orange-500 px-2 py-1 rounded-md border-none cursor-pointer hover:bg-orange-400 disabled:opacity-50">
+                              {reparation === a.reservationId
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <CalendarCheck size={11} />}
+                              Corriger la date
                             </button>
                           )}
                           {a.action === "attribuer-numero" && a.paymentId && (

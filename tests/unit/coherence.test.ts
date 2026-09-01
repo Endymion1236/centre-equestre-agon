@@ -108,6 +108,13 @@ console.log("\n✓ Réservation mal datée (cas ROZIER, promenade d'octobre au 3
   });
   assert("date incohérente signalée", codes(a).includes("reservation-date-incoherente"), codes(a).join(", "));
   assert("réservation sans date signalée", codes(a).includes("reservation-sans-date"), codes(a).join(", "));
+
+  const incoherente = a.find((x) => x.code === "reservation-date-incoherente")!;
+  assert("la réparation est proposée", incoherente.action === "corriger-date-reservation", String(incoherente.action));
+  assert("elle porte la réservation à recaler", incoherente.reservationId === "r1", String(incoherente.reservationId));
+
+  const sansDate = a.find((x) => x.code === "reservation-sans-date")!;
+  assert("pas de réparation automatique sans date de créneau", !sansDate.action, String(sansDate.action));
 }
 
 console.log("\n✓ Prélèvement passé sans écriture au journal :");

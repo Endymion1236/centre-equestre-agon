@@ -33,7 +33,9 @@ export interface Anomalie {
   /** Écran où le traiter. */
   lien?: string;
   /** Réparation proposée par l'écran, quand elle existe. */
-  action?: "replacer-au-planning" | "attribuer-numero";
+  action?: "replacer-au-planning" | "attribuer-numero" | "corriger-date-reservation";
+  /** Réservation visée par la réparation, quand l'anomalie en concerne une. */
+  reservationId?: string;
 }
 
 export interface DonneesCoherence {
@@ -164,7 +166,9 @@ export function analyserCoherence(d: DonneesCoherence): Anomalie[] {
         detail: `${r.childName || "Cavalier"} — ${r.activityTitle || "séance"} : réservation au ${r.date}, créneau du ${c.date}.`,
         famille: r.familyName,
         creneauId: r.creneauId,
+        reservationId: r.id,
         lien: "/admin/planning",
+        action: "corriger-date-reservation",
       });
     }
   }
