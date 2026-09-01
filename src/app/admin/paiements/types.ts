@@ -29,7 +29,7 @@ export interface Payment {
   paymentRef: string;
   status: "draft" | "paid" | "pending" | "partial" | "cancelled" | "sepa_scheduled";
   paidAmount: number;
-  date: unknown;
+  date: any;
 }
 
 export type ChequeDiffereStatus = "pending" | "deposited" | "cancelled";
