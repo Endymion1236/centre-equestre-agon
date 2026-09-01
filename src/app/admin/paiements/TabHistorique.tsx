@@ -1,16 +1,16 @@
 "use client";
 import React, { useState } from "react";
-import { updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { safeNumber, generateOrderId } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, ChevronDown, Receipt, Trash2, Search, X, Check, Copy, Pencil, CalendarCheck } from "lucide-react";
+import { Loader2, Receipt, Trash2, Search, X, Copy, Pencil, CalendarCheck } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
 import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
 import { paymentModes } from "./types";
-import { NoteField } from "./NoteField";
+import {
+  preparerHistorique,
+  type HistoriqueSort,
+} from "./historique-utils";
 
 interface TabHistoriqueProps {
   loading: boolean;
@@ -28,228 +28,146 @@ interface TabHistoriqueProps {
   setEditRemiseEuros: (val: string) => void;
   /** Recherche texte initiale (paramètre `search` de l'URL). */
   initialSearch?: string;
-  /**
-   * Identifiant de la famille sur laquelle ouvrir l'historique (paramètre
-   * `family` de l'URL) — sur l'identifiant, pas sur le nom, pour la même
-   * raison que dans l'onglet Impayés : deux homonymes ne doivent pas se
-   * retrouver mélangées.
-   */
+  /** Identifiant exact de la famille à afficher. */
   familyFilterId?: string;
 }
 
-export function TabHistorique({ loading, payments, avoirs, encaissements, families, toast, setPayments, setDuplicateTarget, deletePaymentCommand, setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros, initialSearch, familyFilterId }: TabHistoriqueProps) {
+export function TabHistorique({
+  loading,
+  payments,
+  avoirs,
+  encaissements,
+  families,
+  toast,
+  setDuplicateTarget,
+  deletePaymentCommand,
+  setEditPayment,
+  setEditItems,
+  setEditRemisePct,
+  setEditRemiseEuros,
+  initialSearch,
+  familyFilterId,
+}: TabHistoriqueProps) {
   const [histSearch, setHistSearch] = useState(initialSearch || "");
   const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [histModeFilter, setHistModeFilter] = useState("all");
   const [histStatusFilter, setHistStatusFilter] = useState("all");
   const [histPeriod, setHistPeriod] = useState("");
-  // Tri configurable (persisté en localStorage pour mémoriser le choix entre sessions).
-  // Trois options : 'commande' (date fiscale = colonne DATE affichée), 'encaissement'
-  // (heure du dernier paiement reçu), 'facture' (numéro de facture lexico).
-  const [sortBy, setSortBy] = useState<"commande" | "encaissement" | "facture">(() => {
+  const [sortBy, setSortBy] = useState<HistoriqueSort>(() => {
     if (typeof window === "undefined") return "commande";
     const saved = window.localStorage.getItem("histSortBy");
-    return (saved === "encaissement" || saved === "facture") ? saved : "commande";
+    return saved === "encaissement" || saved === "facture" ? saved : "commande";
   });
-  const updateSortBy = (v: "commande" | "encaissement" | "facture") => {
-    setSortBy(v);
-    if (typeof window !== "undefined") window.localStorage.setItem("histSortBy", v);
+
+  const updateSortBy = (value: HistoriqueSort) => {
+    setSortBy(value);
+    if (typeof window !== "undefined") window.localStorage.setItem("histSortBy", value);
   };
-  const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
+
+  const { filtered, totalsByMode, grandTotal } = preparerHistorique(payments, encaissements, {
+    familyId: familyFilter,
+    mode: histModeFilter,
+    status: histStatusFilter,
+    search: histSearch,
+    period: histPeriod,
+    sortBy,
+  });
+
+  const resetFilters = () => {
+    setHistModeFilter("all");
+    setHistStatusFilter("all");
+    setHistSearch("");
+    setHistPeriod("");
+    setFamilyFilter("");
+  };
+
+  if (loading) {
+    return <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>;
+  }
 
   return (
-  <div>
-    {loading ? (
-      <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto" /></div>
-    ) : (() => {
-      // Filtres
-      const [modeFilter, setModeFilter] = [histModeFilter, setHistModeFilter];
-      const [statusFilter, setStatusFilter] = [histStatusFilter, setHistStatusFilter];
-      const [searchFilter, setSearchFilter] = [histSearch, setHistSearch];
-      const [periodFilter, setPeriodFilter] = [histPeriod, setHistPeriod];
+    <div>
+      {familyFilter && (
+        <Card padding="sm" className="mb-4 flex items-center justify-between gap-3 !bg-blue-50/50 !border-blue-200">
+          <div className="font-body text-sm text-slate-700 min-w-0">
+            Historique de <span className="font-semibold text-blue-800">{
+              families.find((family: any) => family.firestoreId === familyFilter)?.parentName
+              || filtered[0]?.familyName
+              || "cette famille"
+            }</span>
+            <span className="text-slate-500"> · {filtered.length} ligne{filtered.length > 1 ? "s" : ""}</span>
+          </div>
+          <button type="button" data-testid="historique-family-filter-clear" onClick={() => setFamilyFilter("")}
+            className="shrink-0 flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer">
+            <X size={13}/> Tout l&apos;historique
+          </button>
+        </Card>
+      )}
 
-      // Filtrage — Historique = factures uniquement (paid, partial encaissé, cancelled)
-      // Les pending/draft sont des proformas → visibles dans Impayés, pas ici
-      // SAUF si une proforma a été convertie en facture définitive (invoiceNumber présent)
-      let filtered = payments.filter(p => 
-        p.status === "paid" || p.status === "partial" || p.status === "cancelled" || p.status === "sepa_scheduled" ||
-        ((p as any).invoiceNumber)
-      );
-      // Inclure aussi les encaissements "avoir" qui n'ont pas de payment lié dans payments
-      const avoirEncaissements = encaissements
-        .filter((e: any) => e.mode === "avoir" && !payments.some(p => p.id === e.paymentId))
-        .map((e: any) => ({
-          id: e.id,
-          familyId: e.familyId,
-          familyName: e.familyName,
-          date: e.date,
-          createdAt: e.createdAt || e.date, // pour tri chronologique
-          totalTTC: e.montant || 0,
-          paidAmount: e.montant || 0,
-          status: "paid",
-          paymentMode: "avoir",
-          items: [{ activityTitle: e.activityTitle || "Avoir utilisé" }],
-          _fromEncaissement: true,
-        }));
-      filtered = [...filtered, ...avoirEncaissements] as any[];
-      if (familyFilter) filtered = filtered.filter(p => p.familyId === familyFilter);
-      if (modeFilter !== "all") filtered = filtered.filter(p => p.paymentMode === modeFilter);
-      if (statusFilter !== "all") filtered = filtered.filter(p => p.status === statusFilter);
-      if (searchFilter) {
-        const q = searchFilter.toLowerCase();
-        filtered = filtered.filter(p => p.familyName?.toLowerCase().includes(q) || (p.items || []).some((i: any) => i.activityTitle?.toLowerCase().includes(q)));
-      }
-      if (periodFilter) {
-        filtered = filtered.filter(p => {
-          const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-          if (!d) return false;
-          const m = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
-          return m === periodFilter;
-        });
-      }
-
-      // Tri configurable selon le choix utilisateur (sortBy ci-dessus).
-      // - 'commande' : date fiscale (= colonne DATE affichée). Le plus intuitif
-      //   visuellement, c'est ce qu'attendent la plupart des utilisateurs.
-      // - 'encaissement' : heure du dernier encaissement reçu. Utile pour voir
-      //   ce qui vient d'être payé en haut, même pour des factures anciennes.
-      // - 'facture' : numéro de facture lexico desc. Utile pour la compta
-      //   officielle (le n° suit l'ordre chronologique légal de validation).
-      const getTsFromField = (src: any): number => {
-        if (!src) return 0;
-        if (src.seconds !== undefined) return src.seconds * 1000 + (src.nanoseconds || 0) / 1e6;
-        if (src.toDate) return src.toDate().getTime();
-        return 0;
-      };
-      // Index : paymentId → heure du dernier encaissement (utilisé en mode 'encaissement')
-      const lastEncaissementByPayment = new Map<string, number>();
-      for (const e of encaissements) {
-        if (!e.paymentId) continue;
-        const ts = getTsFromField(e.createdAt) || getTsFromField(e.date);
-        const cur = lastEncaissementByPayment.get(e.paymentId) || 0;
-        if (ts > cur) lastEncaissementByPayment.set(e.paymentId, ts);
-      }
-      const getTs = (p: any) => {
-        if (sortBy === "encaissement") {
-          // Priorité dernier encaissement, fallback createdAt puis date
-          const encTs = lastEncaissementByPayment.get(p.id) || 0;
-          if (encTs > 0) return encTs;
-          return getTsFromField(p.createdAt) || getTsFromField(p.date);
-        }
-        // 'commande' (par défaut) : on prend la date fiscale (date), qui correspond
-        // à la colonne DATE affichée. Fallback sur createdAt si date manquante.
-        return getTsFromField(p.date) || getTsFromField(p.createdAt);
-      };
-      filtered = [...filtered].sort((a, b) => {
-        if (sortBy === "facture") {
-          // Tri par numéro de facture lexico desc. Les paiements sans n° passent en bas.
-          const na = String((a as any).invoiceNumber || a.id || "");
-          const nb = String((b as any).invoiceNumber || b.id || "");
-          // Tri ASCII desc, mais on remonte les vrais n° "F-..." avant les ids type "PF-..." ou alphanumériques
-          const aHasNum = /^F-/.test(na);
-          const bHasNum = /^F-/.test(nb);
-          if (aHasNum !== bHasNum) return aHasNum ? -1 : 1;
-          return nb.localeCompare(na);
-        }
-        const diff = getTs(b) - getTs(a);
-        if (diff !== 0) return diff;
-        // Tie-break stable par id pour éviter les sauts d'ordre visuels
-        return String(b.id || "").localeCompare(String(a.id || ""));
-      });
-
-      // Totaux par mode
-      const totalsByMode: Record<string, number> = {};
-      filtered.forEach(p => { totalsByMode[p.paymentMode] = (totalsByMode[p.paymentMode] || 0) + (p.totalTTC || 0); });
-      const grandTotal = filtered.reduce((s, p) => s + (p.totalTTC || 0), 0);
-
-      return (
-        <>
-          {/* Bandeau du filtre famille — arriver ici depuis la recherche
-              globale ouvre l'historique de CETTE famille, pas celui du centre. */}
-          {familyFilter && (
-            <Card padding="sm" className="mb-4 flex items-center justify-between gap-3 !bg-blue-50/50 !border-blue-200">
-              <div className="font-body text-sm text-slate-700 min-w-0">
-                Historique de <span className="font-semibold text-blue-800">{
-                  families.find((f: any) => f.firestoreId === familyFilter)?.parentName
-                  || filtered[0]?.familyName
-                  || "cette famille"
-                }</span>
-                <span className="text-slate-500"> · {filtered.length} ligne{filtered.length > 1 ? "s" : ""}</span>
+      <div className="flex flex-wrap gap-3 mb-4">
+        {Object.entries(totalsByMode).sort(([, a], [, b]) => b - a).map(([mode, total]) => {
+          const modeObj = paymentModes.find((item) => item.id === mode);
+          return (
+            <div key={mode} onClick={() => setHistModeFilter(histModeFilter === mode ? "all" : mode)}
+              className={`flex flex-col items-center px-4 py-2.5 rounded-xl cursor-pointer transition-all ${histModeFilter === mode ? "bg-blue-500 text-white ring-2 ring-blue-300" : "bg-sand hover:bg-blue-50"}`}>
+              <div className={`font-body text-[10px] uppercase font-semibold ${histModeFilter === mode ? "text-white/70" : "text-slate-600"}`}>
+                {modeObj?.label || mode}
               </div>
-              <button type="button" data-testid="historique-family-filter-clear" onClick={() => setFamilyFilter("")}
-                className="shrink-0 flex items-center gap-1.5 font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer">
-                <X size={13}/> Tout l&apos;historique
-              </button>
-            </Card>
-          )}
+              <div className={`font-body text-base font-bold ${histModeFilter === mode ? "text-white" : "text-blue-800"}`}>{total.toFixed(2)}€</div>
+            </div>
+          );
+        })}
+        <div className="flex flex-col items-center px-4 py-2.5 rounded-xl bg-blue-50">
+          <div className="font-body text-[10px] uppercase font-semibold text-blue-400">Total</div>
+          <div className="font-body text-base font-bold text-blue-500">{grandTotal.toFixed(2)}€</div>
+        </div>
+      </div>
 
-          {/* KPIs par mode */}
-          <div className="flex flex-wrap gap-3 mb-4">
-            {Object.entries(totalsByMode).sort(([,a],[,b]) => b - a).map(([mode, total]) => {
-              const modeObj = paymentModes.find(m => m.id === mode);
-              return (
-                <div key={mode} onClick={() => setHistModeFilter(modeFilter === mode ? "all" : mode as any)}
-                  className={`flex flex-col items-center px-4 py-2.5 rounded-xl cursor-pointer transition-all ${modeFilter === mode ? "bg-blue-500 text-white ring-2 ring-blue-300" : "bg-sand hover:bg-blue-50"}`}>
-                  <div className={`font-body text-[10px] uppercase font-semibold ${modeFilter === mode ? "text-white/70" : "text-slate-600"}`}>
-                    {modeObj?.label || mode}
-                  </div>
-                  <div className={`font-body text-base font-bold ${modeFilter === mode ? "text-white" : "text-blue-800"}`}>{total.toFixed(2)}€</div>
-                </div>
-              );
-            })}
-            <div className="flex flex-col items-center px-4 py-2.5 rounded-xl bg-blue-50">
-              <div className="font-body text-[10px] uppercase font-semibold text-blue-400">Total</div>
-              <div className="font-body text-base font-bold text-blue-500">{grandTotal.toFixed(2)}€</div>
-            </div>
-          </div>
+      <div className="flex flex-wrap gap-3 mb-4 items-center">
+        <div className="flex gap-1.5">
+          {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"], ["sepa_scheduled", "SEPA en cours"], ["cancelled", "Annulés"]] as const).map(([value, label]) => (
+            <button type="button" key={value} onClick={() => setHistStatusFilter(value)}
+              className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${histStatusFilter === value ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input placeholder="Rechercher par nom ou prestation…" value={histSearch} onChange={(event) => setHistSearch(event.target.value)}
+            className="w-full font-body text-xs border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
+        </div>
+        <input type="month" value={histPeriod} onChange={(event) => setHistPeriod(event.target.value)}
+          className="font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
+        {(histModeFilter !== "all" || histStatusFilter !== "all" || histSearch || histPeriod || familyFilter) && (
+          <button type="button" onClick={resetFilters}
+            className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
+            Réinitialiser
+          </button>
+        )}
+        <div className="flex items-center gap-1.5 ml-auto">
+          <span className="font-body text-xs text-slate-500">Trier par :</span>
+          <select
+            value={sortBy}
+            onChange={(event) => updateSortBy(event.target.value as HistoriqueSort)}
+            className="font-body text-xs px-2 py-1.5 rounded-lg border border-blue-500/8 bg-cream cursor-pointer focus:border-blue-500 focus:outline-none"
+            title="Choix mémorisé entre sessions">
+            <option value="commande">Date commande</option>
+            <option value="encaissement">Date encaissement</option>
+            <option value="facture">Numéro facture</option>
+          </select>
+        </div>
+        <span className="font-body text-xs text-slate-600">{filtered.length} paiement{filtered.length > 1 ? "s" : ""}</span>
+      </div>
 
-          {/* Filtres : statut + recherche + période */}
-          <div className="flex flex-wrap gap-3 mb-4 items-center">
-            <div className="flex gap-1.5">
-              {([["all", "Tous"], ["paid", "Réglés"], ["pending", "À régler"], ["partial", "Partiels"], ["sepa_scheduled", "SEPA en cours"], ["cancelled", "Annulés"]] as const).map(([val, label]) => (
-                <button type="button" key={val} onClick={() => setHistStatusFilter(val as any)}
-                  className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer transition-all ${histStatusFilter === val ? "bg-blue-500 text-white" : "bg-white text-slate-600 border border-gray-200"}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="relative flex-1 min-w-[200px]">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input placeholder="Rechercher par nom ou prestation…" value={histSearch} onChange={e => setHistSearch(e.target.value)}
-                className="w-full font-body text-xs border border-gray-200 rounded-lg pl-9 pr-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
-            </div>
-            <input type="month" value={histPeriod} onChange={e => setHistPeriod(e.target.value)}
-              className="font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
-            {(modeFilter !== "all" || statusFilter !== "all" || searchFilter || periodFilter || familyFilter) && (
-              <button type="button" onClick={() => { setHistModeFilter("all"); setHistStatusFilter("all"); setHistSearch(""); setHistPeriod(""); setFamilyFilter(""); }}
-                className="font-body text-xs text-red-500 bg-red-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-red-100">
-                Réinitialiser
-              </button>
-            )}
-            <div className="flex items-center gap-1.5 ml-auto">
-              <span className="font-body text-xs text-slate-500">Trier par :</span>
-              <select
-                value={sortBy}
-                onChange={(e) => updateSortBy(e.target.value as any)}
-                className="font-body text-xs px-2 py-1.5 rounded-lg border border-blue-500/8 bg-cream cursor-pointer focus:border-blue-500 focus:outline-none"
-                title="Choix mémorisé entre sessions">
-                <option value="commande">Date commande</option>
-                <option value="encaissement">Date encaissement</option>
-                <option value="facture">Numéro facture</option>
-              </select>
-            </div>
-            <span className="font-body text-xs text-slate-600">{filtered.length} paiement{filtered.length > 1 ? "s" : ""}</span>
-          </div>
-
-          {/* Tableau */}
-          {filtered.length === 0 ? (
-            <Card padding="lg" className="text-center">
-              <p className="font-body text-sm text-slate-600">Aucun paiement correspondant aux filtres.</p>
-            </Card>
-          ) : (
-            <Card className="!p-0 overflow-hidden">
-              <div className="overflow-x-auto">
-              <div className="min-w-[780px]">
+      {filtered.length === 0 ? (
+        <Card padding="lg" className="text-center">
+          <p className="font-body text-sm text-slate-600">Aucun paiement correspondant aux filtres.</p>
+        </Card>
+      ) : (
+        <Card className="!p-0 overflow-hidden">
+          <div className="overflow-x-auto">
+            <div className="min-w-[780px]">
               <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
                 <span className="w-20">Date</span>
                 <span className="w-20">N° Facture</span>
@@ -263,141 +181,140 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                 <span className="w-16 text-center">Modifier</span>
                 <span className="w-16 text-center"></span>
               </div>
-              {filtered.map((p, idx) => {
-                const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                const mode = paymentModes.find((m) => m.id === p.paymentMode);
-                const invoiceNum = (p as any).invoiceNumber || `PF-${((p as any).orderId || p.id || "").slice(-6).toUpperCase()}`;
-                const ht = (p.items || []).reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
-                const displayTTC = (p as any).originalTotalTTC || p.totalTTC || 0;
-                const printInvoice = async () => {
-                  const fam = families.find(f => f.firestoreId === p.familyId);
-                  const civilite = fam?.civilite ? `${fam.civilite} ` : "";
-                  const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
+              {filtered.map((payment, index) => {
+                const date = payment.date?.seconds ? new Date(payment.date.seconds * 1000) : new Date();
+                const mode = paymentModes.find((item) => item.id === payment.paymentMode);
+                const invoiceNum = payment.invoiceNumber || `PF-${(payment.orderId || payment.id || "").slice(-6).toUpperCase()}`;
+                const ht = (payment.items || []).reduce((sum: number, item: any) => sum + (item.priceHT || 0), 0);
+                const displayTTC = payment.originalTotalTTC || payment.totalTTC || 0;
 
-                  // Récupérer le détail des encaissements associés à cette commande
-                  // pour afficher chaque ligne (mode, montant, date) sur la facture
-                  // plutôt qu'un simple "mixte".
+                const printInvoice = async () => {
+                  const family = families.find((item: any) => item.firestoreId === payment.familyId);
+                  const civilite = family?.civilite ? `${family.civilite} ` : "";
+                  const adresseLines = [family?.address, [family?.zipCode, family?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
                   const paymentDetails = encaissements
-                    .filter((e: any) => e.paymentId === p.id && (e.montant || 0) > 0)
-                    .sort((a: any, b: any) => {
-                      const da = a.date?.seconds || 0;
-                      const db = b.date?.seconds || 0;
-                      return da - db;
-                    })
-                    .map((e: any) => {
-                      const modeObj = paymentModes.find(m => m.id === e.mode);
-                      const encDate = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+                    .filter((encaissement: any) => encaissement.paymentId === payment.id && (encaissement.montant || 0) > 0)
+                    .sort((a: any, b: any) => (a.date?.seconds || 0) - (b.date?.seconds || 0))
+                    .map((encaissement: any) => {
+                      const modeObj = paymentModes.find((item) => item.id === encaissement.mode);
+                      const encDate = encaissement.date?.seconds ? new Date(encaissement.date.seconds * 1000) : null;
                       return {
-                        mode: e.mode,
-                        modeLabel: modeObj?.label || e.modeLabel || e.mode,
-                        montant: Number(e.montant || 0),
+                        mode: encaissement.mode,
+                        modeLabel: modeObj?.label || encaissement.modeLabel || encaissement.mode,
+                        montant: Number(encaissement.montant || 0),
                         date: encDate ? encDate.toLocaleDateString("fr-FR") : undefined,
-                        ref: e.ref,
+                        ref: encaissement.ref,
                       };
                     });
 
                   await downloadInvoicePdf({
-                    invoiceNumber: invoiceNum, date: date.toLocaleDateString("fr-FR"),
-                    familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "",
+                    invoiceNumber: invoiceNum,
+                    date: date.toLocaleDateString("fr-FR"),
+                    familyName: `${civilite}${payment.familyName}`,
+                    familyEmail: family?.parentEmail || "",
                     familyAddress: adresseLines,
-                    serviceFacture: (p as any).serviceFacture || undefined,
-                    items: p.items || [], totalHT: ht,
-                    totalTVA: (p.totalTTC || 0) - ht, totalTTC: p.totalTTC || 0,
-                    paymentMode: mode?.label || p.paymentMode || "",
-                    paymentDate: p.paidAmount > 0 ? date.toLocaleDateString("fr-FR") : "",
-                    paymentId: p.id,
-                    paidAmount: p.paidAmount || p.totalTTC || 0,
+                    serviceFacture: payment.serviceFacture || undefined,
+                    items: payment.items || [],
+                    totalHT: ht,
+                    totalTVA: (payment.totalTTC || 0) - ht,
+                    totalTTC: payment.totalTTC || 0,
+                    paymentMode: mode?.label || payment.paymentMode || "",
+                    paymentDate: payment.paidAmount > 0 ? date.toLocaleDateString("fr-FR") : "",
+                    paymentId: payment.id,
+                    paidAmount: payment.paidAmount || payment.totalTTC || 0,
                     paymentDetails: paymentDetails.length > 0 ? paymentDetails : undefined,
                   });
                 };
-                // Trouver TOUS les avoirs liés pour les annulés
-                const linkedAvoirs = p.status === "cancelled" ? avoirs.filter((a: any) => a.sourcePaymentId === p.id && a.type === "avoir") : [];
+
+                const linkedAvoirs = payment.status === "cancelled"
+                  ? avoirs.filter((avoir: any) => avoir.sourcePaymentId === payment.id && avoir.type === "avoir")
+                  : [];
+
                 const printAllAvoirs = linkedAvoirs.length > 0 ? async () => {
-                  for (const av of linkedAvoirs) {
-                    const avoirDate = av.createdAt?.toDate ? av.createdAt.toDate() : new Date();
-                    const expDate = av.expiryDate?.toDate ? av.expiryDate.toDate() : null;
-                    // Extraire l'item correspondant à cet avoir depuis le motif
-                    const avoirItems = av.reason ? [{
-                      activityTitle: av.reason.replace("Désinscription ", "").replace(" — ", " — "),
+                  for (const avoir of linkedAvoirs) {
+                    const avoirDate = avoir.createdAt?.toDate ? avoir.createdAt.toDate() : new Date();
+                    const expDate = avoir.expiryDate?.toDate ? avoir.expiryDate.toDate() : null;
+                    const avoirItems = avoir.reason ? [{
+                      activityTitle: avoir.reason.replace("Désinscription ", "").replace(" — ", " — "),
                       childName: "",
-                      priceHT: Math.round(av.amount / 1.055 * 100) / 100,
-                      priceTTC: av.amount,
+                      priceHT: Math.round(avoir.amount / 1.055 * 100) / 100,
+                      priceTTC: avoir.amount,
                       tva: 5.5,
                       quantity: 1,
-                    }] : (p.items || []).map((i: any) => ({ ...i, description: i.activityTitle }));
+                    }] : (payment.items || []).map((item: any) => ({ ...item, description: item.activityTitle }));
                     await downloadAvoirPdf({
-                      avoirNumber: av.reference,
+                      avoirNumber: avoir.reference,
                       date: avoirDate.toLocaleDateString("fr-FR"),
-                      familyName: p.familyName,
-                      familyEmail: families.find(f => f.firestoreId === p.familyId)?.parentEmail || "",
+                      familyName: payment.familyName,
+                      familyEmail: families.find((family: any) => family.firestoreId === payment.familyId)?.parentEmail || "",
                       sourceInvoiceNumber: invoiceNum,
-                      reason: av.reason || `Annulation ${invoiceNum}`,
+                      reason: avoir.reason || `Annulation ${invoiceNum}`,
                       items: avoirItems,
-                      totalHT: Math.round(av.amount / 1.055 * 100) / 100,
-                      totalTVA: Math.round((av.amount - av.amount / 1.055) * 100) / 100,
-                      totalTTC: av.amount,
+                      totalHT: Math.round(avoir.amount / 1.055 * 100) / 100,
+                      totalTVA: Math.round((avoir.amount - avoir.amount / 1.055) * 100) / 100,
+                      totalTTC: avoir.amount,
                       type: "avoir",
                       expiryDate: expDate ? expDate.toLocaleDateString("fr-FR") : "—",
                     });
                   }
                 } : null;
+
                 return (
-                  <div key={p.id || idx} className={`px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors ${p.status === "cancelled" ? "bg-red-50/30 opacity-70" : ""}`}>
+                  <div key={payment.id || index} className={`px-5 py-3 border-b border-blue-500/8 last:border-b-0 flex items-center hover:bg-blue-50/30 transition-colors ${payment.status === "cancelled" ? "bg-red-50/30 opacity-70" : ""}`}>
                     <span className="w-20 font-body text-xs text-slate-600">{date.toLocaleDateString("fr-FR")}</span>
                     <span className="w-20 font-body text-xs font-semibold text-blue-800">{invoiceNum}</span>
-                    <span className="flex-1"><div className={`font-body text-sm font-semibold ${p.status === "cancelled" ? "text-red-600 line-through" : "text-blue-800"}`}>{p.familyName}</div></span>
-                    <span className="w-32 font-body text-xs text-slate-600 truncate">{(p.items || []).map((i: any) => i.activityTitle).join(", ")}</span>
-                    <span className={`w-20 text-right font-body text-sm font-bold ${p.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{displayTTC.toFixed(2)}€</span>
-                    <span className="w-20 text-center"><Badge color={p.status === "cancelled" ? "red" : "blue"}>{(p.paymentMode as string) === "mixte" && (p as any).paymentModes ? (p as any).paymentModes.map((m: string) => paymentModes.find(pm => pm.id === m)?.label?.replace("(CAWL)", "").trim() || m).join(" + ") : mode?.label || p.paymentMode}</Badge></span>
-                    <span className="w-16 text-center"><Badge color={p.status === "paid" ? "green" : p.status === "partial" ? "orange" : p.status === "cancelled" ? "red" : p.status === "sepa_scheduled" ? "blue" : p.status === "draft" ? "blue" : "gray"}>{p.status === "paid" ? "Réglé" : p.status === "partial" ? "Partiel" : p.status === "cancelled" ? "Annulé" : p.status === "sepa_scheduled" ? "SEPA" : p.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
+                    <span className="flex-1"><div className={`font-body text-sm font-semibold ${payment.status === "cancelled" ? "text-red-600 line-through" : "text-blue-800"}`}>{payment.familyName}</div></span>
+                    <span className="w-32 font-body text-xs text-slate-600 truncate">{(payment.items || []).map((item: any) => item.activityTitle).join(", ")}</span>
+                    <span className={`w-20 text-right font-body text-sm font-bold ${payment.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{displayTTC.toFixed(2)}€</span>
+                    <span className="w-20 text-center"><Badge color={payment.status === "cancelled" ? "red" : "blue"}>{payment.paymentMode === "mixte" && payment.paymentModes ? payment.paymentModes.map((paymentMode: string) => paymentModes.find((item) => item.id === paymentMode)?.label?.replace("(CAWL)", "").trim() || paymentMode).join(" + ") : mode?.label || payment.paymentMode}</Badge></span>
+                    <span className="w-16 text-center"><Badge color={payment.status === "paid" ? "green" : payment.status === "partial" ? "orange" : payment.status === "cancelled" ? "red" : payment.status === "sepa_scheduled" ? "blue" : payment.status === "draft" ? "blue" : "gray"}>{payment.status === "paid" ? "Réglé" : payment.status === "partial" ? "Partiel" : payment.status === "cancelled" ? "Annulé" : payment.status === "sepa_scheduled" ? "SEPA" : payment.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                     <span className="w-32 text-center">
-                      {p.status === "cancelled" && printAllAvoirs ? (
+                      {payment.status === "cancelled" && printAllAvoirs ? (
                         <button type="button" onClick={printAllAvoirs} title={`Télécharger ${linkedAvoirs.length} avoir(s) PDF`} className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100 flex items-center gap-0.5 justify-center"><Receipt size={12} />{linkedAvoirs.length > 1 ? <span className="text-[9px]">×{linkedAvoirs.length}</span> : null}</button>
                       ) : (
                         <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
                           <button type="button" onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
-                          {/* Replacer au planning : une place tenue puis libérée
-                              par la purge, alors que le règlement est arrivé
-                              après coup, laissait la famille payée mais absente
-                              du planning. Le bouton rejoue la confirmation. */}
-                          {(p.paidAmount || 0) > 0 && (
+                          {(payment.paidAmount || 0) > 0 && (
                             <button type="button"
                               title="Replacer les cavaliers au planning (place perdue avant le paiement)"
                               onClick={async () => {
                                 try {
-                                  const res = await authFetch("/api/admin/confirmer-places", {
+                                  const response = await authFetch("/api/admin/confirmer-places", {
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ paymentId: p.id }),
+                                    body: JSON.stringify({ paymentId: payment.id }),
                                   });
-                                  const d = await res.json().catch(() => null);
-                                  if (!res.ok) { toast(d?.error || "Échec", "error"); return; }
-                                  const r = Number(d?.reinscrites || 0);
-                                  const c = Number(d?.confirmees || 0);
+                                  const data = await response.json().catch(() => null);
+                                  if (!response.ok) {
+                                    toast(data?.error || "Échec", "error");
+                                    return;
+                                  }
+                                  const reinscrites = Number(data?.reinscrites || 0);
+                                  const confirmees = Number(data?.confirmees || 0);
                                   toast(
-                                    r > 0 ? `${r} place(s) rétablie(s) au planning`
-                                      : c > 0 ? `${c} créneau(x) confirmé(s)`
+                                    reinscrites > 0 ? `${reinscrites} place(s) rétablie(s) au planning`
+                                      : confirmees > 0 ? `${confirmees} créneau(x) confirmé(s)`
                                       : "Rien à replacer : les cavaliers sont déjà au planning",
-                                    r > 0 || c > 0 ? "success" : "info",
+                                    reinscrites > 0 || confirmees > 0 ? "success" : "info",
                                   );
-                                } catch (e: any) {
-                                  toast(`Échec : ${e?.message || e}`, "error");
+                                } catch (error: any) {
+                                  toast(`Échec : ${error?.message || error}`, "error");
                                 }
                               }}
                               className="font-body text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-emerald-100">
                               <CalendarCheck size={12} />
                             </button>
                           )}
-                          {(p as any).invoiceNumber && (
+                          {payment.invoiceNumber && (
                             <>
                               <button type="button"
-                                onClick={() => downloadFacturX(p.id!, (p as any).invoiceNumber)}
+                                onClick={() => downloadFacturX(payment.id!, payment.invoiceNumber)}
                                 title="XML Factur-X (EN 16931) — réforme facturation électronique"
                                 className="font-body text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-100 whitespace-nowrap leading-none">
                                 XML
                               </button>
                               <button type="button"
-                                onClick={() => downloadFacturXPdf(p.id!, (p as any).invoiceNumber)}
+                                onClick={() => downloadFacturXPdf(payment.id!, payment.invoiceNumber)}
                                 title="PDF Factur-X hybride (facture PDF + XML embarqué)"
                                 className="font-body text-[9px] font-bold text-white bg-indigo-500 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-600 whitespace-nowrap leading-none">
                                 F-X
@@ -407,41 +324,38 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                         </span>
                       )}
                     </span>
-                    <span className="w-16 text-center"><button type="button" onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
+                    <span className="w-16 text-center"><button type="button" onClick={() => setDuplicateTarget({ payment, targetFamilyId: "", targetSearch: "", mode: "choose" })} title="Dupliquer cette commande" className="font-body text-xs text-purple-500 bg-purple-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-purple-100"><Copy size={12} /></button></span>
                     <span className="w-16 text-center">
-                      {p.status !== "cancelled" && (
+                      {payment.status !== "cancelled" && (
                         <button type="button"
                           onClick={() => {
-                            if ((p as any).invoiceNumber) {
-                              toast(`🔒 Facture ${(p as any).invoiceNumber} — modification impossible. Annulez-la via avoir pour la corriger.`, "warning", 5000);
+                            if (payment.invoiceNumber) {
+                              toast(`🔒 Facture ${payment.invoiceNumber} — modification impossible. Annulez-la via avoir pour la corriger.`, "warning", 5000);
                               return;
                             }
-                            setEditPayment(p);
-                            setEditItems((p.items || []).map((i: any) => ({ ...i })));
+                            setEditPayment(payment);
+                            setEditItems((payment.items || []).map((item: any) => ({ ...item })));
                             setEditRemisePct("");
                             setEditRemiseEuros("");
                           }}
-                          title={(p as any).invoiceNumber ? "Facture définitive — non modifiable" : "Modifier la commande"}
-                          className={`font-body text-xs px-2 py-1 rounded border-none ${(p as any).invoiceNumber ? "text-gray-400 bg-gray-100 cursor-not-allowed" : "text-amber-600 bg-amber-50 cursor-pointer hover:bg-amber-100"}`}>
+                          title={payment.invoiceNumber ? "Facture définitive — non modifiable" : "Modifier la commande"}
+                          className={`font-body text-xs px-2 py-1 rounded border-none ${payment.invoiceNumber ? "text-gray-400 bg-gray-100 cursor-not-allowed" : "text-amber-600 bg-amber-50 cursor-pointer hover:bg-amber-100"}`}>
                           <Pencil size={12} />
                         </button>
                       )}
                     </span>
                     <span className="w-16 text-center">
-                      {p.status !== "cancelled" && !(p as any)._fromEncaissement && (
-                        <button type="button" onClick={() => deletePaymentCommand(p)} title="Annuler + avoir" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Trash2 size={12} /></button>
+                      {payment.status !== "cancelled" && !payment._fromEncaissement && (
+                        <button type="button" onClick={() => deletePaymentCommand(payment)} title="Annuler + avoir" className="font-body text-xs text-red-500 bg-red-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-red-100"><Trash2 size={12} /></button>
                       )}
                     </span>
                   </div>
                 );
               })}
-              </div>
-              </div>
-            </Card>
-          )}
-        </>
-      );
-    })()}
-  </div>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }
