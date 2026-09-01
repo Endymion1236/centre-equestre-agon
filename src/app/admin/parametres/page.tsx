@@ -14,6 +14,9 @@ import ReservationsToggle from "@/components/admin/ReservationsToggle";
 import ThemeSaisonnierToggle from "@/components/admin/ThemeSaisonnierToggle";
 import SectionMaintenance from "./SectionMaintenance";
 import SectionMoniteurs from "./SectionMoniteurs";
+import SectionReductions from "./SectionReductions";
+import SectionStages from "./SectionStages";
+import SectionProgression from "./SectionProgression";
 import { DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL, type ProgressionLabelsSettings } from "@/lib/progression-helpers";
 
 const defaultAccounts = [
@@ -94,62 +97,6 @@ export default function ParametresPage() {
     assuranceOccasionnelle: 10,
   });
   const [inscriptionSaved, setInscriptionSaved] = useState(false);
-
-  // ─── Déroulé des stages (2 séquences) ────────────────────────────────────
-  // Réglage unique partagé par tous les stages. Repris dans les emails de
-  // confirmation ET de rappel. Tant qu'il est vide, aucun bloc n'apparaît
-  // dans les emails : on n'annonce jamais un déroulé qu'on n'a pas saisi.
-  const [deroule, setDeroule] = useState<StageDeroule>(STAGE_DEROULE_VIDE);
-  const [derouleSaved, setDerouleSaved] = useState(false);
-  useEffect(() => {
-    if (section !== "stages") return;
-    getDoc(doc(db, "settings", "stageDeroule")).then(snap => {
-      if (snap.exists()) setDeroule(prev => ({ ...prev, ...(snap.data() as any) }));
-    });
-  }, [section]);
-  const saveDeroule = async () => {
-    await setDoc(doc(db, "settings", "stageDeroule"), {
-      sequence1Titre: deroule.sequence1Titre.trim(),
-      sequence1Detail: deroule.sequence1Detail.trim(),
-      sequence2Titre: deroule.sequence2Titre.trim(),
-      sequence2Detail: deroule.sequence2Detail.trim(),
-      note: (deroule.note || "").trim(),
-      updatedAt: serverTimestamp(),
-    }, { merge: true });
-    setDerouleSaved(true);
-    setTimeout(() => setDerouleSaved(false), 2000);
-  };
-
-  // ─── Progression : labels échelle 1-5 + seuil "validé FFE" ────────────────
-  const [progressionLabels, setProgressionLabels] = useState<string[]>(DEFAULT_ECHELLE_LABELS);
-  const [progressionValidatedFfe, setProgressionValidatedFfe] = useState<number>(DEFAULT_VALIDATED_FFE_LEVEL);
-  const [progressionSaved, setProgressionSaved] = useState(false);
-  useEffect(() => {
-    if (section !== "progression") return;
-    getDoc(doc(db, "settings", "progression_labels")).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data() as ProgressionLabelsSettings;
-        if (Array.isArray(data.echelle) && data.echelle.length === 5) {
-          setProgressionLabels(data.echelle);
-        }
-        if (typeof data.validatedFfe === "number") {
-          setProgressionValidatedFfe(data.validatedFfe);
-        }
-      }
-    });
-  }, [section]);
-  const saveProgressionLabels = async () => {
-    // Validation : les 5 labels doivent être non vides
-    const cleaned = progressionLabels.map(l => l.trim()).map(l => l || "Niveau");
-    await setDoc(doc(db, "settings", "progression_labels"), {
-      echelle: cleaned,
-      validatedFfe: progressionValidatedFfe,
-      updatedAt: serverTimestamp(),
-    } as ProgressionLabelsSettings, { merge: true });
-    setProgressionLabels(cleaned);
-    setProgressionSaved(true);
-    setTimeout(() => setProgressionSaved(false), 2000);
-  };
 
 
   // ─── Fidélité ───
@@ -248,46 +195,6 @@ export default function ParametresPage() {
   }, []);
 
   // ─── Réductions & codes promo ───
-  type PromoType = "code" | "premiere_annee" | "anniversaire" | "parrainage";
-  type DiscountMode = "percent" | "fixed";
-  interface Promo {
-    id: string;
-    type: PromoType;
-    code: string;
-    label: string;
-    discountMode: DiscountMode;
-    discountValue: number;
-    appliesTo: "forfait" | "paiement" | "tout";
-    active: boolean;
-    maxUses: number;
-    usedCount: number;
-    validFrom: string;
-    validUntil: string;
-  }
-  const [promos, setPromos] = useState<Promo[]>([]);
-  const [loadingPromos, setLoadingPromos] = useState(true);
-
-  // Charger les promos depuis Firestore
-  useEffect(() => {
-    const loadPromos = async () => {
-      try {
-        const snap = await getDoc(doc(db, "settings", "promos"));
-        if (snap.exists() && snap.data().items) {
-          setPromos(snap.data().items);
-        }
-      } catch (e) { console.error(e); }
-      setLoadingPromos(false);
-    };
-    loadPromos();
-  }, []);
-
-  const savePromos = async () => {
-    try {
-      await setDoc(doc(db, "settings", "promos"), { items: promos, updatedAt: new Date() });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (e) { console.error(e); alert("Erreur sauvegarde"); }
-  };
 
   // Charger les paramètres depuis Firestore
   // NB : la collection settings/tarifs (legacy de l'ancien onglet "Tarifs annuels")
@@ -505,147 +412,7 @@ export default function ParametresPage() {
       )}
 
       {/* ─── Réductions & promos ─── */}
-      {section === "reductions" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">Codes promo & réductions</h3>
-            <p className="font-body text-xs text-gray-400 mb-4">
-              Créez des codes promo, des réductions automatiques (1ère année, anniversaire) ou manuelles.
-              Ces réductions sont utilisables dans les forfaits annuels et les paiements.
-            </p>
-
-            {loadingPromos ? (
-              <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-blue-500 mx-auto" /></div>
-            ) : (
-              <>
-                {/* Liste des promos existantes */}
-                {promos.length > 0 && (
-                  <div className="flex flex-col gap-2 mb-5">
-                    {promos.map((p, i) => {
-                      const typeLabels: Record<string, { label: string; color: "blue" | "green" | "orange" | "purple" }> = {
-                        code: { label: "Code promo", color: "blue" },
-                        premiere_annee: { label: "1ère année", color: "green" },
-                        anniversaire: { label: "Anniversaire", color: "orange" },
-                        parrainage: { label: "Parrainage", color: "purple" },
-                      };
-                      const t = typeLabels[p.type] || { label: p.type, color: "gray" as const };
-                      return (
-                        <div key={p.id} className={`flex items-center gap-3 rounded-lg px-4 py-3 border ${p.active ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100 opacity-60"}`}>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge color={t.color}>{t.label}</Badge>
-                              {p.code && <span className="font-body text-sm font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded font-mono">{p.code}</span>}
-                              <span className="font-body text-sm text-gray-600">{p.label}</span>
-                              {!p.active && <Badge color="gray">Désactivé</Badge>}
-                            </div>
-                            <div className="font-body text-xs text-gray-400 mt-1">
-                              {p.discountMode === "percent" ? `-${p.discountValue}%` : `-${p.discountValue}€`}
-                              {" · "}{p.appliesTo === "tout" ? "Forfaits + paiements" : p.appliesTo === "forfait" ? "Forfaits uniquement" : "Paiements uniquement"}
-                              {p.maxUses > 0 && <> · {p.usedCount}/{p.maxUses} utilisations</>}
-                              {p.validUntil && <> · Expire le {new Date(p.validUntil).toLocaleDateString("fr-FR")}</>}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <button type="button" onClick={() => {
-                              const up = [...promos]; up[i] = { ...p, active: !p.active }; setPromos(up);
-                            }} className={`font-body text-xs px-3 py-1.5 rounded-lg border-none cursor-pointer ${p.active ? "bg-orange-50 text-orange-500 hover:bg-orange-100" : "bg-green-50 text-green-600 hover:bg-green-100"}`}>
-                              {p.active ? "Désactiver" : "Activer"}
-                            </button>
-                            <button type="button" onClick={() => setPromos(promos.filter((_, j) => j !== i))}
-                              className="w-8 h-8 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Boutons ajout rapide */}
-                <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Ajouter une réduction</div>
-                <div className="grid grid-cols-1 gap-3 mb-4">
-                  {/* Code promo */}
-                  <button type="button" onClick={() => setPromos([...promos, {
-                    id: `promo_${Date.now()}`, type: "code", code: "", label: "Nouveau code promo",
-                    discountMode: "percent", discountValue: 10, appliesTo: "tout", active: true,
-                    maxUses: 0, usedCount: 0, validFrom: "", validUntil: "",
-                  }])} className="flex items-center gap-3 px-4 py-3 rounded-lg border border-dashed border-blue-300 bg-blue-50/30 text-left cursor-pointer hover:bg-blue-50 transition-all">
-                    <Plus size={18} className="text-blue-500" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Code promo</div>
-                      <div className="font-body text-xs text-gray-400">Ex: BIENVENUE10, ETE2026, NOEL...</div>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Édition détaillée des promos */}
-                {promos.length > 0 && (
-                  <div className="border-t border-gray-100 pt-4">
-                    <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Détail des réductions</div>
-                    {promos.map((p, i) => (
-                      <div key={p.id} className="bg-gray-50 rounded-lg p-4 mb-3">
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                          {p.type === "code" && (
-                            <div>
-                              <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Code</label>
-                              <input value={p.code} onChange={e => { const up = [...promos]; up[i] = { ...p, code: e.target.value.toUpperCase() }; setPromos(up); }}
-                                className={`${inputCls} !text-left font-mono !uppercase`} placeholder="BIENVENUE10" />
-                            </div>
-                          )}
-                          <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Description</label>
-                            <input value={p.label} onChange={e => { const up = [...promos]; up[i] = { ...p, label: e.target.value }; setPromos(up); }}
-                              className={`${inputCls} !text-left`} />
-                          </div>
-                          <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Réduction</label>
-                            <div className="flex gap-1">
-                              <input type="number" value={p.discountValue} onChange={e => { const up = [...promos]; up[i] = { ...p, discountValue: parseFloat(e.target.value) || 0 }; setPromos(up); }}
-                                className={`${inputCls} w-16`} />
-                              <select value={p.discountMode} onChange={e => { const up = [...promos]; up[i] = { ...p, discountMode: e.target.value as "percent" | "fixed" }; setPromos(up); }}
-                                className={`${inputCls} w-16`}>
-                                <option value="percent">%</option>
-                                <option value="fixed">€</option>
-                              </select>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">S&apos;applique à</label>
-                            <select value={p.appliesTo} onChange={e => { const up = [...promos]; up[i] = { ...p, appliesTo: e.target.value as any }; setPromos(up); }}
-                              className={`${inputCls} !text-left`}>
-                              <option value="tout">Forfaits + paiements</option>
-                              <option value="paiement">Paiements uniquement</option>
-                            </select>
-                          </div>
-                          {p.type === "code" && (
-                            <>
-                              <div>
-                                <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Max utilisations</label>
-                                <input type="number" value={p.maxUses} onChange={e => { const up = [...promos]; up[i] = { ...p, maxUses: parseInt(e.target.value) || 0 }; setPromos(up); }}
-                                  className={inputCls} placeholder="0 = illimité" />
-                              </div>
-                              <div>
-                                <label className="font-body text-[10px] font-semibold text-gray-400 uppercase block mb-1">Expire le</label>
-                                <input type="date" value={p.validUntil} onChange={e => { const up = [...promos]; up[i] = { ...p, validUntil: e.target.value }; setPromos(up); }}
-                                  className={inputCls} />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <button type="button" onClick={savePromos} className="mt-2 self-start flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-                  <Save size={16} /> Enregistrer les réductions
-                </button>
-              </>
-            )}
-          </Card>
-        </div>
-      )}
+      {section === "reductions" && <SectionReductions />}
 
       {/* ─── Dégressivité ─── */}
       {section === "degressivite" && (
@@ -1018,93 +785,7 @@ export default function ParametresPage() {
       )}
 
       {/* ─── Progression : labels échelle 1-5 ─── */}
-      {section === "progression" && (
-        <div className="flex flex-col gap-5">
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">📈 Échelle de progression (pratiques)</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Pour les compétences de pratique à cheval et à pied, on utilise une échelle de 1 à 5.
-              Personnalise ici les libellés affichés dans l&apos;éditeur de progression et dans
-              l&apos;espace cavalier des familles. Les compétences de connaissances et soins
-              restent en case à cocher (binaire).
-            </p>
-            <div className="flex flex-col gap-3 mb-5">
-              {progressionLabels.map((label, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className="flex items-center justify-center w-10 h-10 rounded-lg font-body text-sm font-bold text-white"
-                    style={{ background: `linear-gradient(135deg, hsl(${(i * 30) + 0}, 75%, 50%), hsl(${(i * 30) + 0}, 70%, 45%))` }}>
-                    {i + 1}
-                  </div>
-                  <input
-                    value={label}
-                    onChange={(e) => {
-                      const next = [...progressionLabels];
-                      next[i] = e.target.value;
-                      setProgressionLabels(next);
-                    }}
-                    placeholder={DEFAULT_ECHELLE_LABELS[i]}
-                    className="flex-1 px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="border-t border-gray-100 pt-4 mb-4">
-              <label className="font-body text-sm font-semibold text-blue-800 block mb-2">
-                Seuil &laquo;&nbsp;Validé FFE&nbsp;&raquo;
-              </label>
-              <p className="font-body text-xs text-slate-500 mb-3">
-                Niveau à partir duquel une compétence pratique compte comme validée pour le passage de Galop.
-                Les niveaux inférieurs apparaissent en progression mais pas comme validés sur le bilan FFE.
-              </p>
-              <select
-                value={progressionValidatedFfe}
-                onChange={(e) => setProgressionValidatedFfe(parseInt(e.target.value, 10))}
-                className="px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"
-              >
-                {[1, 2, 3, 4, 5].map(n => (
-                  <option key={n} value={n}>
-                    Niveau {n} ({progressionLabels[n - 1] || DEFAULT_ECHELLE_LABELS[n - 1]}) ou +
-                  </option>
-                ))}
-              </select>
-              <p className="font-body text-[11px] text-slate-400 mt-2 italic">
-                Recommandé : niveau 5 (acquis). Tu peux baisser si tu veux marquer les Galops plus tôt
-                dans la progression — par exemple niveau 4 = autonomie suffisante pour valider FFE.
-              </p>
-            </div>
-
-            <button type="button" onClick={saveProgressionLabels}
-              className="flex items-center justify-center gap-2 py-3 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 border-none cursor-pointer">
-              {progressionSaved ? "✅ Sauvegardé !" : "Sauvegarder l'échelle"}
-            </button>
-          </Card>
-
-          <Card padding="md">
-            <h3 className="font-body text-base font-semibold text-blue-800 mb-2">📋 Aperçu</h3>
-            <p className="font-body text-xs text-slate-500 mb-4">
-              Voici comment l&apos;échelle apparaîtra dans l&apos;éditeur de progression et chez les familles.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {progressionLabels.map((label, i) => {
-                const level = i + 1;
-                const isValidatedFfe = level >= progressionValidatedFfe;
-                return (
-                  <div key={i}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${isValidatedFfe ? "bg-green-50 border-green-300" : "bg-slate-50 border-slate-200"}`}>
-                    <div className="flex items-center justify-center w-7 h-7 rounded-md font-body text-xs font-bold text-white"
-                      style={{ background: `linear-gradient(135deg, hsl(${(i * 30)}, 75%, 50%), hsl(${(i * 30)}, 70%, 45%))` }}>
-                      {level}
-                    </div>
-                    <span className="font-body text-sm text-slate-700">{label || DEFAULT_ECHELLE_LABELS[i]}</span>
-                    {isValidatedFfe && <span className="font-body text-[10px] text-green-700 font-semibold">✓ FFE</span>}
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </div>
-      )}
+      {section === "progression" && <SectionProgression />}
 
       {/* ─── Fidélité ─── */}
       {section === "fidelite" && (
@@ -1176,81 +857,7 @@ export default function ParametresPage() {
       )}
 
       {/* ─── Marées ─── */}
-      {section === "stages" && (
-        <div className="bg-white rounded-2xl p-6 border border-gray-100">
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-1">🐴 Déroulé d’une séance de stage</h2>
-          <p className="font-body text-sm text-slate-500 mb-5 leading-relaxed">
-            Ce texte est repris dans l’email de <strong>confirmation d’inscription</strong> et dans celui de
-            <strong> rappel avant le stage</strong>. Il évite qu’une famille lise « 10h–12h » et comprenne
-            deux heures à cheval. Réglage unique, valable pour tous les stages.
-          </p>
-
-          {[1, 2].map((n) => {
-            const kt = (n === 1 ? "sequence1Titre" : "sequence2Titre") as keyof StageDeroule;
-            const kd = (n === 1 ? "sequence1Detail" : "sequence2Detail") as keyof StageDeroule;
-            return (
-              <div key={n} className="mb-4 pb-4 border-b border-gray-100 last:border-b-0">
-                <div className="font-body text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                  Séquence {n}
-                </div>
-                <input
-                  value={(deroule[kt] as string) || ""}
-                  onChange={(e) => setDeroule((d) => ({ ...d, [kt]: e.target.value }))}
-                  placeholder={n === 1 ? "Ex : 1re heure — Équitation montée" : "Ex : 2e heure — Atelier à pied"}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none mb-2"
-                />
-                <input
-                  value={(deroule[kd] as string) || ""}
-                  onChange={(e) => setDeroule((d) => ({ ...d, [kd]: e.target.value }))}
-                  placeholder={n === 1 ? "Ex : travail en carrière, jeux et parcours à poney" : "Ex : pansage, soins et connaissance du poney"}
-                  className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"
-                />
-                <p className="font-body text-[10px] text-slate-400 mt-1">
-                  Titre obligatoire, détail facultatif.
-                </p>
-              </div>
-            );
-          })}
-
-          <div className="mb-4">
-            <div className="font-body text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
-              Note complémentaire (facultatif)
-            </div>
-            <input
-              value={deroule.note || ""}
-              onChange={(e) => setDeroule((d) => ({ ...d, note: e.target.value }))}
-              placeholder="Ex : l’ordre des deux séquences peut être inversé selon les groupes."
-              className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none"
-            />
-          </div>
-
-          {/* Aperçu — ce que la famille lira réellement */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-            <div className="font-body text-[10px] font-semibold text-amber-800 uppercase tracking-wider mb-2">
-              Aperçu dans l’email
-            </div>
-            {derouleEstRempli(deroule) ? (
-              <pre className="font-body text-xs text-slate-700 whitespace-pre-wrap m-0">{renderDerouleTexte(deroule)}</pre>
-            ) : (
-              <p className="font-body text-xs text-amber-700 m-0">
-                Les deux titres doivent être renseignés. Tant qu’ils sont vides, <strong>aucun bloc
-                n’est ajouté aux emails</strong> — ils partent comme aujourd’hui.
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={saveDeroule}
-              className="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold border-none cursor-pointer"
-            >
-              Enregistrer
-            </button>
-            {derouleSaved && <span className="font-body text-sm text-green-600">Enregistré ✓</span>}
-          </div>
-        </div>
-      )}
+      {section === "stages" && <SectionStages />}
 
       {section === "marees" && (
         <MareesSection />
