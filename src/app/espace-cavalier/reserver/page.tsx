@@ -342,6 +342,13 @@ export default function ReserverPage() {
     return uniqueInscriptions.size;
   }, [creneaux, familyId, cart]);
 
+  /** « Prénom Nom », tel que l'attend le planning. */
+  const nomCompletCavalier = (child: any): string => {
+    const prenom = String(child?.firstName || "?").split(" (")[0].trim();
+    const nom = String(child?.lastName || "").trim();
+    return nom ? `${prenom} ${nom}` : prenom;
+  };
+
   const isStage = (c: Creneau) => c.activityType === "stage" || c.activityType === "stage_journee";
 
   // Ajouter au panier (stage = multi-enfants, cours = 1 enfant)
@@ -490,7 +497,9 @@ export default function ReserverPage() {
         activityTitle: first.activityTitle,
         dates: isJourMode ? `${stageCreneaux.length} jour${stageCreneaux.length > 1 ? "s" : ""} (${dates})` : `${stageCreneaux.length} jours (${dates})`,
         childId,
-        childName: (child as any)?.firstName || "?",
+        // Prénom ET nom, comme pour les cours : le planning n'affichait que le
+        // prénom des inscriptions prises en ligne.
+        childName: nomCompletCavalier(child),
         prixBase: Math.round(prixBase * 100) / 100,
         remiseEuros: remiseEffective,
         rang: rang + 1,
@@ -565,8 +574,11 @@ export default function ReserverPage() {
     // ── fin règle d'âge ────────────────────────────────────────────────
 
     const priceTTC = (creneau as any).priceTTC || creneau.priceHT * (1 + (creneau.tvaTaux || 5.5) / 100);
-    // Enlever le suffixe " (NomFamille)" pour les cavaliers liés
-    const cleanName = ((child as any)?.firstName || "?").split(" (")[0];
+    // Prénom ET nom : le planning n'affichait que « Loucia », impossible de
+    // savoir de quelle famille il s'agit quand deux cavaliers partagent un
+    // prénom. L'inscription depuis l'administration, elle, écrit « Prénom Nom ».
+    // Le suffixe « (NomFamille) » des cavaliers liés est retiré au passage.
+    const cleanName = nomCompletCavalier(child);
     const sourceFamilyId = (child as any)?.sourceFamilyId || null;
     // ⚠️ Forme FONCTIONNELLE obligatoire : `setCart([...cart, x])` capture le
     // panier fige au rendu. Sur une inscription multi-cavaliers (boucle
@@ -726,14 +738,30 @@ export default function ReserverPage() {
             where("creneauId", "==", item.creneauIds[0]),
           ));
           if (existingCourseResa.empty) {
-            const firstCreneau = creneaux.find(c => c.id === item.creneauIds[0]);
+            // Le créneau est relu en base s'il n'est pas dans la vue courante :
+            // l'écran ne charge qu'une fenêtre de dates, et une réservation
+            // prise pour octobre depuis l'affichage d'août ne le trouvait pas.
+            // Le repli sur « aujourd'hui » écrivait alors la réservation à la
+            // date du jour : la séance apparaissait comme PASSÉE le 31 août
+            // (cas Loucia Rozier, réservation du 23 octobre) et disparaissait
+            // des séances à venir.
+            let firstCreneau: any = creneaux.find(c => c.id === item.creneauIds[0]);
+            if (!firstCreneau) {
+              try {
+                const crSnap = await getDoc(doc(db, "creneaux", item.creneauIds[0]));
+                if (crSnap.exists()) firstCreneau = { id: crSnap.id, ...crSnap.data() };
+              } catch (e) { console.warn("[handlePay] créneau introuvable pour la réservation:", e); }
+            }
             await addDoc(collection(db, "reservations"), {
               familyId: user.uid, familyName: family.parentName,
               ...((item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
               childId: item.childId, childName: item.childName,
               activityTitle: item.activityTitle, activityType: "cours",
               creneauId: item.creneauIds[0],
-              date: firstCreneau?.date || todayLocalString(),
+              // Sans date connue, on laisse le champ vide plutôt que d'y mettre
+              // celle du jour : une réservation sans date se voit et se corrige,
+              // une réservation datée à tort passe inaperçue.
+              date: firstCreneau?.date || "",
               startTime: firstCreneau?.startTime || "",
               endTime: firstCreneau?.endTime || "",
               priceTTC: item.prixFinal, status: "pending_payment", source: "client",

@@ -18,6 +18,24 @@ import { adminDb } from "@/lib/firebase-admin";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+/**
+ * Libellé d'une ligne de facture.
+ *
+ * Le panier compose déjà `activityTitle` avec le prénom (« Promenade coucher
+ * de soleil — Loucia ») : le recoller donnait « … — Loucia — Loucia » sur la
+ * facture. Même règle que les emails (lib/email-prestations) — le prénom n'est
+ * ajouté que s'il manque.
+ */
+function libelleLigne(item: any): string {
+  const titre = String(item?.activityTitle || item?.description || item?.name || "").trim();
+  const enfant = String(item?.childName || "").trim();
+  const enfantAffichable = enfant && !enfant.startsWith("child_") && enfant !== "—";
+  if (!titre) return enfantAffichable ? `Prestation — ${enfant}` : "Prestation";
+  if (!enfantAffichable) return titre;
+  const normaliser = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return normaliser(titre).includes(normaliser(enfant)) ? titre : `${titre} — ${enfant}`;
+}
+
 const BLUE = "#1e3a5f";
 const GRAY = "#6b7280";
 const LIGHT = "#f9fafb";
@@ -244,7 +262,7 @@ export async function POST(request: NextRequest) {
           return React.createElement(View, { key: String(i), style: i % 2 === 0 ? s.trow : s.trowAlt },
             React.createElement(View, { style: s.cDesc },
               React.createElement(Text, { style: s.cellTxt },
-                `${item.activityTitle || item.description || "Prestation"}${item.childName && !String(item.childName).startsWith("child_") && item.childName !== "—" ? ` — ${item.childName}` : ""}`),
+                libelleLigne(item)),
               subtitle ? React.createElement(Text, { style: s.cellSubtitle }, subtitle) : null,
             ),
             React.createElement(Text, { style: [s.cellGray, s.cQty] }, `${item.quantity || 1}`),

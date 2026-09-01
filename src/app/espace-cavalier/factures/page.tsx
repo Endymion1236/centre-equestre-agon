@@ -57,6 +57,8 @@ interface Payment {
   status: string;
   date: any;
   orderId?: string;
+  /** Numéro de facture officiel, attribué à l'encaissement (CGI art. 242 nonies A). */
+  invoiceNumber?: string;
 }
 
 interface SessionCard {
@@ -461,7 +463,13 @@ export default function FacturesPage() {
     ].filter(Boolean).join("\n");
 
     await downloadInvoicePdf({
-      invoiceNumber: payment.orderId || `F-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${payment.id.slice(-4).toUpperCase()}`,
+      // Le numéro de facture officiel — celui de la séquence continue, attribué
+      // à l'encaissement — d'abord. La famille recevait sinon un numéro
+      // fabriqué à la volée (« F-202608-FXY1 ») pendant que l'administration
+      // en affichait un autre (« F-2026-0200 ») pour la MÊME vente : deux
+      // pièces différentes pour une seule facture.
+      invoiceNumber: (payment as any).invoiceNumber || payment.orderId
+        || `F-${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}-${payment.id.slice(-4).toUpperCase()}`,
       date: date.toLocaleDateString("fr-FR"),
       familyName: `${civilite}${payment.familyName || familyData?.parentName || ""}`,
       familyEmail: user?.email || "",
