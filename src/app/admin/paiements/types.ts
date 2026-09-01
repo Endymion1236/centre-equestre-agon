@@ -29,7 +29,26 @@ export interface Payment {
   paymentRef: string;
   status: "draft" | "paid" | "pending" | "partial" | "cancelled" | "sepa_scheduled";
   paidAmount: number;
-  date: any;
+  date: unknown;
+}
+
+export type ChequeDiffereStatus = "pending" | "deposited" | "cancelled";
+export type ChequeDiffereFilter = "all" | "pending" | "overdue" | "deposited";
+
+export interface ChequeDiffere {
+  id: string;
+  paymentId: string;
+  familyId: string;
+  familyName: string;
+  numero: string;
+  banque: string;
+  montant: number;
+  dateEncaissementPrevue: string;
+  status: ChequeDiffereStatus;
+  dateEncaissementEffective?: string;
+  encaissementId?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
 }
 
 export const paymentModes: { id: PaymentMode; label: string }[] = [

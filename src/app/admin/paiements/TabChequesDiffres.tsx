@@ -1,95 +1,70 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { collection, getDocs, doc, updateDoc, serverTimestamp, query, where, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, CheckCircle, AlertTriangle, Calendar, Search, X, Trash2 } from "lucide-react";
-import { safeNumber } from "@/lib/utils";
+import { Loader2, CheckCircle, Calendar, Search, X } from "lucide-react";
 import { useConfirm } from "@/components/ui/Confirm";
+import type { ChequeDiffere, ChequeDiffereFilter, Payment } from "./types";
+import {
+  calculerStatsChequesDifferes,
+  dateIsoDuJour,
+  filtrerChequesDifferes,
+  grouperChequesEnAttenteParMois,
+  libelleMoisFr,
+} from "./cheques-differes-utils";
 
 interface TabChequesDiffresProps {
   enregistrerEncaissement: (
-    paymentId: string, paymentData: any, montant: number,
-    mode: string, ref?: string, activityTitle?: string, customDate?: string
-  ) => Promise<any>;
+    paymentId: string,
+    paymentData: Payment,
+    montant: number,
+    mode: string,
+    ref?: string,
+    activityTitle?: string,
+    customDate?: string,
+  ) => Promise<unknown>;
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
   refreshAll: () => Promise<void>;
-  payments: any[];
-}
-
-interface ChequeDifferE {
-  id: string;
-  paymentId: string;
-  familyId: string;
-  familyName: string;
-  numero: string;
-  banque: string;
-  montant: number;
-  dateEncaissementPrevue: string;
-  status: "pending" | "deposited" | "cancelled";
-  dateEncaissementEffective?: string;
-  encaissementId?: string;
-  createdAt?: any;
+  payments: Payment[];
 }
 
 export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, payments }: TabChequesDiffresProps) {
   const confirmer = useConfirm();
-  const [cheques, setCheques] = useState<ChequeDifferE[]>([]);
+  const [cheques, setCheques] = useState<ChequeDiffere[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "overdue" | "deposited">("all");
+  const [statusFilter, setStatusFilter] = useState<ChequeDiffereFilter>("all");
   const [processing, setProcessing] = useState<string | null>(null);
 
   const fetchCheques = async () => {
     try {
       setLoading(true);
       const snap = await getDocs(collection(db, "cheques-differes"));
-      setCheques(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as ChequeDifferE[]);
-    } catch (e) { console.error("[cheques-differes] fetch:", e); }
-    setLoading(false);
+      setCheques(snap.docs.map((d) => ({ id: d.id, ...d.data() } as ChequeDiffere)));
+    } catch (e) {
+      console.error("[cheques-differes] fetch:", e);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { fetchCheques(); }, []);
+  useEffect(() => {
+    void fetchCheques();
+  }, []);
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = dateIsoDuJour();
+  const filtered = filtrerChequesDifferes(cheques, statusFilter, search, today);
+  const {
+    pendingCheques,
+    overdueCheques,
+    totalPending,
+    totalOverdue,
+    totalDeposited,
+  } = calculerStatsChequesDifferes(cheques, today);
+  const pendingByMonth = grouperChequesEnAttenteParMois(pendingCheques);
 
-  // Filtrage
-  let filtered = cheques;
-  if (statusFilter === "pending") {
-    filtered = filtered.filter(c => c.status === "pending");
-  } else if (statusFilter === "overdue") {
-    filtered = filtered.filter(c => c.status === "pending" && c.dateEncaissementPrevue < today);
-  } else if (statusFilter === "deposited") {
-    filtered = filtered.filter(c => c.status === "deposited");
-  }
-  if (search.trim()) {
-    const q = search.toLowerCase();
-    filtered = filtered.filter(c =>
-      (c.familyName || "").toLowerCase().includes(q) ||
-      (c.numero || "").toLowerCase().includes(q) ||
-      (c.banque || "").toLowerCase().includes(q)
-    );
-  }
-
-  // Tri par date d'encaissement prévue (plus proche d'abord)
-  filtered = [...filtered].sort((a, b) => a.dateEncaissementPrevue.localeCompare(b.dateEncaissementPrevue));
-
-  // Stats
-  const pendingCheques = cheques.filter(c => c.status === "pending");
-  const overdueCheques = pendingCheques.filter(c => c.dateEncaissementPrevue < today);
-  const totalPending = pendingCheques.reduce((s, c) => s + (c.montant || 0), 0);
-  const totalOverdue = overdueCheques.reduce((s, c) => s + (c.montant || 0), 0);
-  const totalDeposited = cheques.filter(c => c.status === "deposited").reduce((s, c) => s + (c.montant || 0), 0);
-
-  // Grouper par mois d'encaissement prévu (pour pending uniquement)
-  const pendingByMonth: Record<string, ChequeDifferE[]> = {};
-  pendingCheques.forEach(c => {
-    const month = c.dateEncaissementPrevue.slice(0, 7); // YYYY-MM
-    if (!pendingByMonth[month]) pendingByMonth[month] = [];
-    pendingByMonth[month].push(c);
-  });
-
-  const handleDeposit = async (chq: ChequeDifferE) => {
+  const handleDeposit = async (chq: ChequeDiffere) => {
     if (!(await confirmer({
       titre: `Déposer en banque le chèque n°${chq.numero || "—"} — ${chq.familyName} ?`,
       details: [
@@ -100,29 +75,26 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
       libelleConfirmer: "Déposer",
       danger: true,
     }))) return;
+
     setProcessing(chq.id);
     try {
-      // Trouver le payment lié
-      const payment = payments.find(p => p.id === chq.paymentId);
+      const payment = payments.find((p) => p.id === chq.paymentId);
       if (!payment) {
         toast("Commande liée introuvable", "error");
-        setProcessing(null);
         return;
       }
 
-      // Créer l'encaissement réel (il créera un doc dans 'encaissements' et mettra à jour le payment)
-      const encDate = new Date().toISOString().split("T")[0];
+      const encDate = dateIsoDuJour();
       await enregistrerEncaissement(
         chq.paymentId,
         payment,
         chq.montant,
         "cheque",
         chq.numero || "",
-        (payment.items || []).map((i: any) => i.activityTitle).join(", "),
+        (payment.items || []).map((item) => item.activityTitle).join(", "),
         encDate,
       );
 
-      // Marquer le chèque comme déposé
       await updateDoc(doc(db, "cheques-differes", chq.id), {
         status: "deposited",
         dateEncaissementEffective: encDate,
@@ -135,11 +107,12 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
     } catch (e) {
       console.error("[cheques-differes] handleDeposit:", e);
       toast("Erreur lors du dépôt", "error");
+    } finally {
+      setProcessing(null);
     }
-    setProcessing(null);
   };
 
-  const handleCancel = async (chq: ChequeDifferE) => {
+  const handleCancel = async (chq: ChequeDiffere) => {
     if (!confirm(`Annuler le chèque n°${chq.numero || "—"} de ${chq.familyName} ?\n\nÀ utiliser si le chèque a été rendu/détruit (ex: erreur de saisie).\nCette action n'est PAS comptable (n'affecte ni CA, ni TVA).`)) return;
     setProcessing(chq.id);
     try {
@@ -152,19 +125,20 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
     } catch (e) {
       console.error("[cheques-differes] handleCancel:", e);
       toast("Erreur", "error");
+    } finally {
+      setProcessing(null);
     }
-    setProcessing(null);
   };
 
-  const monthLabel = (m: string) => {
-    const [y, mo] = m.split("-");
-    const d = new Date(parseInt(y), parseInt(mo) - 1, 1);
-    return d.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
-  };
+  const filters: { id: ChequeDiffereFilter; label: string }[] = [
+    { id: "all", label: "Tous" },
+    { id: "pending", label: "En attente" },
+    { id: "overdue", label: `En retard${overdueCheques.length ? ` (${overdueCheques.length})` : ""}` },
+    { id: "deposited", label: "Déposés" },
+  ];
 
   return (
     <div>
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <Card padding="sm">
           <div className="font-body text-[10px] text-slate-500 uppercase tracking-wider">En attente</div>
@@ -188,28 +162,26 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
         </Card>
       </div>
 
-      {/* Filtres */}
       <Card padding="sm" className="mb-4">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px]">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={(e) => setSearch(e.target.value)}
               placeholder="Famille, n° chèque, banque..."
               className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400"
             />
           </div>
           <div className="flex gap-1">
-            {[
-              { id: "all", label: "Tous" },
-              { id: "pending", label: "En attente" },
-              { id: "overdue", label: `En retard${overdueCheques.length ? ` (${overdueCheques.length})` : ""}` },
-              { id: "deposited", label: "Déposés" },
-            ].map(f => (
-              <button type="button" key={f.id} onClick={() => setStatusFilter(f.id as any)}
-                className={`font-body text-xs px-3 py-2 rounded-lg border cursor-pointer ${statusFilter === f.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
-                {f.label}
+            {filters.map((filter) => (
+              <button
+                type="button"
+                key={filter.id}
+                onClick={() => setStatusFilter(filter.id)}
+                className={`font-body text-xs px-3 py-2 rounded-lg border cursor-pointer ${statusFilter === filter.id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}
+              >
+                {filter.label}
               </button>
             ))}
           </div>
@@ -226,28 +198,23 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
           </p>
         </Card>
       ) : statusFilter === "pending" || statusFilter === "all" ? (
-        // Vue par mois pour les chèques en attente
         <div className="flex flex-col gap-4">
-          {(statusFilter === "pending" ? Object.keys(pendingByMonth) : [null]).map(month => {
+          {(statusFilter === "pending" ? Object.keys(pendingByMonth) : [null]).map((month) => {
             const list = month !== null
-              ? pendingByMonth[month].filter(c => {
-                  if (!search.trim()) return true;
-                  const q = search.toLowerCase();
-                  return (c.familyName || "").toLowerCase().includes(q) || (c.numero || "").toLowerCase().includes(q) || (c.banque || "").toLowerCase().includes(q);
-                })
+              ? filtrerChequesDifferes(pendingByMonth[month], "all", search, today)
               : filtered;
             if (list.length === 0) return null;
-            const monthTotal = list.reduce((s, c) => s + (c.montant || 0), 0);
+            const monthTotal = list.reduce((sum, cheque) => sum + (cheque.montant || 0), 0);
             return (
               <Card key={month || "all"} padding="md">
                 {month && (
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-body text-sm font-semibold text-blue-800 capitalize">{monthLabel(month)}</h3>
+                    <h3 className="font-body text-sm font-semibold text-blue-800 capitalize">{libelleMoisFr(month)}</h3>
                     <span className="font-body text-sm font-bold text-blue-500">{monthTotal.toFixed(2)}€ · {list.length} chèque(s)</span>
                   </div>
                 )}
                 <div className="flex flex-col gap-2">
-                  {list.map(chq => {
+                  {list.map((chq) => {
                     const isOverdue = chq.status === "pending" && chq.dateEncaissementPrevue < today;
                     return (
                       <div key={chq.id} className={`flex items-center justify-between gap-2 p-3 rounded-lg border ${isOverdue ? "border-red-200 bg-red-50/30" : chq.status === "deposited" ? "border-green-200 bg-green-50/30" : "border-gray-200 bg-white"}`}>
@@ -270,18 +237,22 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
                           <span className="font-body text-base font-bold text-blue-500">{chq.montant.toFixed(2)}€</span>
                           {chq.status === "pending" && (
                             <>
-                              <button type="button"
+                              <button
+                                type="button"
                                 onClick={() => handleDeposit(chq)}
                                 disabled={processing === chq.id}
-                                className="font-body text-xs font-semibold text-white bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50 flex items-center gap-1">
+                                className="font-body text-xs font-semibold text-white bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50 flex items-center gap-1"
+                              >
                                 {processing === chq.id ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />}
                                 Déposer
                               </button>
-                              <button type="button"
+                              <button
+                                type="button"
                                 onClick={() => handleCancel(chq)}
                                 disabled={processing === chq.id}
                                 title="Annuler ce chèque (chèque rendu/détruit)"
-                                className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1.5 disabled:opacity-50">
+                                className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1.5 disabled:opacity-50"
+                              >
                                 <X size={14} />
                               </button>
                             </>
@@ -296,10 +267,9 @@ export function TabChequesDiffres({ enregistrerEncaissement, toast, refreshAll, 
           })}
         </div>
       ) : (
-        // Vue liste simple pour déposés
         <Card padding="md">
           <div className="flex flex-col gap-2">
-            {filtered.map(chq => (
+            {filtered.map((chq) => (
               <div key={chq.id} className="flex items-center justify-between gap-2 p-3 rounded-lg border border-green-200 bg-green-50/30">
                 <div className="flex items-center gap-3 flex-1 min-w-0 flex-wrap">
                   <div className="font-body text-xs text-slate-500 min-w-[90px]">
