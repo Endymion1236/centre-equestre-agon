@@ -23,6 +23,11 @@ import {
 } from "./rapprochement-utils";
 import { construireFecVentes } from "./fec-utils";
 import { construireDiagnosticRemises } from "./diagnostic-remises-utils";
+import {
+  calculerSyntheseFactures,
+  calculerTotauxJournaliers,
+  filtrerFacturesPeriode,
+} from "./synthese-compta-utils";
 
 interface Payment {
   id: string;
@@ -603,67 +608,18 @@ export default function ComptabilitePage() {
 
   useEffect(() => { fetchData(); }, []);
 
-  // Filter by period
-  const filteredPayments = useMemo(() => {
-    return payments.filter((p) => {
-      // Seules les factures (paid) apparaissent dans le journal — les proformas (pending/draft) sont exclues
-      if ((p as any).status === "cancelled" || (p as any).status === "pending" || (p as any).status === "draft") return false;
-      const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-      if (!d) return false;
-      const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      return pm === period;
-    });
-  }, [payments, period]);
-
-  const totalHT = filteredPayments.reduce((s, p) => s + (p.items || []).reduce((ss, i) => ss + (i.priceHT || 0), 0), 0);
-  const totalTVA = filteredPayments.reduce((s, p) => {
-    return s + (p.items || []).reduce((ss, i) => ss + (i.priceTTC || 0) - (i.priceHT || 0), 0);
-  }, 0);
-  const totalTTC = filteredPayments.reduce((s, p) => s + (p.totalTTC || 0), 0);
-
-  // TVA by rate
-  const tvaByRate = useMemo(() => {
-    const map: Record<number, { ht: number; tva: number; ttc: number }> = {};
-    filteredPayments.forEach((p) => {
-      (p.items || []).forEach((i) => {
-        const rate = i.tva || 5.5;
-        if (!map[rate]) map[rate] = { ht: 0, tva: 0, ttc: 0 };
-        map[rate].ht += i.priceHT || 0;
-        map[rate].tva += (i.priceTTC || 0) - (i.priceHT || 0);
-        map[rate].ttc += i.priceTTC || 0;
-      });
-    });
-    return Object.entries(map).sort(([a], [b]) => parseFloat(a) - parseFloat(b));
-  }, [filteredPayments]);
-
-  // By payment mode
-  const byMode = useMemo(() => {
-    const map: Record<string, number> = {};
-    filteredPayments.forEach((p) => {
-      map[p.paymentMode] = (map[p.paymentMode] || 0) + (p.totalTTC || 0);
-    });
-    return Object.entries(map).sort(([, a], [, b]) => b - a);
-  }, [filteredPayments]);
-
-  // Daily totals by payment mode
-  // Totaux journaliers depuis les VRAIS encaissements (pas les factures)
-  const dailyTotals = useMemo(() => {
-    const map: Record<string, Record<string, number>> = {};
-    const periodEnc = encaissementsCompta.filter(e => {
-      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-      if (!d) return false;
-      const pm = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      return pm === period;
-    });
-    periodEnc.forEach((e) => {
-      const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-      if (!d) return;
-      const dateStr = d.toLocaleDateString("fr-FR");
-      if (!map[dateStr]) map[dateStr] = {};
-      map[dateStr][e.mode || "autre"] = (map[dateStr][e.mode || "autre"] || 0) + (e.montant || 0);
-    });
-    return map;
-  }, [encaissementsCompta, period]);
+  const filteredPayments = useMemo(
+    () => filtrerFacturesPeriode(payments, period),
+    [payments, period],
+  );
+  const { totalHT, totalTVA, totalTTC, tvaByRate, byMode } = useMemo(
+    () => calculerSyntheseFactures(filteredPayments),
+    [filteredPayments],
+  );
+  const dailyTotals = useMemo(
+    () => calculerTotauxJournaliers(encaissementsCompta, period),
+    [encaissementsCompta, period],
+  );
 
   // CSV import handler — smart matching
   const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
