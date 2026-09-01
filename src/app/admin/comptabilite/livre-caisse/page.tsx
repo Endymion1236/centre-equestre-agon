@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, where, Timestamp } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { refApport } from "@/lib/caisse-mouvements";
 import { Card, Badge } from "@/components/ui";
 import { Banknote, ChevronLeft, ChevronRight, Printer, ShieldCheck, Building2, X, PiggyBank } from "lucide-react";
 import Link from "next/link";
+import {
+  arrondirLivreCaisse,
+  calculerSyntheseLivreCaisse,
+  extrairePeriodeLivreCaisse,
+} from "./livre-caisse-utils";
 
 interface EncaissementEspeces {
   id: string;
@@ -51,9 +56,6 @@ export default function LivreCaissePage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const debutMois = new Date(year, month, 1, 0, 0, 0, 0);
-      const finMois = new Date(year, month + 1, 0, 23, 59, 59, 999);
-
       // ─── Stratégie : récupérer TOUS les encaissements (ou un sous-ensemble
       // filtré par mode uniquement) et filtrer la période en JavaScript.
       // Évite d'avoir besoin d'un index composite Firestore (mode + date + orderBy)
@@ -98,18 +100,16 @@ export default function LivreCaissePage() {
 
       console.log(`[livre-caisse] ${allEspeces.length} encaissements espèces trouvés au total`);
 
-      const listMois = allEspeces
-        .filter(e => e.date >= debutMois && e.date <= finMois)
-        .sort((a, b) => a.date.getTime() - b.date.getTime());
+      const { mouvementsDuMois, soldeInitial: soldeAvant } = extrairePeriodeLivreCaisse(
+        allEspeces,
+        year,
+        month,
+      );
 
-      const soldeAvant = allEspeces
-        .filter(e => e.date < debutMois)
-        .reduce((s, e) => s + e.montant, 0);
+      console.log(`[livre-caisse] Mois en cours : ${mouvementsDuMois.length} mouvements | Solde d'ouverture : ${soldeAvant.toFixed(2)}€`);
 
-      console.log(`[livre-caisse] Mois en cours : ${listMois.length} mouvements | Solde d'ouverture : ${soldeAvant.toFixed(2)}€`);
-
-      setEncaissements(listMois);
-      setSoldeInitial(Math.round(soldeAvant * 100) / 100);
+      setEncaissements(mouvementsDuMois);
+      setSoldeInitial(soldeAvant);
     } catch (e) {
       console.error("Erreur chargement livre de caisse:", e);
     } finally {
@@ -135,7 +135,7 @@ export default function LivreCaissePage() {
           const data = d.data() as any;
           solde += Number(data.montant || 0);
         }
-        setSoldeCaissePhysique(Math.round(solde * 100) / 100);
+        setSoldeCaissePhysique(arrondirLivreCaisse(solde));
       } catch (e) {
         console.error("Erreur calcul solde physique:", e);
       }
@@ -229,26 +229,9 @@ export default function LivreCaissePage() {
     }
   };
 
-  // Calculs avec solde cumulé ligne par ligne
-  const lignes = useMemo(() => {
-    let solde = soldeInitial;
-    return encaissements.map(e => {
-      solde = Math.round((solde + e.montant) * 100) / 100;
-      return { ...e, soldeApres: solde };
-    });
-  }, [encaissements, soldeInitial]);
-
-  const totalEntrees = useMemo(() =>
-    Math.round(encaissements.filter(e => e.montant > 0).reduce((s, e) => s + e.montant, 0) * 100) / 100,
-    [encaissements]
-  );
-  const totalSorties = useMemo(() =>
-    Math.round(encaissements.filter(e => e.montant < 0).reduce((s, e) => s + Math.abs(e.montant), 0) * 100) / 100,
-    [encaissements]
-  );
-  const soldeFinal = useMemo(() =>
-    lignes.length > 0 ? lignes[lignes.length - 1].soldeApres : soldeInitial,
-    [lignes, soldeInitial]
+  const { lignes, totalEntrees, totalSorties, soldeFinal } = useMemo(
+    () => calculerSyntheseLivreCaisse(encaissements, soldeInitial),
+    [encaissements, soldeInitial],
   );
 
   const monthLabel = new Date(year, month, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
