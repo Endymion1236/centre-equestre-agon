@@ -183,3 +183,79 @@ export function parserDetailCa(texte: string): number[] {
   }
   return montants;
 }
+
+const JOUR_MS_RAPPROCHEMENT = 86_400_000;
+
+export function periodePrecedente(periode: string) {
+  const [annee, mois] = periode.split("-").map(Number);
+  const moisPrecedent = mois === 1 ? 12 : mois - 1;
+  const anneePrecedente = mois === 1 ? annee - 1 : annee;
+  return `${anneePrecedente}-${String(moisPrecedent).padStart(2, "0")}`;
+}
+
+export function estDansFenetreBancaire(
+  encaissement: { date?: { seconds?: number } | null },
+  dateBancaire: Date | null,
+  jours = 3,
+) {
+  if (!dateBancaire) return true;
+  const dateEncaissement = encaissement.date?.seconds
+    ? new Date(encaissement.date.seconds * 1000)
+    : null;
+  if (!dateEncaissement) return false;
+  const ecart = Math.abs(dateBancaire.getTime() - dateEncaissement.getTime()) / JOUR_MS_RAPPROCHEMENT;
+  return ecart <= jours;
+}
+
+export function encaissementEnDetail(encaissement: {
+  familyName?: string;
+  montant?: number;
+  date?: { seconds?: number } | null;
+  activityTitle?: string;
+  modeLabel?: string;
+  mode?: string;
+}) {
+  return {
+    familyName: encaissement.familyName || "",
+    montant: encaissement.montant || 0,
+    date: encaissement.date?.seconds
+      ? new Date(encaissement.date.seconds * 1000).toLocaleDateString("fr-FR")
+      : "",
+    activityTitle: encaissement.activityTitle || "",
+    mode: encaissement.modeLabel || encaissement.mode || "",
+  };
+}
+
+/**
+ * Cherche une combinaison dont la somme atteint la cible à deux centimes près.
+ * La limite à 25 lignes et 100 000 états protège l'interface des recherches
+ * exponentielles sur les gros lots.
+ */
+export function trouverSousEnsembleMontant<T extends { montant?: number }>(
+  encaissements: T[],
+  cibleCentimes: number,
+): T[] | null {
+  if (encaissements.length === 0 || encaissements.length > 25 || cibleCentimes <= 0) return null;
+
+  const valeurs = encaissements.map((encaissement) => Math.round((encaissement.montant || 0) * 100));
+  const total = valeurs.reduce((somme, valeur) => somme + valeur, 0);
+  if (cibleCentimes > total + 2) return null;
+  if (Math.abs(total - cibleCentimes) <= 2) return [...encaissements];
+
+  let possibles = new Map<number, number[]>([[0, []]]);
+  for (let index = 0; index < valeurs.length; index++) {
+    const suivants = new Map(possibles);
+    for (const [somme, indices] of possibles) {
+      const nouvelleSomme = somme + valeurs[index];
+      if (nouvelleSomme > cibleCentimes + 2 || suivants.has(nouvelleSomme)) continue;
+      const nouveauxIndices = [...indices, index];
+      suivants.set(nouvelleSomme, nouveauxIndices);
+      if (Math.abs(nouvelleSomme - cibleCentimes) <= 2) {
+        return nouveauxIndices.map((indice) => encaissements[indice]);
+      }
+    }
+    possibles = suivants;
+    if (possibles.size > 100_000) return null;
+  }
+  return null;
+}

@@ -13,9 +13,13 @@ import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
 import {
   analyserPeriodeCsv,
   cleLigneBancaire,
+  encaissementEnDetail,
+  estDansFenetreBancaire,
   parserCsvBancaire,
   parserDateBancaire,
   parserDetailCa,
+  periodePrecedente,
+  trouverSousEnsembleMontant,
 } from "./rapprochement-utils";
 import { construireFecVentes } from "./fec-utils";
 import { construireDiagnosticRemises } from "./diagnostic-remises-utils";
@@ -719,69 +723,13 @@ export default function ComptabilitePage() {
       const usedRemiseIds = new Set<string>();     // ids des bordereaux de remise (chèques/espèces) déjà rapprochés
 
       // ─────────────────────────────────────────────────────────────────────
-      // findSubsetSum : cherche une combinaison d'encaissements dont la somme
-      // (en centimes) = targetCents (±2 centimes). Utilisé pour les remises CB
-      // terminal : la banque peut faire plusieurs remises dans la même journée,
-      // ou une transaction a pu être refusée. Exemple : 18 CB saisis = 2802€,
-      // la banque remet 2766€ (une tx refusée) → on trouve la combinaison de
-      // 17 CB qui fait 2766€.
-      //
-      // Algorithme : programmation dynamique sur les sommes atteignables.
-      // Complexité O(n × S) où S = targetCents. Limite : 25 transactions max
-      // et map plafonnée à 100k entries pour éviter OOM sur gros volumes.
-      // ─────────────────────────────────────────────────────────────────────
-      const findSubsetSum = (encs: any[], targetCents: number): any[] | null => {
-        if (encs.length === 0 || encs.length > 25) return null;
-        const centsValues = encs.map(e => Math.round((e.montant || 0) * 100));
-        const totalCents = centsValues.reduce((s, c) => s + c, 0);
-        if (targetCents > totalCents + 2) return null;
-        if (targetCents <= 0) return null;
-        // Match direct avec le total ?
-        if (Math.abs(totalCents - targetCents) <= 2) return [...encs];
-
-        let dp = new Map<number, number[]>();
-        dp.set(0, []);
-        for (let i = 0; i < centsValues.length; i++) {
-          const current = centsValues[i];
-          const nextDp = new Map(dp);
-          for (const [sum, indices] of dp.entries()) {
-            const newSum = sum + current;
-            if (newSum > targetCents + 2) continue;
-            if (!nextDp.has(newSum)) {
-              const newIndices = [...indices, i];
-              nextDp.set(newSum, newIndices);
-              if (Math.abs(newSum - targetCents) <= 2) {
-                return newIndices.map(idx => encs[idx]);
-              }
-            }
-          }
-          dp = nextDp;
-          if (dp.size > 100000) return null;
-        }
-        return null;
-      };
-
-      // Helper pour convertir un encaissement en détail affichable
-      const encToDetail = (e: any) => ({
-        familyName: e.familyName || "",
-        montant: e.montant || 0,
-        date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "",
-        activityTitle: e.activityTitle || "",
-        mode: e.modeLabel || e.mode || "",
-      });
-
       const matched = parsed.map((bl) => {
         const label = bl.label.toUpperCase();
         const bankDate = parserDateBancaire(bl.date);
 
         // Calcul de la période précédente pour élargir le pool
         // (les chèques / CB terminal peuvent être datés du mois d'avant)
-        const prevPeriod = (() => {
-          const [y, m] = period.split("-").map(Number);
-          const pm = m === 1 ? 12 : m - 1;
-          const py = m === 1 ? y - 1 : y;
-          return `${py}-${String(pm).padStart(2, "0")}`;
-        })();
+        const prevPeriod = periodePrecedente(period);
 
         // Encaissements de la période, avec leur date
         // On EXCLUT les encaissements déjà consommés par une autre bankLine
@@ -804,13 +752,7 @@ export default function ComptabilitePage() {
         });
 
         // Fenêtre de ±3 jours autour de la date bancaire
-        const inWindow = (enc: any) => {
-          if (!bankDate) return true; // pas de date → on essaie quand même
-          const d = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : null;
-          if (!d) return false;
-          const diff = Math.abs(bankDate.getTime() - d.getTime()) / (1000 * 60 * 60 * 24);
-          return diff <= 3;
-        };
+        const inWindow = (enc: any) => estDansFenetreBancaire(enc, bankDate);
 
         // ── 1. CB en ligne (CAWL) payout ─────────────────────────────────
         // CAWL verse les fonds ~2-7 jours après les paiements, regroupés,
@@ -824,14 +766,14 @@ export default function ComptabilitePage() {
           const exactCb = cbEncs.find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
           if (exactCb) {
             usedEncIds.add(exactCb.id);
-            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `CB en ligne ${exactCb.familyName} — ${exactCb.montant?.toFixed(2)}€`, matchedEncs: [encToDetail(exactCb)] };
+            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `CB en ligne ${exactCb.familyName} — ${exactCb.montant?.toFixed(2)}€`, matchedEncs: [encaissementEnDetail(exactCb)] };
           }
 
           // b) Total CB en ligne de la période (payout global)
           const cbTotal = cbEncs.reduce((s, e) => s + (e.montant || 0), 0);
           if (cbTotal > 0 && Math.abs(cbTotal - bl.amount) < 0.02) {
             cbEncs.forEach(e => usedEncIds.add(e.id));
-            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbEncs.length} transaction(s) = ${cbTotal.toFixed(2)}€`, matchedEncs: cbEncs.map(encToDetail) };
+            return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbEncs.length} transaction(s) = ${cbTotal.toFixed(2)}€`, matchedEncs: cbEncs.map(encaissementEnDetail) };
           }
 
           // c) Total CB en ligne net de commissions
@@ -840,7 +782,7 @@ export default function ComptabilitePage() {
             const cbNet = Math.round((cbTotal - estimatedFees) * 100) / 100;
             if (Math.abs(cbNet - bl.amount) < 1.00) { // tolérance 1€ sur les commissions
               cbEncs.forEach(e => usedEncIds.add(e.id));
-              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbEncs.length} tx = ${cbTotal.toFixed(2)}€ brut − ~${estimatedFees.toFixed(2)}€ frais ≈ ${cbNet.toFixed(2)}€`, matchedEncs: cbEncs.map(encToDetail) };
+              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbEncs.length} tx = ${cbTotal.toFixed(2)}€ brut − ~${estimatedFees.toFixed(2)}€ frais ≈ ${cbNet.toFixed(2)}€`, matchedEncs: cbEncs.map(encaissementEnDetail) };
             }
           }
 
@@ -856,7 +798,7 @@ export default function ComptabilitePage() {
             const windowTotal = cbWindow.reduce((s, e) => s + (e.montant || 0), 0);
             if (windowTotal > 0 && Math.abs(windowTotal - bl.amount) < 0.02) {
               cbWindow.forEach(e => usedEncIds.add(e.id));
-              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbWindow.length} tx (J-2 à J-14) = ${windowTotal.toFixed(2)}€`, matchedEncs: cbWindow.map(encToDetail) };
+              return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne — ${cbWindow.length} tx (J-2 à J-14) = ${windowTotal.toFixed(2)}€`, matchedEncs: cbWindow.map(encaissementEnDetail) };
             }
             // Net de commissions
             if (windowTotal > 0) {
@@ -864,7 +806,7 @@ export default function ComptabilitePage() {
               const wNet = Math.round((windowTotal - wFees) * 100) / 100;
               if (Math.abs(wNet - bl.amount) < 1.00) {
                 cbWindow.forEach(e => usedEncIds.add(e.id));
-                return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbWindow.length} tx = ${windowTotal.toFixed(2)}€ − ~${wFees.toFixed(2)}€ frais`, matchedEncs: cbWindow.map(encToDetail) };
+                return { ...bl, matched: true, matchType: "CB en ligne", matchDetail: `Virement CB en ligne net — ${cbWindow.length} tx = ${windowTotal.toFixed(2)}€ − ~${wFees.toFixed(2)}€ frais`, matchedEncs: cbWindow.map(encaissementEnDetail) };
               }
             }
           }
@@ -903,7 +845,7 @@ export default function ComptabilitePage() {
               return {
                 ...bl, matched: true, matchType: "CB Terminal",
                 matchDetail: `${dayData.count} transaction(s) CB du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
-                matchedEncs: dayData.encs.map(encToDetail),
+                matchedEncs: dayData.encs.map(encaissementEnDetail),
               };
             }
           }
@@ -934,7 +876,7 @@ export default function ComptabilitePage() {
           const exactCB = cbEncs.filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
           if (exactCB) {
             usedEncIds.add(exactCB.id);
-            return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `CB ${exactCB.familyName} — ${exactCB.activityTitle || ""}`, matchedEncs: [encToDetail(exactCB)] };
+            return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `CB ${exactCB.familyName} — ${exactCB.activityTitle || ""}`, matchedEncs: [encaissementEnDetail(exactCB)] };
           }
         }
 
@@ -981,13 +923,13 @@ export default function ComptabilitePage() {
           const encNameAmountInWindow = encNameMatches.find(e => inWindow(e) && Math.abs((e.montant || 0) - bl.amount) < 0.02);
           if (encNameAmountInWindow) {
             usedEncIds.add(encNameAmountInWindow.id);
-            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${encNameAmountInWindow.familyName}`, matchedEncs: [encToDetail(encNameAmountInWindow)] };
+            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${encNameAmountInWindow.familyName}`, matchedEncs: [encaissementEnDetail(encNameAmountInWindow)] };
           }
           // Nom + montant exact (même hors fenêtre, jusqu'à 15j)
           const encNameAmount = encNameMatches.find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
           if (encNameAmount) {
             usedEncIds.add(encNameAmount.id);
-            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${encNameAmount.familyName}`, matchedEncs: [encToDetail(encNameAmount)] };
+            return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${encNameAmount.familyName}`, matchedEncs: [encaissementEnDetail(encNameAmount)] };
           }
 
           // b.2) Parmi les PAIEMENTS virement en attente (pending/partial), match par nom
@@ -1043,7 +985,7 @@ export default function ComptabilitePage() {
             return {
               ...bl, matched: true, matchType: "Virement",
               matchDetail: `Virement ${match.familyName} (montant seul)`,
-              matchedEncs: [encToDetail(match)],
+              matchedEncs: [encaissementEnDetail(match)],
               uncertain: true, // nom absent du libellé → à vérifier
             };
           }
@@ -1102,7 +1044,7 @@ export default function ComptabilitePage() {
             return {
               ...bl, matched: true, matchType: "Chèques",
               matchDetail: `Bordereau du ${dayLabel} — ${remiseMatch.nbPaiements || encIds.length} chèque(s) = ${(remiseMatch.total || 0).toFixed(2)}€`,
-              matchedEncs: remiseEncs.map(encToDetail),
+              matchedEncs: remiseEncs.map(encaissementEnDetail),
             };
           }
 
@@ -1115,7 +1057,7 @@ export default function ComptabilitePage() {
           );
           if (match) {
             usedEncIds.add(match.id);
-            return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName}`, matchedEncs: [encToDetail(match)] };
+            return { ...bl, matched: true, matchType: "Chèque", matchDetail: `Chèque ${match.familyName}`, matchedEncs: [encaissementEnDetail(match)] };
           }
 
           // b) Remise chèques groupée par JOUR EXACT
@@ -1146,7 +1088,7 @@ export default function ComptabilitePage() {
               return {
                 ...bl, matched: true, matchType: "Chèques",
                 matchDetail: `${dayData.count} chèque(s) du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
-                matchedEncs: dayData.encs.map(encToDetail),
+                matchedEncs: dayData.encs.map(encaissementEnDetail),
               };
             }
           }
@@ -1163,7 +1105,7 @@ export default function ComptabilitePage() {
             }
             if (dayData.total < bl.amount - 0.02) continue;
             const freeEncs = dayData.encs.filter(e => !usedEncIds.has(e.id));
-            const subset = findSubsetSum(freeEncs, chqTargetCents);
+            const subset = trouverSousEnsembleMontant(freeEncs, chqTargetCents);
             if (subset && subset.length > 0) {
               const subsetSum = subset.reduce((s, e) => s + (e.montant || 0), 0);
               subset.forEach(e => usedEncIds.add(e.id));
@@ -1171,7 +1113,7 @@ export default function ComptabilitePage() {
               return {
                 ...bl, matched: true, matchType: "Chèques",
                 matchDetail: `Sous-ensemble ${subset.length}/${dayData.encs.length} chèque(s) du ${dayLabel} = ${subsetSum.toFixed(2)}€`,
-                matchedEncs: subset.map(encToDetail),
+                matchedEncs: subset.map(encaissementEnDetail),
               };
             }
           }
@@ -1192,7 +1134,7 @@ export default function ComptabilitePage() {
                 return {
                   ...bl, matched: true, matchType: "Chèques",
                   matchDetail: `Agrégat ${runningCount} chèque(s) (${days}) = ${roundedTotal.toFixed(2)}€`,
-                  matchedEncs: allEncs.map(encToDetail),
+                  matchedEncs: allEncs.map(encaissementEnDetail),
                 };
               }
             }
@@ -1202,7 +1144,7 @@ export default function ComptabilitePage() {
           const totalMois = Math.round(allChqEncs.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
           if (totalMois > 0 && Math.abs(totalMois - bl.amount) < 0.02) {
             allChqEncs.forEach(e => usedEncIds.add(e.id));
-            return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${allChqEncs.length} chèque(s) du mois = ${totalMois.toFixed(2)}€`, matchedEncs: allChqEncs.map(encToDetail) };
+            return { ...bl, matched: true, matchType: "Chèques", matchDetail: `Remise ${allChqEncs.length} chèque(s) du mois = ${totalMois.toFixed(2)}€`, matchedEncs: allChqEncs.map(encaissementEnDetail) };
           }
         }
 
@@ -1232,7 +1174,7 @@ export default function ComptabilitePage() {
             return {
               ...bl, matched: true, matchType: "Espèces",
               matchDetail: `Bordereau du ${dayLabel} — ${remiseEspMatch.nbPaiements || encIds.length} enc. espèces = ${(remiseEspMatch.total || 0).toFixed(2)}€`,
-              matchedEncs: remiseEncs.map(encToDetail),
+              matchedEncs: remiseEncs.map(encaissementEnDetail),
             };
           }
 
@@ -1251,7 +1193,7 @@ export default function ComptabilitePage() {
             if (Math.abs(dayTotal - bl.amount) < 0.02) {
               const dayLabel = dayKey.split("-").reverse().join("/");
               dayData.encs.forEach(e => usedEncIds.add(e.id));
-              return { ...bl, matched: true, matchType: "Espèces", matchDetail: `Dépôt espèces du ${dayLabel} = ${dayTotal.toFixed(2)}€`, matchedEncs: dayData.encs.map(encToDetail) };
+              return { ...bl, matched: true, matchType: "Espèces", matchDetail: `Dépôt espèces du ${dayLabel} = ${dayTotal.toFixed(2)}€`, matchedEncs: dayData.encs.map(encaissementEnDetail) };
             }
           }
         }
@@ -1275,7 +1217,7 @@ export default function ComptabilitePage() {
             return {
               ...bl, matched: true, matchType: "Montant exact",
               matchDetail: `${exactMatch.familyName} — ${exactMatch.activityTitle || ""}`,
-              matchedEncs: [encToDetail(exactMatch)],
+              matchedEncs: [encaissementEnDetail(exactMatch)],
               uncertain: true, // match fragile : à vérifier
             };
           }
