@@ -10,6 +10,13 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
+import {
+  analyserPeriodeCsv,
+  cleLigneBancaire,
+  parserCsvBancaire,
+  parserDateBancaire,
+  parserDetailCa,
+} from "./rapprochement-utils";
 
 interface Payment {
   id: string;
@@ -727,22 +734,9 @@ export default function ComptabilitePage() {
       //   - periode tres courte (< 3 jours)
       //   - date de fin tres ancienne (> 30 jours avant aujourd'hui)
       // Confirmation requise avant de poursuivre l'import dans ces cas-la.
-      const periodeMatch = raw.match(/entre le (\d{2})\/(\d{2})\/(\d{4})\s+et le (\d{2})\/(\d{2})\/(\d{4})/i);
-      if (periodeMatch) {
-        const [, d1, m1, y1, d2, m2, y2] = periodeMatch;
-        const startStr = `${d1}/${m1}/${y1}`;
-        const endStr = `${d2}/${m2}/${y2}`;
-        const startDate = new Date(`${y1}-${m1}-${d1}T12:00:00`);
-        const endDate = new Date(`${y2}-${m2}-${d2}T12:00:00`);
-        const nbJours = Math.round((endDate.getTime() - startDate.getTime()) / 86_400_000) + 1;
-        const now = new Date();
-        const joursDepuisFin = Math.round((now.getTime() - endDate.getTime()) / 86_400_000);
-
-        const alertes: string[] = [];
-        if (nbJours < 3) alertes.push(`• Periode tres courte : seulement ${nbJours} jour(s)`);
-        if (joursDepuisFin > 30) alertes.push(`• Derniere operation il y a ${joursDepuisFin} jours`);
-        if (nbJours <= 0) alertes.push(`• Periode invalide : fin (${endStr}) anterieure au debut (${startStr})`);
-
+      const periodeCsv = analyserPeriodeCsv(raw);
+      if (periodeCsv) {
+        const { startStr, endStr, nbJours, alertes } = periodeCsv;
         if (alertes.length > 0) {
           const ok = window.confirm(
             `⚠️ Periode lue dans le CSV : ${startStr} → ${endStr} (${nbJours} jour${nbJours > 1 ? "s" : ""})\n\n` +
@@ -752,101 +746,17 @@ export default function ComptabilitePage() {
             `Continuer quand meme l'import ?`,
           );
           if (!ok) {
-            // L'admin annule -> on remet l'input file a zero et on s'arrete
             e.target.value = "";
             return;
           }
         } else {
-          // Periode OK : info discrete dans la console pour debug
           console.log(`📅 CSV : ${startStr} → ${endStr} (${nbJours} jours)`);
         }
       }
       // Si la ligne de periode est absente (autre banque que CA), on continue
       // sans verification : le format simple n'a pas de header de periode.
       
-      // ── Parser intelligent pour CSV bancaires (Crédit Agricole, etc.) ──
-      // Détecte automatiquement le format :
-      // - Format CA : en-tête multi-lignes, libellés multi-lignes entre guillemets,
-      //   colonnes Date;Libellé;Débit euros;Crédit euros; séparées par ;
-      // - Format simple : Date;Libellé;Montant
-      
-      // 1. Trouver la ligne d'en-tête (celle qui contient "Date" et "Libellé" ou "Label")
-      const allLines = raw.split("\n");
-      let headerIdx = allLines.findIndex(l => {
-        const lower = l.toLowerCase();
-        return (lower.includes("date") && (lower.includes("libellé") || lower.includes("libelle") || lower.includes("label")));
-      });
-      if (headerIdx < 0) headerIdx = 0; // fallback : première ligne
-
-      const headerLine = allLines[headerIdx].toLowerCase();
-      const hasDebitCredit = headerLine.includes("débit") || headerLine.includes("debit") || headerLine.includes("crédit") || headerLine.includes("credit");
-      
-      // 2. Extraire le contenu après l'en-tête
-      const dataText = allLines.slice(headerIdx + 1).join("\n");
-      
-      // 3. Parser les champs CSV avec guillemets multi-lignes
-      const records: { date: string; label: string; debit: number; credit: number }[] = [];
-      let current = "";
-      let inQuotes = false;
-      
-      for (let i = 0; i < dataText.length; i++) {
-        const ch = dataText[i];
-        if (ch === '"') {
-          inQuotes = !inQuotes;
-          current += ch;
-        } else if (ch === "\n" && !inQuotes) {
-          // Fin de ligne réelle (hors guillemets)
-          if (current.trim()) {
-            const fields = [];
-            let field = "";
-            let fInQ = false;
-            for (let j = 0; j < current.length; j++) {
-              const fc = current[j];
-              if (fc === '"') { fInQ = !fInQ; }
-              else if (fc === ";" && !fInQ) { fields.push(field.trim()); field = ""; }
-              else { field += fc; }
-            }
-            fields.push(field.trim());
-            
-            // Nettoyer les champs (supprimer espaces multiples, retours à la ligne dans les libellés)
-            const cleanField = (s: string) => s.replace(/\s+/g, " ").trim();
-            
-            const date = cleanField(fields[0] || "");
-            const label = cleanField(fields[1] || "");
-            
-            // Vérifier que la date ressemble à une date (DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, DD-MM-YYYY)
-            const isDate = /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(date) || /^\d{4}-\d{2}-\d{2}$/.test(date) || /^\d{1,2}-\d{1,2}-\d{4}$/.test(date);
-            
-            if (isDate && label) {
-              if (hasDebitCredit) {
-                // Format CA : Date;Libellé;Débit;Crédit
-                const debit = parseFloat((fields[2] || "0").replace(/\s/g, "").replace(",", ".")) || 0;
-                const credit = parseFloat((fields[3] || "0").replace(/\s/g, "").replace(",", ".")) || 0;
-                records.push({ date, label, debit, credit });
-              } else {
-                // Format simple : Date;Libellé;Montant
-                const amount = parseFloat((fields[2] || "0").replace(/\s/g, "").replace(",", ".")) || 0;
-                records.push({ date, label, debit: amount < 0 ? Math.abs(amount) : 0, credit: amount > 0 ? amount : 0 });
-              }
-            }
-          }
-          current = "";
-        } else {
-          current += ch;
-        }
-      }
-      
-      // 4. Convertir en format attendu (montant = crédit - débit pour avoir + pour les recettes)
-      // On ne garde que les crédits (mouvements entrants). Les débits sont tous exclus d'office
-      // car le rapprochement bancaire ne concerne que les encaissements.
-      const parsed = records.map(r => ({
-        date: r.date,
-        label: r.label,
-        amount: Math.round((r.credit - r.debit) * 100) / 100,
-        matched: false,
-        matchType: "" as string,
-        matchDetail: "" as string,
-      })).filter(r => r.amount > 0);
+      const parsed = parserCsvBancaire(raw);
 
       // ─────────────────────────────────────────────────────────────────────
       //  Smart matching — version robuste avec unicité
@@ -904,24 +814,6 @@ export default function ComptabilitePage() {
         return null;
       };
 
-      // Parse la date de la ligne bancaire (formats : DD/MM/YYYY, D/M/YYYY, YYYY-MM-DD, DD-MM-YYYY)
-      const parseBankDate = (s: string): Date | null => {
-        if (!s) return null;
-        const p1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (p1) {
-          const dd = p1[1].padStart(2, "0"), mm = p1[2].padStart(2, "0");
-          return new Date(`${p1[3]}-${mm}-${dd}`);
-        }
-        const p2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-        if (p2) return new Date(s);
-        const p3 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-        if (p3) {
-          const dd = p3[1].padStart(2, "0"), mm = p3[2].padStart(2, "0");
-          return new Date(`${p3[3]}-${mm}-${dd}`);
-        }
-        return null;
-      };
-
       // Helper pour convertir un encaissement en détail affichable
       const encToDetail = (e: any) => ({
         familyName: e.familyName || "",
@@ -933,7 +825,7 @@ export default function ComptabilitePage() {
 
       const matched = parsed.map((bl) => {
         const label = bl.label.toUpperCase();
-        const bankDate = parseBankDate(bl.date);
+        const bankDate = parserDateBancaire(bl.date);
 
         // Calcul de la période précédente pour élargir le pool
         // (les chèques / CB terminal peuvent être datés du mois d'avant)
@@ -1565,16 +1457,15 @@ export default function ComptabilitePage() {
       // dans le rapprochement avec un pointage MANUEL ou IGNORÉ, on conserve
       // ce pointage pour ne pas le perdre au re-import.
       const previousBankLines = bankLines;
-      const lineKey = (l: any) => `${l.date}|${l.label}|${l.amount.toFixed(2)}`;
       const previousManualByKey = new Map<string, any>();
       for (const prev of previousBankLines) {
         if (prev.matchType === "Manuel" || prev.matchType === "Ignoré") {
-          previousManualByKey.set(lineKey(prev), prev);
+          previousManualByKey.set(cleLigneBancaire(prev), prev);
         }
       }
 
       const finalMatched = matched.map((bl: any) => {
-        const prev = previousManualByKey.get(lineKey(bl));
+        const prev = previousManualByKey.get(cleLigneBancaire(bl));
         if (prev) {
           // On garde le pointage manuel existant plutôt que l'auto-match
           return {
@@ -1597,7 +1488,7 @@ export default function ComptabilitePage() {
       // qui seront écrasées (les auto-matchs se refont proprement à chaque import).
       const autoOverwritten = previousBankLines.filter(p =>
         p.matchType !== "Manuel" && p.matchType !== "Ignoré" &&
-        finalMatched.some((m: any) => lineKey(m) === lineKey(p))
+        finalMatched.some((m: any) => cleLigneBancaire(m) === cleLigneBancaire(p))
       ).length;
       if (autoOverwritten > 0) {
         console.log(`ℹ️ Re-import : ${autoOverwritten} ligne(s) auto-rapprochée(s) recalculée(s), ${previousManualByKey.size} pointage(s) manuel(s) préservé(s)`);
@@ -3660,39 +3551,10 @@ export default function ComptabilitePage() {
         // tx détectée avec heure (ex: l'utilisateur a copié juste les montants).
         //
         // Limites : montants 0.01 € à 50 000 € ; exclusion des lignes "total"/"somme".
-        const parseCaText = (text: string): number[] => {
-          const amounts: number[] = [];
-
-          // PASSE 1 : ancrage HH:MM:SS (la plus fiable, marche dans tous les cas)
-          //   Matches : "17:02:34 95,00 EUR", "09:59:09175,00 EUR", "10:00145,00 EUR", etc.
-          const anchored = /\d{2}:\d{2}(?::\d{2})?\s*(\d{1,6})[,.](\d{2})\s*(?:EUR|€)/gi;
-          let m;
-          while ((m = anchored.exec(text)) !== null) {
-            const val = parseFloat(`${m[1]}.${m[2]}`);
-            if (!isNaN(val) && val > 0 && val < 50000) amounts.push(val);
-          }
-          if (amounts.length > 0) return amounts;
-
-          // PASSE 2 (fallback) : ligne par ligne, regex stricte avec bord de ligne
-          //   Cas où l'utilisateur copie juste les montants sans les heures
-          const lines = text.split(/[\r\n]+/);
-          const single = /(?:^|[\s\u00A0\t])(\d{1,3}(?:[\s\u00A0]\d{3})*|\d{1,6})[,.](\d{2})\s*(?:EUR|€)/i;
-          for (const line of lines) {
-            const lower = line.toLowerCase();
-            if (lower.includes("total") || lower.includes("somme") || lower.includes("récap") || lower.includes("recap")) continue;
-            const mm = line.match(single);
-            if (!mm) continue;
-            const intPart = mm[1].replace(/[\s\u00A0]/g, "");
-            const val = parseFloat(`${intPart}.${mm[2]}`);
-            if (!isNaN(val) && val > 0 && val < 50000) amounts.push(val);
-          }
-          return amounts;
-        };
-
         // Essai de matching : on cherche parmi les CB terminal NON CONSOMMÉS ceux
         // dont le montant correspond aux montants parsés (dans une fenêtre ±3j)
         const tryMatch = (text: string) => {
-          const amounts = parseCaText(text);
+          const amounts = parserDetailCa(text);
           if (amounts.length === 0) { setCaDetailPreview(null); return; }
 
           // Date bancaire (pour la fenêtre)
