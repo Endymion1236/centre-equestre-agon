@@ -1,21 +1,12 @@
 "use client";
 import React, { useState } from "react";
-import { updateDoc, addDoc, getDoc, doc, collection, query, where, getDocs, deleteDoc, serverTimestamp, Timestamp } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { safeNumber, generateOrderId } from "@/lib/utils";
-import { createEncaissement } from "@/lib/compta-encaissement";
-import { Card, Badge } from "@/components/ui";
-import { Loader2, Check, X, CreditCard, Sparkles, AlertTriangle, Plus, Trash2, Search } from "lucide-react";
-import { paymentModes } from "./types";
-import { normalizePayment } from "./utils";
+import { Card } from "@/components/ui";
 import {
-  emailTemplates, emailLayout, emailPanneau, emailLigne, emailTitre,
-  emailParagraphe as P, emailSignature,
-} from "@/lib/email-templates";
-import { downloadInvoicePdf } from "@/lib/download-invoice";
-import { authFetch } from "@/lib/auth-fetch";
-import { renderDerouleStage } from "@/lib/stage-deroule";
-import { encadreConditionsPourType } from "@/lib/cgv-clauses";
+  confirmerDeclarationPaiement,
+  libelleModeDeclaration,
+  rejeterDeclarationPaiement,
+  type DeclarationPaiement,
+} from "./declarations-actions";
 
 interface TabDeclarationsProps {
   loading: boolean;
@@ -37,228 +28,134 @@ interface TabDeclarationsProps {
   refreshAll?: () => Promise<void>;
 }
 
-export function TabDeclarations({
-  loading, payments, declarations, setDeclarations, families, avoirs,
-  broadcastSource, setBroadcastSource, broadcastRows, setBroadcastRows,
-  broadcastSearch, setBroadcastSearch, broadcastSending, setBroadcastSending,
-  toast, setPayments, refreshAll,
-}: TabDeclarationsProps) {
-  const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
+function classeMode(mode: string): string {
+  if (mode === "cheque") return "bg-blue-50 text-blue-700";
+  if (mode === "virement") return "bg-purple-50 text-purple-700";
+  return "bg-green-50 text-green-700";
+}
+
+function iconeMode(mode: string): string {
+  if (mode === "cheque") return "📝";
+  if (mode === "virement") return "🏦";
+  return "💵";
+}
+
+export function TabDeclarations(props: TabDeclarationsProps) {
+  const { declarations, setDeclarations, toast, refreshAll } = props;
   const [confirmingDeclId, setConfirmingDeclId] = useState<string | null>(null);
 
-  return (
-<div className="flex flex-col gap-4">
-  <div className="flex items-center justify-between">
-    <h2 className="font-display text-lg font-bold text-blue-800">Déclarations de paiement</h2>
-    <span className="font-body text-xs text-slate-500">{declarations.length} en attente de confirmation</span>
-  </div>
+  const retirerDeLaListe = (id: string) => {
+    setDeclarations((previous) => previous.filter((declaration) => declaration.id !== id));
+  };
 
-  {declarations.length === 0 ? (
-    <Card padding="lg" className="text-center">
-      <p className="font-body text-sm text-slate-500">Aucune déclaration en attente.</p>
-      <p className="font-body text-xs text-slate-400 mt-1">Les familles peuvent déclarer un paiement chèque ou espèces depuis leur espace.</p>
-    </Card>
-  ) : (
-    <div className="flex flex-col gap-3">
-      {declarations.map((decl: any) => {
-        const date = decl.createdAt?.seconds ? new Date(decl.createdAt.seconds * 1000) : new Date();
-        return (
-          <Card key={decl.id} padding="md">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-body text-base font-bold text-blue-800">{decl.familyName}</span>
-                  <span className={`font-body text-xs font-semibold px-2 py-0.5 rounded-full ${
-                    decl.mode === "cheque" ? "bg-blue-50 text-blue-700" :
-                    decl.mode === "virement" ? "bg-purple-50 text-purple-700" :
-                    "bg-green-50 text-green-700"
-                  }`}>
-                    {decl.mode === "cheque" ? "📝 Chèque" : decl.mode === "virement" ? "🏦 Virement" : "💵 Espèces"}
-                  </span>
+  const rafraichir = async () => {
+    if (!refreshAll) return;
+    try {
+      await refreshAll();
+    } catch {
+      // Le rafraîchissement visuel est non bloquant pour l'opération comptable.
+    }
+  };
+
+  const confirmer = async (declaration: DeclarationPaiement) => {
+    const mode = libelleModeDeclaration(declaration.mode).toLowerCase();
+    if (!confirm(`Confirmer réception de ${declaration.montant.toFixed(2)}€ en ${mode} de ${declaration.familyName} ?`)) return;
+
+    setConfirmingDeclId(declaration.id);
+    try {
+      const result = await confirmerDeclarationPaiement(declaration);
+      if (result.dejaConfirmee) {
+        toast("Déjà confirmé", "info");
+        retirerDeLaListe(declaration.id);
+        return;
+      }
+
+      retirerDeLaListe(declaration.id);
+      await rafraichir();
+      toast(`✅ Paiement de ${declaration.familyName} confirmé`, "success");
+    } catch (error) {
+      console.error("Erreur confirmation:", error);
+      toast("Erreur lors de la confirmation", "error");
+    } finally {
+      setConfirmingDeclId(null);
+    }
+  };
+
+  const rejeter = async (declaration: DeclarationPaiement) => {
+    if (
+      declaration.type === "inscription_annuelle" &&
+      !confirm(`Rejeter cette inscription annuelle de ${declaration.familyName} ? La/les place(s) réservée(s) seront libérée(s).`)
+    ) return;
+
+    await rejeterDeclarationPaiement(declaration);
+    retirerDeLaListe(declaration.id);
+    await rafraichir();
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-bold text-blue-800">Déclarations de paiement</h2>
+        <span className="font-body text-xs text-slate-500">{declarations.length} en attente de confirmation</span>
+      </div>
+
+      {declarations.length === 0 ? (
+        <Card padding="lg" className="text-center">
+          <p className="font-body text-sm text-slate-500">Aucune déclaration en attente.</p>
+          <p className="font-body text-xs text-slate-400 mt-1">Les familles peuvent déclarer un paiement chèque ou espèces depuis leur espace.</p>
+        </Card>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {declarations.map((rawDeclaration: any) => {
+            const declaration = rawDeclaration as DeclarationPaiement;
+            const date = declaration.createdAt?.seconds
+              ? new Date(declaration.createdAt.seconds * 1000)
+              : new Date();
+            const enCours = confirmingDeclId === declaration.id;
+
+            return (
+              <Card key={declaration.id} padding="md">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-body text-base font-bold text-blue-800">{declaration.familyName}</span>
+                      <span className={`font-body text-xs font-semibold px-2 py-0.5 rounded-full ${classeMode(declaration.mode)}`}>
+                        {iconeMode(declaration.mode)} {libelleModeDeclaration(declaration.mode)}
+                      </span>
+                    </div>
+                    <div className="font-body text-sm text-slate-600">{declaration.activityTitle}</div>
+                    {declaration.note && <div className="font-body text-xs text-slate-400 mt-1 italic">&quot;{declaration.note}&quot;</div>}
+                    <div className="font-body text-xs text-slate-400 mt-1">
+                      {date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
+                    </div>
+                  </div>
+
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-body text-xl font-bold text-blue-500 mb-2">{(declaration.montant || 0).toFixed(2)}€</div>
+                    <div className="flex flex-col gap-1.5">
+                      <button
+                        type="button"
+                        disabled={enCours}
+                        onClick={() => void confirmer(declaration)}
+                        className={`font-body text-xs font-semibold text-white px-4 py-2 rounded-lg border-none cursor-pointer ${enCours ? "bg-gray-400 cursor-not-allowed" : "bg-green-500 hover:bg-green-600"}`}
+                      >
+                        {enCours ? "⏳ Confirmation..." : "✓ Confirmer réception"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void rejeter(declaration)}
+                        className="font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer"
+                      >
+                        Rejeter
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <div className="font-body text-sm text-slate-600">{decl.activityTitle}</div>
-                {decl.note && <div className="font-body text-xs text-slate-400 mt-1 italic">"{decl.note}"</div>}
-                <div className="font-body text-xs text-slate-400 mt-1">{date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}</div>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <div className="font-body text-xl font-bold text-blue-500 mb-2">{(decl.montant || 0).toFixed(2)}€</div>
-                <div className="flex flex-col gap-1.5">
-                  <button disabled={confirmingDeclId === decl.id} onClick={async () => {
-                    if (!confirm(`Confirmer réception de ${decl.montant.toFixed(2)}€ en ${decl.mode === "cheque" ? "chèque" : decl.mode === "virement" ? "virement" : "espèces"} de ${decl.familyName} ?`)) return;
-                    setConfirmingDeclId(decl.id);
-                    try {
-                      // Vérification anti-doublon
-                      const declSnap = await getDoc(doc(db, "payment_declarations", decl.id));
-                      if (!declSnap.exists() || declSnap.data()?.status === "confirmed") {
-                        toast("Déjà confirmé", "info");
-                        setDeclarations(prev => prev.filter(d => d.id !== decl.id));
-                        setConfirmingDeclId(null);
-                        return;
-                      }
-                      // Mettre à jour le paiement
-                      console.log("Confirmation déclaration:", decl.id, "paymentId:", decl.paymentId);
-                      if (decl.paymentId) {
-                        const paySnap = await getDoc(doc(db, "payments", decl.paymentId));
-                        console.log("Payment trouvé:", paySnap.exists(), paySnap.data()?.status);
-                        if (paySnap.exists()) {
-                          const pData = paySnap.data();
-                          const newPaid = Math.round(((pData.paidAmount || 0) + decl.montant) * 100) / 100;
-                          const newStatus = newPaid >= (pData.totalTTC || 0) ? "paid" : "partial";
-                          const chequeRef = decl.chequeRef ? `Chèque n°${decl.chequeRef}` : (decl.note || "");
-                          await updateDoc(doc(db, "payments", decl.paymentId), {
-                            paidAmount: newPaid, status: newStatus,
-                            paymentMode: decl.mode,
-                            paymentRef: chequeRef,
-                            updatedAt: serverTimestamp(),
-                          });
-                          // Créer un encaissement
-                          const encDate = decl.dateEncaissement
-                            ? new Date(decl.dateEncaissement + "T12:00:00")
-                            : new Date();
-                          await createEncaissement({
-                            paymentId: decl.paymentId,
-                            familyId: decl.familyId,
-                            familyName: decl.familyName,
-                            montant: decl.montant,
-                            mode: decl.mode,
-                            modeLabel: decl.mode === "cheque" ? `Chèque${decl.chequeRef ? ` n°${decl.chequeRef}` : ""}` : decl.mode === "virement" ? "Virement" : "Espèces",
-                            ref: chequeRef,
-                            activityTitle: decl.activityTitle,
-                            explicitDate: encDate,
-                          });
-                        }
-                      }
-                      // Finalisation d'un règlement chèque/espèces/virement : on
-                      // lève le "pending" sur les créneaux et on confirme les
-                      // réservations. Vaut pour l'inscription annuelle comme pour
-                      // le panier ponctuel — les deux tiennent la place en attente
-                      // du règlement, et les listes sont vides pour les anciennes
-                      // déclarations, qui traversent donc ce bloc sans effet.
-                      {
-                        for (const pe of (decl.pendingEnrollments || [])) {
-                          try {
-                            const crRef = doc(db, "creneaux", pe.creneauId);
-                            const crSnap = await getDoc(crRef);
-                            if (crSnap.exists()) {
-                              const enrolled = (crSnap.data().enrolled || []).map((e: any) =>
-                                e.childId === pe.childId && e.pending ? { ...e, pending: false } : e
-                              );
-                              await updateDoc(crRef, { enrolled });
-                            }
-                          } catch (err) { console.error("Finalisation créneau:", err); }
-                        }
-                        for (const rid of (decl.reservationIds || [])) {
-                          try {
-                            await updateDoc(doc(db, "reservations", rid), {
-                              status: "confirmed", confirmedAt: serverTimestamp(),
-                            });
-                          } catch (err) { console.error("Confirmation réservation:", err); }
-                        }
-                        for (const fp of (decl.forfaitPayloads || [])) {
-                          try {
-                            await addDoc(collection(db, "forfaits"), { ...fp, paymentId: decl.paymentId || null, createdAt: serverTimestamp() });
-                          } catch (err) { console.error("Création forfait:", err); }
-                        }
-                      }
-                      // Marquer la déclaration comme confirmée
-                      await updateDoc(doc(db, "payment_declarations", decl.id), {
-                        status: "confirmed", confirmedAt: serverTimestamp(),
-                      });
-                      // Email confirmation à la famille — avec le déroulé du
-                      // stage et les conditions d'annulation : c'est souvent le
-                      // premier email « officiel » que la famille garde, il doit
-                      // porter la même information qu'une confirmation en ligne.
-                      if (decl.familyEmail) {
-                        let derouleHtml = "";
-                        let typeCgv = "";
-                        try {
-                          const cid = decl.pendingEnrollments?.[0]?.creneauId;
-                          if (cid) {
-                            const crSnap = await getDoc(doc(db, "creneaux", cid));
-                            typeCgv = crSnap.exists() ? String((crSnap.data() as any).activityType || "") : "";
-                          }
-                          if (typeCgv === "stage" || typeCgv === "stage_journee") {
-                            const dSnap = await getDoc(doc(db, "settings", "stageDeroule"));
-                            derouleHtml = renderDerouleStage(dSnap.exists() ? (dSnap.data() as any) : null);
-                          }
-                        } catch { /* déroulé/CGV enrichissent l'email, ils ne le bloquent pas */ }
-                        authFetch("/api/send-email", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            to: decl.familyEmail,
-                            subject: `Paiement confirmé — ${decl.montant.toFixed(2)}€`,
-                            context: "admin_confirmation_declaration",
-                            template: "confirmationDeclaration",
-                            familyId: decl.familyId,
-                            paymentId: decl.paymentId,
-                            html: emailLayout([
-                              emailTitre("Règlement bien reçu"),
-                              P(`Bonjour <strong>${decl.familyName}</strong>,`),
-                              P("Nous avons bien reçu votre règlement, et votre inscription est confirmée."),
-                              emailPanneau("Détail", [
-                                emailLigne("Montant", `${decl.montant.toFixed(2).replace(".", ",")}&nbsp;€`),
-                                emailLigne("Mode de règlement", decl.mode === "cheque" ? "Chèque" : decl.mode === "virement" ? "Virement" : "Espèces"),
-                                emailLigne("Prestations", decl.activityTitle),
-                              ].join("")),
-                              derouleHtml,
-                              encadreConditionsPourType(typeCgv),
-                              emailSignature("Merci de votre confiance."),
-                            ].join("\n"), `${decl.montant.toFixed(2).replace(".", ",")} € reçus — ${decl.activityTitle}`),
-                          }),
-                        }).catch(() => {});
-                      }
-                      setDeclarations(prev => prev.filter(d => d.id !== decl.id));
-                      // Rafraîchir la liste des paiements pour que l'onglet Impayés
-                      // reflète immédiatement le nouveau statut (sinon état figé).
-                      if (refreshAll) { try { await refreshAll(); } catch { /* non bloquant */ } }
-                      toast(`✅ Paiement de ${decl.familyName} confirmé`, "success");
-                    } catch (e) { console.error("Erreur confirmation:", e); toast("Erreur lors de la confirmation", "error"); }
-                    finally { setConfirmingDeclId(null); }
-                    setConfirmingDeclId(null);
-                  }}
-                    className={`font-body text-xs font-semibold text-white px-4 py-2 rounded-lg border-none cursor-pointer ${confirmingDeclId === decl.id ? "bg-gray-400 cursor-not-allowed" : "bg-green-500 hover:bg-green-600"}`}>
-                    {confirmingDeclId === decl.id ? "⏳ Confirmation..." : "✓ Confirmer réception"}
-                  </button>
-                  <button onClick={async () => {
-                    if (decl.type === "inscription_annuelle" && !confirm(`Rejeter cette inscription annuelle de ${decl.familyName} ? La/les place(s) réservée(s) seront libérée(s).`)) return;
-                    // Inscription annuelle en attente → on libère la place, on supprime
-                    // les réservations provisoires et le paiement pending associé.
-                    if (decl.type === "inscription_annuelle") {
-                      for (const pe of (decl.pendingEnrollments || [])) {
-                        try {
-                          const crRef = doc(db, "creneaux", pe.creneauId);
-                          const crSnap = await getDoc(crRef);
-                          if (crSnap.exists()) {
-                            const enrolled = (crSnap.data().enrolled || []).filter(
-                              (e: any) => !(e.childId === pe.childId && e.pending)
-                            );
-                            await updateDoc(crRef, { enrolled, enrolledCount: enrolled.length });
-                          }
-                        } catch (err) { console.error("Libération créneau:", err); }
-                      }
-                      for (const rid of (decl.reservationIds || [])) {
-                        try { await deleteDoc(doc(db, "reservations", rid)); } catch (err) { console.error("Suppression réservation:", err); }
-                      }
-                      if (decl.paymentId) {
-                        try { await deleteDoc(doc(db, "payments", decl.paymentId)); } catch (err) { console.error("Suppression paiement:", err); }
-                      }
-                    }
-                    await updateDoc(doc(db, "payment_declarations", decl.id), { status: "rejected", rejectedAt: serverTimestamp() });
-                    setDeclarations(prev => prev.filter(d => d.id !== decl.id));
-                    if (refreshAll) { try { await refreshAll(); } catch { /* non bloquant */ } }
-                  }}
-                    className="font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer">
-                    Rejeter
-                  </button>
-                </div>
-              </div>
-            </div>
-          </Card>
-        );
-      })}
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
-  )}
-</div>
   );
 }
