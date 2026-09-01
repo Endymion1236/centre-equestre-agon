@@ -5,40 +5,23 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { ClipboardCheck, Loader2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  NOMS_MOIS_CLOTURE as NOMS_MOIS,
+  construirePointsCloture,
+  moisCourantCloture as moisCourant,
+  moisDecale,
+  resumerCloture,
+  type EtatCloture as Etat,
+  type LigneMasseSalarialeCloture as LigneMS,
+  type MoisResultatCloture as MoisResultat,
+  type ReleveClotureMois as Releve,
+} from "./cloture-mois-utils";
 
 /**
  * Boucler le mois — la checklist qui réunit les rituels de fin de mois.
- *
- * Les données vivent sur quatre écrans (trésorerie, masse salariale, dépenses,
- * résultat) ; ici on répond à UNE question : « ce mois est-il bouclé ? ».
- * Chaque point vérifie que la donnée est là, et le rapprochement banque ↔
- * caisse compare les encaissements clients lus sur le relevé au CA de la
- * caisse — le contrôle qu'un comptable ferait, automatisé.
- *
- * Cas assumé : les mois SANS encaissement en caisse (avant la bascule depuis
- * Céleris) affichent « rapprochement sans objet », pas un faux écart.
+ * Les calculs de complétude et de rapprochement sont isolés dans
+ * cloture-mois-utils.ts pour être testés sans React ni appels réseau.
  */
-
-interface Releve { id: string; mois: string; compte: string; montant: number; creditsClients?: number | null; }
-interface LigneMS { type: "salaire" | "charge"; mois: string; }
-interface MoisResultat { mois: string; ca: number; masse: number; depenses: number; }
-
-const NOMS_MOIS: Record<string, string> = {
-  "01": "Janvier", "02": "Février", "03": "Mars", "04": "Avril", "05": "Mai", "06": "Juin",
-  "07": "Juillet", "08": "Août", "09": "Septembre", "10": "Octobre", "11": "Novembre", "12": "Décembre",
-};
-const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
-const moisCourant = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
-/** Mois précédent d'un "AAAA-MM" — celui qu'on boucle par défaut. */
-function moisDecale(mois: string, delta: number): string {
-  const [a, m] = mois.split("-").map(Number);
-  const d = new Date(a, m - 1 + delta, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-type Etat = "ok" | "manque" | "info" | "neutre";
-interface Point { etat: Etat; titre: string; detail: string; href: string; lien: string; }
-
 export default function ClotureMoisPage() {
   const { isAdmin, user } = useAuth();
   const [releves, setReleves] = useState<Releve[]>([]);
@@ -70,79 +53,11 @@ export default function ClotureMoisPage() {
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
-  const points = useMemo<Point[]>(() => {
-    const r = resultat.find(x => x.mois === mois);
-    const comptesComptes = comptes.filter(c => !horsTotal.includes(c));
-    const relevesMois = releves.filter(x => x.mois === mois);
-    const manquants = comptesComptes.filter(c => !relevesMois.some(x => x.compte === c));
-    const fiches = lignesMS.filter(l => l.mois === mois && l.type !== "charge").length;
-    const charges = lignesMS.filter(l => l.mois === mois && l.type === "charge").length;
-    const ca = r?.ca || 0;
-    const depenses = r?.depenses || 0;
-    // Rapprochement : les encaissements clients lus sur les relevés du mois
-    // (tous comptes comptés) face au CA encaissé de la caisse.
-    const creditsLus = relevesMois.filter(x => !horsTotal.includes(x.compte) && x.creditsClients != null);
-    const credits = creditsLus.reduce((s, x) => s + (x.creditsClients || 0), 0);
-
-    const pts: Point[] = [
-      {
-        etat: manquants.length === 0 && comptesComptes.length > 0 ? "ok" : "manque",
-        titre: "Soldes bancaires saisis",
-        detail: manquants.length === 0
-          ? `${comptesComptes.length}/${comptesComptes.length} comptes — ${comptesComptes.map(c => { const x = relevesMois.find(y => y.compte === c); return `${c} : ${x ? eur(x.montant) : "?"}`; }).join(" · ")}`
-          : `Il manque : ${manquants.join(", ")} — dépose le(s) relevé(s) PDF.`,
-        href: "/admin/comptabilite/tresorerie", lien: "Trésorerie",
-      },
-      {
-        etat: fiches > 0 ? "ok" : "manque",
-        titre: "Fiches de paie",
-        detail: fiches > 0 ? `${fiches} salaire(s) enregistré(s).` : "Aucune fiche de paie déposée pour ce mois.",
-        href: "/admin/comptabilite/masse-salariale", lien: "Masse salariale",
-      },
-      {
-        etat: charges > 0 ? "ok" : "info",
-        titre: "Charges sociales versées à part (MSA/TESA)",
-        detail: charges > 0 ? `${charges} charge(s) enregistrée(s).` : "Aucune — normal s'il n'y a pas de saisonniers ce mois-ci, sinon dépose le récapitulatif.",
-        href: "/admin/comptabilite/masse-salariale", lien: "Masse salariale",
-      },
-      {
-        etat: depenses > 0 ? "ok" : "manque",
-        titre: "Dépenses du mois",
-        detail: depenses > 0 ? `${eur(depenses)} saisis sur les postes.` : "Aucune dépense saisie — le relevé déposé les propose tout seul.",
-        href: "/admin/comptabilite/depenses", lien: "Dépenses",
-      },
-    ];
-
-    if (ca === 0) {
-      pts.push({
-        etat: "neutre",
-        titre: "Rapprochement banque ↔ caisse",
-        detail: "Sans objet : aucun encaissement en caisse ce mois-ci (période Céleris, ou mois sans activité).",
-        href: "/admin/comptabilite?tab=rapprochement", lien: "Pointage bancaire",
-      });
-    } else if (creditsLus.length === 0) {
-      pts.push({
-        etat: "info",
-        titre: "Rapprochement banque ↔ caisse",
-        detail: `La caisse dit ${eur(ca)} encaissés, mais aucun relevé du mois ne porte les encaissements clients — redépose le relevé PDF (le champ est lu automatiquement).`,
-        href: "/admin/comptabilite/tresorerie", lien: "Trésorerie",
-      });
-    } else {
-      const ecart = credits - ca;
-      const pct = ca > 0 ? Math.abs(ecart) / ca : 0;
-      pts.push({
-        etat: pct <= 0.05 ? "ok" : "info",
-        titre: "Rapprochement banque ↔ caisse",
-        detail: `Banque : ${eur(credits)} d'encaissements clients · Caisse : ${eur(ca)} — écart ${ecart >= 0 ? "+" : "−"}${eur(Math.abs(ecart))} (${(pct * 100).toFixed(1)} %).`
-          + (pct > 0.05 ? " À creuser : remises CB à cheval sur deux mois, chèques non déposés, impayé… ou relevé partiel." : " Cohérent."),
-        href: "/admin/comptabilite?tab=rapprochement", lien: "Pointage bancaire",
-      });
-    }
-    return pts;
-  }, [mois, resultat, comptes, horsTotal, releves, lignesMS]);
-
-  const bloquants = points.filter(p => p.etat === "manque").length;
-  const boucle = bloquants === 0;
+  const points = useMemo(
+    () => construirePointsCloture({ mois, releves, comptes, horsTotal, lignesMS, resultat }),
+    [mois, releves, comptes, horsTotal, lignesMS, resultat],
+  );
+  const { bloquants, boucle } = useMemo(() => resumerCloture(points), [points]);
 
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
 
