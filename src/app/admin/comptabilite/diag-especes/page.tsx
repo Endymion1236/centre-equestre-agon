@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { ArrowLeft, Search } from "lucide-react";
+import { calculerDiagnosticEspeces } from "./diag-especes-utils";
 
 interface EncDiag {
   id: string;
@@ -84,30 +85,17 @@ export default function DiagEspecesPage() {
     }
   }
 
-  // Calculs
-  const totalBrut = encs.reduce((s, e) => s + e.montant, 0);
-  const totalPositif = encs.filter(e => e.montant > 0).reduce((s, e) => s + e.montant, 0);
-  const totalNegatif = encs.filter(e => e.montant < 0).reduce((s, e) => s + e.montant, 0);
-
-  const avecRemise = encs.filter(e => e.remiseId);
-  const totalRemis = avecRemise.reduce((s, e) => s + e.montant, 0);
-
-  const sansRemise = encs.filter(e => !e.remiseId);
-  const totalSansRemise = sansRemise.reduce((s, e) => s + e.montant, 0);
-
-  // Remises espèces (celles qui touchent au moins 1 encaissement espèces)
-  const encIds = new Set(encs.map(e => e.id));
-  const remisesEspeces = remises.filter(r =>
-    (r.encaissementIds || []).some(id => encIds.has(id)) ||
-    r.paymentMode === "especes"
-  );
-
-  // Encaissements remis selon les remises
-  const allRemisIds = new Set(
-    remisesEspeces.flatMap(r => r.encaissementIds || [])
-  );
-  const encsVusDansRemises = encs.filter(e => allRemisIds.has(e.id));
-  const encsVusMaisSansRemiseId = encsVusDansRemises.filter(e => !e.remiseId);
+  const {
+    totalBrut,
+    totalPositif,
+    totalNegatif,
+    avecRemise,
+    sansRemise,
+    totalRemis,
+    totalSansRemise,
+    remisesEspeces,
+    incoherencesRemiseId: encsVusMaisSansRemiseId,
+  } = useMemo(() => calculerDiagnosticEspeces(encs, remises), [encs, remises]);
 
   return (
     <div className="px-4 sm:px-6 py-6 max-w-6xl mx-auto">
@@ -131,7 +119,6 @@ export default function DiagEspecesPage() {
         <Card padding="md"><p className="text-slate-400 italic text-center py-6">Chargement...</p></Card>
       ) : (
         <>
-          {/* Stats globales */}
           <Card padding="md" className="mb-4">
             <h2 className="font-display text-base font-bold text-blue-800 mb-3">Synthèse</h2>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -159,12 +146,11 @@ export default function DiagEspecesPage() {
                 <strong>Encaissements sans remise : {totalSansRemise.toFixed(2)}€</strong> ({sansRemise.length} ligne{sansRemise.length > 1 ? "s" : ""})
               </div>
               <div className="font-body text-xs text-slate-500 mt-1">
-                C'est la valeur qui doit apparaître dans le bordereau "À remettre" pour le mode Espèces.
+                C&apos;est la valeur qui doit apparaître dans le bordereau &quot;À remettre&quot; pour le mode Espèces.
               </div>
             </div>
           </Card>
 
-          {/* Remises espèces */}
           <Card padding="md" className="mb-4">
             <h2 className="font-display text-base font-bold text-blue-800 mb-3">Remises espèces ({remisesEspeces.length})</h2>
             {remisesEspeces.length === 0 ? (
@@ -194,7 +180,6 @@ export default function DiagEspecesPage() {
             )}
           </Card>
 
-          {/* Liste complète */}
           <Card padding="md">
             <h2 className="font-display text-base font-bold text-blue-800 mb-3">Tous les encaissements espèces ({encs.length})</h2>
             <div className="overflow-x-auto">
@@ -252,8 +237,8 @@ export default function DiagEspecesPage() {
               <h3 className="font-display text-sm font-bold text-red-800 mb-2">⚠️ Incohérences détectées</h3>
               <p className="font-body text-xs text-red-900">
                 {encsVusMaisSansRemiseId.length} encaissement(s) sont référencés dans une remise
-                (via <code>encaissementIds</code>) mais n'ont pas de champ <code>remiseId</code>.
-                Ces encaissements apparaîtront à tort dans les "à remettre".
+                (via <code>encaissementIds</code>) mais n&apos;ont pas de champ <code>remiseId</code>.
+                Ces encaissements apparaîtront à tort dans les &quot;à remettre&quot;.
               </p>
               <ul className="mt-2 text-xs text-red-700 list-disc pl-5">
                 {encsVusMaisSansRemiseId.map(e => (
