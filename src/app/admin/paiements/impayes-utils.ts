@@ -138,7 +138,7 @@ export function preparerMultiEncaissements(unpaid: any[]): MultiEncaissementFami
     if (!reglable) continue;
 
     const familyId = payment.familyId || "";
-    const entry = parFamille.get(familyId) || {
+    const entry: MultiEncaissementFamille = parFamille.get(familyId) || {
       familyId,
       name: payment.familyName || "Famille",
       pays: [],
