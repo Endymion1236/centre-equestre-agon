@@ -4,7 +4,8 @@ import { updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber, generateOrderId } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, ChevronDown, Receipt, Trash2, Search, X, Check, Copy, Pencil } from "lucide-react";
+import { Loader2, ChevronDown, Receipt, Trash2, Search, X, Check, Copy, Pencil, CalendarCheck } from "lucide-react";
+import { authFetch } from "@/lib/auth-fetch";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
 import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
@@ -355,6 +356,38 @@ export function TabHistorique({ loading, payments, avoirs, encaissements, famili
                       ) : (
                         <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
                           <button type="button" onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
+                          {/* Replacer au planning : une place tenue puis libérée
+                              par la purge, alors que le règlement est arrivé
+                              après coup, laissait la famille payée mais absente
+                              du planning. Le bouton rejoue la confirmation. */}
+                          {(p.paidAmount || 0) > 0 && (
+                            <button type="button"
+                              title="Replacer les cavaliers au planning (place perdue avant le paiement)"
+                              onClick={async () => {
+                                try {
+                                  const res = await authFetch("/api/admin/confirmer-places", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ paymentId: p.id }),
+                                  });
+                                  const d = await res.json().catch(() => null);
+                                  if (!res.ok) { toast(d?.error || "Échec", "error"); return; }
+                                  const r = Number(d?.reinscrites || 0);
+                                  const c = Number(d?.confirmees || 0);
+                                  toast(
+                                    r > 0 ? `${r} place(s) rétablie(s) au planning`
+                                      : c > 0 ? `${c} créneau(x) confirmé(s)`
+                                      : "Rien à replacer : les cavaliers sont déjà au planning",
+                                    r > 0 || c > 0 ? "success" : "info",
+                                  );
+                                } catch (e: any) {
+                                  toast(`Échec : ${e?.message || e}`, "error");
+                                }
+                              }}
+                              className="font-body text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-emerald-100">
+                              <CalendarCheck size={12} />
+                            </button>
+                          )}
                           {(p as any).invoiceNumber && (
                             <>
                               <button type="button"

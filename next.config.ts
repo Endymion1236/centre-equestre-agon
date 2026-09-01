@@ -102,6 +102,29 @@ const nextConfig: NextConfig = {
     optimizePackageImports: ["lucide-react", "date-fns"],
   },
 
+  // ─── Génération des PDF (factures, avoirs, mandats, livrets) ───────
+  //
+  // @react-pdf/renderer s'appuie sur pdfkit, qui charge ses polices
+  // standard (Helvetica & co) en lisant des fichiers .cjs à l'exécution,
+  // par un chemin construit à la volée. Le traceur de Next ne peut pas le
+  // deviner : les fichiers restaient hors du bundle serverless et toute
+  // facture mourait en production sur
+  //   Cannot find module '/var/task/node_modules/pdfkit/js/standard-fonts/Helvetica.cjs'
+  // — sans que rien ne le dise, puisque la route répondait « Erreur interne ».
+  //
+  // `serverExternalPackages` laisse ces paquets hors du bundle (ils sont
+  // chargés depuis node_modules), et `outputFileTracingIncludes` force la
+  // copie des polices dans la fonction de chaque route qui produit un PDF.
+  serverExternalPackages: ["@react-pdf/renderer", "pdfkit", "fontkit"],
+  outputFileTracingIncludes: {
+    "/api/invoice-pdf": ["./node_modules/pdfkit/js/**/*"],
+    "/api/avoir-pdf": ["./node_modules/pdfkit/js/**/*"],
+    "/api/livret-pdf": ["./node_modules/pdfkit/js/**/*"],
+    "/api/compta-export-pdf": ["./node_modules/pdfkit/js/**/*"],
+    "/api/admin/sepa-mandate-pdf": ["./node_modules/pdfkit/js/**/*"],
+    "/api/admin/facturx-pdf": ["./node_modules/pdfkit/js/**/*"],
+  },
+
   // ─── Build — enlever les headers 'powered-by' inutiles ─────────────
   poweredByHeader: false,
 

@@ -20,6 +20,6 @@ export async function POST(req: NextRequest) {
   const { paymentId } = await req.json().catch(() => ({}));
   if (!paymentId) return NextResponse.json({ error: "paymentId requis" }, { status: 400 });
 
-  const confirmees = await confirmerPlacesTenues(String(paymentId));
-  return NextResponse.json({ ok: true, confirmees });
+  const { confirmees, reinscrites } = await confirmerPlacesTenues(String(paymentId));
+  return NextResponse.json({ ok: true, confirmees, reinscrites });
 }

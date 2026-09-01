@@ -158,6 +158,38 @@ console.log("\n✓ Le mode de règlement reste dans le libellé, pas dans la cou
   assert("réglé dans Celeris : vert", celeris.etat === "regle", celeris.etat);
 }
 
+console.log("\n✓ Un stage payé l'est du lundi au vendredi :");
+{
+  // Réservation en ligne : la ligne de commande porte tous les jours du stage
+  // dans `creneauIds`, et `creneauId` n'en contient que le premier. Le
+  // rattachement strict par `creneauId` ne reconnaissait donc que le lundi :
+  // Éliona Travers s'affichait « acompte versé » le lundi et « non réglé » les
+  // quatre jours suivants, avec un impayé annoncé sur des créneaux payés.
+  const jours = ["cr-lun", "cr-mar", "cr-mer", "cr-jeu", "cr-ven"];
+  const commande = [{
+    familyId: "travers", status: "partial", paidAmount: 150, totalTTC: 180,
+    acompteAmount: 150,
+    items: [{
+      childId: "eliona", creneauId: "cr-lun", creneauIds: jours,
+      stageKey: "Stage galop de bronze 6/7 ans_2026-10-26",
+      activityTitle: "Stage galop de bronze 6/7 ans — Éliona",
+    }],
+  }];
+  const inscrit = { childId: "eliona", familyId: "travers", stageKey: "Stage galop de bronze 6/7 ans_2026-10-26" };
+
+  for (const jour of jours) {
+    const s = statutPaiementCavalier(inscrit, commande, { id: jour, activityTitle: "Stage galop de bronze 6/7 ans" });
+    assert(`${jour} : acompte versé`, s.etat === "partiel" && s.label === "acompte versé", `${jour} → ${s.label}`);
+  }
+
+  const autreStage = statutPaiementCavalier(
+    { ...inscrit, stageKey: "Autre stage_2026-11-02" },
+    commande,
+    { id: "cr-autre", activityTitle: "Autre stage" },
+  );
+  assert("un stage voisin n'est pas couvert pour autant", autreStage.etat === "impaye", autreStage.etat);
+}
+
 console.log("\n✓ Cas limites :");
 {
   const rien = statutPaiementCavalier(INSCRIT, [], CRENEAU);

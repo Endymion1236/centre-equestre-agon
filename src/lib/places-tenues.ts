@@ -52,17 +52,29 @@ export function dateExpirationHold(depuis: Date = new Date(), paymentMethod?: st
  * devient définitive. Idempotent — rejouable sans dommage (la route status et
  * le webhook CAWL peuvent tous deux confirmer le même paiement).
  */
-export async function confirmerPlacesTenues(paymentId: string): Promise<number> {
+export async function confirmerPlacesTenues(
+  paymentId: string,
+): Promise<{ confirmees: number; reinscrites: number }> {
   let confirmees = 0;
+  let reinscrites = 0;
   try {
     const paySnap = await adminDb.collection("payments").doc(paymentId).get();
-    if (!paySnap.exists) return 0;
+    if (!paySnap.exists) return { confirmees, reinscrites };
     const pData = paySnap.data() as any;
 
     // Créneaux concernés : chaque item porte soit creneauIds (stage), soit
     // creneauId (cours).
     const cibles = new Map<string, Set<string>>(); // creneauId → childIds
+    // De quoi RECRÉER une inscription disparue : nom du cavalier et clé de
+    // stage, tels que la commande les porte.
+    const infosEnfant = new Map<string, { childName: string; stageKey?: string }>();
     for (const item of pData.items || []) {
+      if (item?.childId) {
+        infosEnfant.set(item.childId, {
+          childName: item.childName || "",
+          ...(item.stageKey ? { stageKey: item.stageKey } : {}),
+        });
+      }
       const ids: string[] = Array.isArray(item?.creneauIds) && item.creneauIds.length
         ? item.creneauIds
         : item?.creneauId ? [item.creneauId] : [];
@@ -113,14 +125,48 @@ export async function confirmerPlacesTenues(paymentId: string): Promise<number> 
           const { pending, holdUntil, ...reste } = e;
           return reste;
         });
-        if (touche) {
-          tx.update(ref, { enrolled: maj });
-          confirmees++;
+        if (touche) confirmees++;
+
+        // ── Place disparue entre la réservation et le paiement ──────────
+        //
+        // La place est tenue 30 minutes ; passé ce délai la purge la libère,
+        // à raison — rien n'était encore encaissé. Mais si la famille règle
+        // APRÈS (elle a laissé l'onglet ouvert, elle a été interrompue), la
+        // confirmation ne trouvait plus rien à confirmer : le paiement
+        // aboutissait, l'email annonçait le stage, et personne n'était au
+        // planning. C'est arrivé le 01/09/2026 — 350 € encaissés, deux
+        // cavaliers nulle part.
+        //
+        // L'argent est reçu : la place est due. On la recrée, définitive.
+        // Sans contrôle de capacité — une famille qui a payé ne peut pas être
+        // la variable d'ajustement ; un dépassement se voit au planning et se
+        // règle humainement.
+        const presents = new Set(maj.map((e: any) => e.childId));
+        for (const childId of childIds) {
+          if (presents.has(childId)) continue;
+          const infos = infosEnfant.get(childId);
+          maj.push({
+            childId,
+            childName: infos?.childName || "",
+            familyId: pData.familyId || "",
+            familyName: pData.familyName || "",
+            enrolledAt: new Date().toISOString(),
+            ...(infos?.stageKey ? { stageKey: infos.stageKey } : {}),
+            // Trace : cette inscription a été rétablie après coup.
+            replaceApresPaiement: true,
+          });
+          touche = true;
+          reinscrites++;
+          console.warn(
+            `[hold] place rétablie après paiement — créneau ${creneauId}, cavalier ${childId}, commande ${paymentId}`,
+          );
         }
+
+        if (touche) tx.update(ref, { enrolled: maj, enrolledCount: maj.length });
       });
     }
   } catch (e) {
     console.error("[hold] confirmation des places impossible", paymentId, e);
   }
-  return confirmees;
+  return { confirmees, reinscrites };
 }

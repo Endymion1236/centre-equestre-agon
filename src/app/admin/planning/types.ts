@@ -190,8 +190,21 @@ export function itemMatchesCreneau(
 
   if (item.childId !== childId) return false;
 
+  // 0. Stage réservé en ligne : la ligne porte TOUS ses jours dans
+  //    `creneauIds`, et `creneauId` ne contient que le premier — la règle
+  //    stricte ci-dessous ne reconnaissait donc que le lundi. Éliona Travers,
+  //    le 01/09/2026 : « acompte versé » le lundi, « non réglé » du mardi au
+  //    vendredi, et un impayé annoncé sur quatre créneaux payés.
+  if (Array.isArray(item.creneauIds) && item.creneauIds.length > 0) {
+    if (creneau.id && item.creneauIds.includes(creneau.id)) return true;
+    // Pas dans la liste : on laisse les règles de stage ci-dessous trancher
+    // (un jour ajouté après coup au même stage, par exemple).
+  }
+
   // 1. Cours unique : creneauId strict
-  if (item.creneauId) return item.creneauId === creneau.id;
+  if (item.creneauId && !(Array.isArray(item.creneauIds) && item.creneauIds.length > 0)) {
+    return item.creneauId === creneau.id;
+  }
 
   // 2. Stage moderne : on a le stageKey dans l'enrolled → match strict
   if (enrolledStageKey && item.stageKey) {
