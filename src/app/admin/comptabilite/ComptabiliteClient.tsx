@@ -18,6 +18,7 @@ import {
   parserDetailCa,
 } from "./rapprochement-utils";
 import { construireFecVentes } from "./fec-utils";
+import { construireDiagnosticRemises } from "./diagnostic-remises-utils";
 
 interface Payment {
   id: string;
@@ -230,62 +231,7 @@ export default function ComptabilitePage() {
   //  Calcule un rapport read-only à partir des données déjà chargées dans
   //  l'UI (remises, encaissementsCompta, payments). Pas de requête supplémentaire.
   // ─────────────────────────────────────────────────────────────────────────
-  const buildDiagReport = () => {
-    const total = (remises || []).length;
-    const parMois: Record<string, { count: number; totalEur: number; pointees: number }> = {};
-    const parEtat = { pointees: 0, nonPointees: 0 };
-    const parMode: Record<string, number> = {};
-    const recentes: any[] = [];
 
-    for (const r of (remises || [])) {
-      const date = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : null;
-      const moisCle = date
-        ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`
-        : "???";
-      if (!parMois[moisCle]) parMois[moisCle] = { count: 0, totalEur: 0, pointees: 0 };
-      parMois[moisCle].count += 1;
-      parMois[moisCle].totalEur += r.total || 0;
-      if (r.pointee) parMois[moisCle].pointees += 1;
-
-      if (r.pointee) parEtat.pointees += 1;
-      else parEtat.nonPointees += 1;
-
-      const mode = r.paymentMode || r.mode || "?";
-      parMode[mode] = (parMode[mode] || 0) + 1;
-    }
-
-    const sorted = [...(remises || [])]
-      .sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
-      .slice(0, 15);
-
-    for (const r of sorted) {
-      const d = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : null;
-      recentes.push({
-        id: r.id,
-        date: d ? d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "???",
-        mode: r.paymentMode || r.mode || "?",
-        total: r.total || 0,
-        pointee: !!r.pointee,
-        pointeeNote: r.pointeeNote || null,
-        nbEncaissements: (r.encaissementIds || []).length,
-        nbPaymentsLegacy: (r.paymentIds || []).length,
-      });
-    }
-
-    // Stats sur les encaissements pour comprendre l'écart
-    const totalEnc = (encaissementsCompta || []).length;
-    const reconciledEnc = (encaissementsCompta || []).filter((e: any) => e.reconciledByBank).length;
-    const cbEnc = (encaissementsCompta || []).filter((e: any) => e.mode === "cb_terminal").length;
-
-    return {
-      total,
-      parMois,
-      parEtat,
-      parMode,
-      recentes,
-      encaissements: { total: totalEnc, reconciled: reconciledEnc, cbTerminal: cbEnc },
-    };
-  };
 
   useEffect(() => {
     if (showDiagPanel && !diagLoading && !diagReport && (remises?.length !== undefined)) {
@@ -293,7 +239,7 @@ export default function ComptabilitePage() {
       if (loading) return;
       setDiagLoading(true);
       try {
-        const report = buildDiagReport();
+        const report = construireDiagnosticRemises(remises || [], encaissementsCompta || []);
         setDiagReport(report);
       } catch (e) {
         console.error("Erreur diag:", e);
