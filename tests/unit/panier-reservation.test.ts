@@ -10,7 +10,9 @@
  * lui est réellement prélevé.
  */
 
-import { totauxPanier, ACOMPTE_PAR_ENFANT } from "../../src/lib/panier-reservation";
+import {
+  totauxPanier, montantsAcompteStage, acompteApplicable, ACOMPTE_PAR_ENFANT,
+} from "../../src/lib/panier-reservation";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -98,6 +100,32 @@ console.log("\n✓ Centimes :");
 {
   const t = totauxPanier([ligne(10.1), ligne(20.2), ligne(0.35)]);
   assert("pas de dérive en virgule flottante", t.total === 30.65, `${t.total}`);
+}
+
+console.log("\n✓ L'acompte vu par l'écran d'inscription :");
+{
+  // La même règle sert en ligne et au comptoir. Ces vérifications existent
+  // pour que les deux ne puissent plus diverger : une famille ne doit pas
+  // lire un montant en ligne et en voir un autre sur sa facture.
+  const un = montantsAcompteStage(1, 350);
+  assert("un enfant : un acompte", un.acompte === ACOMPTE_PAR_ENFANT, `${un.acompte}`);
+  assert("le solde suit", un.solde === 350 - ACOMPTE_PAR_ENFANT, `${un.solde}`);
+
+  const deux = montantsAcompteStage(2, 700);
+  assert("deux enfants : deux acomptes", deux.acompte === ACOMPTE_PAR_ENFANT * 2, `${deux.acompte}`);
+
+  const petit = montantsAcompteStage(1, 20);
+  assert("plafonné au total", petit.acompte === 20, `${petit.acompte}`);
+  assert("aucun solde négatif", petit.solde === 0, `${petit.solde}`);
+
+  assert("aucun enfant, aucun acompte", montantsAcompteStage(0, 350).acompte === 0);
+
+  // Proposer un acompte égal au total n'aurait aucun sens : on l'écarte.
+  assert("acompte proposé quand le total le dépasse", acompteApplicable(1, 350));
+  assert("pas d'acompte quand le total l'égale", !acompteApplicable(1, ACOMPTE_PAR_ENFANT));
+  assert("pas d'acompte en dessous", !acompteApplicable(1, 20));
+  assert("deux enfants : il faut dépasser deux acomptes",
+    !acompteApplicable(2, ACOMPTE_PAR_ENFANT * 2) && acompteApplicable(2, ACOMPTE_PAR_ENFANT * 2 + 1));
 }
 
 console.log("\n══════════════════════════════════════════════════════════════");
