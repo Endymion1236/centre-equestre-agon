@@ -25,6 +25,7 @@ import { db } from "@/lib/firebase";
 import { generateOrderId } from "@/lib/utils";
 import { authFetch } from "@/lib/auth-fetch";
 import { applyDiscounts, type VacationPeriod, type DiscountSettings } from "@/lib/discounts";
+import { verrouCommande } from "@/app/admin/paiements/commande-verrou";
 import {
   emailTemplates, emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature,
@@ -476,6 +477,10 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
       const now = Date.now();
       const pendingDocs = existingSnap.docs
         .filter(d => !(d.data().echeancesTotal > 1))
+        // Jamais dans une commande dont la facture définitive est émise : une
+        // ligne de plus sur une facture émise, c'est une facture modifiée ; il
+        // faut une nouvelle commande. Un acompte reçu ne bloque pas la fusion.
+        .filter(d => verrouCommande(d.data()).motif !== "facture")
         .filter(d => {
           const dt = d.data().date;
           if (!dt) return false;

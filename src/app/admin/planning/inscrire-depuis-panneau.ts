@@ -34,6 +34,7 @@ import { estSemaineAttendue, formatFrequence } from "@/lib/rythme";
 import { ACOMPTE_PAR_ENFANT } from "@/lib/panier-reservation";
 import { fmtDate, sameStage, type Creneau } from "./types";
 import { programmerEnvoiConfirmation } from "./minuteries-confirmation";
+import { verrouCommande } from "@/app/admin/paiements/commande-verrou";
 
 export interface ContexteInscriptionPanneau {
   children: any[];
@@ -477,8 +478,13 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
       ));
 
       // Prendre la commande ouverte la plus récente — EXCLURE les échéances de forfait
+      // et les commandes dont la facture définitive est émise : une ligne ne
+      // s'ajoute pas à une facture émise, il faut une nouvelle commande. Un
+      // acompte déjà reçu, lui, ne bloque pas : le complément d'acompte du
+      // deuxième enfant se calcule justement sur la commande entière.
       const pendingDocs = existingSnap.docs
         .filter(d => !(d.data().echeancesTotal > 1))
+        .filter(d => verrouCommande(d.data()).motif !== "facture")
         .sort((a, b) => {
           const da = a.data().date?.seconds || 0;
           const db2 = b.data().date?.seconds || 0;
