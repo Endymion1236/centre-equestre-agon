@@ -63,8 +63,13 @@ const nextConfig: NextConfig = {
           // Ne fuite pas l'URL complète (qui contient des identifiants de
           // paiement et de famille) vers les sites tiers.
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          // Aucune page n'a besoin de la caméra, du micro ni de la géoloc.
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=(), usb=()" },
+          // Le micro est réservé à NOS pages (borne Câlin, assistant vocal,
+          // dictée du montoir et de la progression) : `self` l'autorise sur
+          // notre origine seule, jamais dans un cadre tiers. `microphone=()`
+          // le coupait partout — le navigateur refusait sans même demander,
+          // et la borne affichait « Micro refusé » quoi qu'on règle sur la
+          // tablette. Caméra et géoloc restent interdites : rien ne les utilise.
+          { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(), payment=(), usb=()" },
           { key: "Content-Security-Policy-Report-Only", value: csp },
         ],
       },
