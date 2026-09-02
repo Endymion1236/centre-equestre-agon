@@ -169,7 +169,7 @@ export function TabHistorique({
                 <span className="flex-1">Client</span>
                 <span className="w-32">Prestations</span>
                 <span className="w-20 text-right">Montant</span>
-                <span className="w-20 text-center">Mode</span>
+                <span className="w-24 text-center">Mode</span>
                 <span className="w-16 text-center">Statut</span>
                 <span className="w-32 text-center">PDF / Factur-X</span>
                 <span className="w-16 text-center">Copier</span>
@@ -182,6 +182,22 @@ export function TabHistorique({
                 const invoiceNum = payment.invoiceNumber || `PF-${(payment.orderId || payment.id || "").slice(-6).toUpperCase()}`;
                 const ht = (payment.items || []).reduce((sum: number, item: any) => sum + (item.priceHT || 0), 0);
                 const displayTTC = payment.originalTotalTTC || payment.totalTTC || 0;
+                // Une commande mixte peut cumuler trois ou quatre modes. Les
+                // concaténer dans une colonne fixe faisait passer le texte sous
+                // le statut et les boutons. La pastille reste courte ; le titre
+                // natif conserve le détail complet au survol.
+                const idsModesMixtes: string[] = payment.paymentMode === "mixte" && Array.isArray(payment.paymentModes)
+                  ? [...new Set(payment.paymentModes.map((id: unknown) => String(id)).filter(Boolean))]
+                  : [];
+                const libellesModesMixtes = idsModesMixtes.map((id) =>
+                  paymentModes.find((item) => item.id === id)?.label?.replace("(CAWL)", "").trim() || id
+                );
+                const libelleModeComplet = libellesModesMixtes.length > 0
+                  ? libellesModesMixtes.join(" + ")
+                  : mode?.label || payment.paymentMode || "—";
+                const libelleModeCourt = libellesModesMixtes.length > 1
+                  ? `Mixte (${libellesModesMixtes.length})`
+                  : libelleModeComplet;
 
                 const printInvoice = async () => {
                   const family = families.find((item: any) => item.firestoreId === payment.familyId);
@@ -261,7 +277,11 @@ export function TabHistorique({
                     <span className="flex-1"><div className={`font-body text-sm font-semibold ${payment.status === "cancelled" ? "text-red-600 line-through" : "text-blue-800"}`}>{payment.familyName}</div></span>
                     <span className="w-32 font-body text-xs text-slate-600 truncate">{(payment.items || []).map((item: any) => item.activityTitle).join(", ")}</span>
                     <span className={`w-20 text-right font-body text-sm font-bold ${payment.status === "cancelled" ? "text-red-500 line-through" : "text-blue-500"}`}>{displayTTC.toFixed(2)}€</span>
-                    <span className="w-20 text-center"><Badge color={payment.status === "cancelled" ? "red" : "blue"}>{payment.paymentMode === "mixte" && payment.paymentModes ? payment.paymentModes.map((paymentMode: string) => paymentModes.find((item) => item.id === paymentMode)?.label?.replace("(CAWL)", "").trim() || paymentMode).join(" + ") : mode?.label || payment.paymentMode}</Badge></span>
+                    <span className="w-24 min-w-0 px-1 text-center overflow-hidden" title={libelleModeComplet}>
+                      <Badge color={payment.status === "cancelled" ? "red" : "blue"} className="max-w-full overflow-hidden text-ellipsis">
+                        {libelleModeCourt}
+                      </Badge>
+                    </span>
                     <span className="w-16 text-center"><Badge color={payment.status === "paid" ? "green" : payment.status === "partial" ? "orange" : payment.status === "cancelled" ? "red" : payment.status === "sepa_scheduled" ? "blue" : payment.status === "draft" ? "blue" : "gray"}>{payment.status === "paid" ? "Réglé" : payment.status === "partial" ? "Partiel" : payment.status === "cancelled" ? "Annulé" : payment.status === "sepa_scheduled" ? "SEPA" : payment.status === "draft" ? "Brouillon" : "À régler"}</Badge></span>
                     <span className="w-32 text-center">
                       {payment.status === "cancelled" && printAllAvoirs ? (
