@@ -31,12 +31,14 @@ interface TabDeclarationsProps {
 function classeMode(mode: string): string {
   if (mode === "cheque") return "bg-blue-50 text-blue-700";
   if (mode === "virement") return "bg-purple-50 text-purple-700";
+  if (mode === "cb_terminal") return "bg-cyan-50 text-cyan-700";
   return "bg-green-50 text-green-700";
 }
 
 function iconeMode(mode: string): string {
   if (mode === "cheque") return "📝";
   if (mode === "virement") return "🏦";
+  if (mode === "cb_terminal") return "💳";
   return "💵";
 }
 
@@ -59,7 +61,7 @@ export function TabDeclarations(props: TabDeclarationsProps) {
 
   const confirmer = async (declaration: DeclarationPaiement) => {
     const mode = libelleModeDeclaration(declaration.mode).toLowerCase();
-    if (!confirm(`Confirmer réception de ${declaration.montant.toFixed(2)}€ en ${mode} de ${declaration.familyName} ?`)) return;
+    if (!confirm(`Confirmer réception de ${declaration.montant.toFixed(2)}€ par ${mode} de ${declaration.familyName} ?`)) return;
 
     setConfirmingDeclId(declaration.id);
     try {
@@ -102,7 +104,7 @@ export function TabDeclarations(props: TabDeclarationsProps) {
       {declarations.length === 0 ? (
         <Card padding="lg" className="text-center">
           <p className="font-body text-sm text-slate-500">Aucune déclaration en attente.</p>
-          <p className="font-body text-xs text-slate-400 mt-1">Les familles peuvent déclarer un paiement chèque ou espèces depuis leur espace.</p>
+          <p className="font-body text-xs text-slate-400 mt-1">Les familles peuvent déclarer un règlement différé depuis leur espace.</p>
         </Card>
       ) : (
         <div className="flex flex-col gap-3">

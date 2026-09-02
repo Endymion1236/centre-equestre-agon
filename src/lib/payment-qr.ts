@@ -23,12 +23,17 @@
  */
 
 import QRCode from "qrcode";
+import {
+  CENTRE_BENEFICIARY,
+  CENTRE_BIC,
+  CENTRE_IBAN,
+} from "./coordonnees-bancaires";
 
-// ─── Coordonnées bancaires du Centre Équestre (constantes) ────────────────
-// Sources : tag userMemories session compactée + endpoint SEPA mandates
-export const CENTRE_BENEFICIARY = "EARL Centre Equestre PC Agon-Coutainville";
-export const CENTRE_IBAN = "FR7616606100640013539343253";
-export const CENTRE_BIC = "AGRIFRPP866";
+export {
+  CENTRE_BENEFICIARY,
+  CENTRE_BIC,
+  CENTRE_IBAN,
+} from "./coordonnees-bancaires";
 
 // ─── QR options communes : taille raisonnable pour email + PDF ─────────────
 const QR_OPTIONS_EMAIL: QRCode.QRCodeToDataURLOptions = {

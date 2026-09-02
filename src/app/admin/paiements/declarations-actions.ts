@@ -36,7 +36,9 @@ export type DeclarationPaiement = {
 export function libelleModeDeclaration(mode: string): string {
   if (mode === "cheque") return "Chèque";
   if (mode === "virement") return "Virement";
-  return "Espèces";
+  if (mode === "cb_terminal") return "Carte bancaire au club";
+  if (mode === "especes") return "Espèces";
+  return "Règlement";
 }
 
 function referenceDeclaration(declaration: DeclarationPaiement): string {
