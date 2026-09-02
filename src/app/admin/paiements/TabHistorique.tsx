@@ -187,7 +187,9 @@ export function TabHistorique({
                 // le statut et les boutons. La pastille reste courte ; le titre
                 // natif conserve le détail complet au survol.
                 const idsModesMixtes: string[] = payment.paymentMode === "mixte" && Array.isArray(payment.paymentModes)
-                  ? [...new Set(payment.paymentModes.map((id: unknown) => String(id)).filter(Boolean))]
+                  ? Array.from(new Set<string>(
+                      (payment.paymentModes as unknown[]).map((id) => String(id)).filter((id) => id.length > 0)
+                    ))
                   : [];
                 const libellesModesMixtes = idsModesMixtes.map((id) =>
                   paymentModes.find((item) => item.id === id)?.label?.replace("(CAWL)", "").trim() || id
