@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
   const basePrompt = await bornePromptSysteme();
   const instructions = `${basePrompt}
 
+CE QUE MONTRE L'ÉCRAN :
+Chaque fois que tu utilises chercher_creneaux, les créneaux trouvés s'affichent automatiquement à l'écran de la borne, en cartes, avec un bouton « Réserver sur mon téléphone » qui montre un code QR. Quand un créneau intéresse le visiteur, invite-le en une phrase à regarder l'écran et à scanner le code avec l'appareil photo de son téléphone : il arrive directement sur ce créneau dans son espace cavalier, où il peut réserver et payer par carte. Ne dicte jamais les créneaux un par un s'ils sont nombreux : dis qu'ils sont à l'écran et résume.
+
 PRISE DE MESSAGES POUR L'ÉQUIPE :
 Tu peux prendre un message à transmettre à l'équipe du club (outil laisser_message).
 

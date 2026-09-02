@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { chercherCreneauxBorne } from "@/lib/borne-creneaux";
+import { chercherCreneauxBorneDetaille } from "@/lib/borne-creneaux";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 15;
@@ -31,12 +31,15 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const result = await chercherCreneauxBorne({
+    const { texte, cartes } = await chercherCreneauxBorneDetaille({
       start: typeof body?.start === "string" ? body.start : undefined,
       end: typeof body?.end === "string" ? body.end : undefined,
       type: typeof body?.type === "string" ? body.type : undefined,
     });
-    return NextResponse.json({ result });
+    // `result` : le texte lu par le modèle. `creneaux` : les cartes que la
+    // borne affiche à l'écran, avec un code QR pour réserver depuis son
+    // téléphone (la tablette reste sur le compte du club).
+    return NextResponse.json({ result: texte, creneaux: cartes });
   } catch (e: any) {
     console.error("[Borne creneaux] Erreur:", e?.message || e);
     return NextResponse.json({ result: "Erreur technique lors de la consultation du planning." });

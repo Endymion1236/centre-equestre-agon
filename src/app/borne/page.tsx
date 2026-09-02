@@ -21,10 +21,12 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Mic, PhoneOff, Loader2 } from "lucide-react";
+import { Mic, PhoneOff, Loader2, Smartphone, X } from "lucide-react";
+import QRCode from "qrcode";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
 import BorneVisage, { type BorneVisageHandle, type EtatVisage } from "@/components/BorneVisage";
+import type { CarteCreneauBorne } from "@/lib/borne-creneaux";
 
 type Etat = EtatVisage;
 
@@ -36,6 +38,26 @@ const REFLEXION_MAX_MS = 15_000;
 // Un appel d'outil qui ne répond pas fige la conversation : on l'abandonne
 // et on renvoie une erreur au modèle, qui saura quoi dire.
 const OUTIL_TIMEOUT_MS = 8_000;
+// Les cartes de créneaux restent affichées après la fin de la conversation :
+// le visiteur scanne son code QR tranquillement. Elles s'effacent ensuite.
+const CARTES_DUREE_MS = 3 * 60_000;
+
+// ── Cartes de créneaux : libellés ───────────────────────────────────────────
+function jourCourt(iso: string) {
+  return new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "");
+}
+function periodeCarte(c: CarteCreneauBorne) {
+  const fmt = (iso: string, o: Intl.DateTimeFormatOptions) => new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR", o);
+  if (c.nbJours > 1 && c.dateFin && c.dateFin > c.date) {
+    return `Du ${fmt(c.date, { weekday: "short", day: "numeric" })} au ${fmt(c.dateFin, { weekday: "short", day: "numeric", month: "long" })} · ${c.nbJours} jours`;
+  }
+  return fmt(c.date, { weekday: "long", day: "numeric", month: "long" });
+}
+function prixCarte(c: CarteCreneauBorne) {
+  if (c.priceTTC == null) return "Prix à l’accueil";
+  const semaine = `${c.priceTTC.toFixed(2).replace(".", ",")} €`;
+  return c.priceTTCDay ? `${semaine} · journée ${c.priceTTCDay.toFixed(2).replace(".", ",")} €` : semaine;
+}
 
 // ── Erreurs de démarrage, en clair ──────────────────────────────────────────
 // La borne affichait le message brut du navigateur (« Permission denied »,
@@ -70,6 +92,29 @@ export default function BornePage() {
   const [etat, setEtat] = useState<Etat>("off");
   const [sousTitre, setSousTitre] = useState("");
   const [erreur, setErreur] = useState("");
+  // Créneaux trouvés par Câlin, affichés en cartes ; un code QR par carte
+  // emmène le visiteur sur ce créneau depuis SON téléphone. La tablette ne
+  // quitte jamais le compte du club.
+  const [cartes, setCartes] = useState<CarteCreneauBorne[]>([]);
+  const [qrPour, setQrPour] = useState<CarteCreneauBorne | null>(null);
+  const [qrImage, setQrImage] = useState("");
+  const cartesTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const programmerEffacementCartes = () => {
+    if (cartesTimerRef.current) clearTimeout(cartesTimerRef.current);
+    cartesTimerRef.current = setTimeout(() => { setCartes([]); setQrPour(null); }, CARTES_DUREE_MS);
+  };
+  const ouvrirQr = async (c: CarteCreneauBorne) => {
+    programmerEffacementCartes();
+    setQrPour(c);
+    setQrImage("");
+    try {
+      const url = `${window.location.origin}/espace-cavalier/reserver?creneau=${encodeURIComponent(c.id)}`;
+      setQrImage(await QRCode.toDataURL(url, { errorCorrectionLevel: "M", margin: 2, width: 320, color: { dark: "#0C1A2E", light: "#ffffff" } }));
+    } catch (e) {
+      console.error("[Borne] QR impossible :", e);
+    }
+  };
 
   // Objets mutables en useRef (contrainte Safari/iOS : jamais en useState)
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -226,6 +271,11 @@ export default function BornePage() {
         const res = await avecTimeout("/api/borne/creneaux", JSON.stringify(args));
         const data = await res.json();
         output = data.result || "Aucun résultat.";
+        // Ce que Câlin va annoncer s'affiche en même temps à l'écran.
+        const trouvees: CarteCreneauBorne[] = Array.isArray(data.creneaux) ? data.creneaux : [];
+        setCartes(trouvees);
+        setQrPour(null);
+        if (trouvees.length > 0) programmerEffacementCartes();
       } catch {
         output = "Erreur technique lors de la consultation du planning.";
       }
@@ -357,6 +407,9 @@ export default function BornePage() {
   const demarrer = async () => {
     setErreur("");
     setEtat("connecting");
+    setCartes([]);
+    setQrPour(null);
+    if (cartesTimerRef.current) { clearTimeout(cartesTimerRef.current); cartesTimerRef.current = null; }
     try {
       // AudioContext créé sur le geste utilisateur (contrainte Safari)
       if (!audioCtxRef.current) {
@@ -582,8 +635,8 @@ export default function BornePage() {
         </p>
       </header>
 
-      {/* Visage */}
-      <div className="relative w-80 h-80 md:w-[26rem] md:h-[26rem] my-2" onClick={interrompreReponse}
+      {/* Visage — plus petit quand des créneaux sont affichés dessous */}
+      <div className={`relative my-2 transition-all ${cartes.length > 0 ? "w-48 h-48 md:w-60 md:h-60" : "w-80 h-80 md:w-[26rem] md:h-[26rem]"}`} onClick={interrompreReponse}
         role={etat === "speaking" ? "button" : undefined}>
         {etat === "listening" && (
           <span className="absolute inset-0 rounded-full border-4 border-blue-400 animate-ping opacity-40" />
@@ -611,6 +664,77 @@ export default function BornePage() {
         )}
         {erreur && <p className="font-body text-sm text-red-500">{erreur}</p>}
       </div>
+
+      {/* Créneaux trouvés : ce que Câlin annonce, le visiteur le voit et
+          peut le réserver depuis son téléphone. */}
+      {cartes.length > 0 && (
+        <div className="w-full max-w-3xl">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <div className="font-body text-sm font-bold uppercase tracking-wider text-blue-800">
+              {cartes.length === 1 ? "Le créneau trouvé" : `${cartes.length} créneaux trouvés`}
+            </div>
+            <button type="button" onClick={() => { setCartes([]); setQrPour(null); }} className="font-body text-xs font-semibold text-gray-500 bg-white/70 border-none rounded-full px-3 py-1.5 cursor-pointer">
+              Masquer
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[38vh] overflow-y-auto pr-1">
+            {cartes.map((c) => {
+              const complet = c.placesRestantes <= 0;
+              return (
+                <div key={c.id} className="bg-white rounded-2xl border border-blue-500/10 p-3.5 flex items-center gap-3 text-left">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0">
+                    <span className="font-body text-[11px] font-bold uppercase text-blue-500 leading-none">{jourCourt(c.date)}</span>
+                    <span className="font-display text-lg font-bold text-blue-800 leading-tight">{new Date(`${c.date}T12:00:00`).getDate()}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-body text-base font-bold text-blue-800 truncate">{c.activityTitle}</div>
+                    <div className="font-body text-sm text-gray-600 truncate">{periodeCarte(c)} · {c.startTime}–{c.endTime}</div>
+                    <div className="font-body text-sm text-gray-600">
+                      <span className="font-semibold text-blue-800">{prixCarte(c)}</span>
+                      {" · "}
+                      <span className={complet ? "text-red-600 font-semibold" : "text-green-700"}>
+                        {complet ? "Complet — liste d’attente" : `${c.placesRestantes} place${c.placesRestantes > 1 ? "s" : ""}`}
+                      </span>
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => ouvrirQr(c)}
+                    className="flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl bg-blue-500 text-white border-none cursor-pointer flex-shrink-0">
+                    <Smartphone size={20} />
+                    <span className="font-body text-[11px] font-bold leading-tight text-center">Réserver sur<br />mon téléphone</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Code QR : le visiteur scanne et arrive sur ce créneau, dans son
+          propre espace, sur son propre téléphone. */}
+      {qrPour && (
+        <div className="fixed inset-0 z-50 bg-blue-900/70 flex items-center justify-center p-6" onClick={() => setQrPour(null)}>
+          <div className="bg-white rounded-3xl p-7 max-w-md w-full text-center shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="font-display text-2xl font-bold text-blue-800">{qrPour.activityTitle}</div>
+            <div className="font-body text-base text-gray-600 mt-1">{periodeCarte(qrPour)} · {qrPour.startTime}–{qrPour.endTime}</div>
+            <div className="my-5 flex items-center justify-center min-h-[320px]">
+              {qrImage
+                ? <img src={qrImage} alt="Code QR vers ce créneau" width={320} height={320} className="rounded-xl" />
+                : <Loader2 size={36} className="animate-spin text-blue-500" />}
+            </div>
+            <p className="font-body text-lg font-semibold text-blue-900 leading-snug">
+              Scannez ce code avec l’appareil photo de votre téléphone.
+            </p>
+            <p className="font-body text-sm text-gray-600 mt-2 leading-relaxed">
+              Vous arrivez directement sur ce créneau dans votre espace cavalier, pour réserver et régler par carte.
+              Pas encore de compte ? Il se crée en une minute, au même endroit.
+            </p>
+            <button type="button" onClick={() => setQrPour(null)}
+              className="mt-5 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-50 text-blue-800 font-body text-sm font-bold border-none cursor-pointer">
+              <X size={16} /> Fermer
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Bouton principal */}
       <div className="flex flex-col items-center gap-3 pb-2">

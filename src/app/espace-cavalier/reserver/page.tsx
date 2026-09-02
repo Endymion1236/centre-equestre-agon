@@ -87,13 +87,27 @@ export default function ReserverPage() {
   // la modale de la promenade d'origine — la famille reprend ou elle en
   // etait, nouveau cavalier dans la liste.
   const creneauRouvert = useRef(false);
+  // Un lien vers un créneau d'un autre mois (code QR de la borne, email de
+  // liste d'attente) ne le trouvait pas dans la fenêtre chargée et n'ouvrait
+  // rien : on lit alors le créneau seul pour afficher son mois, puis la
+  // modale s'ouvre au rechargement.
+  const creneauCherche = useRef(false);
   useEffect(() => {
     if (creneauRouvert.current || typeof window === "undefined" || creneaux.length === 0) return;
     const cid = new URLSearchParams(window.location.search).get("creneau");
     if (!cid) { creneauRouvert.current = true; return; }
     const c = creneaux.find((x: any) => x.id === cid);
-    if (c) setBookingCreneau(c);
-    creneauRouvert.current = true;
+    if (c) { setBookingCreneau(c); creneauRouvert.current = true; return; }
+    if (creneauCherche.current) { creneauRouvert.current = true; return; }
+    creneauCherche.current = true;
+    getDoc(doc(db, "creneaux", cid)).then((snap) => {
+      const date = snap.exists() ? String((snap.data() as any).date || "") : "";
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { creneauRouvert.current = true; return; }
+      const cible = new Date(`${date}T12:00:00`);
+      const now = new Date();
+      const offset = (cible.getFullYear() - now.getFullYear()) * 12 + (cible.getMonth() - now.getMonth());
+      if (offset > 0) setMonthOffset(offset); else creneauRouvert.current = true;
+    }).catch(() => { creneauRouvert.current = true; });
   }, [creneaux]);
   // Mode paiement dans le panier
   const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement" | "avoir">("cb");
