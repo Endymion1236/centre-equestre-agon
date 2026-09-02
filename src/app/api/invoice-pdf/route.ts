@@ -14,6 +14,7 @@ import React from "react";
 import { verifyAuth } from "@/lib/api-auth";
 import { generateSEPAQR } from "@/lib/payment-qr";
 import { adminDb } from "@/lib/firebase-admin";
+import { construireAffichageReglementsFacture } from "@/lib/facture-reglements";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -178,14 +179,16 @@ export async function POST(request: NextRequest) {
       } catch { /* en cas d'échec, on retombe sur le libellé simple */ }
     }
 
-    const renderPaymentDetails = () => {
-      if (resolvedDetails.length === 0) return null;
-      return resolvedDetails.map((pd: any, idx: number) =>
-        React.createElement(Text, { key: idx, style: s.payDetail },
-          `• ${pd.modeLabel || pd.mode || "—"} : ${Number(pd.montant || 0).toFixed(2)}€${pd.date ? ` (${pd.date})` : ""}`
-        )
-      );
-    };
+    // Une facture partielle doit montrer les encaissements déjà reçus au même
+    // titre qu'une facture soldée. L'ancien rendu conditionnait ces lignes à
+    // `isPaid` : les 150 € de trois règlements distincts étaient additionnés,
+    // puis leur détail disparaissait tant que le solde restait dû.
+    const affichageReglements = construireAffichageReglementsFacture({
+      paidAmount,
+      paymentMode,
+      paymentDate,
+      paymentDetails: resolvedDetails,
+    });
 
     const doc = React.createElement(Document, { title: `Facture ${invoiceNumber}`, author: CLUB.nom },
       React.createElement(Page, { size: "A4", style: s.page },
@@ -319,22 +322,20 @@ export async function POST(request: NextRequest) {
         React.createElement(View, { style: [s.payBox, isPaid ? s.payPaid : s.payUnpaid] },
           React.createElement(Text, { style: [s.payTitle, { color: isPaid ? GREEN : ORANGE }] },
             isPaid ? "✓ Facture réglée" : "⏳ En attente de règlement"),
-          // Priorité 1 : détail ligne par ligne (fourni ou reconstruit)
-          isPaid && resolvedDetails.length > 0
-            ? [
-                React.createElement(Text, { key: "title", style: s.payDetail }, "Détail des règlements :"),
-                ...(renderPaymentDetails() || []),
-              ]
-            // Priorité 2 : libellé simple (fallback compat)
-            : isPaid && paymentMode
-              ? React.createElement(Text, { style: s.payDetail }, `Mode de règlement : ${paymentMode}${paymentDate ? ` · le ${paymentDate}` : ""}`)
-              : null,
           !isPaid && paidAmount > 0
             ? React.createElement(Text, { style: s.payDetail }, `Acompte versé : ${paidAmount.toFixed(2)} € · Reste dû : ${resteDu.toFixed(2)} €`)
             : null,
+          // Toujours afficher les règlements déjà encaissés, même si la
+          // facture reste partiellement due.
+          affichageReglements.titre
+            ? React.createElement(Text, { style: s.payDetail }, affichageReglements.titre)
+            : null,
+          ...affichageReglements.lignes.map((ligne, idx) =>
+            React.createElement(Text, { key: `reglement-${idx}`, style: s.payDetail }, ligne)
+          ),
           !isPaid && resteDu > 0 && CLUB.iban
             ? React.createElement(Text, { style: s.payDetail },
-                `Règlement par virement :\nIBAN : ${CLUB.iban}\nBIC : ${CLUB.bic || ""}`)
+                `Solde à régler par virement :\nIBAN : ${CLUB.iban}\nBIC : ${CLUB.bic || ""}`)
             : null,
           // QR SEPA : permet de scanner avec l'app bancaire pour pré-remplir
           // un virement (montant + IBAN + BIC + libellé). Norme EPC069-12.
@@ -342,7 +343,7 @@ export async function POST(request: NextRequest) {
             ? React.createElement(View, { style: s.qrRow },
                 React.createElement(Image, { src: qrSEPADataUrl, style: s.qrImg }),
                 React.createElement(View, { style: { flex: 1 } },
-                  React.createElement(Text, { style: s.qrTitle }, "📱 Payer par scan"),
+                  React.createElement(Text, { style: s.qrTitle }, "📱 Payer le solde par scan"),
                   React.createElement(Text, { style: s.qrText },
                     "Scannez ce QR Code depuis votre app bancaire pour ouvrir le formulaire de virement pré-rempli avec le bon montant et libellé. Compatible avec ING, Boursorama, Revolut, BNP Pro et la plupart des banques européennes."),
                 ),
