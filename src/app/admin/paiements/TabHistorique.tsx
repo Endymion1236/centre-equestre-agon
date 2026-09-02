@@ -23,9 +23,6 @@ interface TabHistoriqueProps {
   setDuplicateTarget: (val: any) => void;
   deletePaymentCommand: (payment: any) => Promise<void>;
   setEditPayment: (val: any) => void;
-  setEditItems: (val: any[]) => void;
-  setEditRemisePct: (val: string) => void;
-  setEditRemiseEuros: (val: string) => void;
   /** Recherche texte initiale (paramètre `search` de l'URL). */
   initialSearch?: string;
   /** Identifiant exact de la famille à afficher. */
@@ -42,9 +39,6 @@ export function TabHistorique({
   setDuplicateTarget,
   deletePaymentCommand,
   setEditPayment,
-  setEditItems,
-  setEditRemisePct,
-  setEditRemiseEuros,
   initialSearch,
   familyFilterId,
 }: TabHistoriqueProps) {
@@ -334,9 +328,6 @@ export function TabHistorique({
                               return;
                             }
                             setEditPayment(payment);
-                            setEditItems((payment.items || []).map((item: any) => ({ ...item })));
-                            setEditRemisePct("");
-                            setEditRemiseEuros("");
                           }}
                           title={payment.invoiceNumber ? "Facture définitive — non modifiable" : "Modifier la commande"}
                           className={`font-body text-xs px-2 py-1 rounded border-none ${payment.invoiceNumber ? "text-gray-400 bg-gray-100 cursor-not-allowed" : "text-amber-600 bg-amber-50 cursor-pointer hover:bg-amber-100"}`}>

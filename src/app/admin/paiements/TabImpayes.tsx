@@ -34,9 +34,6 @@ interface TabImpayesProps {
   setQuickRef: (val: string) => void;
   setQuickMode: (val: string) => void;
   setEditPayment: (val: any) => void;
-  setEditItems: (val: any[]) => void;
-  setEditRemisePct: (val: string) => void;
-  setEditRemiseEuros: (val: string) => void;
   setPayLinkModal: (val: any) => void;
   setPayLinkEmail: (val: string) => void;
   setPayLinkAmount: (val: string) => void;
@@ -53,7 +50,7 @@ interface TabImpayesProps {
 export function TabImpayes({
   loading, payments, families, toast, setPayments,
   setQuickEncaisser, setQuickMontant, setQuickDate, setQuickRef, setQuickMode,
-  setEditPayment, setEditItems, setEditRemisePct, setEditRemiseEuros,
+  setEditPayment,
   setPayLinkModal, setPayLinkEmail, setPayLinkAmount, setPayLinkMessage,
   removePaymentItem, setDuplicateTarget, deletePaymentCommand, enrollChildInForfait,
   onMultiEncaisser, initialSearch, familyFilterId,
@@ -365,7 +362,7 @@ export function TabImpayes({
                             className="font-body text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-indigo-100 flex items-center gap-1">
                             💳 Envoyer lien de paiement
                           </button>
-                          <button type="button" onClick={() => { setEditPayment(p); setEditItems((p.items || []).map((i: any) => ({ ...i }))); setEditRemisePct(""); setEditRemiseEuros(""); }}
+                          <button type="button" onClick={() => { setEditPayment(p); }}
                             className="font-body text-xs text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
                         </div>
                         {(p.items || []).map((item: any, idx: number) => {
