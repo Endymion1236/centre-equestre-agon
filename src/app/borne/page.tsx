@@ -37,6 +37,31 @@ const REFLEXION_MAX_MS = 15_000;
 // et on renvoie une erreur au modèle, qui saura quoi dire.
 const OUTIL_TIMEOUT_MS = 8_000;
 
+// ── Erreurs de démarrage, en clair ──────────────────────────────────────────
+// La borne affichait le message brut du navigateur (« Permission denied »,
+// « Failed to fetch »…) : impossible, depuis l'accueil, de savoir s'il
+// fallait autoriser le micro, reconnecter la tablette ou appeler le support.
+function messageErreurDemarrage(e: any): string {
+  const nom = String(e?.name || "");
+  const msg = String(e?.message || "");
+  if (nom === "NotAllowedError" || nom === "SecurityError" || /permission denied|not allowed/i.test(msg)) {
+    return "Micro refusé par la tablette. Autorisez le microphone pour ce site (réglages du navigateur ou de l’application), puis réessayez.";
+  }
+  if (nom === "NotFoundError" || nom === "OverconstrainedError") {
+    return "Aucun microphone détecté sur cette tablette.";
+  }
+  if (nom === "NotReadableError") {
+    return "Le microphone est déjà utilisé par une autre application. Fermez-la puis réessayez.";
+  }
+  if (/non authentifi/i.test(msg)) {
+    return "La tablette n’est plus connectée au compte du club. Reconnectez-vous depuis l’espace cavalier, puis revenez ici.";
+  }
+  if (/failed to fetch|networkerror|load failed/i.test(msg)) {
+    return "Pas de connexion Internet, ou serveur injoignable. Vérifiez le Wi-Fi de la tablette.";
+  }
+  return msg || "Impossible de démarrer la conversation.";
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function BornePage() {
@@ -493,7 +518,8 @@ export default function BornePage() {
     } catch (e: any) {
       raccrocherInterne();
       setEtat("off");
-      setErreur(e?.message || "Impossible de démarrer la conversation.");
+      setErreur(messageErreurDemarrage(e));
+      console.error("[Borne] démarrage impossible :", e?.name, e?.message, e);
     }
   };
 
