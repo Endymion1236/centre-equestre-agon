@@ -29,10 +29,6 @@ interface TabImpayesProps {
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
   setPayments: React.Dispatch<React.SetStateAction<any[]>>;
   setQuickEncaisser: (val: any) => void;
-  setQuickMontant: (val: string) => void;
-  setQuickDate: (val: string) => void;
-  setQuickRef: (val: string) => void;
-  setQuickMode: (val: string) => void;
   setEditPayment: (val: any) => void;
   setPayLinkModal: (val: any) => void;
   setPayLinkEmail: (val: string) => void;
@@ -49,7 +45,7 @@ interface TabImpayesProps {
 
 export function TabImpayes({
   loading, payments, families, toast, setPayments,
-  setQuickEncaisser, setQuickMontant, setQuickDate, setQuickRef, setQuickMode,
+  setQuickEncaisser,
   setEditPayment,
   setPayLinkModal, setPayLinkEmail, setPayLinkAmount, setPayLinkMessage,
   removePaymentItem, setDuplicateTarget, deletePaymentCommand, enrollChildInForfait,
@@ -330,7 +326,7 @@ export function TabImpayes({
                           </div>
                         )}
                         <div className="flex flex-wrap gap-2 mb-3">
-                          <button type="button" onClick={() => { setQuickEncaisser({ payment: p }); setQuickMontant(due.toFixed(2)); setQuickDate(new Date().toISOString().split("T")[0]); setQuickRef(""); setQuickMode("cheque"); }}
+                          <button type="button" onClick={() => { setQuickEncaisser({ payment: p }); }}
                             className="font-body text-xs text-white bg-green-600 hover:bg-green-700 px-3 py-1.5 rounded-lg border-none cursor-pointer font-semibold">💶 Encaisser</button>
                           <button type="button" onClick={async () => {
                             const fam = families.find(f => f.firestoreId === p.familyId);
