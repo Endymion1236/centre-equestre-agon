@@ -10,7 +10,7 @@ import { db } from "@/lib/firebase";
 import { BasculeReserver } from "@/components/espace-cavalier/BasculeReserver";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
-import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, Check, CalendarDays, LayoutList } from "lucide-react";
+import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, Check, CalendarDays, LayoutList, Tent } from "lucide-react";
 import TimelineReservation from "./TimelineReservation";
 import { useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/auth-fetch";
@@ -1174,45 +1174,47 @@ export default function ReserverPage() {
         </button>
       </div>
 
-      {initialFilter === "all" && <BasculeReserver active="activites" />}
+      {/* Onglets de page à gauche, réglage d'affichage (Planning / Liste)
+          réduit à droite sur la même ligne : deux choses différentes, deux
+          formes différentes. */}
+      {initialFilter === "all" && (
+        <BasculeReserver
+          active="activites"
+          droite={filter === "all" ? (
+            <div className="flex bg-sand rounded-lg p-0.5" role="group" aria-label="Affichage">
+              {([["timeline", CalendarDays, "Planning"], ["liste", LayoutList, "Liste"]] as const).map(([mode, Icone, libelle]) => (
+                <button key={mode} type="button" onClick={() => setViewMode(mode)} title={libelle} aria-label={libelle} aria-pressed={viewMode === mode}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-body text-xs font-semibold border-none cursor-pointer transition-all ${viewMode === mode ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 bg-transparent"}`}>
+                  <Icone size={14} /><span className="hidden sm:inline">{libelle}</span>
+                </button>
+              ))}
+            </div>
+          ) : undefined}
+        />
+      )}
 
       {success && <Card padding="md" className="mb-4 bg-green-50 border-green-200"><p className="font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> Inscription confirmée ! Rendez-vous au centre équestre.</p></Card>}
-
-      {/* ── Switcher Timeline / Liste ── */}
-      {filter === "all" && (
-        <div className="flex bg-sand rounded-xl p-1 mb-5">
-          <button onClick={() => setViewMode("timeline")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer transition-all ${viewMode === "timeline" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 bg-transparent"}`}>
-            <CalendarDays size={15}/> Planning
-          </button>
-          <button onClick={() => setViewMode("liste")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer transition-all ${viewMode === "liste" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 bg-transparent"}`}>
-            <LayoutList size={15}/> Liste
-          </button>
-        </div>
-      )}
 
       {/* ── VUE TIMELINE ── */}
       {viewMode === "timeline" && filter === "all" && (<>
         {/* Bandeau stages */}
         {Object.keys(stageGroups).length > 0 && (
-          <div className="mb-5 bg-green-600 rounded-2xl px-5 py-4 cursor-pointer hover:bg-green-700 transition-colors shadow-sm"
-            onClick={() => setViewMode("liste")}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl flex-shrink-0">🏇</div>
-                <div>
-                  <div className="font-body text-base font-bold text-white">
+          <Card hover padding="sm" className="mb-5" onClick={() => setViewMode("liste")}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0"><Tent size={20} className="text-green-700" /></div>
+                <div className="min-w-0">
+                  <div className="font-body text-base font-bold text-blue-800">
                     {Object.keys(stageGroups).length} stage{Object.keys(stageGroups).length > 1 ? "s" : ""} disponible{Object.keys(stageGroups).length > 1 ? "s" : ""}
                   </div>
-                  <div className="font-body text-xs text-green-100 mt-0.5">Inscriptions semaine ou à la journée</div>
+                  <div className="font-body text-xs text-gray-600 mt-0.5">Inscriptions à la semaine ou à la journée</div>
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 bg-white text-green-700 font-body text-sm font-bold px-4 py-2 rounded-xl flex-shrink-0">
-                Voir <span className="text-base">→</span>
+              <div className="flex items-center gap-1 bg-blue-50 text-blue-500 font-body text-sm font-bold px-4 py-2 rounded-lg flex-shrink-0">
+                Voir <ChevronRight size={15} />
               </div>
             </div>
-          </div>
+          </Card>
         )}
         <TimelineReservation
           creneaux={(creneauxLarge.length > 0 ? creneauxLarge : creneaux).filter(c => c.activityType !== "stage" && c.activityType !== "stage_journee")}
