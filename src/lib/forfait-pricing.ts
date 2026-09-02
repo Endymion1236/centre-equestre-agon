@@ -101,6 +101,16 @@ export interface CalculForfaitInput {
   // le DIFFÉRENTIEL vers la fréquence cumulée — tarif(freqDeja+frequence) −
   // tarif(freqDeja) — au lieu d'un nouveau forfait plein (dégressivité horaire).
   frequenceDejaInscrite?: number;
+  /**
+   * Remise famille imposée à la main, en pourcentage, qui prend le pas sur le
+   * barème — y compris pour le descendre, ou pour en accorder une là où le
+   * barème n'en prévoit aucune.
+   *
+   * Le barème s'arrête au rang prévu dans les paramètres ; une famille de cinq
+   * cavaliers qui montent beaucoup sortait de l'échelle sans qu'on puisse rien
+   * y faire. `null` ou absent = on suit le barème.
+   */
+  remisePersonnaliseePercent?: number | null;
 }
 
 export interface CalculForfaitResult {
@@ -109,6 +119,10 @@ export interface CalculForfaitResult {
   prixForfaitBrut: number;         // après prorata, avant réduction famille
   familyDiscountPercent: number;
   familyDiscountAmount: number;
+  /** Le pourcentage qu'aurait donné le barème seul. */
+  remiseBaremePercent: number;
+  /** Vrai quand la remise appliquée s'écarte du barème (saisie à la main). */
+  remiseHorsBareme: boolean;
   prixForfaitNet: number;          // après réduction famille
   prixAdhesion: number;
   prixLicence: number;
@@ -126,7 +140,7 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
   const {
     frequence, sessionsRestantes, sessionsTotalSaison, rangEnfant,
     avecAdhesion, avecLicence, licenceMoins18, tarifs, familyDiscountRules,
-    frequenceDejaInscrite = 0,
+    frequenceDejaInscrite = 0, remisePersonnaliseePercent = null,
   } = input;
 
   // Tarif plein pour une fréquence donnée (dégressivité horaire 1x/2x/3x),
@@ -149,9 +163,16 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
     : 1;
   const prixForfaitBrut = Math.round(prixForfaitAnnuelPlein * prorata);
 
-  // 3. Dégressivité famille (sur le prix brut)
+  // 3. Dégressivité famille (sur le prix brut). Une remise saisie à la main
+  //    prend le pas sur le barème, bornée à l'intervalle 0–100 %.
   const rule = familyDiscountRules.find(r => r.nth === rangEnfant);
-  const familyDiscountPercent = rule?.discount || 0;
+  const remiseBaremePercent = rule?.discount || 0;
+  const remiseImposee = typeof remisePersonnaliseePercent === "number"
+    && Number.isFinite(remisePersonnaliseePercent);
+  const familyDiscountPercent = remiseImposee
+    ? Math.min(100, Math.max(0, remisePersonnaliseePercent as number))
+    : remiseBaremePercent;
+  const remiseHorsBareme = remiseImposee && familyDiscountPercent !== remiseBaremePercent;
   const familyDiscountAmount = familyDiscountPercent > 0
     ? Math.round(prixForfaitBrut * familyDiscountPercent / 100 * 100) / 100
     : 0;
@@ -184,7 +205,9 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
   });
   if (familyDiscountAmount > 0) {
     detailLignes.push({
-      label: `Réduction famille (${rangEnfant}e enfant, -${familyDiscountPercent}%)`,
+      label: remiseHorsBareme
+        ? `Réduction famille (-${familyDiscountPercent}%)`
+        : `Réduction famille (${rangEnfant}e enfant, -${familyDiscountPercent}%)`,
       montantTTC: -familyDiscountAmount,
     });
   }
@@ -195,6 +218,8 @@ export function calculerForfaitAnnuel(input: CalculForfaitInput): CalculForfaitR
     prixForfaitBrut,
     familyDiscountPercent,
     familyDiscountAmount,
+    remiseBaremePercent,
+    remiseHorsBareme,
     prixForfaitNet,
     prixAdhesion,
     prixLicence,

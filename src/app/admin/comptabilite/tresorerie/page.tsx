@@ -6,6 +6,16 @@ import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil, Settings2, FileText } from "lucide-react";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
+import {
+  MOIS_SAISON,
+  NOMS_MOIS_TRESORERIE as NOMS_MOIS,
+  calculerTotauxTresorerieParMois,
+  indexerRelevesParMoisCompte,
+  moisDe,
+  normaliserComptesTresorerie,
+  saisonDe,
+  saisonsDisponiblesTresorerie,
+} from "./tresorerie-utils";
 
 /**
  * Trésorerie — le classeur Excel du gérant, intégré.
@@ -34,23 +44,6 @@ interface PropositionReleve {
   compteChoisi: string; soldeEdit: string; soldeEnregistre: boolean;
 }
 
-const MOIS_SAISON = ["09", "10", "11", "12", "01", "02", "03", "04", "05", "06", "07", "08"] as const;
-const NOMS_MOIS: Record<string, string> = {
-  "09": "Septembre", "10": "Octobre", "11": "Novembre", "12": "Décembre",
-  "01": "Janvier", "02": "Février", "03": "Mars", "04": "Avril",
-  "05": "Mai", "06": "Juin", "07": "Juillet", "08": "Août",
-};
-
-/** "2026-03" → "2025-2026" (une saison court de septembre à août). */
-function saisonDe(mois: string): string {
-  const [a, m] = mois.split("-").map(Number);
-  return m >= 9 ? `${a}-${a + 1}` : `${a - 1}-${a}`;
-}
-/** ("2025-2026", "03") → "2026-03". */
-function moisDe(saison: string, mm: string): string {
-  const [a1, a2] = saison.split("-");
-  return `${Number(mm) >= 9 ? a1 : a2}-${mm}`;
-}
 const eur = (v: number) =>
   v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 
@@ -116,25 +109,15 @@ export default function TresoreriePage() {
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
   // ── Totaux par mois (tous comptes) et index par (mois, compte) ──
-  const parMoisCompte = useMemo(() => {
-    const m = new Map<string, Releve>();
-    releves.forEach(r => m.set(`${r.mois}|${r.compte}`, r));
-    return m;
-  }, [releves]);
+  const parMoisCompte = useMemo(() => indexerRelevesParMoisCompte(releves), [releves]);
   // Total par mois = les comptes qui COMPTENT. L'épargne bloquée est suivie
   // à part : la mélanger ferait croire à 30 000 € de disponible qui n'en est pas.
-  const totalParMois = useMemo(() => {
-    const m = new Map<string, number>();
-    releves.forEach(r => { if (!horsTotal.includes(r.compte)) m.set(r.mois, (m.get(r.mois) || 0) + r.montant); });
-    return m;
-  }, [releves, horsTotal]);
+  const totalParMois = useMemo(
+    () => calculerTotauxTresorerieParMois(releves, horsTotal),
+    [releves, horsTotal],
+  );
 
-  const saisons = useMemo(() => {
-    const s = new Set(releves.map(r => saisonDe(r.mois)));
-    const now = new Date();
-    s.add(saisonDe(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`));
-    return [...s].sort();
-  }, [releves]);
+  const saisons = useMemo(() => saisonsDisponiblesTresorerie(releves), [releves]);
   const saisonCourante = saisons[saisons.length - 1];
   const saisonPrec = saisons[saisons.length - 2];
 
@@ -152,9 +135,8 @@ export default function TresoreriePage() {
 
   const enregistrerComptes = async () => {
     if (comptesEdit === null || saving) return;
-    const lignes = comptesEdit.map(c => ({ ...c, nom: c.nom.trim() })).filter(c => c.nom);
-    if (lignes.length === 0) { setError("Au moins un compte"); return; }
-    if (!lignes.some(c => c.compte)) { setError("Au moins un compte doit compter dans le total"); return; }
+    const { comptes: lignes, erreur } = normaliserComptesTresorerie(comptesEdit);
+    if (erreur) { setError(erreur); return; }
     setSaving(true); setError("");
     try {
       await api({ method: "POST", body: JSON.stringify({

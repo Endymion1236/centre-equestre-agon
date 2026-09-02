@@ -26,7 +26,7 @@ export const HOLD_PAIEMENT_MINUTES = 30;
 
 /**
  * Durée de protection quand le règlement est différé (chèque, espèces,
- * virement). La famille déclare son paiement en ligne mais l'argent arrive
+ * virement ou carte bancaire au club). La famille déclare son paiement en ligne mais l'argent arrive
  * au bureau : la place doit tenir jusqu'à ce que l'admin confirme la
  * réception, pas trente minutes. Sans cette distinction, une inscription
  * réglée par chèque était purgée la demi-heure suivante.
@@ -38,7 +38,7 @@ export const HOLD_PAIEMENT_MINUTES = 30;
 export const HOLD_REGLEMENT_DIFFERE_MINUTES = 7 * 24 * 60;
 
 /** Modes de règlement dont l'encaissement se fait hors ligne. */
-const MODES_DIFFERES = ["cheque", "especes", "virement", "ancv", "cheque_vacances", "pass_sport"];
+const MODES_DIFFERES = ["cheque", "especes", "virement", "cb_terminal", "ancv", "cheque_vacances", "pass_sport"];
 
 export function dateExpirationHold(depuis: Date = new Date(), paymentMethod?: string): string {
   const minutes = paymentMethod && MODES_DIFFERES.includes(paymentMethod)

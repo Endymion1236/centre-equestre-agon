@@ -23,6 +23,7 @@
     "test:debug": "playwright test --debug",
     "audit": "node scripts/audit-validate.mjs",
     "test:e2e": "playwright test",
+    "test:avant-main": "npm run test:unit && npx playwright test --project=admin tests/e2e/admin/26-smoke-avant-main.spec.ts",
     "test:securite": "./scripts/run-tests.sh securite",
     "test:flows": "./scripts/run-tests.sh flows",
     "test:api": "./scripts/run-tests.sh api",

@@ -6,7 +6,6 @@ import {
   collection, getDocs, addDoc, query, where, orderBy, Timestamp, limit, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { estRecette, estMouvementDeTresorerie } from "@/lib/caisse-mouvements";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
@@ -14,10 +13,18 @@ import {
   Lock, ShieldCheck, Calendar, Printer, AlertTriangle, CheckCircle2, Loader2, Hash,
 } from "lucide-react";
 import { hashEncaissement, hashCloture } from "@/lib/compta-hash";
+import {
+  MODE_LABELS,
+  calculerSyntheseCloture,
+  cloturePourDate,
+  cloturePrecedente,
+  numeroZ,
+  prochainNumeroCloture,
+} from "./cloture-utils";
 
 interface Cloture {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string;
   numero: number;
   totauxParMode: Record<string, number>;
   totalGeneral: number;
@@ -45,7 +52,6 @@ export default function ClotureJournaliereClient() {
   async function fetchAll() {
     setLoading(true);
     try {
-      // 1. Encaissements de la journée
       const debutJour = new Date(`${date}T00:00:00`);
       const finJour = new Date(`${date}T23:59:59.999`);
       const qEnc = query(
@@ -57,7 +63,6 @@ export default function ClotureJournaliereClient() {
       const snap = await getDocs(qEnc);
       setDayEnc(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
 
-      // 2. Historique des clôtures (dernières 50, pour stats)
       const qHist = query(
         collection(db, "cloturesJournalieres"),
         orderBy("numero", "desc"),
@@ -73,53 +78,19 @@ export default function ClotureJournaliereClient() {
     }
   }
 
-  // Clôture déjà faite pour ce jour ?
   const clotureExistante = useMemo(
-    () => historique.find(c => c.date === date),
+    () => cloturePourDate(historique, date),
     [historique, date]
   );
-
-  // Le ticket Z rend compte des RECETTES du jour. Un apport de fonds de caisse
-  // ou un versement en banque déplacent de l'argent sans qu'il y ait vente :
-  // ils sont scellés avec la journée (ils font partie du journal) mais comptés
-  // à part, sinon un versement de 500€ ferait apparaître une journée négative.
-  const recettesDuJour = useMemo(() => dayEnc.filter(estRecette), [dayEnc]);
-  const mouvementsTresorerie = useMemo(() => dayEnc.filter(estMouvementDeTresorerie), [dayEnc]);
-
-  const totalTresorerie = useMemo(
-    () => Math.round(mouvementsTresorerie.reduce((s, e) => s + Number(e.montant || 0), 0) * 100) / 100,
-    [mouvementsTresorerie]
-  );
-
-  // Totaux par mode pour le jour (recettes uniquement)
-  const totauxParMode = useMemo(() => {
-    const t: Record<string, number> = {};
-    for (const e of recettesDuJour) {
-      const mode = e.mode || "inconnu";
-      t[mode] = (t[mode] || 0) + Number(e.montant || 0);
-    }
-    // Arrondir chaque total
-    Object.keys(t).forEach(k => { t[k] = Math.round(t[k] * 100) / 100; });
-    return t;
-  }, [recettesDuJour]);
-
-  const totalGeneral = useMemo(
-    () => Math.round(Object.values(totauxParMode).reduce((s, v) => s + v, 0) * 100) / 100,
-    [totauxParMode]
-  );
-
-  const MODE_LABELS: Record<string, string> = {
-    cb_terminal: "CB terminal",
-    cb_online: "CB en ligne",
-    cheque: "Chèque",
-    cheque_differe: "Chèque différé",
-    especes: "Espèces",
-    virement: "Virement",
-    prelevement_sepa: "Prélèvement SEPA",
-    avoir: "Avoir",
-    offert: "Offert",
-    inconnu: "Inconnu",
-  };
+  const prochainNumero = useMemo(() => prochainNumeroCloture(historique), [historique]);
+  const precedente = useMemo(() => cloturePrecedente(historique), [historique]);
+  const {
+    recettesDuJour,
+    mouvementsTresorerie,
+    totalTresorerie,
+    totauxParMode,
+    totalGeneral,
+  } = useMemo(() => calculerSyntheseCloture(dayEnc), [dayEnc]);
 
   async function handleCloturer() {
     if (clotureExistante) {
@@ -141,11 +112,8 @@ export default function ClotureJournaliereClient() {
 
     setClosing(true);
     try {
-      // 1. Numéro de clôture séquentiel
-      const prevNum = historique.length > 0 ? Math.max(...historique.map(c => c.numero)) : 0;
-      const numero = prevNum + 1;
+      const numero = prochainNumero;
 
-      // 2. Hash de chaque encaissement du jour (pour blindage)
       const encaissementHashes: string[] = [];
       for (const enc of dayEnc) {
         const dt: Date = enc.date?.seconds ? new Date(enc.date.seconds * 1000) : new Date();
@@ -165,8 +133,7 @@ export default function ClotureJournaliereClient() {
         encaissementHashes.push(h);
       }
 
-      // 3. Hash de la clôture, chaîné à la précédente
-      const previousClotureHash = historique.length > 0 ? historique[0].hash : null;
+      const previousClotureHash = precedente?.hash || null;
       const clotureHash = await hashCloture({
         date,
         numero,
@@ -176,7 +143,6 @@ export default function ClotureJournaliereClient() {
         previousClotureHash: previousClotureHash || undefined,
       });
 
-      // 4. Écriture en base
       await addDoc(collection(db, "cloturesJournalieres"), {
         date,
         numero,
@@ -194,7 +160,7 @@ export default function ClotureJournaliereClient() {
         createdAt: serverTimestamp(),
       });
 
-      toast(`✅ Clôture Z${String(numero).padStart(4, "0")} scellée`, "success");
+      toast(`✅ Clôture ${numeroZ(numero)} scellée`, "success");
       await fetchAll();
     } catch (e) {
       console.error(e);
@@ -222,18 +188,16 @@ export default function ClotureJournaliereClient() {
         </Link>
       </div>
 
-      {/* Bandeau légal */}
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 mb-4 flex items-start gap-2">
         <ShieldCheck size={16} className="text-purple-600 flex-shrink-0 mt-0.5" />
         <div className="font-body text-xs text-purple-900">
           <strong>Clôture journalière (Z de caisse)</strong> — Une fois clôturée, la journée est
           scellée définitivement par un hash SHA-256. Ce hash intègre tous les encaissements du
           jour ET celui de la clôture précédente (chaînage inaltérable). Toute tentative de
-          modification d'un encaissement invalidera la chaîne, ce qui sera détectable.
+          modification d&apos;un encaissement invalidera la chaîne, ce qui sera détectable.
         </div>
       </div>
 
-      {/* Sélecteur de date */}
       <Card padding="md" className="mb-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-2">
@@ -245,7 +209,7 @@ export default function ClotureJournaliereClient() {
             {clotureExistante ? (
               <Badge color="green">
                 <Lock size={11} className="mr-1 inline" />
-                Z{String(clotureExistante.numero).padStart(4, "0")} scellée
+                {numeroZ(clotureExistante.numero)} scellée
               </Badge>
             ) : (
               <Badge color="orange">À clôturer</Badge>
@@ -254,7 +218,6 @@ export default function ClotureJournaliereClient() {
         </div>
       </Card>
 
-      {/* Détail du jour */}
       <Card padding="md" className="mb-4">
         <h2 className="font-display text-base font-bold text-blue-800 mb-3">
           Mouvements du {new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
@@ -313,7 +276,6 @@ export default function ClotureJournaliereClient() {
         )}
       </Card>
 
-      {/* Action clôture */}
       {!clotureExistante && !loading && (
         <Card padding="md" className="mb-4">
           <div className="flex items-start gap-3 mb-3">
@@ -331,23 +293,22 @@ export default function ClotureJournaliereClient() {
             disabled={closing || loading || !!clotureExistante}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-body text-sm font-semibold border-none cursor-pointer">
             {closing ? <Loader2 size={16} className="animate-spin" /> : <Lock size={16} />}
-            {closing ? "Scellage en cours..." : `Clôturer (Z${String((historique[0]?.numero || 0) + 1).padStart(4, "0")})`}
+            {closing ? "Scellage en cours..." : `Clôturer (${numeroZ(prochainNumero)})`}
           </button>
         </Card>
       )}
 
-      {/* Détails clôture existante */}
       {clotureExistante && (
         <Card padding="md" className="mb-4 bg-green-50/30 border border-green-200">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 size={18} className="text-green-600" />
             <h3 className="font-display text-base font-bold text-green-800">
-              Clôture Z{String(clotureExistante.numero).padStart(4, "0")} — scellée
+              Clôture {numeroZ(clotureExistante.numero)} — scellée
             </h3>
           </div>
           <div className="grid grid-cols-2 gap-3 text-xs font-body">
             <div>
-              <div className="text-slate-500 uppercase tracking-wider text-[10px] mb-0.5">Nombre d'opérations</div>
+              <div className="text-slate-500 uppercase tracking-wider text-[10px] mb-0.5">Nombre d&apos;opérations</div>
               <div className="font-semibold text-blue-800">{clotureExistante.nbOperations}</div>
             </div>
             <div>
@@ -383,7 +344,6 @@ export default function ClotureJournaliereClient() {
         </Card>
       )}
 
-      {/* Historique */}
       <Card padding="md">
         <h3 className="font-display text-base font-bold text-blue-800 mb-3">Historique des clôtures</h3>
         {historique.length === 0 ? (
@@ -405,7 +365,7 @@ export default function ClotureJournaliereClient() {
                 {historique.map(c => (
                   <tr key={c.id} className="border-b border-gray-100 hover:bg-slate-50/50 cursor-pointer"
                     onClick={() => setDate(c.date)}>
-                    <td className="px-3 py-2 font-mono font-semibold text-purple-700">Z{String(c.numero).padStart(4, "0")}</td>
+                    <td className="px-3 py-2 font-mono font-semibold text-purple-700">{numeroZ(c.numero)}</td>
                     <td className="px-3 py-2 text-slate-700">{new Date(c.date).toLocaleDateString("fr-FR", {day:"2-digit", month:"2-digit", year:"numeric"})}</td>
                     <td className="px-3 py-2 text-right text-slate-600">{c.nbOperations}</td>
                     <td className="px-3 py-2 text-right font-semibold text-blue-800">{c.totalGeneral.toFixed(2)}€</td>

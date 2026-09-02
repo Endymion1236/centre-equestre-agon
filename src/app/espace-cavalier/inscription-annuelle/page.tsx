@@ -16,6 +16,18 @@ import {
   type ForfaitTarifs, type FamilyDiscountRule,
 } from "@/lib/forfait-pricing";
 import { frequenceEquivalente, formatFrequence } from "@/lib/rythme";
+import {
+  MOYENS_PAIEMENT_INSCRIPTION,
+  estMoyenPaiementDiffere,
+  libelleMoyenPaiementInscription,
+  type MoyenPaiementInscription,
+} from "@/lib/inscription-annuelle-paiement";
+import { nombreEcheances } from "@/lib/echeancier-paiement";
+import {
+  CENTRE_BENEFICIARY,
+  CENTRE_BIC,
+  CENTRE_IBAN_AFFICHE,
+} from "@/lib/coordonnees-bancaires";
 
 // Saison minimale autorisée pour les inscriptions annuelles en self-service.
 // Règle métier : on bloque la saison en cours, on n'ouvre qu'à partir de
@@ -86,6 +98,23 @@ interface WeeklySlot {
 
 const dayLabels = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
+function CoordonneesVirement({ reference }: { reference: string }) {
+  return (
+    <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50 p-4 text-left">
+      <p className="font-body text-sm font-semibold text-purple-800 mb-2">🏦 Coordonnées bancaires du centre</p>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-body text-xs text-purple-800">
+        <dt className="font-semibold">Bénéficiaire</dt><dd>{CENTRE_BENEFICIARY}</dd>
+        <dt className="font-semibold">IBAN</dt><dd className="font-mono break-all">{CENTRE_IBAN_AFFICHE}</dd>
+        <dt className="font-semibold">BIC</dt><dd className="font-mono">{CENTRE_BIC}</dd>
+        <dt className="font-semibold">Motif</dt><dd>{reference}</dd>
+      </dl>
+      <p className="font-body text-xs text-purple-700 mt-2">
+        Utilisez ce motif afin que le centre puisse identifier rapidement votre virement.
+      </p>
+    </div>
+  );
+}
+
 export default function InscriptionAnnuellePage() {
   const { user, family } = useAuth();
   const { toast } = useToast();
@@ -103,13 +132,15 @@ export default function InscriptionAnnuellePage() {
   const [selectedSlots, setSelectedSlots] = useState<string[]>([]);
   const [forfaitType, setForfaitType] = useState<"1x" | "2x" | "3x">("1x");
   const [paymentPlan, setPaymentPlan] = useState<"1x" | "3x" | "10x">("1x");
-  // Moyen de paiement choisi par la famille :
-  //  - "cb"      : paiement en ligne immédiat via CAWL (place confirmée tout de suite)
-  //  - "cheque"  : règlement physique différé → inscription EN ATTENTE de validation admin
-  //  - "especes" : idem chèque (réglé au club)
-  const [moyenPaiement, setMoyenPaiement] = useState<"cb" | "cheque" | "especes">("cb");
-  // Écran de confirmation affiché après une déclaration chèque/espèces.
-  const [declaredSuccess, setDeclaredSuccess] = useState<null | { mode: "cheque" | "especes"; total: number; names: string }>(null);
+  // "cb" reste le paiement CAWL immédiat. Tous les autres choix sont des
+  // règlements différés, confirmés par le centre depuis Paiements → Déclarations.
+  const [moyenPaiement, setMoyenPaiement] = useState<MoyenPaiementInscription>("cb");
+  const [declaredSuccess, setDeclaredSuccess] = useState<null | {
+    mode: MoyenPaiementInscription;
+    total: number;
+    names: string;
+    plan: "1x" | "3x" | "10x";
+  }>(null);
   const [mode, setMode] = useState<"annuel" | "ponctuel">("annuel");
   const [slotSearch, setSlotSearch] = useState("");
 
@@ -675,17 +706,17 @@ export default function InscriptionAnnuellePage() {
   // forfait. NE crée PAS le paiement (fait une seule fois pour tout le panier).
   // Traite l'inscription d'UN enfant.
   //  - payMethod "cb"  → place confirmée immédiatement, forfait créé tout de suite.
-  //  - payMethod différé (cheque/especes) → place tenue en "pending", réservation
+  //  - payMethod différé (chèque, espèces, virement, CB au club) → place tenue en "pending", réservation
   //    "pending_validation", AUCUN forfait créé côté client (interdit par les règles
   //    Firestore : forfaits = write admin only). Le payload du forfait est retourné
   //    pour être recréé par l'admin au moment de la validation de la déclaration.
   // Retourne les éléments à confirmer/annuler ultérieurement (mode différé).
   const enrollOneItem = async (
     item: PanierItem,
-    payMethod: "cb" | "cheque" | "especes" = "cb",
+    payMethod: MoyenPaiementInscription = "cb",
   ): Promise<{ pendingEnrollments: { creneauId: string; childId: string }[]; reservationIds: string[]; forfaitPayload: any | null }> => {
     if (!user || !family) return { pendingEnrollments: [], reservationIds: [], forfaitPayload: null };
-    const deferred = payMethod !== "cb";
+    const deferred = estMoyenPaiementDiffere(payMethod);
     const pendingEnrollments: { creneauId: string; childId: string }[] = [];
     const reservationIds: string[] = [];
 
@@ -809,7 +840,7 @@ export default function InscriptionAnnuellePage() {
     if (items.length === 0) return;
     setSubmitting(true);
     try {
-      const deferred = moyenPaiement !== "cb";
+      const deferred = estMoyenPaiementDiffere(moyenPaiement);
 
       // 1. Créer toutes les inscriptions (créneaux + réservations [+ forfaits si CB])
       const allPending: { creneauId: string; childId: string }[] = [];
@@ -865,11 +896,12 @@ export default function InscriptionAnnuellePage() {
         createdAt: serverTimestamp(),
       });
 
-      // 3a. Chèque / Espèces → déclaration à valider par l'admin (PAS de CAWL).
+      // 3a. Règlement différé → déclaration à valider par l'admin (PAS de CAWL).
       //     La/les place(s) restent "pending" jusqu'à la confirmation admin.
       if (deferred) {
         const names = items.map(it => it.childName).join(", ");
-        const modeLabel = moyenPaiement === "cheque" ? "chèque" : "espèces";
+        const modeLabel = libelleMoyenPaiementInscription(moyenPaiement).toLowerCase();
+        const nbEcheances = nombreEcheances(paymentPlan);
         await addDoc(collection(db, "payment_declarations"), {
           paymentId: payDoc.id,
           familyId: user.uid,
@@ -897,13 +929,17 @@ export default function InscriptionAnnuellePage() {
             context: "inscription_annuelle",
             titre: `Inscription annuelle (${modeLabel}) à valider — ${family.parentName}`,
             lignes: [
-              `${family.parentName} a inscrit ${names} à l'année et déclare un règlement de ${totalGroupe.toFixed(2)}€ par ${modeLabel} (${paymentPlan}).`,
-              "À valider dans Paiements → Déclarations pour confirmer la ou les places.",
+              nbEcheances > 1
+                ? `${family.parentName} demande un échéancier de ${nbEcheances} mensualités pour l'inscription annuelle de ${names} (total ${totalGroupe.toFixed(2)}€, mode prévu : ${modeLabel}).`
+                : `${family.parentName} a inscrit ${names} à l'année et déclare un règlement de ${totalGroupe.toFixed(2)}€ par ${modeLabel}.`,
+              nbEcheances > 1
+                ? "À valider dans Paiements → Déclarations. La validation créera les échéances sans enregistrer d'encaissement."
+                : "À valider dans Paiements → Déclarations pour confirmer la ou les places.",
             ],
             familyId: user.uid,
           }),
         }).catch(() => {});
-        setDeclaredSuccess({ mode: moyenPaiement, total: totalGroupe, names });
+        setDeclaredSuccess({ mode: moyenPaiement, total: totalGroupe, names, plan: paymentPlan });
         setSubmitting(false);
         return;
       }
@@ -942,20 +978,30 @@ export default function InscriptionAnnuellePage() {
   };
 
   if (declaredSuccess) {
-    const modeLabel = declaredSuccess.mode === "cheque" ? "chèque" : "espèces";
+    const modeLabel = libelleMoyenPaiementInscription(declaredSuccess.mode).toLowerCase();
+    const nbEcheances = nombreEcheances(declaredSuccess.plan);
     return (
       <div className="max-w-lg mx-auto">
         <Card padding="lg" className="text-center">
           <div className="text-5xl mb-3">📨</div>
           <h2 className="font-display text-xl font-bold text-blue-800 mb-2">Inscription enregistrée</h2>
           <p className="font-body text-sm text-gray-600 mb-1">
-            {declaredSuccess.names} — <strong>{declaredSuccess.total.toFixed(2)}€</strong> par {modeLabel}.
+            {declaredSuccess.names} — <strong>{declaredSuccess.total.toFixed(2)}€</strong>
+            {nbEcheances > 1 ? ` en ${nbEcheances} échéances` : ` par ${modeLabel}`}.
           </p>
+          {declaredSuccess.mode === "virement" && (
+            <CoordonneesVirement reference={`Inscription annuelle — ${family?.parentName || declaredSuccess.names}`} />
+          )}
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 my-4 text-left">
-            <p className="font-body text-sm text-amber-800 font-semibold mb-1">⏳ En attente de validation</p>
+            <p className="font-body text-sm text-amber-800 font-semibold mb-1">
+              ⏳ {nbEcheances > 1 ? "Échéancier en attente de validation" : "En attente de validation"}
+            </p>
             <p className="font-body text-xs text-amber-700">
-              La/les place(s) sont réservées provisoirement. Le centre équestre confirmera l&apos;inscription
-              dès réception de votre règlement en {modeLabel}. Vous recevrez un email de confirmation.
+              {nbEcheances > 1 ? (
+                <>La/les place(s) sont réservées provisoirement. Le centre validera l&apos;inscription et créera <strong>{nbEcheances} échéances mensuelles</strong> par {modeLabel}. Aucun encaissement de {declaredSuccess.total.toFixed(2)}€ n&apos;est enregistré à ce stade.</>
+              ) : (
+                <>La/les place(s) sont réservées provisoirement. Le centre équestre confirmera l&apos;inscription dès réception de votre règlement par {modeLabel}. Vous recevrez un email de confirmation.</>
+              )}
             </p>
           </div>
           <a href="/espace-cavalier/reservations" className="no-underline">
@@ -1435,19 +1481,15 @@ export default function InscriptionAnnuellePage() {
               {/* Moyen de paiement (toujours affiché au récap) */}
               <div className="mb-5">
                 <div className="font-body text-sm font-semibold text-blue-800 mb-3">Moyen de paiement</div>
-                <div className="flex gap-3">
-                  {([
-                    ["cb", "💳", "Carte bancaire", "Paiement en ligne immédiat"],
-                    ["cheque", "📝", "Chèque", "Réglé au club"],
-                    ["especes", "💵", "Espèces", "Réglé au club"],
-                  ] as const).map(([id, icon, label, sub]) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {MOYENS_PAIEMENT_INSCRIPTION.map(({ id, icon, label, sub }) => (
                     <button type="button" key={id} onClick={() => {
                       setMoyenPaiement(id);
                       // La carte débite en une fois : repartir de "1x" évite de
                       // garder un échéancier choisi avant de basculer en CB.
                       if (id === "cb") setPaymentPlan("1x");
                     }}
-                      className={`flex-1 py-3 px-2 rounded-xl border font-body text-sm font-medium cursor-pointer text-center transition-all
+                      className={`py-3 px-2 rounded-xl border font-body text-sm font-medium cursor-pointer text-center transition-all
                         ${moyenPaiement === id ? "border-blue-500 bg-blue-50 text-blue-500 font-semibold" : "border-gray-200 bg-white text-gray-500"}`}>
                       <span className="block text-lg mb-0.5">{icon}</span>
                       {label}
@@ -1457,19 +1499,22 @@ export default function InscriptionAnnuellePage() {
                 </div>
                 {moyenPaiement !== "cb" && (
                   <p className="font-body text-xs text-amber-600 mt-2">
-                    ⏳ La place est réservée provisoirement. L&apos;inscription sera confirmée par le centre dès réception de votre règlement en {moyenPaiement === "cheque" ? "chèque" : "espèces"}.
+                    ⏳ La place est réservée provisoirement. L&apos;inscription sera confirmée par le centre dès réception de votre règlement par {libelleMoyenPaiementInscription(moyenPaiement).toLowerCase()}.
                   </p>
+                )}
+                {moyenPaiement === "virement" && (
+                  <CoordonneesVirement reference={`Inscription annuelle — ${family?.parentName || "famille"}`} />
                 )}
                 {moyenPaiement === "cb" && mode === "annuel" && grandTotal > 100 && (
                   <p className="font-body text-xs text-gray-500 mt-2">
                     Le paiement par carte se fait <strong>en une seule fois</strong>. Pour régler en
-                    plusieurs fois, choisissez <strong>Chèque</strong> — les chèques sont encaissés
-                    progressivement — ou contactez le centre pour convenir d&apos;un échelonnement.
+                    plusieurs fois, choisissez un <strong>règlement au club</strong> ou un
+                    <strong> virement</strong>. L&apos;échéancier sera validé par le centre.
                   </p>
                 )}
               </div>
 
-              {/* Échéancier — jamais en carte.
+              {/* Échéancier — jamais avec la carte en ligne CAWL.
                   Le choix 3x/10x n'était qu'une étiquette posée sur le
                   paiement : aucune échéance n'était créée et le checkout CAWL
                   partait avec le total de l'année. Une famille qui choisissait
@@ -1517,7 +1562,7 @@ export default function InscriptionAnnuellePage() {
                     ) : moyenPaiement === "cb" ? (
                       <><CreditCard size={18} /> Payer {totalAPayer.toFixed(2)}€</>
                     ) : (
-                      <><Check size={18} /> Valider — règlement par {moyenPaiement === "cheque" ? "chèque" : "espèces"}</>
+                      <><Check size={18} /> Valider — {libelleMoyenPaiementInscription(moyenPaiement)}</>
                     )}
                   </button>
                 </div>

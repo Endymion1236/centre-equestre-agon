@@ -3,19 +3,23 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  collection, getDocs, addDoc, query, orderBy, limit, where, Timestamp, serverTimestamp,
+  collection, getDocs, addDoc, query, orderBy, limit, where, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { Card, Badge } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import {
   Banknote, Coins, AlertTriangle, CheckCircle2, ShieldCheck, Loader2, Calculator,
 } from "lucide-react";
-
-// Dénominations euro (billets + pièces)
-const BILLETS = [500, 200, 100, 50, 20, 10, 5] as const;
-const PIECES = [2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01] as const;
+import {
+  BILLETS,
+  PIECES,
+  calculerComptage,
+  calculerSoldeTheorique,
+  initialiserComptage,
+  motifEcartRequis,
+} from "./fond-caisse-utils";
 
 interface FondDeCaisse {
   id: string;
@@ -35,12 +39,8 @@ export default function FondCaisseClient() {
   const { toast } = useToast();
   const todayStr = new Date().toISOString().split("T")[0];
 
-  const [billets, setBillets] = useState<Record<number, number>>(
-    Object.fromEntries(BILLETS.map(b => [b, 0]))
-  );
-  const [pieces, setPieces] = useState<Record<number, number>>(
-    Object.fromEntries(PIECES.map(p => [p, 0]))
-  );
+  const [billets, setBillets] = useState<Record<number, number>>(() => initialiserComptage(BILLETS));
+  const [pieces, setPieces] = useState<Record<number, number>>(() => initialiserComptage(PIECES));
   const [motifEcart, setMotifEcart] = useState("");
   const [soldeTheorique, setSoldeTheorique] = useState<number | null>(null);
   const [historique, setHistorique] = useState<FondDeCaisse[]>([]);
@@ -52,14 +52,10 @@ export default function FondCaisseClient() {
   async function fetchAll() {
     setLoading(true);
     try {
-      // 1. Solde théorique = somme cumulée de tous les encaissements espèces
-      //    (toute l'histoire, pas juste le mois)
       const qEnc = query(collection(db, "encaissements"), where("mode", "==", "especes"));
       const encSnap = await getDocs(qEnc);
-      const solde = encSnap.docs.reduce((s, d) => s + Number(d.data().montant || 0), 0);
-      setSoldeTheorique(Math.round(solde * 100) / 100);
+      setSoldeTheorique(calculerSoldeTheorique(encSnap.docs.map((d) => d.data())));
 
-      // 2. Historique des fonds de caisse
       const qH = query(collection(db, "fondsDeCaisse"), orderBy("createdAt", "desc"), limit(30));
       const snap = await getDocs(qH);
       setHistorique(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
@@ -71,27 +67,13 @@ export default function FondCaisseClient() {
     }
   }
 
-  const totalBillets = useMemo(
-    () => BILLETS.reduce((s, b) => s + b * (billets[b] || 0), 0),
-    [billets]
+  const { totalBillets, totalPieces, totalCompte, ecart, hasEcart } = useMemo(
+    () => calculerComptage(billets, pieces, soldeTheorique),
+    [billets, pieces, soldeTheorique],
   );
-  const totalPieces = useMemo(
-    () => PIECES.reduce((s, p) => s + p * (pieces[p] || 0), 0),
-    [pieces]
-  );
-  const totalCompte = useMemo(
-    () => Math.round((totalBillets + totalPieces) * 100) / 100,
-    [totalBillets, totalPieces]
-  );
-  const ecart = useMemo(
-    () => soldeTheorique === null ? 0 : Math.round((totalCompte - soldeTheorique) * 100) / 100,
-    [totalCompte, soldeTheorique]
-  );
-
-  const hasEcart = Math.abs(ecart) >= 0.01;
 
   async function handleSave() {
-    if (hasEcart && !motifEcart.trim()) {
+    if (motifEcartRequis(ecart, motifEcart)) {
       toast("Un écart non nul nécessite un motif.", "warning");
       return;
     }
@@ -120,9 +102,8 @@ export default function FondCaisseClient() {
         createdAt: serverTimestamp(),
       });
       toast("✅ Fond de caisse enregistré", "success");
-      // Reset
-      setBillets(Object.fromEntries(BILLETS.map(b => [b, 0])));
-      setPieces(Object.fromEntries(PIECES.map(p => [p, 0])));
+      setBillets(initialiserComptage(BILLETS));
+      setPieces(initialiserComptage(PIECES));
       setMotifEcart("");
       await fetchAll();
     } catch (e) {
@@ -162,7 +143,7 @@ export default function FondCaisseClient() {
           </div>
           <div>
             <h1 className="font-display text-2xl font-bold text-blue-800">Fond de caisse</h1>
-            <p className="font-body text-sm text-slate-500">Comptage physique des espèces et contrôle d'écart.</p>
+            <p className="font-body text-sm text-slate-500">Comptage physique des espèces et contrôle d&apos;écart.</p>
           </div>
         </div>
         <Link href="/admin/comptabilite"
@@ -177,7 +158,7 @@ export default function FondCaisseClient() {
           <strong>Contrôle physique de caisse</strong> — Comptez billets et pièces dans le tiroir-caisse.
           Le système compare avec le solde théorique calculé à partir de tous les encaissements espèces.
           Tout écart non nul doit être justifié (arrondi, rendu de monnaie erroné, perte, etc.).
-          Chaque comptage est scellé et consultable dans l'historique.
+          Chaque comptage est scellé et consultable dans l&apos;historique.
         </div>
       </div>
 
@@ -198,7 +179,6 @@ export default function FondCaisseClient() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-        {/* Billets */}
         <Card padding="md">
           <div className="flex items-center gap-2 mb-3">
             <Banknote size={16} className="text-green-600" />
@@ -210,7 +190,6 @@ export default function FondCaisseClient() {
           </div>
         </Card>
 
-        {/* Pièces */}
         <Card padding="md">
           <div className="flex items-center gap-2 mb-3">
             <Coins size={16} className="text-amber-600" />
@@ -223,7 +202,6 @@ export default function FondCaisseClient() {
         </Card>
       </div>
 
-      {/* Synthèse + bouton */}
       <Card padding="md" className="mb-4">
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="bg-blue-50 rounded-lg p-3 text-center">
@@ -247,7 +225,7 @@ export default function FondCaisseClient() {
         {hasEcart && (
           <div className="mb-3">
             <label className="font-body text-xs font-semibold text-red-700 flex items-center gap-1 mb-1">
-              <AlertTriangle size={12} /> Motif de l'écart *
+              <AlertTriangle size={12} /> Motif de l&apos;écart *
             </label>
             <input
               value={motifEcart} onChange={e => setMotifEcart(e.target.value)}
@@ -266,7 +244,6 @@ export default function FondCaisseClient() {
         </button>
       </Card>
 
-      {/* Historique */}
       <Card padding="md">
         <h3 className="font-display text-base font-bold text-blue-800 mb-3">Historique des comptages</h3>
         {historique.length === 0 ? (

@@ -5,43 +5,23 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { TrendingUp, Loader2, RefreshCw } from "lucide-react";
+import {
+  NOMS_MOIS,
+  REF_BILAN,
+  construireLignesResultat,
+  exerciceDe,
+  exercicesDisponibles,
+  formaterEuros as eur,
+  moisCourant,
+  resultatMensuel,
+  resumerResultat,
+  type MoisResultat,
+} from "./resultat-utils";
 
 /**
  * Résultat en continu — le chaînon entre la caisse et le bilan.
- *
- * Le bilan a montré le piège d'une lecture annuelle : un CA en hausse mangé
- * par des achats qui doublent, découvert dix-huit mois plus tard. Ici, chaque
- * mois de l'exercice (juillet → juin) aligne :
- *   CA encaissé (automatique, caisse NF525) − masse salariale − dépenses
- * = ce qui reste. Comparé aux repères du bilan 2024-25.
- *
- * Honnêteté des chiffres : le CA est TTC et ENCAISSÉ (pas facturé HT comme au
- * bilan), et « dépenses » ne couvre que les factures saisies. Le « reste »
- * n'est donc pas un EBE comptable — c'est un indicateur de tendance, qui
- * suffit largement à voir un mois qui décroche.
+ * CA encaissé (TTC) − masse salariale − dépenses saisies = indicateur de tendance.
  */
-
-interface MoisResultat { mois: string; ca: number; masse: number; depenses: number; }
-
-// Repères du bilan 2024-25 (exercice clos le 30/06/2025, cabinet Pignolet).
-const REF_BILAN = { ca: 277163, personnel: 109330, ebe: 35990 };
-
-const MOIS_EXERCICE = ["07", "08", "09", "10", "11", "12", "01", "02", "03", "04", "05", "06"] as const;
-const NOMS_MOIS: Record<string, string> = {
-  "07": "Juillet", "08": "Août", "09": "Septembre", "10": "Octobre", "11": "Novembre", "12": "Décembre",
-  "01": "Janvier", "02": "Février", "03": "Mars", "04": "Avril", "05": "Mai", "06": "Juin",
-};
-function exerciceDe(mois: string): string {
-  const [a, m] = mois.split("-").map(Number);
-  return m >= 7 ? `${a}-${a + 1}` : `${a - 1}-${a}`;
-}
-function moisDe(exercice: string, mm: string): string {
-  const [a1, a2] = exercice.split("-");
-  return `${Number(mm) >= 7 ? a1 : a2}-${mm}`;
-}
-const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
-const moisCourant = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
-
 export default function ResultatPage() {
   const { isAdmin, user } = useAuth();
   const [donnees, setDonnees] = useState<MoisResultat[]>([]);
@@ -64,28 +44,13 @@ export default function ResultatPage() {
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
-  const exercices = useMemo(() => {
-    const s = new Set(donnees.map(d => exerciceDe(d.mois)));
-    s.add(exerciceDe(moisCourant()));
-    return [...s].sort();
-  }, [donnees]);
-
-  const parMois = useMemo(() => new Map(donnees.map(d => [d.mois, d])), [donnees]);
   const courant = moisCourant();
-
-  // Lignes de l'exercice affiché — seulement jusqu'au mois courant pour
-  // l'exercice en cours (les mois à venir n'ont rien à dire).
-  const lignes = useMemo(() =>
-    MOIS_EXERCICE.map(mm => {
-      const mois = moisDe(exercice, mm);
-      const d = parMois.get(mois);
-      return { mois, mm, futur: mois > courant, ca: d?.ca || 0, masse: d?.masse || 0, depenses: d?.depenses || 0 };
-    }), [exercice, parMois, courant]);
-  const passees = lignes.filter(l => !l.futur);
-  const cumul = passees.reduce((s, l) => ({ ca: s.ca + l.ca, masse: s.masse + l.masse, depenses: s.depenses + l.depenses }),
-    { ca: 0, masse: 0, depenses: 0 });
-  const reste = cumul.ca - cumul.masse - cumul.depenses;
-  const pctMasse = cumul.ca > 0 ? Math.round((cumul.masse / cumul.ca) * 100) : null;
+  const exercices = useMemo(() => exercicesDisponibles(donnees, courant), [donnees, courant]);
+  const lignes = useMemo(
+    () => construireLignesResultat(donnees, exercice, courant),
+    [donnees, exercice, courant],
+  );
+  const { cumul, reste, pctMasse } = useMemo(() => resumerResultat(lignes), [lignes]);
 
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
 
@@ -131,7 +96,6 @@ export default function ResultatPage() {
         <div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-emerald-500 mx-auto" /></div>
       ) : (
         <>
-          {/* ── Tuiles de cumul ── */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <Card padding="sm">
               <div className="font-body text-[11px] uppercase tracking-wider text-slate-500">CA encaissé (cumul)</div>
@@ -157,7 +121,6 @@ export default function ResultatPage() {
             </Card>
           </div>
 
-          {/* ── Le tableau mensuel ── */}
           <Card padding="sm" className="overflow-x-auto !p-0">
             <table className="w-full border-collapse font-body text-sm">
               <thead>
@@ -172,8 +135,7 @@ export default function ResultatPage() {
               </thead>
               <tbody>
                 {lignes.map(l => {
-                  const r = l.ca - l.masse - l.depenses;
-                  const pct = !l.futur && l.ca > 0 ? Math.round((l.masse / l.ca) * 100) : null;
+                  const { reste: resteMois, pctMasse: pct } = resultatMensuel(l);
                   const vide = !l.futur && l.ca === 0 && l.masse === 0 && l.depenses === 0;
                   return (
                     <tr key={l.mois} className={`border-b border-gray-100 ${l.futur ? "text-slate-300" : "hover:bg-emerald-50/30"}`}>
@@ -185,7 +147,7 @@ export default function ResultatPage() {
                           <td className="px-3 py-2 text-right font-semibold text-emerald-800">{eur(l.ca)}</td>
                           <td className="px-3 py-2 text-right text-purple-800">{l.masse > 0 ? `− ${eur(l.masse)}` : "—"}</td>
                           <td className="px-3 py-2 text-right text-orange-800">{l.depenses > 0 ? `− ${eur(l.depenses)}` : "—"}</td>
-                          <td className={`px-3 py-2 text-right font-bold ${r >= 0 ? "text-emerald-700" : "text-red-600"}`}>{eur(r)}</td>
+                          <td className={`px-3 py-2 text-right font-bold ${resteMois >= 0 ? "text-emerald-700" : "text-red-600"}`}>{eur(resteMois)}</td>
                           <td className={`px-3 py-2 text-right ${pct != null && pct > 50 ? "text-red-600 font-semibold" : "text-slate-500"}`}>{pct != null ? `${pct} %` : "—"}</td>
                         </>
                       )}

@@ -41,6 +41,7 @@ export function libelleModePaiement(mode?: string | null): string {
   switch (mode) {
     case "cb_online": return "Carte bancaire en ligne";
     case "cb": return "Carte bancaire";
+    case "cb_terminal": return "Carte bancaire au club";
     case "cheque": return "Chèque";
     case "cheque_differe": return "Chèque différé";
     case "especes": return "Espèces";

@@ -5,6 +5,18 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Users, Loader2, RefreshCw, FileUp, Check, Pencil, Trash2, Plus } from "lucide-react";
+import {
+  MOIS_EXERCICE as MOIS_SAISON,
+  NOMS_MOIS_MASSE as NOMS_MOIS,
+  calculerMasseParMois,
+  exerciceDe as saisonDe,
+  exercicesDisponiblesMasse,
+  lignesChargeDuMois,
+  lignesSalaireDuMois,
+  moisCourantMasse as moisCourant,
+  moisDeExercice as moisDe,
+  refBilanMois,
+} from "./masse-salariale-utils";
 
 /**
  * Masse salariale — le pendant « paie » de l'écran Trésorerie.
@@ -21,43 +33,10 @@ interface Ligne { id: string; type: "salaire" | "charge"; mois: string; salarie:
 interface PropositionCharge { mois: string; libelle: string; montant: number | null; decaissement: number | null; partPatronale: number | null; reductionPatronale: number; partOuvriere: number | null; totalAPayer: number | null; fichier: string; }
 interface Proposition { salarie: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; }
 
-// L'EXERCICE COMPTABLE du centre court du 1er juillet au 30 juin — c'est lui
-// qui structure la lecture, pas la saison scolaire : la masse salariale se
-// compare au bilan. (La trésorerie, elle, reste en septembre → août, comme le
-// classeur historique du gérant.)
-const MOIS_SAISON = ["07", "08", "09", "10", "11", "12", "01", "02", "03", "04", "05", "06"] as const;
-const NOMS_MOIS: Record<string, string> = {
-  "09": "Septembre", "10": "Octobre", "11": "Novembre", "12": "Décembre",
-  "01": "Janvier", "02": "Février", "03": "Mars", "04": "Avril",
-  "05": "Mai", "06": "Juin", "07": "Juillet", "08": "Août",
-};
-// ── Référence : exercice 2024-25, le dernier validé par le cabinet ──
-// Le journal de paie mensuel du bilan donne le PROFIL saisonnier, et les
-// 109 330 € de charges de personnel du compte de résultat donnent le NIVEAU
-// (le journal seul omet la rémunération du gérant et une partie des
-// cotisations) : chaque mois du journal est donc mis à l'échelle pour que
-// l'année retombe exactement sur le total du bilan.
-const REF_JOURNAL_PAIE: Record<string, number> = {
-  "07": 6363.70, "08": 5795.39, "09": 5015.90, "10": 5267.13, "11": 5150.41, "12": 2746.30,
-  "01": 2375.88, "02": 4239.69, "03": 2641.46, "04": 3160.75, "05": 4381.50, "06": 5358.43,
-};
-const REF_CHARGES_PERSONNEL_AN = 109330.29;
-const REF_JOURNAL_TOTAL = Object.values(REF_JOURNAL_PAIE).reduce((s, v) => s + v, 0);
-const refBilanMois = (mm: string) => (REF_JOURNAL_PAIE[mm] / REF_JOURNAL_TOTAL) * REF_CHARGES_PERSONNEL_AN;
-
-function saisonDe(mois: string): string {
-  const [a, m] = mois.split("-").map(Number);
-  return m >= 7 ? `${a}-${a + 1}` : `${a - 1}-${a}`;
-}
-function moisDe(saison: string, mm: string): string {
-  const [a1, a2] = saison.split("-");
-  return `${Number(mm) >= 7 ? a1 : a2}-${mm}`;
-}
 const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 // Les heures s'additionnent en flottants (152.92 + …) : sans arrondi, le total
 // affiche des queues du genre « 891.5099999999999 h ».
 const hrs = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 2 }) + " h";
-const moisCourant = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; };
 
 export default function MasseSalarialePage() {
   const { isAdmin, user } = useAuth();
@@ -99,42 +78,23 @@ export default function MasseSalarialePage() {
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
-  const salaires = useMemo(() => lignes.filter(l => l.type !== "charge"), [lignes]);
-  const charges = useMemo(() => lignes.filter(l => l.type === "charge"), [lignes]);
-
   // En mode coût : salaires (coût employeur, sinon brut) + charges versées à
   // part (MSA/TESA des saisonniers). En mode brut : les salaires seuls — une
   // charge patronale n'est pas du brut.
-  const valeurDe = useCallback(
-    (l: Ligne) => (mode === "cout" ? (l.coutEmployeur ?? l.brut) : l.brut),
-    [mode],
+  const { totalParMois, moisPartiels } = useMemo(
+    () => calculerMasseParMois(lignes, mode),
+    [lignes, mode],
   );
-  const totalParMois = useMemo(() => {
-    const m = new Map<string, number>();
-    salaires.forEach(l => m.set(l.mois, (m.get(l.mois) || 0) + valeurDe(l)));
-    if (mode === "cout") charges.forEach(c => m.set(c.mois, (m.get(c.mois) || 0) + (c.montant || 0)));
-    return m;
-  }, [salaires, charges, valeurDe, mode]);
-  // Mois dont le coût est partiellement estimé (lignes sans coût employeur).
-  const moisPartiels = useMemo(() => {
-    const m = new Set<string>();
-    if (mode === "cout") salaires.forEach(l => { if (l.coutEmployeur == null) m.add(l.mois); });
-    return m;
-  }, [salaires, mode]);
-  const saisons = useMemo(() => {
-    const s = new Set(lignes.map(l => saisonDe(l.mois)));
-    s.add(saisonDe(moisCourant()));
-    return [...s].sort();
-  }, [lignes]);
+  const saisons = useMemo(() => exercicesDisponiblesMasse(lignes), [lignes]);
   const saisonCourante = saisons[saisons.length - 1];
   const saisonPrec = saisons[saisons.length - 2];
   const lignesDuMois = useMemo(
-    () => salaires.filter(l => l.mois === moisDetail).sort((a, b) => a.salarie.localeCompare(b.salarie, "fr")),
-    [salaires, moisDetail],
+    () => lignesSalaireDuMois(lignes, moisDetail),
+    [lignes, moisDetail],
   );
   const chargesDuMois = useMemo(
-    () => charges.filter(c => c.mois === moisDetail).sort((a, b) => a.libelle.localeCompare(b.libelle, "fr")),
-    [charges, moisDetail],
+    () => lignesChargeDuMois(lignes, moisDetail),
+    [lignes, moisDetail],
   );
 
   // ── Dépôt de fiches de paie ──

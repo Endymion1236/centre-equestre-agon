@@ -34,6 +34,7 @@ console.log("\n── Mode de paiement ──");
 
 test("un mode connu devient un libellé lisible", () => {
   assert.equal(libelleModePaiement("cb_online"), "Carte bancaire en ligne");
+  assert.equal(libelleModePaiement("cb_terminal"), "Carte bancaire au club");
   assert.equal(libelleModePaiement("cheque"), "Chèque");
   assert.equal(libelleModePaiement("sepa"), "Prélèvement SEPA");
 });

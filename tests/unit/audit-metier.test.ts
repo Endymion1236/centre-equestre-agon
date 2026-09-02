@@ -120,7 +120,7 @@ console.log("\n✓ Durée de protection d'une place selon le mode de règlement 
 
   // Le bug : la place réservée par un chèque déclaré disparaissait avant que
   // le chèque n'arrive au bureau.
-  for (const mode of ["cheque", "especes", "virement"]) {
+  for (const mode of ["cheque", "especes", "virement", "cb_terminal"]) {
     assert(`${mode} : plusieurs jours, pas trente minutes`,
       minutesApres(dateExpirationHold(t0, mode)) === HOLD_REGLEMENT_DIFFERE_MINUTES);
   }

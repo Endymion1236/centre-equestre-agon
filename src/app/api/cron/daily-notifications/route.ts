@@ -617,7 +617,7 @@ export async function GET(req: NextRequest) {
         const lignes = anciennes.map(d => {
           const cree = d.createdAt?.toDate?.();
           const jours = cree ? Math.floor((Date.now() - cree.getTime()) / 86400_000) : "?";
-          const mode = { cheque: "chèque", especes: "espèces", virement: "virement" }[d.mode as string] || d.mode || "règlement";
+          const mode = { cheque: "chèque", especes: "espèces", virement: "virement", cb_terminal: "carte bancaire au club" }[d.mode as string] || d.mode || "règlement";
           return emailPanneau(
             `${d.familyName || "—"} · ${Number(d.montant || 0).toFixed(2).replace(".", ",")} € par ${mode}`,
             [

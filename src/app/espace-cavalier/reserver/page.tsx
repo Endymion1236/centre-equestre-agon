@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { derouleEstRempli } from "@/lib/stage-deroule";
-import { CGV_STAGES_COURT, STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
+import { totauxPanier } from "@/lib/panier-reservation";
+import ModalePanier from "./ModalePanier";
+import ModaleChoixCavalier from "./ModaleChoixCavalier";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
-import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check, CreditCard, CalendarDays, LayoutList } from "lucide-react";
+import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, Check, CalendarDays, LayoutList } from "lucide-react";
 import TimelineReservation from "./TimelineReservation";
 import { useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/auth-fetch";
@@ -614,15 +616,12 @@ export default function ReserverPage() {
   };
 
   const removeFromCart = (idx: number) => setCart(cart.filter((_, i) => i !== idx));
-  const cartTotal = cart.reduce((s, i) => s + i.prixFinal, 0);
-  // Le panier contient-il un stage ? La clause d'annulation à 3 semaines ne
-  // concerne que les stages : inutile de la faire accepter pour une balade.
-  const cartHasStage = cart.some((i: any) => i.isStage === true);
-  const cartTotalReductions = cart.reduce((s, i) => s + i.remiseEuros, 0);
-  const ACOMPTE_PAR_ENFANT = STAGE_ACOMPTE_EUROS; // source unique cgv-clauses
-  const nbEnfantsStage = cart.filter(i => i.isStage).length;
-  const acompteFixe = Math.min(ACOMPTE_PAR_ENFANT * nbEnfantsStage, cartTotal);
-  const soldeFixe = Math.round((cartTotal - acompteFixe) * 100) / 100;
+  // Les totaux du panier et l'acompte dû viennent de panier-reservation, la
+  // même source que le paiement : ce que la famille lit est ce qu'elle règle.
+  const {
+    total: cartTotal, reductions: cartTotalReductions, contientUnStage: cartHasStage,
+    nbEnfantsStage, acompte: acompteFixe, solde: soldeFixe,
+  } = totauxPanier(cart);
 
   // Paiement
   const handlePay = async () => {
@@ -1964,459 +1963,27 @@ export default function ReserverPage() {
 
       {/* ── MODAL SÉLECTION ENFANT (depuis Timeline) ── */}
       {bookingCreneau && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
-          onClick={() => setBookingCreneau(null)}>
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-100">
-              <div className="font-display text-base font-bold text-blue-800">{bookingCreneau.activityTitle}</div>
-              <div className="font-body text-xs text-slate-500 mt-0.5">{bookingCreneau.startTime}–{bookingCreneau.endTime} · {bookingCreneau.monitor}</div>
-            </div>
-            <div className="p-5">
-              {spotsLeft(bookingCreneau) === 0 ? (
-                /* ── Créneau complet : inscription en liste d'attente ── */
-                waitlistSuccess === bookingCreneau.id ? (
-                  <div className="text-center py-2">
-                    <div className="flex items-center justify-center gap-2 text-green-600 font-body text-sm font-semibold mb-2">
-                      <Check size={18} /> Inscrit en liste d&apos;attente !
-                    </div>
-                    <p className="font-body text-xs text-slate-500 mb-4">
-                      Vous serez notifié par email si une place se libère.
-                    </p>
-                    {selCavaliers.size > 0 && (
-                      <button type="button"
-                        onClick={() => {
-                          selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
-                          setBookingCreneau(null);
-                          setShowCart(true);
-                        }}
-                        className="w-full mt-2 py-3 rounded-xl font-body text-sm font-bold text-white bg-green-600 hover:bg-green-500 border-none cursor-pointer">
-                        Ajouter {selCavaliers.size} cavalier{selCavaliers.size > 1 ? "s" : ""} au panier
-                      </button>
-                    )}
-                    <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`}
-                      className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
-                      + Ajouter un nouveau membre de la famille
-                    </a>
-                    <button type="button" onClick={() => setBookingCreneau(null)}
-                      className="w-full py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-400">
-                      Fermer
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div className="font-body text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 mb-3">
-                      🔔 Ce créneau est complet. Inscrivez-vous en liste d&apos;attente :
-                    </div>
-                    <div className="font-body text-sm font-semibold text-slate-700 mb-1">Pour quel cavalier ?</div>
-                <div className="font-body text-xs text-slate-500 mb-3">
-                  Touchez un cavalier : son inscription en liste d&apos;attente est immédiate.
-                </div>
-                    <div className="flex flex-col gap-2">
-                      {(family?.children || [])
-                        .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
-                        .map((ch: any) => (
-                          enAttente(bookingCreneau.id, ch.id) ? (
-                            <div key={ch.id} className="flex items-center justify-between px-4 py-3 rounded-xl border border-green-200 bg-green-50 font-body text-sm text-green-700">
-                              <span className="font-semibold flex items-center gap-2"><Check size={14} /> {ch.firstName} — en liste d&apos;attente</span>
-                            </div>
-                          ) : (
-                            <button type="button" key={ch.id}
-                              onClick={() => addToWaitlist(bookingCreneau, ch.id)}
-                              disabled={waitlistLoading === bookingCreneau.id}
-                              className="flex items-center justify-between px-4 py-3 rounded-xl border border-orange-200 bg-orange-50 font-body text-sm text-orange-700 cursor-pointer hover:bg-orange-100 disabled:opacity-50">
-                              <span className="font-semibold flex items-center gap-2">
-                                {waitlistLoading === bookingCreneau.id ? <Loader2 size={14} className="animate-spin" /> : "🔔"} Inscrire {ch.firstName}
-                              </span>
-                              {ch.galopLevel && ch.galopLevel !== "—" && (
-                                <span className="font-body text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">{/^\d/.test(String(ch.galopLevel)) ? `G${ch.galopLevel}` : ch.galopLevel}</span>
-                              )}
-                            </button>
-                          )
-                        ))}
-                      {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
-                        (children.length === 0 ? (
-                    <div className="text-center py-2">
-                      <p className="font-body text-sm text-slate-600 mb-2">
-                        Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
-                      </p>
-                      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`} className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
-                        Ajouter un cavalier
-                      </a>
-                    </div>
-                  ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
-                      )}
-                    </div>
-                    <button type="button" onClick={() => { setSelCavaliers(new Set()); setBookingCreneau(null); }}
-                      className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
-                      Annuler
-                    </button>
-                  </>
-                )
-              ) : (
-              <>
-              <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
-              <div className="flex flex-col gap-2">
-                {(family?.children || [])
-                  .filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id))
-                  .map((ch: any) => {
-                    // Règle : 12 ans minimum pour les promenades
-                    let tooYoung = false;
-                    if (bookingCreneau.activityType === "balade") {
-                      const bd: any = ch.birthDate;
-                      const bdDate = bd?.seconds ? new Date(bd.seconds * 1000) : (bd ? new Date(bd) : null);
-                      if (!bdDate || isNaN(bdDate.getTime())) tooYoung = true;
-                      else if (bdDate.getFullYear() > new Date().getFullYear() - 12) tooYoung = true;
-                    }
-                    // Deja dans le panier pour CE creneau : plus selectionnable
-                    // — un double ajout ferait payer deux fois la meme place.
-                    const dejaAuPanier = cart.some((i) =>
-                      i.childId === ch.id && i.creneauIds.includes(bookingCreneau.id));
-                    return (
-                      <button type="button" key={ch.id}
-                        onClick={() => {
-                          if (dejaAuPanier) return;
-                          if (tooYoung) {
-                            alert(`Les promenades sont réservées aux cavaliers de 12 ans et plus (nés en ${new Date().getFullYear() - 12} ou avant).`);
-                            return;
-                          }
-                          setSelCavaliers((prev) => {
-                            const n = new Set(prev);
-                            if (n.has(ch.id)) n.delete(ch.id); else n.add(ch.id);
-                            return n;
-                          });
-                        }}
-                        disabled={tooYoung || dejaAuPanier}
-                        title={dejaAuPanier ? "Déjà dans votre panier pour ce créneau" : tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
-                        className={`flex items-center justify-between px-4 py-3 rounded-xl border font-body text-sm transition-all ${
-                          dejaAuPanier
-                            ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                            : tooYoung
-                            ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                            : selCavaliers.has(ch.id)
-                              ? "border-green-500 bg-green-50 text-green-800 cursor-pointer"
-                              : "border-blue-200 bg-blue-50 text-blue-800 cursor-pointer hover:bg-blue-100"
-                        }`}>
-                        <span className="font-semibold">
-                          {selCavaliers.has(ch.id) && !dejaAuPanier && "✓ "}{ch.firstName}
-                          {dejaAuPanier && <span className="ml-2 text-xs">🛒 Déjà au panier</span>}
-                          {!dejaAuPanier && tooYoung && <span className="ml-2 text-xs">🔒 Moins de 12 ans</span>}
-                        </span>
-                        {ch.galopLevel && ch.galopLevel !== "—" && (
-                          <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{/^\d/.test(String(ch.galopLevel)) ? `G${ch.galopLevel}` : ch.galopLevel}</span>
-                        )}
-                      </button>
-                    );
-                  })
-                }
-                {/* Validation de la selection : la coche multiple existait
-                    mais SANS bouton dans cette branche — il n'etait present
-                    que cote liste d'attente. On inscrit tous les cavaliers
-                    coches en une fois, puis on ouvre le panier. */}
-                {/* Toujours affiche : la selection multiple a rendu le clic
-                    « silencieux » (il coche au lieu d'ajouter) — sans bouton
-                    visible en permanence, la famille croit que rien ne se
-                    passe. Desactive tant que rien n'est coche. */}
-                <button type="button"
-                  disabled={selCavaliers.size === 0}
-                  onClick={() => {
-                    selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
-                    setSelCavaliers(new Set());
-                    setBookingCreneau(null);
-                    setShowCart(true);
-                  }}
-                  className={`w-full py-3 rounded-xl font-body text-sm font-bold border-none ${
-                    selCavaliers.size === 0
-                      ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : "text-white bg-green-600 hover:bg-green-500 cursor-pointer"
-                  }`}>
-                  {selCavaliers.size === 0
-                    ? "Sélectionnez un cavalier ci-dessus"
-                    : `Valider — ${selCavaliers.size} cavalier${selCavaliers.size > 1 ? "s" : ""} au panier`}
-                </button>
-                {(family?.children || []).filter((ch: any) => !(bookingCreneau.enrolled || []).some((e: any) => e.childId === ch.id)).length === 0 && (
-                  (children.length === 0 ? (
-                    <div className="text-center py-2">
-                      <p className="font-body text-sm text-slate-600 mb-2">
-                        Vous n&apos;avez pas encore ajouté de cavalier à votre famille.
-                      </p>
-                      <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`} className="inline-block px-4 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold no-underline">
-                        Ajouter un cavalier
-                      </a>
-                    </div>
-                  ) : <p className="font-body text-sm text-slate-500 text-center py-2">Tous vos cavaliers sont déjà inscrits à ce créneau.</p>)
-                )}
-              </div>
-              <a href={`/espace-cavalier/profil?action=ajouter-cavalier&retour=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search + (bookingCreneau ? `${window.location.search ? "&" : "?"}creneau=${bookingCreneau.id}` : "") : "/espace-cavalier/reserver")}`}
-                className="block text-center font-body text-xs font-semibold text-blue-600 no-underline mt-2 py-1.5">
-                + Ajouter un nouveau membre de la famille
-              </a>
-              <button type="button" onClick={() => setBookingCreneau(null)}
-                className="w-full mt-3 py-2.5 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">
-                Annuler
-              </button>
-              </>
-              )}
-            </div>
-          </div>
-        </div>
+        <ModaleChoixCavalier
+          bookingCreneau={bookingCreneau} onClose={() => setBookingCreneau(null)}
+          children={children} cart={cart} filter={filter}
+          selCavaliers={selCavaliers} setSelCavaliers={setSelCavaliers}
+          setShowCart={setShowCart} spotsLeft={spotsLeft} enAttente={enAttente}
+          addCoursToCart={addCoursToCart} addToWaitlist={addToWaitlist}
+          waitlistLoading={waitlistLoading} waitlistSuccess={waitlistSuccess}
+          family={family} />
       )}
 
       {/* PANIER MODAL */}
       {showCart && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setShowCart(false)}>
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[78vh] overflow-auto shadow-2xl pb-6" onClick={e => e.stopPropagation()}>
-            <div className="p-5 border-b border-gray-100">
-              <div className="flex justify-between items-center mb-3">
-                <h2 className="font-display text-lg font-bold text-blue-800"><ShoppingCart size={18} className="inline mr-2" />Mon panier</h2>
-                <button type="button" onClick={() => setShowCart(false)} className="text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
-              </div>
-            </div>
-            <div className="p-5">
-              {cart.length === 0 ? (
-                <p className="font-body text-sm text-gray-600 text-center py-8">Votre panier est vide.</p>
-              ) : (
-                <>
-                  <div className="flex flex-col gap-2 mb-4">
-                    {cart.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between bg-sand rounded-lg px-3 py-2.5">
-                        <div className="flex-1">
-                          <div className="font-body text-sm font-semibold text-blue-800">{item.activityTitle}</div>
-                          <div className="font-body text-xs text-gray-600">{item.childName} · {item.dates}</div>
-                          {item.remiseEuros > 0 && <div className="font-body text-xs text-green-600">Reduction : -{item.remiseEuros}€</div>}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-right">
-                            {item.remiseEuros > 0 && <div className="font-body text-xs text-gray-600 line-through">{item.prixBase.toFixed(0)}€</div>}
-                            <div className="font-body text-sm font-bold text-blue-500">{item.prixFinal.toFixed(2)}€</div>
-                          </div>
-                          <button type="button" onClick={() => removeFromCart(idx)} className="text-red-400 bg-transparent border-none cursor-pointer p-1 hover:text-red-600"><X size={14} /></button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Totaux */}
-                  {cartTotalReductions > 0 && (
-                    <div className="flex justify-between font-body text-xs text-green-600 mb-1 px-1">
-                      <span>Reductions</span><span>-{cartTotalReductions.toFixed(2)}€</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-body text-base font-bold text-blue-800 px-1 mb-4 pt-2 border-t border-gray-200">
-                    <span>Total</span><span className="text-green-600">{cartTotal.toFixed(2)}€</span>
-                  </div>
-
-                  {/* Stages : reglement par acompte uniquement. Le solde est
-                      preleve automatiquement a ~J-7. Quand l'acompte couvre
-                      deja le total (petite journee), on ne parle ni de solde
-                      ni d'empreinte de carte : il n'y a rien a prelever. */}
-                  {cart.some(i => i.isStage) && cartPayMode === "cb" && (
-                    <div className="bg-blue-50 rounded-lg p-3 mb-4">
-                      <div className="font-body text-xs font-semibold text-blue-800 mb-2">
-                        Règlement du stage : acompte maintenant, solde avant le stage
-                      </div>
-                      <div className="space-y-2">
-                        <div className="font-body text-xs text-slate-600 text-center">
-                          {soldeFixe > 0
-                            ? `${nbEnfantsStage} enfant${nbEnfantsStage > 1 ? "s" : ""} × ${ACOMPTE_PAR_ENFANT}€ = ${acompteFixe.toFixed(2)}€ maintenant · solde ${soldeFixe.toFixed(2)}€ prélevé automatiquement ~1 semaine avant le stage`
-                            : `Montant réglé aujourd'hui : ${acompteFixe.toFixed(2)}€ — rien d'autre à prévoir.`}
-                        </div>
-                        {soldeFixe > 0 && (
-                          <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5">
-                            <p className="font-body text-xs text-amber-800 leading-snug">
-                              ⚠️ <strong>À faire sur la page de paiement :</strong> cochez la case <strong>« Enregistrer mes données de paiement »</strong>. En la cochant, vous autorisez le prélèvement automatique du solde de <strong>{soldeFixe.toFixed(2)}€</strong> environ une semaine avant le stage. Sans cette case, le solde restera à régler manuellement.
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Choix mode de paiement */}
-                  <div className="mb-4">
-                    <div className="font-body text-xs font-semibold text-slate-600 mb-2">Comment souhaitez-vous régler ?</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        ["cb", "💳 Carte bancaire"],
-                        ["cheque", "📝 Chèque"],
-                        ["especes", "💵 Espèces"],
-                        ["virement", "🏦 Virement"],
-                      ] as const).map(([mode, label]) => (
-                        <button type="button" key={mode} onClick={() => setCartPayMode(mode)}
-                          className={`py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === mode ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500 hover:border-blue-300"}`}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {/* Bouton avoir si la famille a un solde */}
-                    {familyAvoirs.length > 0 && (() => {
-                      const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
-                      return (
-                        <button type="button" onClick={() => setCartPayMode("avoir")}
-                          className={`w-full mt-2 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === "avoir" ? "border-amber-500 bg-amber-50 text-amber-700" : "border-gray-200 bg-white text-amber-600 hover:border-amber-300"}`}>
-                          💜 Utiliser mon avoir ({totalAvoir.toFixed(2)}€ disponible)
-                        </button>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Conditions d'annulation — acceptation AVANT paiement.
-                      Une clause n'est opposable que si le client en a eu
-                      connaissance et l'a acceptée avant de contracter :
-                      l'email de confirmation arrive trop tard pour ça. */}
-                  {cartHasStage && (
-                    <label className="flex items-start gap-2.5 mb-3 p-3 rounded-xl bg-orange-50 border border-orange-200 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={cgvAccepted}
-                        onChange={(e) => setCgvAccepted(e.target.checked)}
-                        className="mt-0.5 h-4 w-4 flex-shrink-0 cursor-pointer accent-orange-500"
-                      />
-                      <span className="font-body text-xs text-orange-900 leading-relaxed">
-                        J&apos;ai lu et j&apos;accepte les <a href="/cgv" target="_blank" rel="noopener noreferrer" className="font-semibold underline">conditions d&apos;annulation</a> : {CGV_STAGES_COURT}
-                      </span>
-                    </label>
-                  )}
-
-                  <button type="button"
-                    onClick={() => setShowCart(false)}
-                    className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl py-2.5 px-4 cursor-pointer transition-colors mb-3"
-                  >
-                    <ShoppingCart size={15} />
-                    Continuer mes réservations
-                  </button>
-
-                  {/* Bouton CB → CAWL */}
-                  {cartPayMode === "cb" && (
-                    <>
-                      <button type="button" onClick={handlePay} disabled={paying || (cartHasStage && !cgvAccepted)}
-                        className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying || (cartHasStage && !cgvAccepted) ? "bg-gray-200 text-gray-600 cursor-not-allowed" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
-                        {paying ? <Loader2 size={18} className="animate-spin" /> : <CreditCard size={18} />}
-                        {paying ? "Paiement en cours..." : depositMode === "deposit" ? (soldeFixe > 0 ? `Payer l'acompte ${acompteFixe.toFixed(2)}€` : `Payer ${acompteFixe.toFixed(2)}€`) : `Payer ${cartTotal.toFixed(2)}€`}
-                      </button>
-                      <p className="font-body text-xs text-gray-600 text-center mt-2">Paiement sécurisé par CAWL / Crédit Agricole</p>
-                    </>
-                  )}
-
-                  {/* Bouton Chèque/Espèces/Virement → déclaration */}
-                  {cartPayMode === "avoir" && (() => {
-                    const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
-                    const couvre = totalAvoir >= cartTotal;
-                    return cartPaySuccess ? (
-                      <div className="text-center py-4">
-                        <div className="text-4xl mb-2">✅</div>
-                        <p className="font-body text-base font-semibold text-green-700">Avoir utilisé !</p>
-                        <p className="font-body text-xs text-slate-500 mt-1">
-                          {couvre ? "Votre avoir a couvert la totalité." : "Le centre équestre vous contactera pour le complément."}
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        {!couvre && (
-                          <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3">
-                            <p className="font-body text-xs text-orange-700">
-                              Votre avoir ({totalAvoir.toFixed(2)}€) ne couvre pas la totalité ({cartTotal.toFixed(2)}€). Le reste ({(cartTotal - totalAvoir).toFixed(2)}€) sera à régler séparément.
-                            </p>
-                          </div>
-                        )}
-                        <button type="button" onClick={async () => {
-                          if (!user || !family) return;
-                          setPaying(true);
-                          try {
-                            // Tout passe par l'API serveur — les écritures Firestore
-                            // (payments, encaissements, avoirs, reservations, creneaux)
-                            // sont atomiques et sécurisées côté adminDb.
-                            const res = await authFetch("/api/pay-with-avoir", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                cart: cart.map(i => ({
-                                  activityTitle: i.activityTitle,
-                                  childId: i.childId,
-                                  childName: i.childName,
-                                  creneauIds: i.creneauIds,
-                                  prixFinal: i.prixFinal,
-                                  isStage: i.isStage,
-                                  ...((i as any).sourceFamilyId ? { sourceFamilyId: (i as any).sourceFamilyId } : {}),
-                                })),
-                              }),
-                            });
-                            const data = await res.json();
-                            if (!res.ok) {
-                              throw new Error(data.error || "Erreur serveur");
-                            }
-                            setCart([]);
-                            setCartPaySuccess(true);
-                          } catch (e: any) {
-                            console.error(e);
-                            alert(`Erreur lors du paiement par avoir${e?.message ? ` : ${e.message}` : ""}.`);
-                          }
-                          setPaying(false);
-                        }} disabled={paying}
-                          className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600" : "bg-amber-600 text-white hover:bg-amber-500"}`}>
-                          {paying ? <Loader2 size={18} className="animate-spin" /> : null}
-                          {paying ? "En cours..." : couvre ? `Payer avec mon avoir (${cartTotal.toFixed(2)}€)` : `Utiliser ${totalAvoir.toFixed(2)}€ d'avoir`}
-                        </button>
-                      </>
-                    );
-                  })()}
-                  {cartPayMode !== "cb" && cartPayMode !== "avoir" && (
-                    cartPaySuccess ? (
-                      <div className="text-center py-4">
-                        <div className="text-4xl mb-2">✅</div>
-                        <p className="font-body text-base font-semibold text-green-700">Déclaration envoyée !</p>
-                        <p className="font-body text-xs text-slate-500 mt-1">
-                          Le centre équestre va confirmer réception de votre {cartPayMode === "cheque" ? "chèque" : cartPayMode === "especes" ? "règlement en espèces" : "virement"}.
-                        </p>
-                      </div>
-                    ) : (
-                      <>
-                        <button onClick={async () => {
-                          if (!user || !family) return;
-                          setPaying(true);
-                          try {
-                            // UN SEUL appel serveur : inscriptions (places
-                            // tenues) puis réservations + commande +
-                            // déclaration en une transaction, email au club.
-                            // Avant, le navigateur enchaînait cinq écritures :
-                            // un rafraîchissement au milieu laissait un impayé
-                            // orphelin sans déclaration ni email (vécu). Une
-                            // fois cette requête partie, le serveur termine
-                            // même si l'onglet se ferme.
-                            const res = await authFetch("/api/declarer-paiement", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                mode: cartPayMode,
-                                items: cart.map(i => ({
-                                  childId: i.childId, childName: i.childName,
-                                  activityTitle: i.activityTitle, isStage: i.isStage,
-                                  creneauIds: i.creneauIds, prixFinal: i.prixFinal,
-                                  ...((i as any).sourceFamilyId ? { sourceFamilyId: (i as any).sourceFamilyId } : {}),
-                                })),
-                              }),
-                            });
-                            const d = await res.json().catch(() => ({} as any));
-                            if (!res.ok) throw new Error(d?.error || "Erreur. Réessayez.");
-                            setCartPaySuccess(true);
-                            setCart([]);
-                          } catch (e: any) { console.error(e); toast(e?.message || "Erreur. Réessayez.", "error"); }
-                          setPaying(false);
-                        }} disabled={paying}
-                          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50">
-                          {paying ? <Loader2 size={18} className="animate-spin" /> : null}
-                          {paying ? "Envoi..." : `Déclarer mon paiement par ${cartPayMode === "cheque" ? "chèque" : cartPayMode === "especes" ? "espèces" : "virement"}`}
-                        </button>
-                        <p className="font-body text-xs text-gray-500 text-center mt-2">
-                          L'équipe confirmera réception lors de votre prochain passage.
-                        </p>
-                      </>
-                    )
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <ModalePanier
+          cart={cart} setCart={setCart} removeFromCart={removeFromCart}
+          onClose={() => setShowCart(false)} creneaux={creneaux} isStage={isStage}
+          totaux={totauxPanier(cart)} familyAvoirs={familyAvoirs}
+          depositMode={depositMode} cartPayMode={cartPayMode} setCartPayMode={setCartPayMode}
+          cgvAccepted={cgvAccepted} setCgvAccepted={setCgvAccepted}
+          cartPaySuccess={cartPaySuccess} setCartPaySuccess={setCartPaySuccess}
+          paying={paying} setPaying={setPaying} handlePay={handlePay}
+          user={user} family={family} />
       )}
     </div>
   );

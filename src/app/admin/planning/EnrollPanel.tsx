@@ -1,53 +1,16 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
-import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
-import { db, storage } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { Card, Badge } from "@/components/ui";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { ACOMPTE_PAR_ENFANT, montantsAcompteStage, acompteApplicable } from "@/lib/panier-reservation";
+import { collection, getDocs, getDoc, updateDoc, deleteField, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import {
-  emailTemplates, emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
-  emailParagraphe, emailParagraphe as P, emailSignature, emailCouleurs as CE,
-} from "@/lib/email-templates";
-import { generateOrderId, emailValide } from "@/lib/utils";
-import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "@/app/admin/paiements/types";
-import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
-import { tarifPourFrequence } from "@/lib/forfait-pricing";
+import { tarifPourFrequence, calculerForfaitAnnuel } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
-
-/**
- * Minuteries d'envoi des confirmations groupées.
- *
- * Hors du composant à dessein : le panneau se démonte entre deux inscriptions
- * (on change de créneau, de jour, de semaine), la confirmation en attente,
- * elle, reste due. Le cron `/api/cron/confirmations-stage` reste le filet :
- * si l'onglet est fermé avant l'échéance, c'est lui qui envoie.
- */
-const minuteriesConfirmation = new Map<string, ReturnType<typeof setTimeout>>();
-
-function programmerEnvoiConfirmation(familyId: string, envoiPrevuA: string) {
-  const precedente = minuteriesConfirmation.get(familyId);
-  if (precedente) clearTimeout(precedente);
-  const attente = Math.max(3000, (Date.parse(envoiPrevuA) || 0) - Date.now() + 2000);
-  minuteriesConfirmation.set(familyId, setTimeout(() => {
-    minuteriesConfirmation.delete(familyId);
-    // `force: false` : si une inscription de dernière minute a repoussé
-    // l'échéance, l'envoi est simplement laissé au cron.
-    authFetch("/api/admin/confirmation-stage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "envoyer", familyId, force: false }),
-    }).catch(e => console.warn("Envoi confirmation groupée:", e));
-  }, attente));
-}
-
-function annulerMinuterieConfirmation(familyId: string) {
-  const t = minuteriesConfirmation.get(familyId);
-  if (t) { clearTimeout(t); minuteriesConfirmation.delete(familyId); }
-}
+import { annulerMinuterieConfirmation } from "./minuteries-confirmation";
+import { resumerAttentes } from "@/app/admin/paiements/impayes-utils";
 
 /** Libellé lisible d'un moyen de règlement d'acompte, aligné sur la caisse. */
 function libelleModeAcompte(mode: string): string {
@@ -99,21 +62,26 @@ const calcAge = (birthDate: any): string => {
   return `${age} ans`;
 };
 import {
-  findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
+  computeStageReductions,
   computeStageReductionsAsync,
-  enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
+  createReservation, removeChildFromCreneau, deleteReservations,
 } from "@/lib/planning-services";
 import {
   fetchVacationPeriods, fetchDiscountSettings,
   type VacationPeriod, type DiscountSettings,
 } from "@/lib/discounts";
-import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, Mail, Send, FileText, Printer } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, statutPaiementCavalier, sameStage } from "./types";
 import { MOTIFS_OFFERT } from "@/lib/offerts";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
-import { signalerErreur } from "@/lib/signaler-erreur";
+import PanneauPedagogie from "./PanneauPedagogie";
+import FormulaireEmailCreneau from "./FormulaireEmailCreneau";
+import PanneauListeAttente from "./PanneauListeAttente";
+import FormulaireNouvelleFamille from "./FormulaireNouvelleFamille";
+import { inscrireDepuisPanneau } from "./inscrire-depuis-panneau";
+import { nomDeduitDuParent } from "@/lib/nom-foyer";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll, onRefresh }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
@@ -211,22 +179,71 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       let count = 0;
       for (const d of cibles) {
         const c = d.data() as any;
-        const newEnrolled = [...(c.enrolled || []), {
+        const inscrit = {
           childId, childName, familyId, familyName,
           enrolledAt: new Date().toISOString(), presence: null,
           institutional: true, // marqueur : séance facturée à l'établissement
-        }];
+        };
+        const newEnrolled = [...(c.enrolled || []), inscrit];
         await updateDoc(doc(db, "creneaux", d.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+        // La fiche du cavalier et l'espace famille listent les « prochaines
+        // séances » depuis les réservations, pas depuis les créneaux : sans
+        // cette écriture, un enfant inscrit pour la saison n'avait aucune
+        // séance à venir sur sa fiche.
+        await createReservation(inscrit as EnrolledChild, { id: d.id, ...c });
         count++;
       }
       panelToast(`🏫 ${childName} inscrit(e) sur ${count} séance(s) de la saison (établissement, sans facturation)`, "success");
       setJustEnrolled(`🏫 ${childName} — ${count} séances de la saison (établissement)`);
+      // L'inscription est faite : le panneau peut se fermer sans demander
+      // « quitter sans enregistrer ? ».
+      setInscriptionFaite(true);
       await onRefresh?.();
     } catch (e) {
       console.error("Inscription saison établissement:", e);
       panelToast("Erreur lors de l'inscription saison", "error");
     }
     setEnrollingSaison(false);
+  };
+
+  // ── Désinscription établissement de TOUTE la saison ──
+  // Le miroir exact de l'inscription : les mêmes créneaux récurrents à venir,
+  // où l'enfant est inscrit avec le marqueur établissement. Rien d'autre n'est
+  // touché : ni paiement, ni avoir, puisque rien n'a été facturé aux parents.
+  const [unenrollingSaison, setUnenrollingSaison] = useState("");
+  const desinscrireSaisonEtablissement = async (childId: string, childName: string) => {
+    if (!confirm(`Retirer ${childName} de toutes les séances de la saison de ce cours (inscription établissement) ?`)) return;
+    setUnenrollingSaison(childId);
+    try {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const startStr = today.toISOString().split("T")[0];
+      const endStr = dateFinSaisonEffective.toISOString().split("T")[0];
+      const jourRef = new Date(creneau.date + "T12:00:00").getDay();
+      const snap = await getDocs(query(
+        collection(db, "creneaux"),
+        where("date", ">=", startStr),
+        where("date", "<=", endStr),
+      ));
+      const cibles = snap.docs.filter(d => {
+        const c = d.data() as any;
+        if (c.activityTitle !== creneau.activityTitle) return false;
+        if (c.startTime !== creneau.startTime) return false;
+        if (new Date(c.date + "T12:00:00").getDay() !== jourRef) return false;
+        return (c.enrolled || []).some((e: any) => e.childId === childId && e.institutional);
+      });
+      let count = 0;
+      for (const d of cibles) {
+        await removeChildFromCreneau(d.id, childId);
+        await deleteReservations(d.id, childId);
+        count++;
+      }
+      panelToast(`🏫 ${childName} retiré(e) de ${count} séance(s) de la saison`, "success");
+      await onRefresh?.();
+    } catch (e) {
+      console.error("Désinscription saison établissement:", e);
+      panelToast("Erreur lors de la désinscription saison", "error");
+    }
+    setUnenrollingSaison("");
   };
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
@@ -339,7 +356,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // ── Création famille inline ──
   const [showNewFamily, setShowNewFamily] = useState(false);
-  const [newFam, setNewFam] = useState({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "", civilite: "" as "" | "M." | "Mme", tags: [] as string[] });
   // Nom de famille deduit de `parentName` : ce formulaire n'a qu'un seul
   // champ (pas de nom/prenom separes comme dans /admin/cavaliers). On retient
   // le mot ECRIT EN MAJUSCULES s'il y en a un ("DUPONT Marie" -> DUPONT),
@@ -390,31 +406,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return nom || e.childName || "—";
   };
 
-  const nomDeduitDuParent = (parentName: string) => {
-    const brut = (parentName || "").trim();
-    if (!brut) return "";
-    const mots = brut.split(/\s+/).filter(Boolean);
-    const estMaj = (m: string) => m.length > 1 && m === m.toUpperCase() && /[A-ZÀ-Ý]/.test(m);
-    // Cas courant "LE MOAL Sophie" / "DUPONT Marie" : on prend TOUS les mots
-    // en majuscules consécutifs, pas seulement le premier (noms composés).
-    const majuscules = mots.filter(estMaj);
-    if (majuscules.length > 0) return majuscules.join(" ");
-    // Aucune majuscule ("Marie Dupont") : convention nom en dernier.
-    return (mots[mots.length - 1] || "").toUpperCase();
-  };
-  const nomFoyerDeduit = nomDeduitDuParent(newFam.parentName);
 
-  const [newChildren, setNewChildren] = useState<any[]>([{ firstName: "", lastName: null as string | null, birthDate: "", galopLevel: "—" }]);
-  const [localFamilies, setLocalFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   // Cavaliers ajoutés depuis cette modale : `families` vient du parent et ne
   // peut pas être muté ici, on superpose donc la liste à jour le temps de la
   // session pour que le nouveau cavalier apparaisse sans recharger le planning.
   const [childOverrides, setChildOverrides] = useState<Record<string, any[]>>({});
+  // Les familles créées depuis cet écran, le temps de la session : elles ne
+  // sont pas encore dans `families`, qui vient du planning.
+  const [localFamilies, setLocalFamilies] = useState<any[]>([]);
   const allFamilies = useMemo(
     () => [...families, ...localFamilies].map((f: any) =>
       childOverrides[f.firestoreId] ? { ...f, children: childOverrides[f.firestoreId] } : f),
     [families, localFamilies, childOverrides]);
-  const [creatingFamily, setCreatingFamily] = useState(false);
   // Ajout d'un cavalier à une famille DÉJÀ existante, sans quitter la modale.
   // Auparavant il fallait sortir du planning, passer par la fiche famille,
   // puis revenir — et souvent reprendre la recherche du créneau.
@@ -493,207 +496,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   );
 
 
-  // Plan de séance
-  const [planUploading, setPlanUploading] = useState(false);
-  const [lightbox, setLightbox] = useState(false);
-  const [lightboxBlobUrl, setLightboxBlobUrl] = useState<string | null>(null);
-
-  const openLightbox = async () => {
-    setLightbox(true);
-    if (!planUrl) return;
-    try {
-      const resp = await fetch(planUrl, { mode: "cors" });
-      if (!resp.ok) throw new Error("fetch failed");
-      const blob = await resp.blob();
-      // Convertir HEIC en affichable si besoin
-      setLightboxBlobUrl(URL.createObjectURL(blob));
-    } catch {
-      // CORS bloqué → fallback sur URL directe dans un nouvel onglet
-      setLightboxBlobUrl("cors_error:" + planUrl);
-    }
-  };
-
-  const closeLightbox = () => {
-    setLightbox(false);
-    if (lightboxBlobUrl && lightboxBlobUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(lightboxBlobUrl);
-    }
-    setLightboxBlobUrl(null);
-  };
-  const [planUrl, setPlanUrl] = useState<string | null>((creneau as any).planSeanceUrl || null);
-  const [planType, setPlanType] = useState<string | null>((creneau as any).planSeanceType || null);
   const planInputRef = useRef<HTMLInputElement>(null);
   const inscritsRef = useRef<HTMLDivElement>(null);
   const hasScrolledToInscrits = useRef(false);
 
-  // ── Notes pédagogiques de la séance (historique) ─────────────────────
-  // Chaque note enregistre le texte + un snapshot du plan de séance courant
-  // au moment de l'enregistrement (URL/path/type). Permet de retrouver
-  // l'historique des notes ET des plans utilisés au fil des séances.
-  type NoteSeance = {
-    id: string;
-    creneauId: string;
-    texte: string;
-    planSeanceUrl?: string | null;
-    planSeancePath?: string | null;
-    planSeanceType?: string | null;
-    createdAt?: any;
-    createdByEmail?: string | null;
-    createdByName?: string | null;
-    creneauDate?: string;
-    creneauActivityTitle?: string;
-    creneauMonitor?: string;
-  };
-  const [notes, setNotes] = useState<NoteSeance[]>([]);
-  const [notesLoading, setNotesLoading] = useState(false);
-  const [noteTexte, setNoteTexte] = useState("");
-  const [noteSaving, setNoteSaving] = useState(false);
-  const [showHistorique, setShowHistorique] = useState(false);
 
-  // Notes des seances PRECEDENTES du meme cours (meme activite + meme
-  // moniteur, autres dates). Permet de relire le fil pedagogique du groupe
-  // semaine apres semaine. Chargees separement des notes de la seance
-  // courante (qui restent dans `notes`).
-  const [notesPrecedentes, setNotesPrecedentes] = useState<NoteSeance[]>([]);
-  const [notesPrecLoading, setNotesPrecLoading] = useState(false);
-  const [showPrecedentes, setShowPrecedentes] = useState(false);
+  // La recherche de famille sert à l'inscription comme à la liste d'attente :
+  // une seule saisie, une seule liste filtrée.
+  const filteredFamilies = useMemo(() => { if (!search) return allFamilies; const terms = search.toLowerCase().trim().split(/\s+/); return allFamilies.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [allFamilies, search]);
 
-  // Note de PREPARATION : attachee au creneau (pas a l'historique), reste
-  // affichee et modifiable en permanence. Permet au moniteur de noter a
-  // l'avance ce qu'il a prevu pour la seance. Distincte des notes-seance
-  // (qui sont un journal horodate d'observations post-seance).
-  const [notePrepa, setNotePrepa] = useState<string>((creneau as any).notePreparation || "");
-  const [notePrepaSaving, setNotePrepaSaving] = useState(false);
-  const [notePrepaSaved, setNotePrepaSaved] = useState(false);
-
-  // Liste d'attente
-  const [waitlist, setWaitlist] = useState<any[]>([]);
-  const [waitlistLoading, setWaitlistLoading] = useState(false);
-
-  // ── Chargement de l'historique des notes pour ce créneau ─────────────
-  useEffect(() => {
-    if (!creneau.id) return;
-    setNotesLoading(true);
-    // Tri serveur : du plus récent au plus ancien
-    getDocs(query(
-      collection(db, "notes-seance"),
-      where("creneauId", "==", creneau.id),
-      orderBy("createdAt", "desc")
-    ))
-      .then(snap => setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance))))
-      .catch(e => {
-        signalerErreur(e, "planning: notes de séance (tri serveur)", { creneauId: creneau.id });
-        // Index composite manquant → fallback sans orderBy
-        getDocs(query(collection(db, "notes-seance"), where("creneauId", "==", creneau.id)))
-          .then(snap => {
-            const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance));
-            // Tri client par createdAt desc
-            items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-            setNotes(items);
-          })
-          .catch(() => setNotes([]));
-      })
-      .finally(() => setNotesLoading(false));
-  }, [creneau.id]);
-
-  // Charge les notes des seances PRECEDENTES du meme cours (meme titre
-  // d'activite + meme moniteur, dates differentes de la seance courante).
-  useEffect(() => {
-    if (!creneau.id || !creneau.activityTitle) { setNotesPrecedentes([]); return; }
-    setNotesPrecLoading(true);
-    // On filtre par titre d'activite (champ stocke dans chaque note). On
-    // recupere large puis on affine cote client (exclure la seance courante,
-    // garder le meme moniteur, trier par date desc, limiter a 10).
-    getDocs(query(
-      collection(db, "notes-seance"),
-      where("creneauActivityTitle", "==", creneau.activityTitle),
-    ))
-      .then(snap => {
-        const items = snap.docs
-          .map(d => ({ id: d.id, ...d.data() } as NoteSeance))
-          // Exclure les notes de la seance courante (deja affichees au-dessus)
-          .filter(n => n.creneauId !== creneau.id)
-          // Garder le meme moniteur si renseigne (un meme creneau horaire peut
-          // etre tenu par des moniteurs differents selon les semaines ; on
-          // privilegie la continuite pedagogique du meme encadrant, mais on
-          // garde quand meme si le moniteur n'est pas renseigne)
-          .filter(n => !creneau.monitor || !n.creneauMonitor || n.creneauMonitor === creneau.monitor)
-          // Tri par date de seance desc (la plus recente d'abord)
-          .sort((a, b) => {
-            const da = a.creneauDate || "";
-            const db_ = b.creneauDate || "";
-            if (da !== db_) return db_.localeCompare(da);
-            // meme date : tri par createdAt desc
-            return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-          })
-          .slice(0, 10); // max 10 dernieres notes
-        setNotesPrecedentes(items);
-      })
-      .catch(e => {
-        console.warn("Notes precedentes load:", e);
-        setNotesPrecedentes([]);
-      })
-      .finally(() => setNotesPrecLoading(false));
-  }, [creneau.id, creneau.activityTitle, creneau.monitor]);
-
-  // Retrait d'une entree de liste d'attente (admin). Cote famille le bouton
-  // « Retirer » existe deja : l'admin n'avait que « Accepter ».
-  const [waitRemoving, setWaitRemoving] = useState("");
-  const retirerWaitlist = async (entry: any) => {
-    if (waitRemoving) return;
-    if (!confirm(`Retirer ${entry.childName} de la liste d'attente ?`)) return;
-    setWaitRemoving(entry.id);
-    try {
-      // Si cette entree detenait une place reservee, liberer le hold : sinon
-      // le creneau garderait une place bloquee pour quelqu'un qui n'est plus
-      // dans la file.
-      const h = (creneau as any).waitlistHold;
-      if (h?.waitlistEntryId === entry.id && creneau.id) {
-        await updateDoc(doc(db, "creneaux", creneau.id), { waitlistHold: deleteField() });
-      }
-      await deleteDoc(doc(db, "waitlist", entry.id));
-      await chargerWaitlist();
-      await onRefresh?.();
-    } catch (e) {
-      console.error("Retrait liste d'attente :", e);
-      alert("Retrait impossible. Réessayez.");
-    }
-    setWaitRemoving("");
-  };
-
-  // Chargement de la liste d'attente, extrait en fonction RAPPELABLE.
-  // En useEffect sur [creneau.id] seul, il ne se rejouait jamais apres un
-  // ajout : l'identifiant du creneau ne change pas, il fallait fermer et
-  // rouvrir le panneau pour voir la nouvelle entree.
-  //
-  // Deux requetes : les entrees « cours » portent creneauId, les entrees
-  // « stage » (une seule pour toute la semaine) portent creneauIds avec TOUS
-  // les jours — sinon l'attente d'un stage ne serait visible que depuis son
-  // premier jour. Le statut est filtre en memoire pour ne pas exiger un
-  // nouvel index composite Firestore.
-  const chargerWaitlist = useCallback(async () => {
-    if (!creneau.id) return;
-    const [parId, parJours] = await Promise.all([
-      getDocs(query(collection(db, "waitlist"), where("creneauId", "==", creneau.id), where("status", "==", "waiting"))),
-      getDocs(query(collection(db, "waitlist"), where("creneauIds", "array-contains", creneau.id))),
-    ]);
-    const map = new Map<string, any>();
-    parId.docs.forEach(d => map.set(d.id, { id: d.id, ...d.data() }));
-    parJours.docs.forEach(d => {
-      const data = d.data() as any;
-      if (data.status === "waiting") map.set(d.id, { id: d.id, ...data });
-    });
-    setWaitlist([...map.values()].sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0)));
-  }, [creneau.id]);
-
-  useEffect(() => { chargerWaitlist(); }, [chargerWaitlist]);
-
-  // Resync de la note de preparation quand on ouvre un autre creneau
-  // (le composant EnrollPanel est reutilise d'un creneau a l'autre).
-  useEffect(() => {
-    setNotePrepa((creneau as any).notePreparation || "");
-    setNotePrepaSaved(false);
-  }, [creneau.id]);
+  // Libérer une place tenue doit faire réapparaître l'entrée en attente : on
+  // demande au panneau de se relire plutôt que de partager son état.
+  const [rechargerAttente, setRechargerAttente] = useState(0);
 
   // Charger le solde avoir quand on sélectionne une famille
   useEffect(() => {
@@ -743,10 +557,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // ── Email créneau ──
   const [showEmailForm, setShowEmailForm] = useState(false);
-  const [emailSubject, setEmailSubject] = useState("");
-  const [emailBody, setEmailBody] = useState("");
-  const [emailSending, setEmailSending] = useState(false);
-  const [emailGenerating, setEmailGenerating] = useState(false);
   const [progressionSending, setProgressionSending] = useState(false);
 
   // Charger le nombre réel de jours du stage depuis Firestore (pas allCreneaux qui est limité à la vue)
@@ -871,7 +681,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           releasedByAdminAt: new Date().toISOString(),
         }).catch(() => {});
       }
-      await chargerWaitlist();   // l'entree repasse en « waiting » : la reafficher
+      setRechargerAttente(n => n + 1);   // l'entree repasse en « waiting » : la reafficher
       await onRefresh?.();
     } catch (e) {
       console.error("Libération hold :", e);
@@ -942,249 +752,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // sans qu'elle ait à passer par l'espace famille. Même structure de
   // document que l'inscription côté client, pour que l'acceptation et la
   // notification fonctionnent à l'identique.
-  const [waitAdding, setWaitAdding] = useState(false);
-  const addToWaitlistAdmin = async () => {
-    if (!selFam || !selChild || waitAdding) return;
-    const fam = allFamilies.find((f: any) => f.firestoreId === selFam);
-    const child: any = (fam?.children || []).find((c: any) => c.id === selChild);
-    if (!fam || !child) return;
-    const childName = child.lastName ? `${child.firstName} ${child.lastName}` : child.firstName;
-    const estStage = creneau.activityType === "stage" || creneau.activityType === "stage_journee";
-    const jours = estStage
-      ? allCreneaux
-          .filter((c: any) => sameStage(c, creneau) && (c.activityType === "stage" || c.activityType === "stage_journee"))
-          .sort((a: any, b: any) => a.date.localeCompare(b.date))
-      : [creneau];
-    const first: any = jours[0] || creneau;
-    const last: any = jours[jours.length - 1] || creneau;
-    setWaitAdding(true);
-    try {
-      const deja = await getDocs(query(
-        collection(db, "waitlist"),
-        where("creneauId", "==", first.id),
-        where("childId", "==", selChild),
-        where("familyId", "==", fam.firestoreId),
-      ));
-      if (!deja.empty) {
-        alert("Ce cavalier est déjà en liste d'attente pour ce créneau.");
-        setWaitAdding(false); return;
-      }
-      await addDoc(collection(db, "waitlist"), {
-        isStage: estStage && jours.length > 1,
-        stageKey: `${first.activityTitle}_${first.date}`,
-        creneauId: first.id,
-        creneauIds: jours.map((c: any) => c.id),
-        activityTitle: first.activityTitle,
-        activityType: first.activityType,
-        date: first.date,
-        dateFin: last.date,
-        nbJours: jours.length,
-        startTime: first.startTime,
-        endTime: first.endTime,
-        monitor: first.monitor || "",
-        familyId: fam.firestoreId,
-        familyName: fam.parentName || "",
-        familyEmail: fam.parentEmail || "",
-        childId: selChild,
-        childName,
-        status: "waiting",
-        addedByAdmin: true,
-        createdAt: serverTimestamp(),
-      });
-      setSelFam(""); setSelChild(""); setSearch("");
-      await chargerWaitlist();   // sinon l'entree n'apparait qu'apres reouverture
-      onRefresh?.();
-    } catch (e) {
-      console.error("Ajout liste d'attente :", e);
-      alert("Ajout impossible. Réessayez.");
-    }
-    setWaitAdding(false);
-  };
 
-  const filteredFamilies = useMemo(() => { if (!search) return allFamilies; const terms = search.toLowerCase().trim().split(/\s+/); return allFamilies.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [allFamilies, search]);
-
-  const acceptWaitlist = async (entry: any) => {
-    if (spots <= 0) { alert("Toujours pas de place disponible."); return; }
-    setWaitlistLoading(true);
-    try {
-      // Inscrire dans le créneau
-      const newEnrolled = [...enrolled, {
-        childId: entry.childId, childName: entry.childName,
-        familyId: entry.familyId, familyName: entry.familyName,
-        enrolledAt: new Date().toISOString(), presence: null,
-      }];
-      await updateDoc(doc(db, "creneaux", creneau.id!), {
-        enrolled: newEnrolled, enrolledCount: newEnrolled.length,
-        // Lever le hold 24h s'il concernait cette entrée (place réservée honorée)
-        ...((creneau as any).waitlistHold?.childId === entry.childId ? { waitlistHold: deleteField() } : {}),
-      });
-      // Mettre à jour le statut waitlist
-      await updateDoc(doc(db, "waitlist", entry.id), { status: "accepted", acceptedAt: new Date().toISOString() });
-      // Notifier la famille par email
-      authFetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: entry.familyEmail,
-          subject: `Une place s'est libérée — ${creneau.activityTitle}`,
-          context: "admin_place_liberee",
-          template: "placeLiberee",
-          familyId: entry.familyId,
-          creneauId: creneau.id,
-          html: emailLayout([
-            emailTitre("Une place s'est libérée"),
-            P(`Bonjour <strong>${entry.familyName}</strong>,`),
-            P(`Bonne nouvelle : une place s'est libérée pour <strong>${entry.childName}</strong>.`),
-            emailPanneau(creneau.activityTitle, [
-              emailLigne("Date", new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })),
-              emailLigne("Horaire", `${creneau.startTime}–${creneau.endTime}`),
-            ].join("")),
-            P("<strong>Cette place vous est réservée pendant 24 heures.</strong> Confirmez l'inscription depuis votre espace famille : passé ce délai, elle sera proposée aux autres familles en attente."),
-            emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(creneau.id!)}`),
-            P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
-            emailSignature(),
-          ].join("\n"), `Place disponible — ${creneau.activityTitle}`),
-        }),
-      }).catch(e => console.warn("Email waitlist:", e));
-      // Mettre à jour la liste locale
-      setWaitlist(prev => prev.filter(w => w.id !== entry.id));
-      panelToast(`✅ ${entry.childName} inscrit(e) et notifié(e) par email`, "success");
-      onClose(); // Fermer le panel pour forcer un rechargement
-    } catch (e) { console.error(e); }
-    setWaitlistLoading(false);
-  };
-
-  const uploadPlan = async (file: File) => {
-    if (!creneau.id) return;
-    setPlanUploading(true);
-    try {
-      // Accepter tous les formats image (HEIC iPhone inclus)
-      const allowed = ["image/jpeg","image/png","image/webp","image/heic","image/heif","image/gif","application/pdf"];
-      const isImage = file.type.startsWith("image/") || file.type === "";
-      if (!isImage && !allowed.includes(file.type)) throw new Error("Format non supporté (JPG, PNG, HEIC, PDF)");
-      if (file.size > 10 * 1024 * 1024) throw new Error("Fichier trop volumineux (max 10 Mo)");
-
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `plans-seance/${creneau.id}_${Date.now()}.${ext}`;
-      const storageRef = ref(storage, path);
-
-      // Upload direct depuis le navigateur
-      const snapshot = await uploadBytesResumable(storageRef, file, {
-        contentType: file.type,
-      });
-      const url = await getDownloadURL(snapshot.ref);
-
-      // ⚠️ NE PAS supprimer l'ancien fichier : il peut être référencé par une
-      // note pédagogique dans l'historique. Le Storage garde donc tous les
-      // plans (~quelques Mo par séance, négligeable). Pour la suppression
-      // groupée, il faudra un script de nettoyage qui vérifie qu'aucune note
-      // ne pointe vers un fichier avant de l'effacer.
-
-      await updateDoc(doc(db, "creneaux", creneau.id), {
-        planSeanceUrl: url,
-        planSeancePath: path,
-        planSeanceType: file.type,
-        planSeanceUpdatedAt: new Date().toISOString(),
-      });
-      setPlanUrl(url);
-      setPlanType(file.type);
-    } catch (e: any) {
-      alert(`Erreur upload : ${e.message}`);
-    }
-    setPlanUploading(false);
-  };
-
-  const deletePlan = async () => {
-    if (!creneau.id || !confirm("Retirer le plan de séance courant ?\n\nLe fichier reste accessible dans l'historique des notes pédagogiques (si une note y fait référence).")) return;
-    // ⚠️ On NE supprime PAS le fichier du Storage : il peut être référencé
-    // par une note dans l'historique. Seule la référence courante est retirée.
-    await updateDoc(doc(db, "creneaux", creneau.id), {
-      planSeanceUrl: null,
-      planSeancePath: null,
-      planSeanceType: null,
-    });
-    setPlanUrl(null);
-    setPlanType(null);
-  };
-
-  // ── Enregistrer une note pédagogique ────────────────────────────────
-  // Snapshot du plan courant (URL/path/type) pour construire l'historique.
-  // Si aucun plan n'est uploadé, les champs plan* sont à null sur la note.
-  // Sauvegarde de la note de preparation (sur le doc creneau lui-meme).
-  // Appelee soit au clic du bouton, soit en auto-save au blur du textarea.
-  const saveNotePrepa = async () => {
-    if (!creneau.id) return;
-    setNotePrepaSaving(true);
-    try {
-      await updateDoc(doc(db, "creneaux", creneau.id), {
-        notePreparation: notePrepa.trim() || null,
-        notePreparationUpdatedAt: new Date().toISOString(),
-      });
-      setNotePrepaSaved(true);
-      // Le petit "✓ Enregistre" disparait apres 2s
-      setTimeout(() => setNotePrepaSaved(false), 2000);
-    } catch (e) {
-      console.error("saveNotePrepa:", e);
-      panelToast("Erreur enregistrement note de preparation", "error");
-    }
-    setNotePrepaSaving(false);
-  };
-
-  const saveNote = async () => {
-    if (!creneau.id) return;
-    const texte = noteTexte.trim();
-    if (!texte) { panelToast("Note vide", "info"); return; }
-    setNoteSaving(true);
-    try {
-      const docData: any = {
-        creneauId: creneau.id,
-        texte,
-        // Snapshot du plan courant au moment de la note
-        planSeanceUrl: planUrl || null,
-        planSeancePath: (creneau as any).planSeancePath || null,
-        planSeanceType: planType || null,
-        // Métadonnées de traçabilité
-        createdAt: serverTimestamp(),
-        createdByEmail: user?.email || null,
-        createdByName: user?.displayName || null,
-        // Contexte du créneau (utile pour requêtes transversales futures)
-        creneauDate: creneau.date,
-        creneauActivityTitle: creneau.activityTitle,
-        creneauMonitor: creneau.monitor,
-      };
-      const ref = await addDoc(collection(db, "notes-seance"), docData);
-      // Mise à jour optimiste de l'historique avec un createdAt approximatif
-      // (le serverTimestamp réel sera celui du serveur, mais on n'attend pas
-      // un refetch pour montrer la note dans la liste).
-      setNotes(prev => [{
-        id: ref.id,
-        ...docData,
-        // Approximation : Firestore Timestamp { seconds, nanoseconds } pour
-        // le tri client en attendant le serverTimestamp réel.
-        createdAt: { seconds: Math.floor(Date.now() / 1000), nanoseconds: 0 },
-      }, ...prev]);
-      setNoteTexte("");
-      setShowHistorique(true);
-      panelToast("✅ Note enregistrée", "success");
-    } catch (e: any) {
-      console.error(e);
-      panelToast("Erreur lors de l'enregistrement", "error");
-    }
-    setNoteSaving(false);
-  };
-
-  // ── Supprimer une note de l'historique ──────────────────────────────
-  const deleteNote = async (noteId: string) => {
-    if (!confirm("Supprimer cette note de l'historique ?\n\nCette action est irréversible.")) return;
-    try {
-      await deleteDoc(doc(db, "notes-seance", noteId));
-      setNotes(prev => prev.filter(n => n.id !== noteId));
-      panelToast("Note supprimée", "success");
-    } catch (e) {
-      console.error(e);
-      panelToast("Erreur suppression", "error");
-    }
-  };
   const fam = allFamilies.find(f => f.firestoreId === selFam); const children = fam?.children || [];
   const available = children.filter((c: any) => {
     if (enrolledIds.includes(c.id)) return false;
@@ -1445,10 +1013,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // le tarif 1×/semaine au lieu de grimper vers le 2×/semaine.
   const freqAjouteeAdmin = frequenceCours * coefRythme;
   const freqCumuleeAdmin = Math.min(3, frequenceDejaInscrite + freqAjouteeAdmin);
-  const prixForfaitAnnuel = ajoutHeureAdmin
-    ? Math.max(0, prixForfaitPlein(freqCumuleeAdmin) - prixForfaitPlein(frequenceDejaInscrite))
-    : prixForfaitPlein(freqAjouteeAdmin);
-  const prixForfaitBrut = Math.round(prixForfaitAnnuel * prorata);
 
   // Réduction famille sur le forfait (chargée depuis settings/degressivite)
   const [familyDiscountRules, setFamilyDiscountRules] = useState<{ nth: number; discount: number }[]>([]);
@@ -1460,25 +1024,44 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     }).catch(() => {});
   }, []);
 
-  const familyRule = familyDiscountRules.find(r => r.nth === rangEnfantFamille);
-  const remiseBaremePercent = familyRule?.discount || 0;
-  // Une saisie manuelle prend le pas sur le barème — y compris pour le
-  // descendre, ou pour en accorder une là où le barème n'en prévoit aucune.
+  // Le prix du forfait annuel vient de calculerForfaitAnnuel, la même fonction
+  // que l'espace famille et les devis. Cet écran le recalculait à la main :
+  // les deux versions avaient déjà divergé, et la remise saisie à la main
+  // n'existait qu'ici. Un tarif annoncé à la famille ne peut pas différer de
+  // celui que l'inscription facture.
   const remiseSaisie = remisePctManuel.trim() !== "" && Number.isFinite(Number(remisePctManuel));
-  const familyDiscountPercent = remiseSaisie
-    ? Math.min(100, Math.max(0, Number(remisePctManuel)))
-    : remiseBaremePercent;
-  const remiseHorsBareme = remiseSaisie && familyDiscountPercent !== remiseBaremePercent;
-  const familyDiscountAmount = familyDiscountPercent > 0 ? Math.round(prixForfaitBrut * familyDiscountPercent / 100 * 100) / 100 : 0;
-  const prixForfait = prixForfaitBrut - familyDiscountAmount;
+  const calculForfait = useMemo(() => calculerForfaitAnnuel({
+    frequence: freqAjouteeAdmin,
+    sessionsRestantes,
+    sessionsTotalSaison,
+    rangEnfant: rangEnfantFamille,
+    avecAdhesion: adhesion,
+    avecLicence: licence,
+    licenceMoins18: licenceType === "moins18",
+    tarifs: inscParams,
+    familyDiscountRules,
+    frequenceDejaInscrite,
+    remisePersonnaliseePercent: remiseSaisie ? Number(remisePctManuel) : null,
+  }), [
+    freqAjouteeAdmin, sessionsRestantes, sessionsTotalSaison, rangEnfantFamille,
+    adhesion, licence, licenceType, inscParams, familyDiscountRules,
+    frequenceDejaInscrite, remiseSaisie, remisePctManuel,
+  ]);
 
-  const prixAdhesionDegressif =
+  const prixForfaitAnnuel = calculForfait.prixForfaitAnnuelPlein;
+  const prixForfaitBrut = calculForfait.prixForfaitBrut;
+  const remiseBaremePercent = calculForfait.remiseBaremePercent;
+  const familyDiscountPercent = calculForfait.familyDiscountPercent;
+  const remiseHorsBareme = calculForfait.remiseHorsBareme;
+  const familyDiscountAmount = calculForfait.familyDiscountAmount;
+  const prixForfait = calculForfait.prixForfaitNet;
+  const prixAdhesionDegressif = calculForfait.prixAdhesion || (
     rangEnfantFamille === 1 ? inscParams.adhesion1 :
     rangEnfantFamille === 2 ? inscParams.adhesion2 :
     rangEnfantFamille === 3 ? inscParams.adhesion3 :
-    inscParams.adhesion4plus;
-
-  const totalAnnuel = (adhesion ? prixAdhesionDegressif : 0) + (licence ? prixLicence : 0) + prixForfait;
+    inscParams.adhesion4plus
+  );
+  const totalAnnuel = calculForfait.totalAnnuel;
 
   // Calcul stage : réductions fratrie uniquement sur les enfants inscrits EN MÊME TEMPS
   // Pas de cumul avec les inscriptions passées — une fois encaissé, compteur reset
@@ -1588,10 +1171,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [isStage, selectedChildren, children, priceTTC, stageMode, stageDaysCount, creneau, fam, discountSettings, vacationPeriods]);
 
   const stageTotalTTC = stageLines.reduce((s, l) => s + l.prixReduit, 0);
-  const ACOMPTE_PAR_ENFANT = STAGE_ACOMPTE_EUROS; // par enfant — source unique cgv-clauses
-  const showAcompte = stageMode === "semaine" && stagePayChoice === "acompte" && stageTotalTTC > ACOMPTE_PAR_ENFANT * stageLines.length;
-  const stageAcompte = showAcompte ? Math.min(ACOMPTE_PAR_ENFANT * stageLines.length, stageTotalTTC) : stageTotalTTC;
-  const stageSolde = showAcompte ? Math.round((stageTotalTTC - stageAcompte) * 100) / 100 : 0;
+  // L'acompte suit la même règle qu'en ligne (panier-reservation) : un montant
+  // fixe par enfant, jamais plus que le total. Cet écran la recalculait pour
+  // son compte ; une famille ne peut pas lire un chiffre en ligne et en voir
+  // un autre sur sa facture.
+  const showAcompte = stageMode === "semaine" && stagePayChoice === "acompte"
+    && acompteApplicable(stageLines.length, stageTotalTTC);
+  const { acompte: acompteDuStage, solde: soldeDuStage } =
+    montantsAcompteStage(stageLines.length, stageTotalTTC);
+  const stageAcompte = showAcompte ? acompteDuStage : stageTotalTTC;
+  const stageSolde = showAcompte ? soldeDuStage : 0;
 
   // ─────────────────────────────────────────────────────────────────────
   //  Alerte "créneau complet" après inscription
@@ -1650,960 +1239,29 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     }
   };
 
+  // Ce que l'inscription consulte et remet à zéro, en toutes lettres :
+  // voir inscrire-depuis-panneau.ts.
   const handleEnroll = async () => {
-    // Mode non-stage, non-compétition, ponctuel, 2+ enfants sélectionnés :
-    // inscrire un par un avec un paiement séparé par enfant (plus simple pour
-    // les avoirs/remboursements individuels).
-    if (!isStage && !isCompetition && inscriptionMode === "ponctuel" && selectedChildren.length > 1 && fam) {
-      setEnrolling(true);
-      try {
-        const childrenToEnroll = selectedChildren
-          .map(cid => children.find((c: any) => c.id === cid))
-          .filter(Boolean) as any[];
-
-        const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
-        const encaisseEnsemble = showPay && !freeEnroll && !useRattrapage && !preinscription;
-        // Encaissement immédiat de plusieurs cavaliers : on inscrit SANS mode de
-        // paiement, ce qui fait tomber tous les enfants dans la même commande
-        // (fusion des impayés récents de la famille), puis on encaisse cette
-        // commande une seule fois. Sinon chaque enfant produisait sa facture et
-        // son encaissement : deux lignes de 57€ au journal pour une seule
-        // transaction CB de 114€, que le rapprochement bancaire ne retrouve pas
-        // (le match par combinaison est désactivé, cf. comptabilité).
-        const payModeToUse = encaisseEnsemble
-          ? undefined
-          : (showPay && !freeEnroll && !useRattrapage ? payMode : undefined);
-
-        const enrolledNames: string[] = [];
-        const commandeIds = new Set<string>();
-        for (const child of childrenToEnroll) {
-          const firstName = child.firstName || "—";
-          const lastName = child.lastName || "";
-          const childName = lastName ? `${firstName} ${lastName}` : firstName;
-          try {
-            const resultat = await onEnroll(
-              creneau.id!,
-              {
-                childId: child.id,
-                childName,
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "—",
-                enrolledAt: new Date().toISOString(),
-                ...(preinscription ? { preinscription: true } : {}),
-              } as any,
-              preinscription ? undefined : payModeToUse,
-              preinscription ? { skipPayment: true, skipEmail: true } : freeEnrollOptions,
-            );
-            if (typeof resultat === "string" && resultat) commandeIds.add(resultat);
-            enrolledNames.push(firstName);
-          } catch (err) {
-            console.error(`[EnrollPanel] échec inscription ${firstName}:`, err);
-            panelToast(`Erreur inscription ${firstName}`, "error");
-          }
-        }
-
-        // Un seul règlement pour toute la commande : une ligne au journal, du
-        // montant réellement passé sur le terminal.
-        let encaisseOk = true;
-        if (encaisseEnsemble && enrolledNames.length > 0) {
-          if (commandeIds.size !== 1) {
-            // Les enfants ne se sont pas retrouvés sur la même commande (fenêtre
-            // de fusion dépassée, échec partiel). On ne devine pas : la commande
-            // reste en impayé, à encaisser depuis Paiements.
-            encaisseOk = false;
-            console.warn(`[EnrollPanel] ${commandeIds.size} commande(s) pour ${enrolledNames.length} cavaliers — encaissement groupé abandonné`);
-          } else {
-            const paymentId = [...commandeIds][0];
-            try {
-              const paySnap = await getDoc(doc(db, "payments", paymentId));
-              if (!paySnap.exists()) throw new Error("commande introuvable");
-              const pData = paySnap.data() as any;
-
-              // On encaisse ce qui vient d'être inscrit, PAS le total de la
-              // commande : les impayés récents de la famille sont fusionnés
-              // dans la même commande (fenêtre de 7 jours), et encaisser son
-              // total prélèverait une dette antérieure que le terminal n'a pas
-              // vue. Les lignes sont relues en base pour tenir compte des
-              // remises appliquées à l'inscription.
-              const childIds = new Set(childrenToEnroll.map(c => c.id));
-              const montantInscrit = (pData.items || [])
-                .filter((i: any) => i.creneauId === creneau.id && childIds.has(i.childId))
-                .reduce((s: number, i: any) => s + (Number(i.priceTTC) || 0), 0);
-              const restantDu = Math.round(((Number(pData.totalTTC) || 0) - (Number(pData.paidAmount) || 0)) * 100) / 100;
-              // Jamais plus que ce qui reste dû sur la commande.
-              const aEncaisser = Math.round(Math.min(montantInscrit, restantDu) * 100) / 100;
-              if (aEncaisser <= 0) throw new Error("montant à encaisser nul");
-
-              await enregistrerEncaissement(
-                paymentId,
-                pData,
-                aEncaisser,
-                payMode,
-                "",
-                creneau.activityTitle,
-              );
-            } catch (e) {
-              encaisseOk = false;
-              console.error("[EnrollPanel] encaissement groupé:", e);
-              panelToast("Inscriptions créées, mais l'encaissement a échoué — à encaisser depuis Paiements", "error");
-            }
-          }
-        }
-
-        const totalEncaisse = priceTTC * enrolledNames.length;
-        const payInfo = freeEnroll ? ` — 🎁 offert (${freeReason})`
-          : encaisseEnsemble ? (encaisseOk ? ` — encaissé ✅ ${totalEncaisse.toFixed(2)}€` : " — à encaisser")
-          : showPay ? " — encaissé ✅"
-          : priceTTC > 0 ? " — paiement(s) en attente" : "";
-        setJustEnrolled(`${enrolledNames.length} cavalier${enrolledNames.length > 1 ? "s" : ""} inscrit${enrolledNames.length > 1 ? "s" : ""} : ${enrolledNames.join(", ")}${payInfo}`);
-        if (encaisseOk) {
-          panelToast(`${enrolledNames.length} inscription${enrolledNames.length > 1 ? "s" : ""} créée${enrolledNames.length > 1 ? "s" : ""} — ${totalEncaisse.toFixed(2)}€ au total`, "success");
-        }
-        // Alerter si le creneau passe complet apres la salve d'inscriptions
-        await checkAndAlertIfFull([creneau.id!]);
-      } finally {
-        setSelChild(""); setSelectedChildren([]); setSelFam(""); setSearch("");
-        setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage");
-        setUseRattrapage(null); setInscriptionMode("ponctuel");
-        setTimeout(() => setJustEnrolled(""), 5000);
-      }
-      return;
-    }
-
-    // Mode stage : inscription multi-enfants
-    if (isStage && selectedChildren.length > 0 && fam) {
-      setEnrolling(true);
-      try {
-        // Trouver les créneaux à inscrire selon le mode choisi
-        let creneauxAInscrire = [creneau];
-        if (stageMode === "semaine") {
-          const creneauDate = new Date(creneau.date);
-          const dayOfWeek = creneauDate.getDay();
-          const monday = new Date(creneauDate);
-          monday.setDate(monday.getDate() - ((dayOfWeek + 6) % 7));
-          const sunday = new Date(monday);
-          sunday.setDate(sunday.getDate() + 6);
-          const monStr = monday.toISOString().split("T")[0];
-          const sunStr = sunday.toISOString().split("T")[0];
-
-          // `allCreneaux` n'est que la vue courante du planning : en vue jour,
-          // il ne contient que le jour affiché. La semaine est donc TOUJOURS
-          // relue en base, jamais déduite de ce qui est à l'écran.
-          //
-          // Le code se contentait auparavant d'une relecture « si on n'a
-          // trouvé qu'un seul créneau ». Un stage à deux séances par jour en
-          // trouvait deux dès le lundi : le garde-fou ne se déclenchait pas et
-          // le cavalier n'était inscrit que sur la journée du lundi. Compter
-          // les résultats ne dit pas si la vue est complète.
-          const filtreStage = (liste: any[]) => liste
-            .filter(c =>
-              sameStage(c, creneau) &&
-              (c.activityType === "stage" || c.activityType === "stage_journee") &&
-              c.date >= monStr && c.date <= sunStr
-            )
-            .sort((a, b) => a.date.localeCompare(b.date));
-
-          let stageCreneaux = filtreStage(allCreneaux);
-          try {
-            const weekSnap = await getDocs(query(
-              collection(db, "creneaux"),
-              where("date", ">=", monStr),
-              where("date", "<=", sunStr)
-            ));
-            const depuisBase = filtreStage(weekSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[]);
-            // La base fait foi. On ne garde la liste locale que si la requête
-            // n'a rien ramené — mieux vaut inscrire le jour affiché que rien.
-            if (depuisBase.length > 0) stageCreneaux = depuisBase;
-            console.log(`📋 Stage semaine : ${stageCreneaux.length} jour(s) pour "${creneau.activityTitle}" (${monStr} → ${sunStr})`);
-          } catch (e) {
-            console.error("Erreur chargement stage semaine:", e);
-          }
-
-          creneauxAInscrire = stageCreneaux.length > 0 ? stageCreneaux : [creneau];
-        }
-        // Mode "jour" → juste le créneau cliqué (déjà par défaut)
-
-        // Calculer un stageKey STABLE pour ce stage : il est le même pour
-        // tous les créneaux du stage (peu importe lequel on a cliqué dans
-        // le planning). Format : "activityTitle_premierJourDuStage".
-        // On le stocke dans chaque enrolled + dans l'item paiement, pour que
-        // le filtre planning puisse matcher les badges paiement de manière
-        // stricte (aucun risque de confusion entre deux stages de même titre
-        // sur deux semaines différentes).
-        const stageKey = `${creneau.activityTitle}_${creneauxAInscrire[0]?.date || creneau.date}`;
-
-        // Inscrire chaque enfant dans TOUS les jours du stage (inscription technique seulement, pas de paiement par jour)
-        const conflictsFound: string[] = [];
-        for (const line of stageLines) {
-          for (const sc of creneauxAInscrire) {
-            const enrolled = sc.enrolled || [];
-            if (enrolled.some((e: any) => e.childId === line.childId)) continue;
-            // Vérifier conflit horaire avec un autre créneau ce jour
-            const hasConflict = allCreneaux.find(other =>
-              other.id !== sc.id &&
-              other.date === sc.date &&
-              (other.enrolled || []).some((e: any) => e.childId === line.childId) &&
-              sc.startTime < other.endTime && other.startTime < sc.endTime
-            );
-            if (hasConflict) {
-              conflictsFound.push(`${line.childName} (${sc.date} : conflit avec ${hasConflict.activityTitle})`);
-              continue;
-            }
-            await onEnroll(sc.id!, {
-              childId: line.childId, childName: line.childName,
-              familyId: fam.firestoreId, familyName: fam.parentName || "—",
-              enrolledAt: new Date().toISOString(),
-              stageKey, // ← NOUVEAU : permet le matching paiement précis
-              ...(preinscription ? { preinscription: true, preinscriptionMode: "stage" } : {}),
-            } as any, undefined, { skipPayment: true, skipEmail: true });
-          }
-        }
-        if (conflictsFound.length > 0) {
-          panelToast(`Conflits horaires ignorés : ${conflictsFound.join(", ")}`, "warning");
-        }
-
-        // Alerter pour chaque jour du stage qui passe complet (demande Nicolas)
-        await checkAndAlertIfFull(creneauxAInscrire.map(c => c.id!).filter(Boolean));
-
-        // Pré-inscription : on s'arrête là. Les places sont retenues, aucun
-        // panier n'est constitué — donc ni commande, ni facture, ni relance.
-        if (preinscription) {
-          panelToast(
-            `${stageLines.length} cavalier(s) pré-inscrit(s) au stage — aucun paiement créé`,
-            "success"
-          );
-          setSelectedChildren([]); setPreinscription(false); setInscriptionFaite(true);
-          await onRefresh?.();
-          setEnrolling(false);
-          return;
-        }
-
-        // Ajouter les lignes au panier de la famille (1 seul paiement pending)
-        const scheduleDesc = formatStageSchedule(creneauxAInscrire);
-        const newItems = stageLines.map(l => ({
-          activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName}${l.remiseEuros > 0 ? ` (-${l.remiseEuros}€)` : ""}`,
-          childId: l.childId, childName: l.childName,
-          stageKey, // ← maintenant STABLE (avant : dépendait du créneau cliqué)
-          activityType: creneau.activityType,
-          stageSchedule: scheduleDesc,
-          stageDates: creneauxAInscrire.map(c => ({ date: c.date, startTime: c.startTime, endTime: c.endTime })),
-          priceHT: l.prixReduit / 1.055, tva: 5.5, priceTTC: l.prixReduit,
-        }));
-
-        // Assurance occasionnelle si cochée
-        if (assuranceOccasionnelle) {
-          for (const line of stageLines) {
-            newItems.push({
-              activityTitle: `Assurance occasionnelle 1 mois — ${line.childName}`,
-              childId: line.childId, childName: line.childName,
-              stageKey: `${creneau.activityTitle}_${creneau.date}`,
-              activityType: "option",
-              stageSchedule: "",
-              stageDates: [],
-              priceHT: inscParams.assuranceOccasionnelle / 1.2, tva: 20,
-              priceTTC: inscParams.assuranceOccasionnelle,
-            });
-          }
-        }
-
-        // Chercher un paiement pending existant pour cette famille (PANIER UNIQUE)
-        const existingSnap = await getDocs(query(
-          collection(db, "payments"),
-          where("familyId", "==", fam.firestoreId),
-          where("status", "==", "pending"),
-        ));
-
-        // Prendre la commande ouverte la plus récente — EXCLURE les échéances de forfait
-        const pendingDocs = existingSnap.docs
-          .filter(d => !(d.data().echeancesTotal > 1))
-          .sort((a, b) => {
-            const da = a.data().date?.seconds || 0;
-            const db2 = b.data().date?.seconds || 0;
-            return db2 - da;
-          });
-        if (pendingDocs.length > 1) {
-          console.warn(`⚠️ ${pendingDocs.length} commandes pending pour famille ${fam.firestoreId} — fusion dans la plus récente`);
-        }
-        const openOrder = pendingDocs.length > 0 ? pendingDocs[0] : null;
-
-        // Commande à laquelle ces stages sont rattachés : la confirmation
-        // groupée la relit au moment de l'envoi pour savoir ce qui a déjà été
-        // encaissé entre-temps.
-        let commandeId = "";
-
-        if (openOrder) {
-          // Fusionner avec la commande existante
-          commandeId = openOrder.id;
-          const existingData = openOrder.data();
-          const mergedItems = [...(existingData.items || []), ...newItems];
-          const mergedTotal = Math.round(mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
-
-          // Acompte de la commande ENTIÈRE, enfants déjà présents compris :
-          // 30 € par enfant inscrit à un stage.
-          const nbEnfantsStage = mergedItems.filter(
-            (i: any) => i.activityType === "stage" || i.activityType === "stage_journee",
-          ).length || stageLines.length;
-          const acompteTotal = Math.min(ACOMPTE_PAR_ENFANT * nbEnfantsStage, mergedTotal);
-          const soldeTotal = Math.round((mergedTotal - acompteTotal) * 100) / 100;
-
-          await updateDoc(doc(db, "payments", openOrder.id), {
-            items: mergedItems,
-            totalTTC: mergedTotal,
-            stageDate: existingData.stageDate || creneauxAInscrire[0]?.date || creneau.date,
-            stageTitle: existingData.stageTitle || creneau.activityTitle,
-            familyEmail: existingData.familyEmail || fam.parentEmail || "",
-            acompteAmount: acompteTotal,
-            soldeAmount: soldeTotal,
-            updatedAt: serverTimestamp(),
-          });
-
-          // ── Lien de paiement du COMPLÉMENT d'acompte ────────────────────
-          //
-          // L'envoi n'existait que pour une commande neuve. Inscrire un second
-          // enfant dans une commande déjà ouverte ne déclenchait donc aucun
-          // email : la famille restait avec le lien du premier — 30 € et un
-          // « solde de 150 € » devenus faux, alors que la commande en réclamait
-          // 60 et 289,20. Rien n'était perdu, mais plus rien n'était juste.
-          //
-          // On ne redemande que ce qui manque : l'acompte de la commande
-          // entière moins ce qui a déjà été réglé.
-          const emailFamille = existingData.familyEmail || fam.parentEmail || "";
-          if (showAcompte && acompteReglement === "lien" && emailFamille) {
-            const dejaRegle = existingData.paidAmount || 0;
-            const complement = Math.round(Math.max(0, acompteTotal - dejaRegle) * 100) / 100;
-            if (complement > 0) {
-              authFetch("/api/send-payment-link", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  paymentId: openOrder.id,
-                  recipientEmail: emailFamille,
-                  amount: complement,
-                  familyId: fam.firestoreId,
-                  familyName: fam.parentName || "",
-                  message: `Bonjour,\n\nVotre inscription porte maintenant sur ${nbEnfantsStage} enfant${nbEnfantsStage > 1 ? "s" : ""}, pour un total de ${mergedTotal.toFixed(2)}€.\n\nL'acompte est de ${acompteTotal.toFixed(2)}€${dejaRegle > 0 ? `, dont ${dejaRegle.toFixed(2)}€ déjà réglés` : ""}. Voici le lien pour régler ${complement.toFixed(2)}€.\n\nCe message remplace le précédent. Le solde de ${soldeTotal.toFixed(2)}€ vous sera demandé 7 jours avant le stage.`,
-                }),
-              }).catch(e => console.warn("Lien complément acompte:", e));
-            }
-          }
-
-          // Acompte réglé au comptoir : même écriture comptable que la caisse,
-          // et même confirmation d'acompte que lorsqu'il est payé en ligne.
-          if (showAcompte && acompteReglement === "sur_place") {
-            await enregistrerEncaissement(
-              openOrder.id,
-              { ...existingData, items: mergedItems, totalTTC: Math.round(mergedTotal * 100) / 100 },
-              stageAcompte,
-              acompteMode,
-              acompteRef,
-              `Acompte ${creneau.activityTitle}`,
-            );
-            authFetch("/api/admin/stage-acompte-recu", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ paymentId: openOrder.id, montant: stageAcompte, mode: acompteMode }),
-            }).catch(e => console.warn("Confirmation acompte:", e));
-          }
-        } else {
-          // Créer une nouvelle commande stage avec infos acompte
-          const newPayRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
-            familyId: fam.firestoreId,
-            familyName: fam.parentName || "",
-            familyEmail: fam.parentEmail || "",
-            items: newItems,
-            totalTTC: stageTotalTTC,
-            paymentMode: "",
-            paymentRef: "",
-            status: "pending",
-            paidAmount: 0,
-            stageDate: creneauxAInscrire[0]?.date || creneau.date,
-            stageTitle: creneau.activityTitle,
-            ...(showAcompte ? { acompteAmount: stageAcompte, soldeAmount: stageSolde } : {}),
-            date: serverTimestamp(),
-          });
-          commandeId = newPayRef.id;
-
-          // Acompte réglé au comptoir : on encaisse ici, sans lien de paiement.
-          if (showAcompte && acompteReglement === "sur_place") {
-            await enregistrerEncaissement(
-              newPayRef.id,
-              {
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                items: newItems,
-                totalTTC: stageTotalTTC,
-              },
-              stageAcompte,
-              acompteMode,
-              acompteRef,
-              `Acompte ${creneau.activityTitle}`,
-            );
-            // Confirmation d'acompte — le pendant du webhook CAWL, qui ne se
-            // déclenche pas quand l'argent est reçu au comptoir.
-            authFetch("/api/admin/stage-acompte-recu", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ paymentId: newPayRef.id, montant: stageAcompte, mode: acompteMode }),
-            }).catch(e => console.warn("Confirmation acompte:", e));
-          }
-
-          // Envoyer automatiquement le lien de paiement pour l'acompte
-          if (showAcompte && acompteReglement === "lien" && fam.parentEmail) {
-            authFetch("/api/send-payment-link", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                paymentId: newPayRef.id,
-                recipientEmail: fam.parentEmail,
-                amount: stageAcompte,
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                message: `Bonjour,\n\nVoici le lien de paiement pour l'acompte du stage "${creneau.activityTitle}" (${stageAcompte}€).\n\nLe solde de ${stageSolde}€ vous sera demandé 7 jours avant le stage.`,
-              }),
-            }).catch(e => console.warn("Lien paiement acompte:", e));
-          }
-        }
-
-        const noms = stageLines.map(l => l.childName).join(", ");
-        setJustEnrolled(`${noms} inscrit(s) dans ${creneauxAInscrire.length} jour(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? ` (acompte ${stageAcompte}€ + solde ${stageSolde}€ J-7)` : ""}`);
-
-        // Confirmation d'inscription — mise en file, pas envoi immédiat.
-        //
-        // Inscrire cinq enfants répartis sur trois stages, c'est trois
-        // passages ici : la famille recevait trois lettres presque identiques
-        // dans la même minute pour ce qui est, de son côté, une seule
-        // inscription et un seul règlement. La confirmation attend donc
-        // quelques minutes que les stages suivants de la même famille la
-        // rejoignent (lib/stage-confirmations), puis part une seule fois —
-        // un panneau par stage, un total unique.
-        //
-        // Sauf quand l'acompte vient d'être encaissé au comptoir : dans ce
-        // cas /api/admin/stage-acompte-recu a déjà envoyé « Acompte confirmé —
-        // la place est réservée », qui dit la même chose en mieux. La famille
-        // recevait les deux à une seconde d'intervalle.
-        const acompteEncaisseAuComptoir = showAcompte && acompteReglement === "sur_place";
-        if (fam.parentEmail && !acompteEncaisseAuComptoir) {
-          try {
-            const dates = stageMode === "jour"
-              ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
-              : creneauxAInscrire.map(c => new Date(c.date).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "long" })).join(", ");
-            const res = await authFetch("/api/admin/confirmation-stage", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                email: fam.parentEmail,
-                paymentId: commandeId,
-                // L'acompte part dans un lien de paiement séparé
-                // (send-payment-link) : la lettre ne porte pas de bouton.
-                lienSepare: showAcompte && acompteReglement === "lien",
-                stage: {
-                  stageKey,
-                  stageTitle: creneau.activityTitle,
-                  dates,
-                  dateDebut: creneauxAInscrire[0]?.date || creneau.date,
-                  creneauId: creneau.id,
-                  enfants: stageLines.map(l => ({ name: l.childName, prix: l.prixReduit, remise: l.remiseEuros })),
-                  // Ce qui est réclamé maintenant : l'acompte quand il y en a
-                  // un, le prix entier sinon — l'inscription part alors aux
-                  // impayés et le lien de paiement suit. Dans les deux cas la
-                  // lettre annonce une place retenue, jamais une inscription
-                  // « confirmée » que rien n'a payée.
-                  aRegler: showAcompte ? stageAcompte : stageTotalTTC,
-                  solde: showAcompte ? stageSolde : 0,
-                },
-              }),
-            });
-            const fileConfirmation = await res.json().catch(() => null);
-            if (fileConfirmation?.queued) {
-              setConfirmationEnAttente({
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                nbStages: fileConfirmation.nbStages || 1,
-                envoiPrevuA: fileConfirmation.envoiPrevuA || "",
-              });
-              setEnvoiConfirmation("");
-              programmerEnvoiConfirmation(fam.firestoreId, fileConfirmation.envoiPrevuA || "");
-            }
-          } catch (e) { console.error("Confirmation stage (mise en file):", e); }
-        }
-
-        // Notification push — hors du bloc email : elle doit partir aussi quand
-        // l'acompte a été encaissé au comptoir, cas où l'email de confirmation
-        // est volontairement omis. Son titre suit l'état réel de la place.
-        {
-          // « Confirmée » est réservé à ce qui est payé : tant que rien n'est
-          // encaissé — le cas courant depuis l'administration, où le lien de
-          // paiement part après l'inscription — la place est seulement retenue.
-          const regleAuComptoir = showAcompte && acompteReglement === "sur_place";
-          const enAttenteReglement = !regleAuComptoir;
-          authFetch("/api/push", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              familyId: fam.firestoreId,
-              title: enAttenteReglement ? "Inscription enregistrée — règlement à venir" : "Inscription confirmée",
-              body: enAttenteReglement
-                ? `${noms} : la place au stage ${creneau.activityTitle} est retenue jusqu'au règlement.`
-                : `${noms} inscrit(s) au stage ${creneau.activityTitle}`,
-              url: enAttenteReglement ? "/espace-cavalier/factures" : "/espace-cavalier/reservations",
-            }),
-          }).catch(() => {});
-        }
-
-        panelToast(`${noms} inscrit(s) — ${stageTotalTTC.toFixed(2)}€${showAcompte ? (acompteReglement === "sur_place" ? ` (acompte ${stageAcompte}€ encaissé + solde J-7)` : ` (acompte ${stageAcompte}€ + solde J-7)`) : " — paiement en attente"}`, "success");
-      } catch (e) { console.error(e); panelToast("Erreur lors de l'inscription", "error"); }
-      setSelectedChildren([]);
-      setSelChild(""); setSelFam(""); setSearch(""); setEnrolling(false);
-      setTimeout(() => setJustEnrolled(""), 6000);
-
-      // Si mode jour : proposer d'inscrire dans d'autres jours du stage
-      if (stageMode === "jour" && fam) {
-        const creneauDate = new Date(creneau.date);
-        const dow = creneauDate.getDay();
-        const mon = new Date(creneauDate); mon.setDate(mon.getDate() - ((dow + 6) % 7));
-        const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
-        // Utiliser weekCreneaux (chargé depuis Firestore) plutôt qu'allCreneaux (limité à la vue)
-        const source = weekCreneaux.length > 0 ? weekCreneaux : allCreneaux;
-        const autresJours = source.filter(c =>
-          c.activityTitle === creneau.activityTitle &&
-          (c.activityType === "stage" || c.activityType === "stage_journee") &&
-          new Date(c.date) >= mon && new Date(c.date) <= sun &&
-          c.id !== creneau.id
-        ).map(c => ({
-          id: c.id!,
-          date: c.date,
-          label: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
-        }));
-        if (autresJours.length > 0) {
-          setShowAddDays({
-            familyId: fam.firestoreId,
-            enfants: stageLines.map(l => ({ childId: l.childId, childName: l.childName })),
-            joursRestants: autresJours,
-            totalJoursStage: autresJours.length + 1, // tous les jours de la semaine pour ce stage
-            joursInscrits: 1, // on vient d'en inscrire 1
-            stageTitle: creneau.activityTitle,
-            creneauRef: creneau, // pour accéder aux prix multi-jours
-          });
-        }
-      }
-      return;
-    }
-
-    // Mode cours/forfait : inscription simple
-    if (!selChild || !fam) return;
-    setEnrolling(true);
-    const child = children.find((c: any) => c.id === selChild);
-    const childFirstName = (child as any)?.firstName || "—";
-    const childLastName = (child as any)?.lastName || "";
-    const childName = childLastName ? `${childFirstName} ${childLastName}` : childFirstName;
-
-    const createdPaymentIds: string[] = [];
-
-    // ── PRÉ-INSCRIPTION ANNUELLE ────────────────────────────────────────
-    // La branche annuelle ci-dessous crée le forfait, l'échéancier et le
-    // paiement AVANT d'inscrire : elle ne peut pas être neutralisée par les
-    // options passées à onEnroll. On la court-circuite donc entièrement.
-    // Le cavalier est simplement posé sur le créneau, marqué pré-inscrit.
-    if (inscriptionMode === "annuel" && preinscription) {
-      if (!selChild || !fam) return;
-      // childName (calculé plus haut) porte « Prénom Nom » : ne pas le
-      // réécraser par le prénom seul — c'est lui qui est copié sur le créneau.
-      setEnrolling(true);
-      try {
-        await onEnroll(creneau.id!, {
-          childId: selChild,
-          childName,
-          familyId: fam.firestoreId,
-          familyName: fam.parentName || "—",
-          enrolledAt: new Date().toISOString(),
-          preinscription: true,
-          // Mémorisé pour la conversion : on saura qu'il s'agissait d'une
-          // inscription à l'année, pas d'une séance isolée.
-          preinscriptionMode: "annuel",
-        } as any, undefined, { skipPayment: true, skipEmail: true });
-        panelToast(`${childName} pré-inscrit(e) à l'année — aucun paiement créé`, "success");
-        setSelChild(""); setSelectedChildren([]); setPreinscription(false);
-        setInscriptionFaite(true);
-        await onRefresh?.();
-      } catch (err: any) {
-        panelToast(`Échec : ${err?.message || err}`, "error");
-      }
-      setEnrolling(false);
-      return;
-    }
-
-    if (inscriptionMode === "annuel") {
-      // Inscription annuelle : créer le forfait + inscrire dans le créneau
-      try {
-        const slotKey = `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`;
-        await addDoc(collection(db, "forfaits"), {
-          familyId: fam.firestoreId,
-          familyName: fam.parentName || "",
-          childId: selChild,
-          childName,
-          slotKey,
-          activityTitle: creneau.activityTitle,
-          dayLabel: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" }),
-          startTime: creneau.startTime,
-          endTime: creneau.endTime,
-          totalSessions: quinzaine ? Math.ceil(sessionsRestantes / 2) : sessionsRestantes,
-          // Rythme : "hebdo" par défaut, "quinzaine" pour une semaine sur deux.
-          // semainePaire indique les semaines concernées (numéro ISO).
-          rythme: quinzaine ? "quinzaine" : "hebdo",
-          ...(quinzaine ? { semainePaire } : {}),
-          totalSessionsSaison,
-          attendedSessions: 0,
-          licenceFFE: licence,
-          licenceType,
-          adhesion,
-          prixForfaitAnnuel,
-          remiseFamillePercent: familyDiscountPercent,
-          ...(remiseHorsBareme ? { remiseHorsBareme: true, remiseBaremePercent, remiseMotif: remiseMotif.trim() || null } : {}),
-          prorata: Math.round(prorata * 100),
-          forfaitPriceTTC: totalAnnuel,
-          totalPaidTTC: 0,
-          paymentPlan: payPlan,
-          status: "actif",
-          frequence: frequenceCours,
-          // Forfait "complément" : heures ajoutées à un forfait existant la
-          // même saison (facturé au différentiel), aligné sur l'espace famille.
-          ...(ajoutHeureAdmin ? { complement: true, frequenceDejaInscrite } : {}),
-          // Saison FFE du forfait (1er sept Y → 30 juin Y+1).
-          // Déduite de la date du créneau cliqué : si mois >= sept,
-          // saison Y/Y+1 → on stocke Y. Sinon (janv-août), Y-1/Y → Y-1.
-          // Permet de filtrer rangEnfantFamille par saison côté admin
-          // pour ne pas confondre forfaits saison passée et saison nouvelle.
-          seasonStartYear: (() => {
-            const d = new Date(creneau.date);
-            return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
-          })(),
-          createdAt: serverTimestamp(),
-        });
-        // Créer les items pour cet enfant
-        const items: any[] = [];
-        if (adhesion) items.push({ activityTitle: `Adhésion annuelle (enfant ${rangEnfantFamille})`, childId: selChild, childName, priceHT: prixAdhesionDegressif / 1.055, tva: 5.5, priceTTC: prixAdhesionDegressif });
-        if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, childId: selChild, childName, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
-        // Créneau principal
-        items.push({ activityTitle: ajoutHeureAdmin ? `Forfait — heure suppl. (${formatFrequence(frequenceDejaInscrite)}×→${formatFrequence(freqCumuleeAdmin)}×/sem) — ${creneau.activityTitle} (${slotKey})` : `Forfait ${creneau.activityTitle} (${slotKey})`, childId: selChild, childName, creneauId: creneau.id, activityType: creneau.activityType, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
-        // Créneaux supplémentaires (2ème, 3ème)
-        const dayNames = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-        for (const esKey of extraSlots) {
-          const firstDash = esKey.indexOf("-");
-          const secondDash = esKey.indexOf("-", firstDash + 1);
-          const esDow = parseInt(esKey.substring(0, firstDash));
-          const esTime = esKey.substring(firstDash + 1, secondDash);
-          const esTitle = esKey.substring(secondDash + 1);
-          const esSlotLabel = `${esTitle} — ${dayNames[esDow]} ${esTime}`;
-          items.push({ activityTitle: `Forfait ${esTitle} (${esSlotLabel})`, childId: selChild, childName, activityType: creneau.activityType, priceHT: 0, tva: 5.5, priceTTC: 0 });
-        }
-        // Ligne de réduction famille si applicable
-        if (familyDiscountAmount > 0) {
-          // Le motif figure sur la facture : une remise hors barème doit dire
-          // pourquoi, sans quoi personne ne saura la justifier dans six mois.
-          const motif = remiseMotif.trim();
-          const libelleRemise = `Réduction famille (${rangEnfantFamille}ème enfant, -${familyDiscountPercent}%`
-            + (remiseHorsBareme ? ` — ${motif || "remise exceptionnelle"}` : "")
-            + ")";
-          items.push({ activityTitle: libelleRemise, childId: selChild, childName, priceHT: -familyDiscountAmount / 1.055, tva: 5.5, priceTTC: -familyDiscountAmount,
-            ...(remiseHorsBareme ? { remiseHorsBareme: true, remiseBaremePercent, remiseMotif: motif || null } : {}) });
-        }
-
-        // Chercher un paiement annuel pending existant pour cette famille (pour regrouper la fratrie)
-        const existingPaySnap = await getDocs(query(
-          collection(db, "payments"),
-          where("familyId", "==", fam.firestoreId),
-          where("status", "==", "pending"),
-        ));
-        // Trouver un paiement forfait annuel non échelonné (écheance 1 ou pas d'écheance)
-        const existingForfaitPay = existingPaySnap.docs.find(d => {
-          const data = d.data();
-          return (data.items || []).some((i: any) => i.activityTitle?.includes("Forfait")) &&
-            (!data.echeancesTotal || data.echeancesTotal <= 1) &&
-            (!data.echeance || data.echeance <= 1);
-        });
-
-        if (existingForfaitPay && payPlan === "1x") {
-          // Ajouter les items à la commande existante
-          const existingData = existingForfaitPay.data();
-          const mergedItems = [...(existingData.items || []), ...items];
-          const newTotal = mergedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
-          await updateDoc(doc(db, "payments", existingForfaitPay.id), {
-            items: mergedItems,
-            totalTTC: Math.round(newTotal * 100) / 100,
-            updatedAt: serverTimestamp(),
-          });
-          createdPaymentIds.push(existingForfaitPay.id);
-          console.log(`📋 Items ajoutés à la commande existante ${existingForfaitPay.id} (${newTotal.toFixed(2)}€)`);
-        } else {
-          // Créer une nouvelle commande (ou paiement échelonné)
-          const nbEcheances = payPlan === "10x" ? 10 : payPlan === "3x" ? 3 : 1;
-          const montantEcheance = Math.round((totalAnnuel / nbEcheances) * 100) / 100;
-          const montantDerniereEcheance = Math.round((totalAnnuel - montantEcheance * (nbEcheances - 1)) * 100) / 100;
-
-          if (annualPayMode === "prelevement_sepa") {
-            // ── Mode SEPA : chercher le mandat actif, créer dans echeances-sepa ──
-            const mandatSnap = await getDocs(query(
-              collection(db, "mandats-sepa"),
-              where("familyId", "==", fam.firestoreId),
-              where("status", "==", "active")
-            ));
-            if (mandatSnap.empty) {
-              panelToast("⚠️ Aucun mandat SEPA actif pour cette famille. Créez-en un dans Prélèvements SEPA.", "error");
-              setEnrolling(false);
-              return;
-            }
-            // Plusieurs mandats actifs (changement de banque sans révocation
-            // de l'ancien) : sans tri, on rattachait les échéances à un mandat
-            // ARBITRAIRE — donc possiblement au RIB que la famille n'utilise
-            // plus, et le prélèvement serait rejeté. On prend le plus récent.
-            const dateMandat = (m: any) => m?.createdAt?.seconds || 0;
-            const mandatData = mandatSnap.docs
-              .map(d => d.data())
-              .sort((a: any, b: any) => dateMandat(b) - dateMandat(a))[0];
-            const orderId = generateOrderId();
-            for (let i = 0; i < nbEcheances; i++) {
-              const echeanceDate = new Date();
-              echeanceDate.setMonth(echeanceDate.getMonth() + i);
-              const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
-              await addDoc(collection(db, "echeances-sepa"), {
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                mandatId: mandatData.mandatId,
-                montant,
-                dateEcheance: fmtDate(echeanceDate),
-                status: "pending",
-                reference: "",
-                description: `Forfait ${creneau.activityTitle} — ${childName} — ${i + 1}/${nbEcheances}`,
-                remiseId: null,
-                paymentId: null,
-                orderId,
-                echeance: i + 1,
-                echeancesTotal: nbEcheances,
-                forfaitRef: slotKey,
-                createdAt: serverTimestamp(),
-              });
-            }
-            // Créer un paiement de référence (informatif uniquement — géré via module SEPA)
-            const docRef = await addDoc(collection(db, "payments"), {
-              orderId,
-              familyId: fam.firestoreId,
-              familyName: fam.parentName || "",
-              items,
-              totalTTC: totalAnnuel,
-              paymentMode: "prelevement_sepa",
-              paymentRef: `${nbEcheances}× SEPA · ${mandatData.mandatId}`,
-              status: "sepa_scheduled",
-              paidAmount: 0,
-              echeance: 1,
-              echeancesTotal: nbEcheances,
-              echeanceDate: fmtDate(new Date()),
-              forfaitRef: slotKey,
-              date: serverTimestamp(),
-            });
-            createdPaymentIds.push(docRef.id);
-
-            // Pré-notification : montant, dates et mandat. La famille doit
-            // savoir ce qui sera prélevé et quand — les règles SEPA l'imposent
-            // au créancier avant le premier prélèvement.
-            authFetch("/api/admin/sepa-prenotification", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ paymentId: docRef.id }),
-            }).catch(e => console.warn("Pré-notification SEPA:", e));
-          } else {
-            for (let i = 0; i < nbEcheances; i++) {
-              const echeanceDate = new Date();
-              echeanceDate.setMonth(echeanceDate.getMonth() + i);
-              const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
-
-              const docRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                items: i === 0 ? items : [{ activityTitle: `Échéance ${i + 1}/${nbEcheances} — ${childName}`, childId: selChild, childName, priceHT: montant / 1.055, tva: 5.5, priceTTC: montant }],
-                totalTTC: montant,
-                paymentMode: annualPayMode,
-                paymentRef: "",
-                status: "pending",
-                paidAmount: 0,
-                echeance: i + 1,
-                echeancesTotal: nbEcheances,
-                echeanceDate: fmtDate(echeanceDate),
-                forfaitRef: slotKey,
-                date: serverTimestamp(),
-              });
-              createdPaymentIds.push(docRef.id);
-            }
-          }
-        }
-      } catch (e) { console.error(e); }
-    }
-
-    // Dans les 2 cas : inscrire dans le créneau
-    // Pour les forfaits annuels : skipPayment car les échéances sont déjà créées
-    // Une pre-inscription ne declenche RIEN : ni paiement, ni facture, ni email.
-    const enrollOptions = preinscription
-      ? { skipPayment: true, skipEmail: true }
-      : inscriptionMode === "annuel" ? { skipPayment: true, skipEmail: true } : undefined;
-
-    if (inscriptionMode === "annuel") {
-      // Inscrire dans TOUS les créneaux futurs du même cours (même jour + même heure + même activité)
-      // IMPORTANT: allCreneaux ne contient que la semaine affichée, on charge tous les futurs
-      // Bornes :
-      //   - début = la date du créneau cliqué (pas "aujourd'hui") — pour le cas
-      //     d'une pré-inscription saison N+1 où l'on ne veut PAS inscrire le cavalier
-      //     dans les dernières séances de la saison en cours
-      //   - fin = dateFinSaisonEffective (saison du créneau, calculée plus haut)
-      const startDate = creneau.date; // borne basse incluse
-      const endDate = dateFinSaisonEffective.toISOString().split("T")[0]; // borne haute incluse
-      const allFutureSnap = await getDocs(
-        query(collection(db, "creneaux"), where("date", ">=", startDate), where("date", "<=", endDate))
-      );
-      const allFutureCreneaux = allFutureSnap.docs.map(d => ({ id: d.id, ...d.data() })) as (Creneau & { id: string })[];
-
-      // Créneau principal : filtrer par jour + heure + activityTitle SEULEMENT
-      // Ne PAS filtrer par moniteur — il peut changer en cours de saison (remplacements)
-      const dow = new Date(creneau.date + "T12:00:00").getDay();
-      // Rythme du forfait : une quinzaine ne doit poser le cavalier QUE sur les
-      // semaines de sa parité. L'inscrire partout puis le griser à l'affichage
-      // ne suffirait pas : la feuille d'appel compte présent tout inscrit non
-      // marqué absent, et gonflerait ses séances d'un facteur deux.
-      const rythmeForfait = { rythme: quinzaine ? "quinzaine" : "hebdo", semainePaire };
-      const slotsToEnroll = allFutureCreneaux.filter(c =>
-        new Date(c.date + "T12:00:00").getDay() === dow &&
-        c.startTime === creneau.startTime &&
-        c.activityTitle === creneau.activityTitle &&
-        estSemaineAttendue(c.date, rythmeForfait)
-      );
-
-      console.log(`📋 Inscription annuelle : ${slotsToEnroll.length} séances pour "${creneau.activityTitle}" (jour ${dow}, ${creneau.startTime}) du ${startDate} au ${endDate}`);
-
-      // ── Collecte de TOUS les slots a inscrire (principal + extras) ───
-      // Au lieu d'enchainer les onEnroll en sequence (250ms x 114 = 30s),
-      // on les collecte tous puis on lance Promise.all en parallele
-      // (~3-5s total). Pas de risque de concurrence car chaque slot est un
-      // doc Firestore distinct, et runTransaction protege chaque doc
-      // individuellement.
-      const allSlotsToEnroll: { id: string }[] = [...slotsToEnroll.map(s => ({ id: s.id! }))];
-
-      // Resoudre les creneaux supplementaires (2x ou 3x par semaine) avant
-      // le Promise.all global
-      for (const slotKey of extraSlots) {
-        const refCreneau = weekCreneaux.find(c => {
-          const cdow = new Date(c.date + "T12:00:00").getDay();
-          return `${cdow}-${c.startTime}-${c.activityTitle}-${c.monitor || ""}` === slotKey;
-        });
-
-        if (!refCreneau) {
-          console.warn(`⚠️ Aucun créneau trouvé pour la clé : ${slotKey}`);
-          continue;
-        }
-
-        const extraDow = new Date(refCreneau.date + "T12:00:00").getDay();
-        const extraCreneaux = allFutureCreneaux.filter(c =>
-          c.date >= startDate &&
-          new Date(c.date + "T12:00:00").getDay() === extraDow &&
-          c.startTime === refCreneau.startTime &&
-          c.activityTitle === refCreneau.activityTitle &&
-          // Le rythme vaut pour le forfait entier : un cavalier en garde
-          // alternée n'est pas là non plus pour ses 2e et 3e créneaux.
-          estSemaineAttendue(c.date, rythmeForfait)
-        );
-
-        console.log(`📋 Créneau supplémentaire : ${extraCreneaux.length} séances pour "${refCreneau.activityTitle}" (jour ${extraDow}, ${refCreneau.startTime})`);
-        for (const slot of extraCreneaux) {
-          allSlotsToEnroll.push({ id: slot.id! });
-        }
-      }
-
-      console.log(`📋 Total : ${allSlotsToEnroll.length} séances à inscrire (parallele Promise.all)`);
-      const enrollPayload = {
-        childId: selChild, childName,
-        familyId: fam.firestoreId, familyName: fam.parentName || "—",
-        enrolledAt: new Date().toISOString(),
-        paymentSource: "forfait" as const,
-        // Recopié sur chaque inscription : le planning et le montoir lisent le
-        // créneau, pas le forfait. Sans ce marqueur, rien à l'écran ne dirait
-        // pourquoi ce cavalier manque une semaine sur deux.
-        ...(quinzaine ? { rythme: "quinzaine" as const, semainePaire } : {}),
-      };
-
-      // Promise.all : toutes les ecritures partent en meme temps. Firestore
-      // peut absorber facilement 100+ requetes paralleles. Si une echoue
-      // (ex. concurrence detectee), elle echoue isolement sans bloquer les
-      // autres. allSettled plutot que all pour ne pas tout perdre si 1 fail.
-      const results = await Promise.allSettled(
-        allSlotsToEnroll.map(s =>
-          onEnroll(s.id, enrollPayload, undefined, {
-            skipPayment: true, skipEmail: true, skipRefresh: true,
-          })
-        )
-      );
-      const failedCount = results.filter(r => r.status === "rejected").length;
-      if (failedCount > 0) {
-        console.warn(`⚠️ ${failedCount}/${allSlotsToEnroll.length} inscriptions ont echoue`);
-      }
-
-      // Refresh global une seule fois apres tous les onEnroll
-      // (qui ont tous skipRefresh:true). Sans ca, l'UI ne se met pas a jour.
-      try { await onRefresh?.(); } catch (e) { console.warn("Refresh post-annual:", e); }
-
-      // Alerter pour chaque seance qui passe complete apres inscription annuelle
-      await checkAndAlertIfFull(allSlotsToEnroll.map(s => s.id));
-    } else {
-      // ── Mode Compétition : un engagement par épreuve/passage + coaching global ──
-      if (isCompetition) {
-        const coachingTTC = parseFloat(compCoaching) || 0;
-        const compItems: any[] = [];
-        for (const ep of compEpreuves) {
-          const montantTTC = parseFloat(ep.montant) || 0;
-          if (montantTTC <= 0) continue;
-          compItems.push({
-            activityTitle: `Engagement — ${ep.epreuve || creneau.activityTitle}`,
-            childId: selChild, childName, creneauId: creneau.id, activityType: "competition",
-            description: ep.epreuve || "Engagement compétition",
-            priceHT: montantTTC / 1.055, tva: 5.5, priceTTC: montantTTC,
-          });
-        }
-        if (coachingTTC > 0) compItems.push({
-          activityTitle: `Coaching — ${creneau.activityTitle}`,
-          childId: selChild, childName, creneauId: creneau.id, activityType: "competition",
-          description: "Coaching moniteur",
-          priceHT: coachingTTC / 1.055, tva: 5.5, priceTTC: coachingTTC,
-        });
-        const compOptions = compItems.length > 0 ? { competitionItems: compItems, skipEmail: false } : undefined;
-        await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, showPay ? payMode : undefined, compOptions);
-      } else {
-        const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
-        const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;
-        await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), ...(preinscription ? { preinscription: true } : {}) } as any, preinscription ? undefined : (inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined), enrollOptions || freeEnrollOptions || rattrapageOptions);
-      }
-      // Alerter si le creneau (cours collectif ou competition) passe complet
-      await checkAndAlertIfFull([creneau.id!]);
-    }
-
-    if (inscriptionMode === "annuel") {
-      setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
-      panelToast(`Forfait créé — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`, "success");
-    } else {
-      const payInfo = useRattrapage ? " — 🔄 rattrapage utilisé" : freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
-      setJustEnrolled(`${childName}${payInfo}`);
-    }
-    // Reset complet du formulaire pour permettre une nouvelle inscription
-    // dans la foulee (cas frequent : inscrire toute une fratrie l'un apres
-    // l'autre sans fermer le panel).
-    // CRITICAL : selectedChildren doit aussi etre vide, sinon en mode annuel
-    // le re-clic sur un autre enfant additionne au precedent puis le
-    // useEffect-like de cleanup garde le PREMIER (= l'ancien). Resultat :
-    // l'inscription suivante reutilise l'ancien enfant. Bug rapporte par
-    // Nicolas : a inscrit Suzanne puis click Marianne, mais Suzanne inscrite
-    // 2x.
-    setSelChild(""); setSelectedChildren([]); setSelFam(""); setSearch(""); setEnrolling(false); setShowPay(false); setFreeEnroll(false); setFreeReason("Rattrapage"); setUseRattrapage(null); setInscriptionMode("ponctuel"); setExtraSlots([]); setExtraSlotSearch(""); setAnnualPayMode("cb_terminal");
-    // La remise ajustée vaut pour l'inscription qu'on vient de faire, pas pour
-    // la suivante : on repart du barème.
-    setRemisePctManuel(""); setRemiseMotif(""); setEditRemise(false);
-    setTimeout(() => setJustEnrolled(""), 5000);
+    await inscrireDepuisPanneau({
+      children, panelToast, acompteMode, acompteRef, acompteReglement,
+      adhesion, ajoutHeureAdmin, allCreneaux, annualPayMode, assuranceOccasionnelle,
+      checkAndAlertIfFull, compCoaching, compEpreuves, conversion,
+      creneau, dateFinSaisonEffective, extraSlots, fam, familyDiscountAmount,
+      familyDiscountPercent, freeEnroll, freeReason, freqCumuleeAdmin, frequenceCours,
+      frequenceDejaInscrite, inscParams, inscriptionMode, isCompetition, isStage,
+      licence, licenceType, onEnroll, onRefresh, payMode,
+      payPlan, payments, preinscription, priceTTC, prixAdhesionDegressif,
+      prixForfait, prixForfaitAnnuel, prixLicence, prorata, quinzaine,
+      rangEnfantFamille, remiseBaremePercent, remiseHorsBareme, remiseMotif, selChild,
+      selectedChildren, semainePaire, sessionsRestantes, showAcompte, showPay,
+      stageAcompte, stageLines, stageMode, stageSolde, stageTotalTTC,
+      status, totalAnnuel, totalSessionsSaison, useRattrapage, weekCreneaux,
+      setAnnualPayMode, setConfirmationEnAttente, setEditRemise, setEnrolling, setEnvoiConfirmation,
+      setExtraSlotSearch, setExtraSlots, setFreeEnroll, setFreeReason, setInscriptionFaite,
+      setInscriptionMode, setJustEnrolled, setPreinscription, setRemiseMotif, setRemisePctManuel,
+      setSearch, setSelChild, setSelFam, setSelectedChildren, setShowAddDays,
+      setShowPay, setUseRattrapage,
+    });
   };
 
   const handleUnenroll = async (childId: string) => {
@@ -2616,81 +1274,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   };
 
   // ── Email créneau : envoi à toutes les familles inscrites ──
-  const getCreneauRecipients = () => {
-    const recipients: { email: string; parentName: string; familyId: string }[] = [];
-    const seen = new Set<string>();
-    for (const e of enrolled) {
-      const fam = families.find(f => f.firestoreId === e.familyId);
-      if (fam?.parentEmail && !seen.has(fam.parentEmail)) {
-        seen.add(fam.parentEmail);
-        recipients.push({ email: fam.parentEmail, parentName: fam.parentName || "", familyId: fam.firestoreId });
-      }
-    }
-    return recipients;
-  };
-
-  const handleEmailGenerate = async () => {
-    setEmailGenerating(true);
-    try {
-      const cavaliers = enrolled.map((e: any) => {
-        const fam = families.find(f => f.firestoreId === e.familyId);
-        const child = (fam?.children || []).find((c: any) => c.id === e.childId);
-        return { firstName: e.childName, galopLevel: child?.galopLevel || "—", parentName: e.familyName };
-      });
-      const res = await authFetch("/api/ia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "email_reprise", creneau, cavaliers }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setEmailSubject(data.suggestedSubject || `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`);
-        setEmailBody(data.emailBody || "");
-      } else { panelToast("Erreur IA : " + (data.error || ""), "error"); }
-    } catch (e: any) { panelToast("Erreur IA : " + e.message, "error"); }
-    setEmailGenerating(false);
-  };
-
-  const handleEmailSend = async () => {
-    const recipients = getCreneauRecipients();
-    if (recipients.length === 0) { panelToast("Aucune famille avec email", "error"); return; }
-    if (!emailSubject || !emailBody) { panelToast("Sujet et message requis", "error"); return; }
-    setEmailSending(true);
-    let sent = 0;
-    for (const r of recipients) {
-      try {
-        await authFetch("/api/send-email", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: r.email,
-            subject: emailSubject,
-            context: "admin_email_reprise",
-            familyId: r.familyId,
-            creneauId: creneau.id,
-            html: emailLayout(emailParagraphe(emailBody.replace(/\n/g, "<br/>")), emailSubject),
-          }),
-        });
-        sent++;
-      } catch {}
-    }
-    // Log dans Firestore
-    await addDoc(collection(db, "emailsReprise"), {
-      creneauId: creneau.id,
-      creneauTitle: creneau.activityTitle,
-      date: creneau.date,
-      subject: emailSubject,
-      message: emailBody,
-      recipients: recipients.map(r => r.email),
-      recipientCount: recipients.length,
-      status: "sent",
-      createdAt: serverTimestamp(),
-    });
-    panelToast(`Email envoyé à ${sent} famille${sent > 1 ? "s" : ""}`, "success");
-    setShowEmailForm(false);
-    setEmailSubject(""); setEmailBody("");
-    setEmailSending(false);
-  };
 
   // ── Fiches de progression (stage) ──────────────────────────────────
   const handlePrintProgressions = async () => {
@@ -2812,290 +1395,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             )}
           </div>
 
-          {/* ── Plan de séance ── */}
-          <div className="mt-3 pt-3 border-t border-blue-500/8">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-body text-xs font-semibold text-slate-500 uppercase tracking-wider">Plan de séance</span>
-              {!planUploading && (
-                <div className="flex gap-1.5">
-                  {/* Bouton appareil photo */}
-                  <label className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
-                    <Camera size={12} /> Photo
-                    <input type="file" accept="image/*" capture="environment" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadPlan(f); e.target.value = ""; }} />
-                  </label>
-                  {/* Bouton galerie / fichier */}
-                  <label className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
-                    <FileImage size={12} /> Galerie / PDF
-                    <input ref={planInputRef} type="file" accept="image/*,.pdf,.heic,.heif" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadPlan(f); e.target.value = ""; }} />
-                  </label>
-                </div>
-              )}
-              {planUploading && <div className="flex items-center gap-1.5 font-body text-xs text-blue-500"><Loader2 size={12} className="animate-spin" /> Upload...</div>}
-            </div>
-
-            {planUrl ? (
-              <div className="relative group">
-                {planType === "application/pdf" ? (
-                  <a href={planUrl} target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-3 py-2.5 bg-red-50 border border-red-100 rounded-xl no-underline hover:bg-red-100">
-                    <FileImage size={20} className="text-red-500 flex-shrink-0" />
-                    <div>
-                      <div className="font-body text-sm font-semibold text-red-700">Plan de séance PDF</div>
-                      <div className="font-body text-xs text-red-400">Cliquer pour ouvrir</div>
-                    </div>
-                  </a>
-                ) : (
-                  <button type="button" onClick={() => openLightbox()} className="w-full border-none p-0 bg-transparent cursor-zoom-in block">
-                    <img src={planUrl} alt="Plan de séance" className="w-full rounded-xl object-cover max-h-48 hover:opacity-90 transition-opacity" />
-                    <div className="absolute inset-0 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/20 transition-opacity">
-                      <span className="font-body text-xs text-white bg-black/50 px-2 py-1 rounded-lg">🔍 Agrandir</span>
-                    </div>
-                  </button>
-                )}
-                <button type="button" onClick={deletePlan}
-                  className="absolute top-2 right-2 w-6 h-6 rounded-full bg-red-500 text-white flex items-center justify-center border-none cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity text-xs">
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <div className="border-2 border-dashed border-gray-200 rounded-xl p-4 text-center cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"
-                onClick={() => planInputRef.current?.click()}>
-                <Camera size={20} className="text-slate-400 mx-auto mb-1" />
-                <p className="font-body text-xs text-slate-500">Photo ou PDF du plan de séance</p>
-                <p className="font-body text-[10px] text-slate-400 mt-0.5">Tous formats image · PDF · max 10 Mo</p>
-              </div>
-            )}
-          </div>
-
-          {/* ── Notes pédagogiques (avec historique) ─────────────────────
-              Notes textuelles libres attachées à la séance. À chaque
-              enregistrement, on capture aussi le plan de séance courant
-              pour conserver l'historique complet (note + plan associé). */}
-          <div className="mt-3 pt-3 border-t border-blue-500/8">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-body text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-                <StickyNote size={12} /> Notes de séance
-                {notes.length > 0 && (
-                  <span className="font-body text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full normal-case tracking-normal">
-                    {notes.length}
-                  </span>
-                )}
-              </span>
-              {notes.length > 0 && (
-                <button type="button"
-                  onClick={() => setShowHistorique(v => !v)}
-                  className="flex items-center gap-1 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline"
-                >
-                  {showHistorique ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  Historique
-                </button>
-              )}
-              {notesPrecedentes.length > 0 && (
-                <button type="button"
-                  onClick={() => setShowPrecedentes(v => !v)}
-                  className="flex items-center gap-1 font-body text-xs text-violet-600 bg-transparent border-none cursor-pointer hover:underline"
-                >
-                  {showPrecedentes ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                  Séances précédentes ({notesPrecedentes.length})
-                </button>
-              )}
-            </div>
-
-            {/* Note de PREPARATION (persistante, attachee au creneau) */}
-            <div className="mb-3 p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/60">
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-body text-[10px] font-semibold text-amber-700 uppercase tracking-wider flex items-center gap-1">
-                  📋 Note de préparation
-                </span>
-                {notePrepaSaved && (
-                  <span className="font-body text-[10px] text-green-600 flex items-center gap-0.5">
-                    <Check size={10} /> Enregistré
-                  </span>
-                )}
-              </div>
-              <textarea
-                value={notePrepa}
-                onChange={e => { setNotePrepa(e.target.value); setNotePrepaSaved(false); }}
-                onBlur={saveNotePrepa}
-                placeholder="Ce que tu as prévu pour cette séance (exercices, objectifs, matériel…). Reste affichée et modifiable à chaque fois."
-                rows={2}
-                className="w-full px-3 py-2 rounded-lg border border-amber-200 bg-white font-body text-xs resize-none focus:outline-none focus:ring-2 focus:ring-amber-300/40 focus:border-amber-300"
-              />
-              <div className="flex items-center justify-between mt-1">
-                <span className="font-body text-[10px] text-amber-600/70">
-                  Sauvegarde automatique
-                </span>
-                <button type="button"
-                  onClick={saveNotePrepa}
-                  disabled={notePrepaSaving}
-                  className="flex items-center gap-1 font-body text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-amber-500 text-white border-none cursor-pointer hover:bg-amber-400 disabled:opacity-40"
-                >
-                  {notePrepaSaving ? <Loader2 size={10} className="animate-spin" /> : <Check size={10} />}
-                  Enregistrer
-                </button>
-              </div>
-            </div>
-
-            {/* Champ d'ajout de note */}
-            <textarea
-              value={noteTexte}
-              onChange={e => setNoteTexte(e.target.value)}
-              placeholder="Ajouter une note pédagogique sur cette séance (ressenti, comportement de groupe, exercices à refaire…)"
-              rows={3}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 font-body text-xs resize-none focus:outline-none focus:ring-2 focus:ring-blue-400/30 focus:border-blue-300"
-            />
-            <div className="flex items-center justify-between mt-1.5">
-              <span className="font-body text-[10px] text-slate-400">
-                {planUrl
-                  ? "✓ Le plan de séance courant sera associé à la note"
-                  : "Aucun plan associé"}
-              </span>
-              <button type="button"
-                onClick={saveNote}
-                disabled={noteSaving || !noteTexte.trim()}
-                className="flex items-center gap-1 font-body text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-500 text-white border-none cursor-pointer hover:bg-blue-400 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {noteSaving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                Enregistrer
-              </button>
-            </div>
-
-            {/* Historique des notes */}
-            {showHistorique && (
-              <div className="mt-3 space-y-2 max-h-96 overflow-y-auto">
-                {notesLoading && (
-                  <div className="flex items-center justify-center py-4 text-slate-400">
-                    <Loader2 size={14} className="animate-spin" />
-                  </div>
-                )}
-                {!notesLoading && notes.length === 0 && (
-                  <div className="text-center py-4 font-body text-xs text-slate-400">
-                    Aucune note encore enregistrée
-                  </div>
-                )}
-                {notes.map(n => {
-                  const date = n.createdAt?.toDate
-                    ? n.createdAt.toDate()
-                    : n.createdAt?.seconds
-                    ? new Date(n.createdAt.seconds * 1000)
-                    : null;
-                  return (
-                    <div key={n.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <div className="font-body text-[10px] text-slate-500 flex items-center gap-1.5">
-                          <Clock size={10} />
-                          {date
-                            ? date.toLocaleString("fr-FR", {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })
-                            : "—"}
-                          {n.createdByName && (
-                            <span className="text-slate-400">· {n.createdByName}</span>
-                          )}
-                        </div>
-                        <button type="button"
-                          onClick={() => deleteNote(n.id)}
-                          className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer p-0.5"
-                          title="Supprimer cette note"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                      <p className="font-body text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-                        {n.texte}
-                      </p>
-                      {/* Miniature du plan associé à cette note (snapshot historique) */}
-                      {n.planSeanceUrl && (
-                        <div className="mt-2 pt-2 border-t border-slate-200">
-                          <div className="font-body text-[10px] text-slate-400 mb-1">Plan associé :</div>
-                          {n.planSeanceType === "application/pdf" ? (
-                            <a
-                              href={n.planSeanceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-2 py-1 bg-red-50 border border-red-100 rounded-lg no-underline hover:bg-red-100"
-                            >
-                              <FileImage size={12} className="text-red-500" />
-                              <span className="font-body text-[11px] text-red-700">Plan PDF</span>
-                            </a>
-                          ) : (
-                            <a
-                              href={n.planSeanceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-block"
-                            >
-                              <img
-                                src={n.planSeanceUrl}
-                                alt="Plan associé"
-                                className="h-20 rounded-lg border border-slate-200 hover:opacity-80 cursor-zoom-in object-cover"
-                              />
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Notes des seances PRECEDENTES du meme cours */}
-            {showPrecedentes && (
-              <div className="mt-3 space-y-2 max-h-96 overflow-y-auto border-t border-violet-100 pt-3">
-                <div className="font-body text-[10px] text-violet-600 uppercase tracking-wider mb-1 flex items-center gap-1">
-                  🕘 Notes des semaines précédentes — {creneau.activityTitle}
-                </div>
-                {notesPrecLoading && (
-                  <div className="flex items-center justify-center py-4 text-slate-400">
-                    <Loader2 size={14} className="animate-spin" />
-                  </div>
-                )}
-                {!notesPrecLoading && notesPrecedentes.length === 0 && (
-                  <div className="text-center py-4 font-body text-xs text-slate-400">
-                    Aucune note sur les séances précédentes
-                  </div>
-                )}
-                {notesPrecedentes.map(n => {
-                  // Date de la SEANCE (creneauDate), pas de la saisie de la note
-                  const seanceDate = n.creneauDate ? new Date(n.creneauDate) : null;
-                  return (
-                    <div key={n.id} className="bg-violet-50/50 border border-violet-100 rounded-xl p-3">
-                      <div className="font-body text-[10px] text-violet-500 flex items-center gap-1.5 mb-1.5">
-                        <Clock size={10} />
-                        {seanceDate
-                          ? seanceDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })
-                          : "Date inconnue"}
-                        {n.createdByName && <span className="text-violet-400">· {n.createdByName}</span>}
-                      </div>
-                      <p className="font-body text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
-                        {n.texte}
-                      </p>
-                      {n.planSeanceUrl && (
-                        <div className="mt-2 pt-2 border-t border-violet-100">
-                          <a
-                            href={n.planSeanceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-violet-200 rounded-lg no-underline hover:bg-violet-50"
-                          >
-                            <FileImage size={12} className="text-violet-500" />
-                            <span className="font-body text-[11px] text-violet-700">Plan de cette séance</span>
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <PanneauPedagogie creneau={creneau as any} />
         </div>
         {(creneau as any).status === "closed" && (
           <div className="p-5 bg-gray-50 border-b border-gray-200">
@@ -3167,7 +1467,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   title="Envoyer les fiches de progression par email">
                   {progressionSending ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} Envoyer fiches
                 </button>
-                <button type="button" onClick={() => { setShowEmailForm(!showEmailForm); if (!showEmailForm && !emailSubject) setEmailSubject(`${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`); }}
+                <button type="button" onClick={() => setShowEmailForm(!showEmailForm)}
                   className="flex items-center gap-1 font-body text-xs text-blue-500 bg-blue-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                   <Mail size={12} /> Email
                 </button>
@@ -3176,35 +1476,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           </div>
 
           {/* ── Formulaire email créneau ── */}
-          {showEmailForm && (
-            <div className="mb-4 border border-blue-200 rounded-xl overflow-hidden">
-              <div className="bg-blue-50 px-4 py-2.5 flex items-center justify-between">
-                <span className="font-body text-xs font-semibold text-blue-700">📧 Email aux {getCreneauRecipients().length} famille{getCreneauRecipients().length > 1 ? "s" : ""}</span>
-                <button type="button" onClick={() => setShowEmailForm(false)} className="text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
-              </div>
-              <div className="p-4 space-y-3">
-                <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)}
-                  placeholder="Objet de l'email"
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-500" />
-                <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)}
-                  placeholder="Votre message aux familles..."
-                  rows={6}
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm resize-y focus:outline-none focus:border-blue-500" />
-                <div className="flex gap-2">
-                  <button type="button" onClick={handleEmailGenerate} disabled={emailGenerating}
-                    className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50">
-                    {emailGenerating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-                    Générer avec IA
-                  </button>
-                  <button type="button" onClick={handleEmailSend} disabled={emailSending || !emailSubject || !emailBody}
-                    className="flex-1 flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-600 disabled:opacity-50">
-                    {emailSending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
-                    Envoyer
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <FormulaireEmailCreneau
+            creneau={creneau} enrolled={enrolled} families={families}
+            panelToast={panelToast} ouvert={showEmailForm}
+            onFermer={() => setShowEmailForm(false)} />
           {enrolled.length === 0 ? <p className="font-body text-sm text-slate-500 italic mb-4">Aucun</p> :
           <div className="flex flex-col gap-2 mb-4">{enrolled.map((e: any) => {
             // Rouge rien reçu, orange partiellement réglé, vert réglé.
@@ -3305,7 +1580,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <span className="hidden sm:inline">Confirmer</span>
                     </button>
                   )}
+                  {(e as any).institutional && (
+                    <button type="button" onClick={() => desinscrireSaisonEtablissement(e.childId, e.childName)} disabled={unenrollingSaison === e.childId}
+                      title="Inscription établissement : retirer de toutes les séances de la saison de ce cours"
+                      className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 hover:text-purple-800 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-purple-50 flex-shrink-0 disabled:opacity-40">
+                      {unenrollingSaison === e.childId ? <Loader2 size={12} className="animate-spin" /> : <span>🏫</span>}
+                      <span className="hidden sm:inline">Retirer de la saison</span>
+                    </button>
+                  )}
                   <button type="button" onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
+                    title={(e as any).institutional ? "Retirer de cette séance seulement" : "Désinscrire"}
                     className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">
                     {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>}
                   </button>
@@ -3358,83 +1642,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             </div>
           )}
 
-          {/* ── Liste d'attente ── */}
-          {waitlist.length > 0 && (
-            <div className="mb-4 border border-orange-200 rounded-xl overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-orange-50">
-                <span className="font-body text-xs font-semibold text-orange-700">🔔 Liste d'attente ({waitlist.length})</span>
-                {spots > 0 && <span className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded">Place disponible !</span>}
-              </div>
-              {waitlist.map((entry: any, i: number) => (
-                <div key={entry.id} className="flex items-center justify-between px-4 py-2.5 border-t border-orange-100">
-                  <div>
-                    <div className="font-body text-sm font-semibold text-blue-800">
-                      <span className="text-orange-400 mr-1.5">#{i + 1}</span>
-                      {entry.childName}
-                    </div>
-                    <div className="font-body text-xs text-slate-500">{entry.familyName}</div>
-                  </div>
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    <button type="button"
-                      onClick={() => acceptWaitlist(entry)}
-                      disabled={waitlistLoading || spots <= 0}
-                      className={`font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer ${spots > 0 ? "bg-green-500 text-white hover:bg-green-600" : "bg-gray-100 text-slate-400 cursor-not-allowed"} disabled:opacity-50`}>
-                      {waitlistLoading ? <Loader2 size={12} className="animate-spin inline" /> : "✓ Accepter"}
-                    </button>
-                    <button type="button"
-                      onClick={() => retirerWaitlist(entry)}
-                      disabled={waitRemoving === entry.id}
-                      title="Retirer de la liste d'attente"
-                      className="bg-transparent border-none cursor-pointer text-red-400 hover:text-red-600 px-1 disabled:opacity-40">
-                      {waitRemoving === entry.id ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={14} />}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Créneau complet : ajout MANUEL en liste d'attente ────────── */}
-          {spots <= 0 && (creneau as any).status !== "closed" && (
-            <div className="mb-4 border-t border-blue-500/8 pt-4">
-              <h3 className="font-body text-sm font-semibold text-orange-700 mb-3">
-                🔔 Ajouter en liste d&apos;attente
-              </h3>
-              <div className="flex flex-col gap-3">
-                <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input value={search} onChange={e => { setSearch(e.target.value); setSelFam(""); setSelChild(""); setInscriptionFaite(false); }}
-                    placeholder="Nom parent, prénom enfant, email..."
-                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-orange-400 focus:outline-none" />
-                </div>
-                <select value={selFam} onChange={e => { setSelFam(e.target.value); setSelChild(""); setInscriptionFaite(false); }}
-                  className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream">
-                  <option value="">Famille ({filteredFamilies.length})</option>
-                  {filteredFamilies.map(f => {
-                    const n = (f.children || []).map((c: any) => c.firstName).join(", ");
-                    return <option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n ? `(${n})` : ""}</option>;
-                  })}
-                </select>
-                {selFam && (
-                  <select value={selChild} onChange={e => setSelChild(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream">
-                    <option value="">Cavalier…</option>
-                    {(allFamilies.find((f: any) => f.firestoreId === selFam)?.children || []).map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.firstName} {c.lastName || ""}</option>
-                    ))}
-                  </select>
-                )}
-                <button type="button" onClick={addToWaitlistAdmin} disabled={!selChild || waitAdding}
-                  className={`w-full py-2.5 rounded-lg font-body text-sm font-semibold border-none ${!selChild || waitAdding ? "bg-gray-100 text-slate-400 cursor-not-allowed" : "bg-orange-500 text-white cursor-pointer hover:bg-orange-600"}`}>
-                  {waitAdding ? <Loader2 size={14} className="animate-spin inline" /> : "🔔 Mettre en liste d'attente"}
-                </button>
-                <p className="font-body text-[11px] text-slate-500">
-                  La famille sera prévenue par email si une place se libère
-                  {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") ? " sur la semaine complète" : ""}.
-                </p>
-              </div>
-            </div>
-          )}
+          {/* ── Liste d'attente et ajout manuel quand la séance est pleine ── */}
+          <PanneauListeAttente
+            creneau={creneau} allCreneaux={allCreneaux} allFamilies={allFamilies}
+            spots={spots} enrolled={enrolled}
+            selFam={selFam} setSelFam={setSelFam} selChild={selChild} setSelChild={setSelChild}
+            search={search} setSearch={setSearch} panelToast={panelToast}
+            onClose={onClose} onRefresh={onRefresh}
+            filteredFamilies={filteredFamilies}
+            setInscriptionFaite={setInscriptionFaite} rechargerToken={rechargerAttente} />
 
           {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
             {/* Recherche famille */}
@@ -3451,210 +1667,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
             {/* Formulaire création famille inline */}
             {showNewFamily && (
-              <div className="border border-green-200 rounded-xl overflow-hidden">
-                <div className="bg-green-50 px-4 py-2.5 flex items-center justify-between">
-                  <span className="font-body text-xs font-semibold text-green-700">👨‍👩‍👧 Nouvelle famille</span>
-                  <button type="button" onClick={() => setShowNewFamily(false)} className="text-green-400 hover:text-green-600 bg-transparent border-none cursor-pointer"><X size={14} /></button>
-                </div>
-                <div className="p-4 space-y-2.5">
-                  <div className="flex gap-2">
-                    {(["M.", "Mme"] as const).map((c) => (
-                      <button key={c} type="button" onClick={() => setNewFam({ ...newFam, civilite: newFam.civilite === c ? "" : c })}
-                        className={`font-body text-xs px-4 py-2 rounded-lg border cursor-pointer ${newFam.civilite === c ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-300"}`}>
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                  <input value={newFam.parentName} onChange={e => setNewFam({...newFam, parentName: e.target.value})}
-                    placeholder="Nom du parent *" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                  <div className="flex gap-2">
-                    <input value={newFam.parentEmail} onChange={e => setNewFam({...newFam, parentEmail: e.target.value})}
-                      placeholder="Email" type="email" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                    <input value={newFam.parentPhone} onChange={e => setNewFam({...newFam, parentPhone: e.target.value})}
-                      placeholder="Téléphone" type="tel" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                  </div>
-                  <input value={newFam.address} onChange={e => setNewFam({...newFam, address: e.target.value})}
-                    placeholder="Adresse" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                  <div className="flex gap-2">
-                    <input value={newFam.zipCode} onChange={e => setNewFam({...newFam, zipCode: e.target.value})}
-                      placeholder="Code postal" className="w-28 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                    <input value={newFam.city} onChange={e => setNewFam({...newFam, city: e.target.value})}
-                      placeholder="Ville" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                  </div>
-                  <div>
-                    <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Fléchage</div>
-                    <div className="flex gap-1.5">
-                      {[
-                        { id: "cavalier_annee", label: "🏇 À l'année" },
-                        { id: "stage", label: "🎯 Stages" },
-                        { id: "passage", label: "👋 Passage" },
-                      ].map((opt) => {
-                        const on = newFam.tags.includes(opt.id);
-                        return (
-                          <button key={opt.id} type="button"
-                            onClick={() => setNewFam({ ...newFam, tags: on ? newFam.tags.filter((t) => t !== opt.id) : [...newFam.tags, opt.id] })}
-                            className={`font-body text-xs px-3 py-1.5 rounded-full border cursor-pointer ${on ? "bg-green-600 text-white border-green-600" : "bg-white text-gray-600 border-gray-200 hover:border-green-300"}`}>
-                            {opt.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  <div className="border-t border-gray-100 pt-2.5">
-                    <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Cavaliers</div>
-                    {newChildren.map((child, idx) => (
-                      <div key={idx} className="mb-3 border border-gray-100 rounded-lg p-2.5 bg-white">
-                        <div className="flex gap-2 mb-2 items-center">
-                          <input value={child.firstName} onChange={e => { const u = [...newChildren]; u[idx].firstName = e.target.value; setNewChildren(u); }}
-                            placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                          <input value={child.lastName ?? nomFoyerDeduit} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
-                            placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                          {newChildren.length > 1 && (
-                            <button type="button" onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
-                              className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><X size={14} /></button>
-                          )}
-                        </div>
-                        <div className="flex gap-2">
-                          <div className="flex-1">
-                            <label className="font-body text-[10px] text-slate-400 block mb-1">Date de naissance</label>
-                            <input value={child.birthDate} onChange={e => { const u = [...newChildren]; u[idx].birthDate = e.target.value; setNewChildren(u); }}
-                              type="date" min="1920-01-01" max={new Date().toISOString().slice(0, 10)}
-                              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-                            {(() => {
-                              // Une date future (ex. 2050 saisi pour 1950) faisait
-                              // echouer la creation sur un « Timestamp seconds out
-                              // of range » incomprehensible cote utilisateur.
-                              if (!child.birthDate) return null;
-                              const d = new Date(child.birthDate);
-                              if (isNaN(d.getTime())) return null;
-                              const an = d.getFullYear();
-                              if (an > new Date().getFullYear() || an < 1920) {
-                                return <p className="mt-1 font-body text-[10px] font-semibold text-orange-600">⚠️ Année {an} — vérifiez la saisie.</p>;
-                              }
-                              return null;
-                            })()}
-                          </div>
-                          <div className="flex-1">
-                            <label className="font-body text-[10px] text-slate-400 block mb-1">Niveau Galop</label>
-                            <select value={child.galopLevel} onChange={e => { const u = [...newChildren]; u[idx].galopLevel = e.target.value; setNewChildren(u); }}
-                              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-green-500">
-                              {["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"].map(g =>
-                                <option key={g} value={g}>{g === "—" ? "Débutant" : g}</option>
-                              )}
-                            </select>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => setNewChildren([...newChildren, { firstName: "", lastName: null, birthDate: "", galopLevel: "—" }])}
-                      className="font-body text-xs text-green-600 bg-transparent border-none cursor-pointer hover:underline p-0">
-                      + Ajouter un cavalier
-                    </button>
-                  </div>
-                  <button onClick={async () => {
-                    const validChildren = newChildren.filter(c => c.firstName.trim());
-                    // Date aberrante : Firestore rejette les timestamps hors
-                    // plage avec un message technique. On arrete avant.
-                    const dateInvalide = validChildren.find(c => {
-                      if (!c.birthDate) return false;
-                      const d = new Date(c.birthDate);
-                      if (isNaN(d.getTime())) return true;
-                      const an = d.getFullYear();
-                      return an > new Date().getFullYear() || an < 1920;
-                    });
-                    if (dateInvalide) {
-                      panelToast(`Date de naissance invalide pour ${dateInvalide.firstName || "un cavalier"} — vérifiez l'année`, "error");
-                      return;
-                    }
-                    if (!newFam.parentName.trim() || validChildren.length === 0) {
-                      panelToast("Nom du parent et prénom d'au moins un cavalier requis", "error");
-                      return;
-                    }
-                    // Adresse obligatoire, comme dans « Nouvelle famille » :
-                    // une fiche sans adresse se dédouble en compte orphelin le
-                    // jour où le parent se connecte.
-                    if (!emailValide(newFam.parentEmail)) {
-                      panelToast(
-                        newFam.parentEmail.trim()
-                          ? "Cette adresse email ne semble pas valide — vérifiez-la"
-                          : "L'adresse email est obligatoire : sans elle, la connexion du parent créera une fiche vide en double",
-                        "error",
-                      );
-                      return;
-                    }
-                    setCreatingFamily(true);
-                    try {
-                      const children = validChildren.map(c => ({
-                        id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                        firstName: c.firstName.trim(),
-                        lastName: (c.lastName ?? nomFoyerDeduit).trim(),
-                        birthDate: c.birthDate ? new Date(c.birthDate) : null,
-                        galopLevel: c.galopLevel || "—",
-                        sanitaryForm: null,
-                      }));
-                      const famRef = await addDoc(collection(db, "families"), {
-                        civilite: newFam.civilite || null,
-                        parentName: newFam.parentName.trim(),
-                        parentEmail: newFam.parentEmail.trim(),
-                        parentPhone: newFam.parentPhone.trim(),
-                        address: newFam.address.trim(),
-                        zipCode: newFam.zipCode.trim(),
-                        city: newFam.city.trim(),
-                        accountType: "particulier",
-                        tags: newFam.tags,
-                        authProvider: "admin",
-                        authUid: "",
-                        children,
-                        createdAt: serverTimestamp(),
-                        updatedAt: serverTimestamp(),
-                      });
-                      // Email bienvenue
-                      if (newFam.parentEmail.trim()) {
-                        const emailData = emailTemplates.bienvenueNouvelleFamille({ parentName: newFam.parentName.trim() });
-                        authFetch("/api/send-email", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
-                            to: newFam.parentEmail.trim(),
-                            ...emailData,
-                            context: "admin_bienvenue_famille",
-                            template: "bienvenueNouvelleFamille",
-                            familyId: famRef.id,
-                          }),
-                        }).catch(() => {});
-                      }
-                      // Ajouter la famille au state local pour qu'elle soit sélectionnable
-                      setLocalFamilies(prev => [...prev, {
-                        firestoreId: famRef.id,
-                        parentName: newFam.parentName.trim(),
-                        parentEmail: newFam.parentEmail.trim(),
-                        parentPhone: newFam.parentPhone.trim(),
-                        children,
-                      } as any]);
-                      // Sélectionner automatiquement la nouvelle famille + premier enfant
-                      setSelFam(famRef.id);
-                      setSelChild(children[0].id);
-                      setShowNewFamily(false);
-                      setSearch(newFam.parentName.trim());
-                      const noms = children.map(c => c.firstName).join(", ");
-                      panelToast(`✅ Famille ${newFam.parentName} créée (${noms}) — sélectionnez le mode d'inscription`, "success");
-                      setNewFam({ parentName: "", parentEmail: "", parentPhone: "", address: "", zipCode: "", city: "", civilite: "", tags: [] });
-                      // null = « jamais touche » : le nom du foyer sera herite.
-                      // Une chaine vide signifierait « efface volontairement »
-                      // et couperait l'heritage pour toutes les familles
-                      // creees ensuite sans rechargement de la page.
-                      setNewChildren([{ firstName: "", lastName: null, birthDate: "", galopLevel: "—" }]);
-                    } catch (e: any) {
-                      panelToast("Erreur : " + e.message, "error");
-                    }
-                    setCreatingFamily(false);
-                  }} disabled={creatingFamily || !newFam.parentName.trim() || !newChildren.some(c => c.firstName.trim())}
-                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold text-white bg-green-600 border-none cursor-pointer hover:bg-green-500 disabled:opacity-50">
-                    {creatingFamily ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                    Créer la famille
-                  </button>
-                </div>
-              </div>
+              <FormulaireNouvelleFamille
+                panelToast={panelToast}
+                onFermer={() => setShowNewFamily(false)}
+                onCreee={(famille, premierCavalierId) => {
+                  setLocalFamilies(prev => [...prev, famille as any]);
+                  setSelFam(famille.firestoreId);
+                  setSelChild(premierCavalierId);
+                  setShowNewFamily(false);
+                  setSearch(famille.parentName || "");
+                }} />
             )}
             {fam && !isStage && (
               <div>
@@ -4225,7 +2247,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={showPay} onChange={e => { setShowPay(e.target.checked); setFreeEnroll(false); }} className="accent-blue-500 w-4 h-4"/>
-                          <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
+                          {/* Le montant annoncé est celui qui sera réellement encaissé :
+                              une seule ligne au journal pour tous les cavaliers cochés.
+                              Afficher le prix unitaire faisait croire que seul le
+                              premier enfant serait réglé. */}
+                          <span className="font-body text-sm text-blue-800 font-semibold">
+                            Encaisser maintenant ({(priceTTC * Math.max(1, selectedChildren.length)).toFixed(2)}€)
+                            {selectedChildren.length > 1 && (
+                              <span className="font-normal text-slate-500"> — {selectedChildren.length} × {priceTTC.toFixed(2)}€</span>
+                            )}
+                          </span>
                         </label>
                         <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
                           {showPay ? "Le paiement sera enregistré immédiatement dans le journal." : "La prestation sera ajoutée aux impayés de la famille."}
@@ -4860,71 +2891,42 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         {/* ── Bandeau impayés sticky ── */}
         {(() => {
           // Collecter les familyIds des inscrits dans ce créneau
-          const enrolledFamilyIds = [...new Set((creneau.enrolled || []).map((e: any) => e.familyId))];
-          const pendingPayments = payments.filter((p: any) =>
-            enrolledFamilyIds.includes(p.familyId) &&
-            (p.status === "pending" || p.status === "partial") &&
-            p.totalTTC > (p.paidAmount || 0)
-          );
-          if (pendingPayments.length === 0) return null;
-          const totalDu = pendingPayments.reduce((s: number, p: any) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
-          const familyNames = [...new Set(pendingPayments.map((p: any) => p.familyName))].join(", ");
+          const enrolledFamilyIds = [...new Set((creneau.enrolled || []).map((e: any) => e.familyId))] as string[];
+          // Même règle que l'onglet Impayés : une échéance à venir, un SEPA
+          // programmé ou un chèque différé sont dus, pas impayés. Le bandeau
+          // disait « 3 paiements en attente » à une famille qui venait de
+          // choisir trois fois sans frais, et Impayés n'en montrait aucun.
+          const attentes = resumerAttentes(payments, enrolledFamilyIds, new Date().toISOString().split("T")[0]);
+          const tous = [...attentes.impayes, ...attentes.aVenir];
+          if (tous.length === 0) return null;
+          const familyNames = [...new Set(tous.map((p: any) => p.familyName))].join(", ");
+          const queDuAVenir = attentes.impayes.length === 0;
+          const cible = queDuAVenir ? attentes.aVenir[0] : attentes.impayes[0];
+          const lien = `/admin/paiements?tab=${queDuAVenir ? "echeances" : "impayes"}${cible?.familyId ? `&family=${encodeURIComponent(cible.familyId)}` : `&search=${encodeURIComponent(familyNames.split(",")[0].trim())}`}`;
+          const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
           return (
-            <div className="border-t border-orange-200 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-3 rounded-b-2xl flex-shrink-0">
+            <div className={`border-t px-5 py-3 rounded-b-2xl flex-shrink-0 bg-gradient-to-r ${queDuAVenir ? "border-blue-200 from-sky-50 to-blue-50" : "border-orange-200 from-amber-50 to-orange-50"}`}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-lg flex-shrink-0">💰</span>
+                  <span className="text-lg flex-shrink-0">{queDuAVenir ? "📅" : "💰"}</span>
                   <div className="min-w-0">
-                    <div className="font-body text-sm font-semibold text-orange-800 truncate">
-                      {pendingPayments.length} paiement{pendingPayments.length > 1 ? "s" : ""} en attente · {totalDu.toFixed(0)}€
+                    <div className={`font-body text-sm font-semibold truncate ${queDuAVenir ? "text-blue-800" : "text-orange-800"}`}>
+                      {attentes.impayes.length > 0 && `${pluriel(attentes.impayes.length, "impayé")} · ${attentes.totalImpayes.toFixed(0)}€`}
+                      {attentes.impayes.length > 0 && attentes.aVenir.length > 0 && " · "}
+                      {attentes.aVenir.length > 0 && `${pluriel(attentes.aVenir.length, "échéance")} à venir · ${attentes.totalAVenir.toFixed(0)}€`}
                     </div>
-                    <div className="font-body text-[10px] text-orange-600 truncate">{familyNames}</div>
+                    <div className={`font-body text-[10px] truncate ${queDuAVenir ? "text-blue-600" : "text-orange-600"}`}>{familyNames}</div>
                   </div>
                 </div>
-                <a href={`/admin/paiements?tab=impayes${pendingPayments[0]?.familyId ? `&family=${encodeURIComponent(pendingPayments[0].familyId)}` : `&search=${encodeURIComponent(familyNames.split(",")[0].trim())}`}`}
-                  className="flex-shrink-0 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-2 rounded-lg no-underline transition-colors">
-                  Encaisser →
+                <a href={lien}
+                  className={`flex-shrink-0 font-body text-xs font-semibold text-white px-3 py-2 rounded-lg no-underline transition-colors ${queDuAVenir ? "bg-blue-500 hover:bg-blue-600" : "bg-orange-500 hover:bg-orange-600"}`}>
+                  {queDuAVenir ? "Voir les échéances →" : "Encaisser →"}
                 </a>
               </div>
             </div>
           );
         })()}
       </div>
-      {lightbox && (
-        <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4"
-          onClick={closeLightbox}>
-          <div className="relative max-w-4xl max-h-full w-full" onClick={e => e.stopPropagation()}>
-            {!lightboxBlobUrl ? (
-              <div className="flex items-center justify-center h-64 text-white">
-                <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin"/>
-              </div>
-            ) : lightboxBlobUrl.startsWith("cors_error:") ? (
-              <div className="flex flex-col items-center justify-center h-64 gap-4 text-white text-center p-6">
-                <div className="text-4xl">🔒</div>
-                <p className="font-body text-sm">Aperçu bloqué par la politique CORS de Firebase Storage.</p>
-                <a href={lightboxBlobUrl.replace("cors_error:", "")} target="_blank" rel="noopener noreferrer"
-                  className="font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-400 px-4 py-2.5 rounded-xl no-underline">
-                  Ouvrir dans un nouvel onglet →
-                </a>
-                <p className="font-body text-[10px] text-white/50">Solution définitive : configurer les règles CORS dans Firebase Storage</p>
-              </div>
-            ) : (
-              <img src={lightboxBlobUrl} alt="Plan de séance"
-                className="w-full max-h-[85vh] object-contain rounded-xl shadow-2xl" />
-            )}
-            <button onClick={closeLightbox}
-              className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/60 text-white flex items-center justify-center border-none cursor-pointer hover:bg-black/80 text-lg">
-              ✕
-            </button>
-            {lightboxBlobUrl && (
-              <a href={lightboxBlobUrl} download="plan-seance" target="_blank" rel="noopener noreferrer"
-                className="absolute bottom-3 right-3 flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-black/60 hover:bg-black/80 px-3 py-2 rounded-lg no-underline">
-                ⬇ Télécharger
-              </a>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -13,8 +13,8 @@ import {
   type VacationPeriod,
   type DiscountSettings,
 } from "@/lib/discounts";
-import { Card, Badge } from "@/components/ui";
-import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift, CalendarClock } from "lucide-react";
+import { Card } from "@/components/ui";
+import { Plus, ShoppingCart, Check, Loader2, Search, X, AlertTriangle, CalendarClock } from "lucide-react";
 import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
