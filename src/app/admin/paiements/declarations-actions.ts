@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import {
@@ -12,6 +12,8 @@ import {
 import { authFetch } from "@/lib/auth-fetch";
 import { renderDerouleStage } from "@/lib/stage-deroule";
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
+import { construireEcheancier, nombreEcheances } from "@/lib/echeancier-paiement";
+import { todayLocalString } from "@/lib/date-local";
 
 export type DeclarationPaiement = {
   id: string;
@@ -28,6 +30,7 @@ export type DeclarationPaiement = {
   createdAt?: { seconds?: number };
   status?: string;
   type?: string;
+  paymentPlan?: string;
   pendingEnrollments?: Array<{ creneauId: string; childId: string }>;
   reservationIds?: string[];
   forfaitPayloads?: Record<string, unknown>[];
@@ -75,17 +78,81 @@ async function finaliserPlacesEtForfaits(declaration: DeclarationPaiement) {
     }
   }
 
-  for (const forfaitPayload of declaration.forfaitPayloads || []) {
+  for (const [index, forfaitPayload] of (declaration.forfaitPayloads || []).entries()) {
     try {
-      await addDoc(collection(db, "forfaits"), {
+      // ID déterministe : si la validation est relancée après une coupure,
+      // le même forfait est complété au lieu d'être créé une seconde fois.
+      await setDoc(doc(db, "forfaits", `${declaration.id}-forfait-${index + 1}`), {
         ...forfaitPayload,
         paymentId: declaration.paymentId || null,
+        sourceDeclarationId: declaration.id,
         createdAt: serverTimestamp(),
-      });
+      }, { merge: true });
     } catch (error) {
       console.error("Création forfait:", error);
     }
   }
+}
+
+async function creerEcheancierDeclaration(
+  declaration: DeclarationPaiement,
+  paymentRef: ReturnType<typeof doc>,
+  payment: Record<string, any>,
+): Promise<number> {
+  const nb = nombreEcheances(declaration.paymentPlan || payment.paymentPlan);
+  if (nb <= 1) return 1;
+
+  // Si l'échéancier existe déjà, une nouvelle tentative ne doit jamais le
+  // dupliquer. Les identifiants des échéances 2..N sont déterministes.
+  if (Number(payment.echeancesTotal || 0) > 1) return nb;
+
+  const echeancier = construireEcheancier({
+    totalTTC: Number(payment.totalTTC || declaration.montant || 0),
+    items: Array.isArray(payment.items) ? payment.items : [],
+    paymentPlan: declaration.paymentPlan || payment.paymentPlan,
+    dateDepart: todayLocalString(),
+  });
+  const sourcePaymentId = declaration.paymentId!;
+  const forfaitRef = payment.forfaitRef || declaration.activityTitle || "Inscription annuelle";
+
+  // Écrire d'abord 2..N, puis remplacer la commande d'origine par l'échéance 1.
+  // En cas d'interruption, relancer écrase les mêmes IDs au lieu de doubler.
+  for (let i = 1; i < echeancier.length; i++) {
+    const echeance = echeancier[i];
+    const ref = doc(db, "payments", `${sourcePaymentId}-echeance-${String(i + 1).padStart(2, "0")}`);
+    await setDoc(ref, {
+      ...payment,
+      ...echeance,
+      paymentMode: declaration.mode,
+      paymentPlan: declaration.paymentPlan,
+      paymentRef: "",
+      status: "pending",
+      paidAmount: 0,
+      skipPayment: true,
+      awaitingValidation: false,
+      sourcePaymentId,
+      forfaitRef,
+      createdAt: payment.createdAt || serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  }
+
+  await setDoc(paymentRef, {
+    ...payment,
+    ...echeancier[0],
+    paymentMode: declaration.mode,
+    paymentPlan: declaration.paymentPlan,
+    paymentRef: "",
+    status: "pending",
+    paidAmount: 0,
+    skipPayment: true,
+    awaitingValidation: false,
+    sourcePaymentId,
+    forfaitRef,
+    updatedAt: serverTimestamp(),
+  });
+
+  return nb;
 }
 
 async function envoyerConfirmationDeclaration(declaration: DeclarationPaiement) {
@@ -109,29 +176,40 @@ async function envoyerConfirmationDeclaration(declaration: DeclarationPaiement) 
     // Le déroulé et les CGV enrichissent l'email, ils ne bloquent pas la confirmation.
   }
 
+  const nb = nombreEcheances(declaration.paymentPlan);
+  const avecEcheancier = nb > 1;
+  const total = `${declaration.montant.toFixed(2).replace(".", ",")}&nbsp;€`;
+
   void authFetch("/api/send-email", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       to: declaration.familyEmail,
-      subject: `Paiement confirmé — ${declaration.montant.toFixed(2)}€`,
+      subject: avecEcheancier
+        ? `Inscription confirmée — échéancier ${nb}×`
+        : `Paiement confirmé — ${declaration.montant.toFixed(2)}€`,
       context: "admin_confirmation_declaration",
       template: "confirmationDeclaration",
       familyId: declaration.familyId,
       paymentId: declaration.paymentId,
       html: emailLayout([
-        emailTitre("Règlement bien reçu"),
+        emailTitre(avecEcheancier ? "Inscription et échéancier confirmés" : "Règlement bien reçu"),
         P(`Bonjour <strong>${declaration.familyName}</strong>,`),
-        P("Nous avons bien reçu votre règlement, et votre inscription est confirmée."),
+        P(avecEcheancier
+          ? `Votre inscription est confirmée. Votre règlement est réparti en <strong>${nb} échéances mensuelles</strong>.`
+          : "Nous avons bien reçu votre règlement, et votre inscription est confirmée."),
         emailPanneau("Détail", [
-          emailLigne("Montant", `${declaration.montant.toFixed(2).replace(".", ",")}&nbsp;€`),
+          emailLigne(avecEcheancier ? "Total de l'inscription" : "Montant", total),
+          ...(avecEcheancier ? [emailLigne("Échéancier", `${nb} mensualités`)] : []),
           emailLigne("Mode de règlement", libelleModeDeclaration(declaration.mode)),
           emailLigne("Prestations", declaration.activityTitle || ""),
         ].join("")),
         derouleHtml,
         encadreConditionsPourType(typeCgv),
         emailSignature("Merci de votre confiance."),
-      ].join("\n"), `${declaration.montant.toFixed(2).replace(".", ",")} € reçus — ${declaration.activityTitle || ""}`),
+      ].join("\n"), avecEcheancier
+        ? `${nb} échéances créées — ${declaration.activityTitle || ""}`
+        : `${declaration.montant.toFixed(2).replace(".", ",")} € reçus — ${declaration.activityTitle || ""}`),
     }),
   }).catch(() => {});
 }
@@ -150,34 +228,42 @@ export async function confirmerDeclarationPaiement(
     const paymentSnap = await getDoc(paymentRef);
     if (paymentSnap.exists()) {
       const payment = paymentSnap.data();
-      const newPaid = Math.round(((payment.paidAmount || 0) + declaration.montant) * 100) / 100;
-      const newStatus = newPaid >= (payment.totalTTC || 0) ? "paid" : "partial";
-      const paymentReference = referenceDeclaration(declaration);
+      const nb = nombreEcheances(declaration.paymentPlan || payment.paymentPlan);
 
-      await updateDoc(paymentRef, {
-        paidAmount: newPaid,
-        status: newStatus,
-        paymentMode: declaration.mode,
-        paymentRef: paymentReference,
-        updatedAt: serverTimestamp(),
-      });
+      if (nb > 1) {
+        // Valider un plan 3×/10× crée de vraies échéances. Cela ne signifie
+        // pas que le total annuel a été reçu : aucun encaissement n'est écrit.
+        await creerEcheancierDeclaration(declaration, paymentRef, payment);
+      } else {
+        const newPaid = Math.round(((payment.paidAmount || 0) + declaration.montant) * 100) / 100;
+        const newStatus = newPaid >= (payment.totalTTC || 0) ? "paid" : "partial";
+        const paymentReference = referenceDeclaration(declaration);
 
-      const explicitDate = declaration.dateEncaissement
-        ? new Date(`${declaration.dateEncaissement}T12:00:00`)
-        : new Date();
-      await createEncaissement({
-        paymentId: declaration.paymentId,
-        familyId: declaration.familyId,
-        familyName: declaration.familyName,
-        montant: declaration.montant,
-        mode: declaration.mode,
-        modeLabel: declaration.mode === "cheque"
-          ? `Chèque${declaration.chequeRef ? ` n°${declaration.chequeRef}` : ""}`
-          : libelleModeDeclaration(declaration.mode),
-        ref: paymentReference,
-        activityTitle: declaration.activityTitle,
-        explicitDate,
-      });
+        await updateDoc(paymentRef, {
+          paidAmount: newPaid,
+          status: newStatus,
+          paymentMode: declaration.mode,
+          paymentRef: paymentReference,
+          updatedAt: serverTimestamp(),
+        });
+
+        const explicitDate = declaration.dateEncaissement
+          ? new Date(`${declaration.dateEncaissement}T12:00:00`)
+          : new Date();
+        await createEncaissement({
+          paymentId: declaration.paymentId,
+          familyId: declaration.familyId,
+          familyName: declaration.familyName,
+          montant: declaration.montant,
+          mode: declaration.mode,
+          modeLabel: declaration.mode === "cheque"
+            ? `Chèque${declaration.chequeRef ? ` n°${declaration.chequeRef}` : ""}`
+            : libelleModeDeclaration(declaration.mode),
+          ref: paymentReference,
+          activityTitle: declaration.activityTitle,
+          explicitDate,
+        });
+      }
     }
   }
 

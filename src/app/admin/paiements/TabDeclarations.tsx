@@ -7,6 +7,7 @@ import {
   rejeterDeclarationPaiement,
   type DeclarationPaiement,
 } from "./declarations-actions";
+import { nombreEcheances } from "@/lib/echeancier-paiement";
 
 interface TabDeclarationsProps {
   loading: boolean;
@@ -61,7 +62,11 @@ export function TabDeclarations(props: TabDeclarationsProps) {
 
   const confirmer = async (declaration: DeclarationPaiement) => {
     const mode = libelleModeDeclaration(declaration.mode).toLowerCase();
-    if (!confirm(`Confirmer réception de ${declaration.montant.toFixed(2)}€ par ${mode} de ${declaration.familyName} ?`)) return;
+    const nb = nombreEcheances(declaration.paymentPlan);
+    const question = nb > 1
+      ? `Valider l'inscription de ${declaration.familyName} et créer ${nb} échéances mensuelles pour un total de ${declaration.montant.toFixed(2)}€ par ${mode} ?\n\nAucun encaissement ne sera enregistré maintenant.`
+      : `Confirmer réception de ${declaration.montant.toFixed(2)}€ par ${mode} de ${declaration.familyName} ?`;
+    if (!confirm(question)) return;
 
     setConfirmingDeclId(declaration.id);
     try {
@@ -74,7 +79,10 @@ export function TabDeclarations(props: TabDeclarationsProps) {
 
       retirerDeLaListe(declaration.id);
       await rafraichir();
-      toast(`✅ Paiement de ${declaration.familyName} confirmé`, "success");
+      const nb = nombreEcheances(declaration.paymentPlan);
+      toast(nb > 1
+        ? `✅ Inscription validée — ${nb} échéances créées`
+        : `✅ Paiement de ${declaration.familyName} confirmé`, "success");
     } catch (error) {
       console.error("Erreur confirmation:", error);
       toast("Erreur lors de la confirmation", "error");
@@ -110,6 +118,7 @@ export function TabDeclarations(props: TabDeclarationsProps) {
         <div className="flex flex-col gap-3">
           {declarations.map((rawDeclaration: any) => {
             const declaration = rawDeclaration as DeclarationPaiement;
+            const nbEcheances = nombreEcheances(declaration.paymentPlan);
             const date = declaration.createdAt?.seconds
               ? new Date(declaration.createdAt.seconds * 1000)
               : new Date();
@@ -126,6 +135,11 @@ export function TabDeclarations(props: TabDeclarationsProps) {
                       </span>
                     </div>
                     <div className="font-body text-sm text-slate-600">{declaration.activityTitle}</div>
+                    {nbEcheances > 1 && (
+                      <div className="font-body text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-2.5 py-1.5 mt-2 inline-block">
+                        📅 {nbEcheances} échéances mensuelles · aucun encaissement immédiat
+                      </div>
+                    )}
                     {declaration.note && <div className="font-body text-xs text-slate-400 mt-1 italic">&quot;{declaration.note}&quot;</div>}
                     <div className="font-body text-xs text-slate-400 mt-1">
                       {date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })}
@@ -133,6 +147,7 @@ export function TabDeclarations(props: TabDeclarationsProps) {
                   </div>
 
                   <div className="text-right flex-shrink-0">
+                    <div className="font-body text-[10px] text-slate-400">{nbEcheances > 1 ? "Total inscription" : "Montant"}</div>
                     <div className="font-body text-xl font-bold text-blue-500 mb-2">{(declaration.montant || 0).toFixed(2)}€</div>
                     <div className="flex flex-col gap-1.5">
                       <button
@@ -141,7 +156,11 @@ export function TabDeclarations(props: TabDeclarationsProps) {
                         onClick={() => void confirmer(declaration)}
                         className={`font-body text-xs font-semibold text-white px-4 py-2 rounded-lg border-none cursor-pointer ${enCours ? "bg-gray-400 cursor-not-allowed" : "bg-green-500 hover:bg-green-600"}`}
                       >
-                        {enCours ? "⏳ Confirmation..." : "✓ Confirmer réception"}
+                        {enCours
+                          ? "⏳ Validation..."
+                          : nbEcheances > 1
+                            ? `✓ Créer les ${nbEcheances} échéances`
+                            : "✓ Confirmer réception"}
                       </button>
                       <button
                         type="button"

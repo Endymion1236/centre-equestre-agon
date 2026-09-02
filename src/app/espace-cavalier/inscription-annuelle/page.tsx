@@ -22,6 +22,7 @@ import {
   libelleMoyenPaiementInscription,
   type MoyenPaiementInscription,
 } from "@/lib/inscription-annuelle-paiement";
+import { nombreEcheances } from "@/lib/echeancier-paiement";
 import {
   CENTRE_BENEFICIARY,
   CENTRE_BIC,
@@ -138,6 +139,7 @@ export default function InscriptionAnnuellePage() {
     mode: MoyenPaiementInscription;
     total: number;
     names: string;
+    plan: "1x" | "3x" | "10x";
   }>(null);
   const [mode, setMode] = useState<"annuel" | "ponctuel">("annuel");
   const [slotSearch, setSlotSearch] = useState("");
@@ -899,6 +901,7 @@ export default function InscriptionAnnuellePage() {
       if (deferred) {
         const names = items.map(it => it.childName).join(", ");
         const modeLabel = libelleMoyenPaiementInscription(moyenPaiement).toLowerCase();
+        const nbEcheances = nombreEcheances(paymentPlan);
         await addDoc(collection(db, "payment_declarations"), {
           paymentId: payDoc.id,
           familyId: user.uid,
@@ -926,13 +929,17 @@ export default function InscriptionAnnuellePage() {
             context: "inscription_annuelle",
             titre: `Inscription annuelle (${modeLabel}) à valider — ${family.parentName}`,
             lignes: [
-              `${family.parentName} a inscrit ${names} à l'année et déclare un règlement de ${totalGroupe.toFixed(2)}€ par ${modeLabel} (${paymentPlan}).`,
-              "À valider dans Paiements → Déclarations pour confirmer la ou les places.",
+              nbEcheances > 1
+                ? `${family.parentName} demande un échéancier de ${nbEcheances} mensualités pour l'inscription annuelle de ${names} (total ${totalGroupe.toFixed(2)}€, mode prévu : ${modeLabel}).`
+                : `${family.parentName} a inscrit ${names} à l'année et déclare un règlement de ${totalGroupe.toFixed(2)}€ par ${modeLabel}.`,
+              nbEcheances > 1
+                ? "À valider dans Paiements → Déclarations. La validation créera les échéances sans enregistrer d'encaissement."
+                : "À valider dans Paiements → Déclarations pour confirmer la ou les places.",
             ],
             familyId: user.uid,
           }),
         }).catch(() => {});
-        setDeclaredSuccess({ mode: moyenPaiement, total: totalGroupe, names });
+        setDeclaredSuccess({ mode: moyenPaiement, total: totalGroupe, names, plan: paymentPlan });
         setSubmitting(false);
         return;
       }
@@ -972,22 +979,29 @@ export default function InscriptionAnnuellePage() {
 
   if (declaredSuccess) {
     const modeLabel = libelleMoyenPaiementInscription(declaredSuccess.mode).toLowerCase();
+    const nbEcheances = nombreEcheances(declaredSuccess.plan);
     return (
       <div className="max-w-lg mx-auto">
         <Card padding="lg" className="text-center">
           <div className="text-5xl mb-3">📨</div>
           <h2 className="font-display text-xl font-bold text-blue-800 mb-2">Inscription enregistrée</h2>
           <p className="font-body text-sm text-gray-600 mb-1">
-            {declaredSuccess.names} — <strong>{declaredSuccess.total.toFixed(2)}€</strong> par {modeLabel}.
+            {declaredSuccess.names} — <strong>{declaredSuccess.total.toFixed(2)}€</strong>
+            {nbEcheances > 1 ? ` en ${nbEcheances} échéances` : ` par ${modeLabel}`}.
           </p>
           {declaredSuccess.mode === "virement" && (
             <CoordonneesVirement reference={`Inscription annuelle — ${family?.parentName || declaredSuccess.names}`} />
           )}
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 my-4 text-left">
-            <p className="font-body text-sm text-amber-800 font-semibold mb-1">⏳ En attente de validation</p>
+            <p className="font-body text-sm text-amber-800 font-semibold mb-1">
+              ⏳ {nbEcheances > 1 ? "Échéancier en attente de validation" : "En attente de validation"}
+            </p>
             <p className="font-body text-xs text-amber-700">
-              La/les place(s) sont réservées provisoirement. Le centre équestre confirmera l&apos;inscription
-              dès réception de votre règlement par {modeLabel}. Vous recevrez un email de confirmation.
+              {nbEcheances > 1 ? (
+                <>La/les place(s) sont réservées provisoirement. Le centre validera l&apos;inscription et créera <strong>{nbEcheances} échéances mensuelles</strong> par {modeLabel}. Aucun encaissement de {declaredSuccess.total.toFixed(2)}€ n&apos;est enregistré à ce stade.</>
+              ) : (
+                <>La/les place(s) sont réservées provisoirement. Le centre équestre confirmera l&apos;inscription dès réception de votre règlement par {modeLabel}. Vous recevrez un email de confirmation.</>
+              )}
             </p>
           </div>
           <a href="/espace-cavalier/reservations" className="no-underline">
