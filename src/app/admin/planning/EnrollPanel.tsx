@@ -63,7 +63,7 @@ const calcAge = (birthDate: any): string => {
 import {
   computeStageReductions,
   computeStageReductionsAsync,
-  
+  createReservation, removeChildFromCreneau, deleteReservations,
 } from "@/lib/planning-services";
 import {
   fetchVacationPeriods, fetchDiscountSettings,
@@ -178,22 +178,71 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       let count = 0;
       for (const d of cibles) {
         const c = d.data() as any;
-        const newEnrolled = [...(c.enrolled || []), {
+        const inscrit = {
           childId, childName, familyId, familyName,
           enrolledAt: new Date().toISOString(), presence: null,
           institutional: true, // marqueur : séance facturée à l'établissement
-        }];
+        };
+        const newEnrolled = [...(c.enrolled || []), inscrit];
         await updateDoc(doc(db, "creneaux", d.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
+        // La fiche du cavalier et l'espace famille listent les « prochaines
+        // séances » depuis les réservations, pas depuis les créneaux : sans
+        // cette écriture, un enfant inscrit pour la saison n'avait aucune
+        // séance à venir sur sa fiche.
+        await createReservation(inscrit as EnrolledChild, { id: d.id, ...c });
         count++;
       }
       panelToast(`🏫 ${childName} inscrit(e) sur ${count} séance(s) de la saison (établissement, sans facturation)`, "success");
       setJustEnrolled(`🏫 ${childName} — ${count} séances de la saison (établissement)`);
+      // L'inscription est faite : le panneau peut se fermer sans demander
+      // « quitter sans enregistrer ? ».
+      setInscriptionFaite(true);
       await onRefresh?.();
     } catch (e) {
       console.error("Inscription saison établissement:", e);
       panelToast("Erreur lors de l'inscription saison", "error");
     }
     setEnrollingSaison(false);
+  };
+
+  // ── Désinscription établissement de TOUTE la saison ──
+  // Le miroir exact de l'inscription : les mêmes créneaux récurrents à venir,
+  // où l'enfant est inscrit avec le marqueur établissement. Rien d'autre n'est
+  // touché : ni paiement, ni avoir, puisque rien n'a été facturé aux parents.
+  const [unenrollingSaison, setUnenrollingSaison] = useState("");
+  const desinscrireSaisonEtablissement = async (childId: string, childName: string) => {
+    if (!confirm(`Retirer ${childName} de toutes les séances de la saison de ce cours (inscription établissement) ?`)) return;
+    setUnenrollingSaison(childId);
+    try {
+      const today = new Date(); today.setHours(0, 0, 0, 0);
+      const startStr = today.toISOString().split("T")[0];
+      const endStr = dateFinSaisonEffective.toISOString().split("T")[0];
+      const jourRef = new Date(creneau.date + "T12:00:00").getDay();
+      const snap = await getDocs(query(
+        collection(db, "creneaux"),
+        where("date", ">=", startStr),
+        where("date", "<=", endStr),
+      ));
+      const cibles = snap.docs.filter(d => {
+        const c = d.data() as any;
+        if (c.activityTitle !== creneau.activityTitle) return false;
+        if (c.startTime !== creneau.startTime) return false;
+        if (new Date(c.date + "T12:00:00").getDay() !== jourRef) return false;
+        return (c.enrolled || []).some((e: any) => e.childId === childId && e.institutional);
+      });
+      let count = 0;
+      for (const d of cibles) {
+        await removeChildFromCreneau(d.id, childId);
+        await deleteReservations(d.id, childId);
+        count++;
+      }
+      panelToast(`🏫 ${childName} retiré(e) de ${count} séance(s) de la saison`, "success");
+      await onRefresh?.();
+    } catch (e) {
+      console.error("Désinscription saison établissement:", e);
+      panelToast("Erreur lors de la désinscription saison", "error");
+    }
+    setUnenrollingSaison("");
   };
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
@@ -1530,7 +1579,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <span className="hidden sm:inline">Confirmer</span>
                     </button>
                   )}
+                  {(e as any).institutional && (
+                    <button type="button" onClick={() => desinscrireSaisonEtablissement(e.childId, e.childName)} disabled={unenrollingSaison === e.childId}
+                      title="Inscription établissement : retirer de toutes les séances de la saison de ce cours"
+                      className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 hover:text-purple-800 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-purple-50 flex-shrink-0 disabled:opacity-40">
+                      {unenrollingSaison === e.childId ? <Loader2 size={12} className="animate-spin" /> : <span>🏫</span>}
+                      <span className="hidden sm:inline">Retirer de la saison</span>
+                    </button>
+                  )}
                   <button type="button" onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
+                    title={(e as any).institutional ? "Retirer de cette séance seulement" : "Désinscrire"}
                     className="flex items-center gap-1 font-body text-xs text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">
                     {unenrolling===e.childId ? <Loader2 size={12} className="animate-spin"/> : <Trash2 size={12}/>}
                   </button>
@@ -2188,7 +2246,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       <>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <input type="checkbox" checked={showPay} onChange={e => { setShowPay(e.target.checked); setFreeEnroll(false); }} className="accent-blue-500 w-4 h-4"/>
-                          <span className="font-body text-sm text-blue-800 font-semibold">Encaisser maintenant ({priceTTC.toFixed(2)}€)</span>
+                          {/* Le montant annoncé est celui qui sera réellement encaissé :
+                              une seule ligne au journal pour tous les cavaliers cochés.
+                              Afficher le prix unitaire faisait croire que seul le
+                              premier enfant serait réglé. */}
+                          <span className="font-body text-sm text-blue-800 font-semibold">
+                            Encaisser maintenant ({(priceTTC * Math.max(1, selectedChildren.length)).toFixed(2)}€)
+                            {selectedChildren.length > 1 && (
+                              <span className="font-normal text-slate-500"> — {selectedChildren.length} × {priceTTC.toFixed(2)}€</span>
+                            )}
+                          </span>
                         </label>
                         <div className="font-body text-[10px] text-slate-500 mt-1 ml-6">
                           {showPay ? "Le paiement sera enregistré immédiatement dans le journal." : "La prestation sera ajoutée aux impayés de la famille."}
