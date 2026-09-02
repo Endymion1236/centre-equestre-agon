@@ -129,7 +129,7 @@ export function construirePointsCloture(params: {
     });
   } else {
     const ecart = credits - ca;
-    const pct = Math.abs(ecart) / ca;
+    const pct = ca > 0 ? Math.abs(ecart) / ca : 0;
     points.push({
       etat: pct <= 0.05 ? "ok" : "info",
       titre: "Rapprochement banque ↔ caisse",

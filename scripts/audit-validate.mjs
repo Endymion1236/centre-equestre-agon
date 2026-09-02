@@ -481,7 +481,13 @@ test("I6 — Les routes CAWL existent (checkout, status, webhook)", () => {
 });
 
 test("I7 — La comptabilité ne référence pas Stripe comme mode de paiement actif", () => {
-  const content = readFile("src/app/admin/comptabilite/page.tsx");
+  // La page n'est plus qu'une enveloppe : la logique vit dans ces fichiers.
+  const content = [
+    "src/app/admin/comptabilite/page.tsx",
+    "src/app/admin/comptabilite/ComptabiliteClient.tsx",
+    "src/app/admin/comptabilite/useRapprochement.ts",
+    "src/app/admin/comptabilite/rapprochement-matching.ts",
+  ].map((f) => readFile(f) || "").join("\n");
   if (!content) return;
   // Vérifier que "STRIPE" est dans un contexte de rapprochement bancaire historique, pas comme mode actif
   const stripeImport = /import.*stripe/i.test(content);

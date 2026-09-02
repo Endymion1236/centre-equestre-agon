@@ -1,54 +1,15 @@
 "use client";
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { ACOMPTE_PAR_ENFANT, montantsAcompteStage, acompteApplicable } from "@/lib/panier-reservation";
-import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
-import { db, storage } from "@/lib/firebase";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { Card, Badge } from "@/components/ui";
+import { collection, getDocs, getDoc, updateDoc, deleteField, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import {
-  emailTemplates, emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
-  emailParagraphe, emailParagraphe as P, emailSignature, emailCouleurs as CE,
-} from "@/lib/email-templates";
-import { generateOrderId, emailValide } from "@/lib/utils";
-import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "@/app/admin/paiements/types";
-import { formatStageSchedule } from "@/lib/format-stage";
 import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
 import { tarifPourFrequence, calculerForfaitAnnuel } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
-
-/**
- * Minuteries d'envoi des confirmations groupées.
- *
- * Hors du composant à dessein : le panneau se démonte entre deux inscriptions
- * (on change de créneau, de jour, de semaine), la confirmation en attente,
- * elle, reste due. Le cron `/api/cron/confirmations-stage` reste le filet :
- * si l'onglet est fermé avant l'échéance, c'est lui qui envoie.
- */
-const minuteriesConfirmation = new Map<string, ReturnType<typeof setTimeout>>();
-
-function programmerEnvoiConfirmation(familyId: string, envoiPrevuA: string) {
-  const precedente = minuteriesConfirmation.get(familyId);
-  if (precedente) clearTimeout(precedente);
-  const attente = Math.max(3000, (Date.parse(envoiPrevuA) || 0) - Date.now() + 2000);
-  minuteriesConfirmation.set(familyId, setTimeout(() => {
-    minuteriesConfirmation.delete(familyId);
-    // `force: false` : si une inscription de dernière minute a repoussé
-    // l'échéance, l'envoi est simplement laissé au cron.
-    authFetch("/api/admin/confirmation-stage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "envoyer", familyId, force: false }),
-    }).catch(e => console.warn("Envoi confirmation groupée:", e));
-  }, attente));
-}
-
-function annulerMinuterieConfirmation(familyId: string) {
-  const t = minuteriesConfirmation.get(familyId);
-  if (t) { clearTimeout(t); minuteriesConfirmation.delete(familyId); }
-}
+import { annulerMinuterieConfirmation } from "./minuteries-confirmation";
 
 /** Libellé lisible d'un moyen de règlement d'acompte, aligné sur la caisse. */
 function libelleModeAcompte(mode: string): string {
@@ -100,21 +61,20 @@ const calcAge = (birthDate: any): string => {
   return `${age} ans`;
 };
 import {
-  findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
+  computeStageReductions,
   computeStageReductionsAsync,
-  enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
+  
 } from "@/lib/planning-services";
 import {
   fetchVacationPeriods, fetchDiscountSettings,
   type VacationPeriod, type DiscountSettings,
 } from "@/lib/discounts";
-import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, CreditCard, Camera, FileImage, Mail, Sparkles, Send, FileText, Printer, StickyNote, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, Mail, Send, FileText, Printer } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, statutPaiementCavalier, sameStage } from "./types";
 import { MOTIFS_OFFERT } from "@/lib/offerts";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
-import { signalerErreur } from "@/lib/signaler-erreur";
 import PanneauPedagogie from "./PanneauPedagogie";
 import FormulaireEmailCreneau from "./FormulaireEmailCreneau";
 import PanneauListeAttente from "./PanneauListeAttente";

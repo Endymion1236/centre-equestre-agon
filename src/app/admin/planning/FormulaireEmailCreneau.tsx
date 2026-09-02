@@ -33,9 +33,9 @@ export default function FormulaireEmailCreneau({
 }: FormulaireEmailCreneauProps) {
   // Le sujet part du nom de la séance et de sa date : c'est ce qu'on écrit
   // neuf fois sur dix, et l'écran d'inscription n'a plus à le préparer.
-  const [emailSubject, setEmailSubject] = useState(
-    () => `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`,
-  );
+  const sujetParDefaut = () =>
+    `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}`;
+  const [emailSubject, setEmailSubject] = useState(sujetParDefaut);
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailGenerating, setEmailGenerating] = useState(false);
@@ -114,7 +114,8 @@ export default function FormulaireEmailCreneau({
     });
     panelToast(`Email envoyé à ${sent} famille${sent > 1 ? "s" : ""}`, "success");
     setShowEmailForm(false);
-    setEmailSubject(""); setEmailBody("");
+    // Le sujet repart de la séance pour l'envoi suivant, comme avant l'extraction.
+    setEmailSubject(sujetParDefaut()); setEmailBody("");
     setEmailSending(false);
   };
 

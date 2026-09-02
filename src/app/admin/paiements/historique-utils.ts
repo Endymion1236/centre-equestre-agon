@@ -59,7 +59,11 @@ export function filtrerHistorique(
     result = result.filter((payment) => payment.familyId === filters.familyId);
   }
   if (filters.mode && filters.mode !== "all") {
-    result = result.filter((payment) => payment.paymentMode === filters.mode);
+    // « autre » regroupe les commandes sans mode de règlement (broadcast,
+    // duplication) : c'est sous cette clé que les totaux les comptent.
+    result = result.filter((payment) =>
+      filters.mode === "autre" ? !payment.paymentMode : payment.paymentMode === filters.mode,
+    );
   }
   if (filters.status && filters.status !== "all") {
     result = result.filter((payment) => payment.status === filters.status);

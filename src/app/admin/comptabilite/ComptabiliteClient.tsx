@@ -3,24 +3,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { collection, getDocs, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc, query, where, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Download, Upload, Check, FileText, Building2, Receipt, Calculator, Search, Printer, Plus, Sparkles, Bot, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
+import { Loader2, Download, FileText, Building2, Receipt, Calculator, Printer, Sparkles, Bot, EyeOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
-import {
-  analyserPeriodeCsv,
-  cleLigneBancaire,
-  encaissementEnDetail,
-  estDansFenetreBancaire,
-  parserCsvBancaire,
-  parserDateBancaire,
-  parserDetailCa,
-  periodePrecedente,
-  trouverSousEnsembleMontant,
-} from "./rapprochement-utils";
 import { construireFecVentes } from "./fec-utils";
 import PanneauxDebug from "./PanneauxDebug";
 import OngletRemise from "./OngletRemise";
@@ -512,10 +501,13 @@ export default function ComptabilitePage() {
       )}
 
       {/* ─── Bordereaux de remise ─── */}
-      {!loading && tab === "remise" && (
+      {/* Monté en permanence : ses états (sélection, filtres, pointage) vivaient
+          dans l'écran avant l'extraction et survivaient à un aller-retour
+          d'onglet. Le démonter les remettait à zéro. */}
+      <div hidden={loading || tab !== "remise"}>
         <OngletRemise payments={payments} remises={remises}
           encaissementsCompta={encaissementsCompta} fetchData={fetchData} />
-      )}
+      </div>
 
       {/* ─── Rapprochement bancaire ─── */}
       {/* ─── Rapprochement bancaire, pointage manuel et lignes ignorées ─── */}
