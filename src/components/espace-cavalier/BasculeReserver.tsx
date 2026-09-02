@@ -24,8 +24,8 @@ export function BasculeReserver({ active, droite }: { active: "activites" | "ann
     { id: "annuel", href: "/espace-cavalier/inscription-annuelle", label: "Inscription à l’année" },
   ] as const;
   return (
-    <div className="flex items-end justify-between gap-3 border-b border-gray-200 mb-5">
-      <div className="flex gap-5 -mb-px">
+    <div className="flex flex-col-reverse sm:flex-row sm:items-end sm:justify-between gap-2 sm:gap-3 border-b border-gray-200 mb-5 min-w-0">
+      <div className="flex gap-5 -mb-px overflow-x-auto max-w-full hide-scrollbar">
         {onglets.map(({ id, href, label }) => {
           const actif = id === active;
           return (
@@ -41,7 +41,7 @@ export function BasculeReserver({ active, droite }: { active: "activites" | "ann
           );
         })}
       </div>
-      {droite && <div className="pb-2">{droite}</div>}
+      {droite && <div className="self-end pb-2">{droite}</div>}
     </div>
   );
 }

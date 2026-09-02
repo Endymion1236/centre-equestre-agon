@@ -536,7 +536,11 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
           </div>
         )}
 
-        <main className="p-4 md:p-8 max-w-[940px] pb-28 md:pb-10">{children}</main>
+        {/* min-w-0 + overflow-x-hidden : un bloc trop large (ligne
+            d'onglets, tableau) ne fait plus défiler toute la page de gauche
+            à droite sur téléphone. Les blocs qui doivent défiler (planning)
+            gardent leur propre overflow-x-auto. */}
+        <main className="p-4 md:p-8 max-w-[940px] pb-28 md:pb-10 min-w-0 overflow-x-hidden">{children}</main>
       </div>
 
       <div className="fixed bottom-20 left-4 z-[70] flex flex-col items-start gap-3 md:bottom-6">
