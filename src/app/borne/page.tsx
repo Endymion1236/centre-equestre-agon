@@ -680,9 +680,9 @@ export default function BornePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[38vh] overflow-y-auto pr-1">
             {cartes.map((c) => {
               const complet = c.placesRestantes <= 0;
+              // Écran étroit (téléphone, tablette en portrait) : le bouton
+              // passe sous le texte, sinon il tronquait titre et date.
               return (
-                {/* Écran étroit (téléphone, tablette en portrait) : le bouton
-                    passe sous le texte, sinon il tronquait titre et date. */}
                 <div key={c.id} className="bg-white rounded-2xl border border-blue-500/10 p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 text-left">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0">
