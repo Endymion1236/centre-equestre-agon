@@ -21,6 +21,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Badge, Card } from "@/components/ui";
 import { todayLocalString } from "@/lib/date-local";
+import { reconcilierReservationsAvecPaiements } from "@/lib/reservations-affichage";
 
 interface Reservation {
   id: string;
@@ -186,7 +187,25 @@ export default function ReservationsPage() {
         console.error("[reservations] waitlist:", error);
       }
 
-      setReservations([...own, ...linked.filter((item) => !own.some((ownItem) => ownItem.id === item.id))]);
+      const toutes = [...own, ...linked.filter((item) => !own.some((ownItem) => ownItem.id === item.id))];
+
+      // Les réservations « à finaliser » ne valent que si un paiement les
+      // attend vraiment. Un panier abandonné en laissait une pour toujours,
+      // et la page annonçait « paiement à finaliser » quand « Mes paiements »
+      // disait « tout est à jour ». On lit les paiements de la famille et on
+      // rapproche, sans rien écrire.
+      let paiements: any[] = [];
+      try {
+        const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", user.uid)));
+        paiements = paySnap.docs.map((item) => item.data());
+      } catch (error) {
+        console.error("[reservations] payments:", error);
+      }
+      const rapprochees = reconcilierReservationsAvecPaiements(toutes as any[], paiements);
+      if (rapprochees.abandonnees.length > 0) {
+        console.info(`[reservations] ${rapprochees.abandonnees.length} réservation(s) de panier abandonné masquée(s)`);
+      }
+      setReservations(rapprochees.reservations as Reservation[]);
       setLoading(false);
     };
 
