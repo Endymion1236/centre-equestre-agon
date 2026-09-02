@@ -129,19 +129,43 @@ async function dejaPrevenues(): Promise<Map<string, string>> {
   return map;
 }
 
+/**
+ * Familles dont on tient un IBAN : un mandat SEPA, actif ou en attente de
+ * signature, qui porte un IBAN. Un mandat révoqué ou annulé ne compte pas.
+ * C'est ce qui manque le plus souvent à un dossier de pré-inscrit : la
+ * liste le montre d'un coup d'œil, vert ou rouge.
+ */
+async function famillesAvecIban(): Promise<Set<string>> {
+  const avec = new Set<string>();
+  try {
+    const snap = await adminDb.collection("mandats-sepa").get();
+    for (const d of snap.docs) {
+      const m = d.data() as any;
+      const statut = String(m.status || "active").toLowerCase();
+      if (["revoked", "revoque", "cancelled", "annule", "inactive"].includes(statut)) continue;
+      if (m.familyId && String(m.iban || "").replace(/\s/g, "").length >= 15) avec.add(m.familyId);
+    }
+  } catch (e) {
+    console.warn("[preinscrits] lecture des mandats SEPA :", e);
+  }
+  return avec;
+}
+
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
-  const [familles, prevenues] = await Promise.all([collecter(), dejaPrevenues()]);
+  const [familles, prevenues, ibans] = await Promise.all([collecter(), dejaPrevenues(), famillesAvecIban()]);
   const enrichies = familles.map(f => ({
     ...f,
     dejaPrevenuLe: prevenues.get(f.familyId) || null,
+    iban: ibans.has(f.familyId),
   }));
   return NextResponse.json({
     nbFamilles: enrichies.length,
     nbPlaces: enrichies.reduce((s, f) => s + f.lignes.length, 0),
     sansEmail: enrichies.filter(f => !f.email).length,
     dejaPrevenues: enrichies.filter(f => f.dejaPrevenuLe).length,
+    avecIban: enrichies.filter(f => f.iban).length,
     familles: enrichies,
   });
 }

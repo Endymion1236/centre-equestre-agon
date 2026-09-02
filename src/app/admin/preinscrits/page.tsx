@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/auth-context";
 import { Loader2, Send, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface Ligne { childName: string; activite: string; date: string; horaire: string; annuel: boolean }
-interface Famille { familyId: string; familyName: string; email: string; lignes: Ligne[]; dejaPrevenuLe?: string | null }
+interface Famille { familyId: string; familyName: string; email: string; lignes: Ligne[]; dejaPrevenuLe?: string | null; iban?: boolean }
 
 const MESSAGE_DEFAUT = `La rentrée approche, et nous voulions faire le point avec vous.
 
@@ -185,6 +185,10 @@ export default function PreinscritsPage() {
           <span className="font-body text-sm text-slate-500">
             {data.nbFamilles} famille(s) · {data.nbPlaces} place(s)
             {Number((data as any).dejaPrevenues || 0) > 0 && ` · ${(data as any).dejaPrevenues} déjà prévenue(s)`}
+            {" · "}
+            <span className="text-emerald-700 font-semibold">{Number((data as any).avecIban || 0)} avec RIB</span>
+            {" · "}
+            <span className="text-rose-700 font-semibold">{data.nbFamilles - Number((data as any).avecIban || 0)} sans RIB</span>
           </span>
         )}
       </div>
@@ -231,9 +235,11 @@ export default function PreinscritsPage() {
 
           <div className="mt-2 space-y-2">
             {familles.map(f => (
+              // Vert : un mandat SEPA avec IBAN existe pour la famille.
+              // Rouge : rien reçu, c'est le RIB qu'il faut réclamer.
               <label key={f.familyId}
                 className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer ${
-                  f.email ? "bg-white border-slate-200" : "bg-slate-50 border-slate-200 opacity-70"}`}>
+                  f.iban ? "bg-emerald-50 border-emerald-300" : "bg-rose-50 border-rose-300"} ${f.email ? "" : "opacity-70"}`}>
                 <input type="checkbox" disabled={!f.email}
                   checked={selection.has(f.familyId)}
                   onChange={e => {
@@ -245,6 +251,10 @@ export default function PreinscritsPage() {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-body font-semibold text-slate-800">{f.familyName || "—"}</span>
+                    <span className={`rounded-full border px-2 py-0.5 font-body text-[11px] font-semibold ${
+                      f.iban ? "bg-emerald-100 border-emerald-300 text-emerald-800" : "bg-rose-100 border-rose-300 text-rose-800"}`}>
+                      {f.iban ? "RIB reçu" : "RIB manquant"}
+                    </span>
                     {f.dejaPrevenuLe && (
                       <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 font-body text-[11px] font-semibold text-emerald-800">
                         ✉️ Déjà prévenu le {jolieDate(f.dejaPrevenuLe.slice(0, 10))}
