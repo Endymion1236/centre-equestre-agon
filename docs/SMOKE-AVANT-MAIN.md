@@ -56,7 +56,9 @@ Chaque mode, un par un : chèque, espèces, CB, virement, **SEPA**, chèques dif
 Ouvrir une commande impayée depuis l'historique et depuis les impayés.
 → Les lignes s'affichent, la remise se saisit, le total suit.
 → Une commande **déjà facturée** refuse la modification.
-✗ Faux si : la modale s'ouvre vide.
+→ Une commande **déjà encaissée, même partiellement** (acompte de stage) refuse aussi :
+  bouton grisé 🔒, bandeau rouge dans la modale, correction par avoir.
+✗ Faux si : la modale s'ouvre vide, ou si une commande avec acompte reste modifiable.
 
 **1.8 Rapprochement bancaire**
 Importer un vrai relevé.

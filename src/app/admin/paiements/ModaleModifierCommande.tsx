@@ -25,6 +25,7 @@ import { Trash2, X } from "lucide-react";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { fetchDiscountSettings, calculateFamilyDiscount, calculateMultiStageDiscount } from "@/lib/discounts";
 import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
+import { verrouCommande } from "./commande-verrou";
 
 export interface ModaleModifierCommandeProps {
   /** La commande à modifier ; la modale n'est montée que si elle existe. */
@@ -57,7 +58,11 @@ export default function ModaleModifierCommande({
   const editPayment = payment;
   const setEditPayment = (v: any) => { if (!v) onClose(); };
 
-      const isInvoiced = !!editPayment.invoiceNumber;
+      // Facture émise ou premier règlement encaissé : la commande ne se
+      // modifie plus, c'est un avoir qu'il faut. Le nom `isInvoiced` reste
+      // pour ne pas toucher aux vingt endroits du formulaire qui le lisent.
+      const verrou = verrouCommande(editPayment);
+      const isInvoiced = verrou.verrouillee;
       const newTotalLive = Math.round(editItems.reduce((s, i) => s + (i.priceTTC || 0), 0) * 100) / 100;
       const paidAmount = editPayment.paidAmount || 0;
       const tropPercu = Math.round((paidAmount - newTotalLive) * 100) / 100;
@@ -74,19 +79,14 @@ export default function ModaleModifierCommande({
             <button type="button" onClick={() => setEditPayment(null)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
           </div>
 
-          {/* Bandeau de blocage si facture définitive émise */}
+          {/* Bandeau de blocage : facture définitive émise, ou règlement déjà encaissé */}
           {isInvoiced && (
             <div className="mx-5 mt-5 p-4 rounded-xl bg-red-50 border border-red-200">
               <div className="font-body text-sm font-semibold text-red-700 mb-1">
-                🔒 Modification impossible — facture {editPayment.invoiceNumber} émise
+                🔒 {verrou.titre}
               </div>
               <div className="font-body text-xs text-red-600 leading-relaxed">
-                Cette commande a déjà fait l'objet d'une facture définitive numérotée.
-                Pour des raisons de conformité comptable (article L123-14 du Code de commerce),
-                une facture émise ne peut pas être modifiée.
-                <br /><br />
-                Pour corriger le montant, vous devez : <strong>annuler la facture via un avoir</strong>,
-                puis créer une nouvelle commande avec le bon montant.
+                {verrou.explication}
               </div>
             </div>
           )}

@@ -8,6 +8,7 @@ import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
 import { emailTemplates } from "@/lib/email-templates";
 import { paymentModes } from "./types";
+import { verrouCommande } from "./commande-verrou";
 import { NoteField } from "./NoteField";
 import { authFetch } from "@/lib/auth-fetch";
 import { useConfirm } from "@/components/ui/Confirm";
@@ -357,8 +358,22 @@ export function TabImpayes({
                             className="font-body text-xs text-indigo-600 bg-indigo-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-indigo-100 flex items-center gap-1">
                             💳 Envoyer lien de paiement
                           </button>
-                          <button type="button" onClick={() => { setEditPayment(p); }}
-                            className="font-body text-xs text-slate-600 bg-gray-100 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-gray-200">✏️ Modifier</button>
+                          {(() => {
+                            // Même règle que la modale et l'historique : facture
+                            // émise ou règlement encaissé, on ne modifie plus.
+                            const verrou = verrouCommande(p);
+                            return (
+                              <button type="button"
+                                onClick={() => {
+                                  if (verrou.verrouillee) { toast(`🔒 ${verrou.titre}. Corrigez via un avoir.`, "warning", 5000); return; }
+                                  setEditPayment(p);
+                                }}
+                                title={verrou.verrouillee ? verrou.titre : "Modifier la commande"}
+                                className={`font-body text-xs px-3 py-1.5 rounded-lg border-none ${verrou.verrouillee ? "text-gray-400 bg-gray-100 cursor-not-allowed" : "text-slate-600 bg-gray-100 cursor-pointer hover:bg-gray-200"}`}>
+                                {verrou.verrouillee ? "🔒 Modifier" : "✏️ Modifier"}
+                              </button>
+                            );
+                          })()}
                         </div>
                         {(p.items || []).map((item: any, idx: number) => {
                           let planning = "";

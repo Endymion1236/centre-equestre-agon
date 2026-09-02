@@ -7,6 +7,7 @@ import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
 import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
 import { paymentModes } from "./types";
+import { verrouCommande } from "./commande-verrou";
 import {
   preparerHistorique,
   type HistoriqueSort,
@@ -323,14 +324,15 @@ export function TabHistorique({
                       {payment.status !== "cancelled" && (
                         <button type="button"
                           onClick={() => {
-                            if (payment.invoiceNumber) {
-                              toast(`🔒 Facture ${payment.invoiceNumber} — modification impossible. Annulez-la via avoir pour la corriger.`, "warning", 5000);
+                            const verrou = verrouCommande(payment);
+                            if (verrou.verrouillee) {
+                              toast(`🔒 ${verrou.titre}. Corrigez via un avoir.`, "warning", 5000);
                               return;
                             }
                             setEditPayment(payment);
                           }}
-                          title={payment.invoiceNumber ? "Facture définitive — non modifiable" : "Modifier la commande"}
-                          className={`font-body text-xs px-2 py-1 rounded border-none ${payment.invoiceNumber ? "text-gray-400 bg-gray-100 cursor-not-allowed" : "text-amber-600 bg-amber-50 cursor-pointer hover:bg-amber-100"}`}>
+                          title={verrouCommande(payment).verrouillee ? verrouCommande(payment).titre : "Modifier la commande"}
+                          className={`font-body text-xs px-2 py-1 rounded border-none ${verrouCommande(payment).verrouillee ? "text-gray-400 bg-gray-100 cursor-not-allowed" : "text-amber-600 bg-amber-50 cursor-pointer hover:bg-amber-100"}`}>
                           <Pencil size={12} />
                         </button>
                       )}
