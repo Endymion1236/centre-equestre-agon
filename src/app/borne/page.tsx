@@ -681,26 +681,30 @@ export default function BornePage() {
             {cartes.map((c) => {
               const complet = c.placesRestantes <= 0;
               return (
-                <div key={c.id} className="bg-white rounded-2xl border border-blue-500/10 p-3.5 flex items-center gap-3 text-left">
-                  <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0">
-                    <span className="font-body text-[11px] font-bold uppercase text-blue-500 leading-none">{jourCourt(c.date)}</span>
-                    <span className="font-display text-lg font-bold text-blue-800 leading-tight">{new Date(`${c.date}T12:00:00`).getDate()}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-body text-base font-bold text-blue-800 truncate">{c.activityTitle}</div>
-                    <div className="font-body text-sm text-gray-600 truncate">{periodeCarte(c)} · {c.startTime}–{c.endTime}</div>
-                    <div className="font-body text-sm text-gray-600">
-                      <span className="font-semibold text-blue-800">{prixCarte(c)}</span>
-                      {" · "}
-                      <span className={complet ? "text-red-600 font-semibold" : "text-green-700"}>
-                        {complet ? "Complet — liste d’attente" : `${c.placesRestantes} place${c.placesRestantes > 1 ? "s" : ""}`}
-                      </span>
+                {/* Écran étroit (téléphone, tablette en portrait) : le bouton
+                    passe sous le texte, sinon il tronquait titre et date. */}
+                <div key={c.id} className="bg-white rounded-2xl border border-blue-500/10 p-3.5 flex flex-col sm:flex-row sm:items-center gap-3 text-left">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0">
+                      <span className="font-body text-[11px] font-bold uppercase text-blue-500 leading-none">{jourCourt(c.date)}</span>
+                      <span className="font-display text-lg font-bold text-blue-800 leading-tight">{new Date(`${c.date}T12:00:00`).getDate()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-body text-base font-bold text-blue-800 leading-snug line-clamp-2">{c.activityTitle}</div>
+                      <div className="font-body text-sm text-gray-600 first-letter:uppercase">{periodeCarte(c)} · {c.startTime}–{c.endTime}</div>
+                      <div className="font-body text-sm text-gray-600">
+                        <span className="font-semibold text-blue-800">{prixCarte(c)}</span>
+                        {" · "}
+                        <span className={complet ? "text-red-600 font-semibold" : "text-green-700"}>
+                          {complet ? "Complet — liste d’attente" : `${c.placesRestantes} place${c.placesRestantes > 1 ? "s" : ""}`}
+                        </span>
+                      </div>
                     </div>
                   </div>
                   <button type="button" onClick={() => ouvrirQr(c)}
-                    className="flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl bg-blue-500 text-white border-none cursor-pointer flex-shrink-0">
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-500 text-white border-none cursor-pointer flex-shrink-0 w-full sm:w-auto sm:flex-col sm:gap-1 sm:px-3">
                     <Smartphone size={20} />
-                    <span className="font-body text-[11px] font-bold leading-tight text-center">Réserver sur<br />mon téléphone</span>
+                    <span className="font-body text-sm sm:text-[11px] font-bold leading-tight text-center">Réserver sur<span className="sm:hidden"> </span><br className="hidden sm:inline" />mon téléphone</span>
                   </button>
                 </div>
               );
