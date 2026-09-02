@@ -10,6 +10,7 @@ import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, freque
 import { tarifPourFrequence, calculerForfaitAnnuel } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
 import { annulerMinuterieConfirmation } from "./minuteries-confirmation";
+import { resumerAttentes } from "@/app/admin/paiements/impayes-utils";
 
 /** Libellé lisible d'un moyen de règlement d'acompte, aligné sur la caisse. */
 function libelleModeAcompte(mode: string): string {
@@ -2890,30 +2891,36 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         {/* ── Bandeau impayés sticky ── */}
         {(() => {
           // Collecter les familyIds des inscrits dans ce créneau
-          const enrolledFamilyIds = [...new Set((creneau.enrolled || []).map((e: any) => e.familyId))];
-          const pendingPayments = payments.filter((p: any) =>
-            enrolledFamilyIds.includes(p.familyId) &&
-            (p.status === "pending" || p.status === "partial") &&
-            p.totalTTC > (p.paidAmount || 0)
-          );
-          if (pendingPayments.length === 0) return null;
-          const totalDu = pendingPayments.reduce((s: number, p: any) => s + (p.totalTTC || 0) - (p.paidAmount || 0), 0);
-          const familyNames = [...new Set(pendingPayments.map((p: any) => p.familyName))].join(", ");
+          const enrolledFamilyIds = [...new Set((creneau.enrolled || []).map((e: any) => e.familyId))] as string[];
+          // Même règle que l'onglet Impayés : une échéance à venir, un SEPA
+          // programmé ou un chèque différé sont dus, pas impayés. Le bandeau
+          // disait « 3 paiements en attente » à une famille qui venait de
+          // choisir trois fois sans frais, et Impayés n'en montrait aucun.
+          const attentes = resumerAttentes(payments, enrolledFamilyIds, new Date().toISOString().split("T")[0]);
+          const tous = [...attentes.impayes, ...attentes.aVenir];
+          if (tous.length === 0) return null;
+          const familyNames = [...new Set(tous.map((p: any) => p.familyName))].join(", ");
+          const queDuAVenir = attentes.impayes.length === 0;
+          const cible = queDuAVenir ? attentes.aVenir[0] : attentes.impayes[0];
+          const lien = `/admin/paiements?tab=${queDuAVenir ? "echeances" : "impayes"}${cible?.familyId ? `&family=${encodeURIComponent(cible.familyId)}` : `&search=${encodeURIComponent(familyNames.split(",")[0].trim())}`}`;
+          const pluriel = (n: number, mot: string) => `${n} ${mot}${n > 1 ? "s" : ""}`;
           return (
-            <div className="border-t border-orange-200 bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-3 rounded-b-2xl flex-shrink-0">
+            <div className={`border-t px-5 py-3 rounded-b-2xl flex-shrink-0 bg-gradient-to-r ${queDuAVenir ? "border-blue-200 from-sky-50 to-blue-50" : "border-orange-200 from-amber-50 to-orange-50"}`}>
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-lg flex-shrink-0">💰</span>
+                  <span className="text-lg flex-shrink-0">{queDuAVenir ? "📅" : "💰"}</span>
                   <div className="min-w-0">
-                    <div className="font-body text-sm font-semibold text-orange-800 truncate">
-                      {pendingPayments.length} paiement{pendingPayments.length > 1 ? "s" : ""} en attente · {totalDu.toFixed(0)}€
+                    <div className={`font-body text-sm font-semibold truncate ${queDuAVenir ? "text-blue-800" : "text-orange-800"}`}>
+                      {attentes.impayes.length > 0 && `${pluriel(attentes.impayes.length, "impayé")} · ${attentes.totalImpayes.toFixed(0)}€`}
+                      {attentes.impayes.length > 0 && attentes.aVenir.length > 0 && " · "}
+                      {attentes.aVenir.length > 0 && `${pluriel(attentes.aVenir.length, "échéance")} à venir · ${attentes.totalAVenir.toFixed(0)}€`}
                     </div>
-                    <div className="font-body text-[10px] text-orange-600 truncate">{familyNames}</div>
+                    <div className={`font-body text-[10px] truncate ${queDuAVenir ? "text-blue-600" : "text-orange-600"}`}>{familyNames}</div>
                   </div>
                 </div>
-                <a href={`/admin/paiements?tab=impayes${pendingPayments[0]?.familyId ? `&family=${encodeURIComponent(pendingPayments[0].familyId)}` : `&search=${encodeURIComponent(familyNames.split(",")[0].trim())}`}`}
-                  className="flex-shrink-0 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-2 rounded-lg no-underline transition-colors">
-                  Encaisser →
+                <a href={lien}
+                  className={`flex-shrink-0 font-body text-xs font-semibold text-white px-3 py-2 rounded-lg no-underline transition-colors ${queDuAVenir ? "bg-blue-500 hover:bg-blue-600" : "bg-orange-500 hover:bg-orange-600"}`}>
+                  {queDuAVenir ? "Voir les échéances →" : "Encaisser →"}
                 </a>
               </div>
             </div>

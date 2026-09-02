@@ -153,3 +153,37 @@ export function preparerMultiEncaissements(unpaid: any[]): MultiEncaissementFami
     .filter((entry) => entry.pays.length >= 2)
     .sort((a, b) => b.total - a.total);
 }
+
+export interface ResumeAttentes {
+  /** Ce que l'onglet Impayés afficherait : dû et exigible aujourd'hui. */
+  impayes: any[];
+  totalImpayes: number;
+  /** Dû mais pas encore exigible : échéances à venir, prélèvements SEPA
+   *  programmés, chèques différés déposés. */
+  aVenir: any[];
+  totalAVenir: number;
+}
+
+/**
+ * Sépare, pour un ensemble de familles, ce qui est réellement impayé de ce
+ * qui est simplement dû plus tard.
+ *
+ * Le bandeau du panneau d'inscription annonçait « 3 paiements en attente »
+ * pour une famille qui venait de choisir un règlement en trois fois, alors
+ * que l'onglet Impayés n'en montrait aucun : les échéances n'y entrent qu'à
+ * leur date. Même règle ici (listerImpayes), pour que les deux écrans
+ * disent la même chose.
+ */
+export function resumerAttentes(payments: any[], familyIds: string[], today: string): ResumeAttentes {
+  const familles = new Set(familyIds);
+  const dus = (payments || []).filter((payment) =>
+    familles.has(payment?.familyId) &&
+    (payment?.status === "pending" || payment?.status === "partial") &&
+    soldeRestant(payment) > 0.005,
+  );
+  const impayes = listerImpayes(dus, today);
+  const idsImpayes = new Set(impayes.map((payment) => payment.id));
+  const aVenir = dus.filter((payment) => !idsImpayes.has(payment.id));
+  const somme = (liste: any[]) => Math.round(liste.reduce((s, payment) => s + soldeRestant(payment), 0) * 100) / 100;
+  return { impayes, totalImpayes: somme(impayes), aVenir, totalAVenir: somme(aVenir) };
+}

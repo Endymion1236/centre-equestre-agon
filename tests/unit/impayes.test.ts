@@ -5,6 +5,7 @@ import {
   grouperImpayesParEvenement,
   listerImpayes,
   preparerMultiEncaissements,
+  resumerAttentes,
   soldeRestant,
 } from "../../src/app/admin/paiements/impayes-utils";
 
@@ -125,6 +126,52 @@ test("seules les familles avec au moins deux factures réglables sont proposées
   assert.equal(result.length, 1);
   assert.equal(result[0].familyId, "f1");
   assert.equal(result[0].total, 140);
+});
+
+test("resumerAttentes : un paiement en 3 fois est « à venir », pas impayé", () => {
+  const payments = [
+    { id: "e1", familyId: "f1", status: "pending", totalTTC: 214, paidAmount: 0, echeancesTotal: 3, echeanceDate: "2026-10-05" },
+    { id: "e2", familyId: "f1", status: "pending", totalTTC: 214, paidAmount: 0, echeancesTotal: 3, echeanceDate: "2026-11-05" },
+    { id: "e3", familyId: "f1", status: "pending", totalTTC: 214, paidAmount: 0, echeancesTotal: 3, echeanceDate: "2026-12-05" },
+  ];
+  const r = resumerAttentes(payments, ["f1"], "2026-09-02");
+  assert.equal(r.impayes.length, 0);
+  assert.equal(r.aVenir.length, 3);
+  assert.equal(r.totalAVenir, 642);
+  assert.equal(r.totalImpayes, 0);
+});
+
+test("resumerAttentes : une échéance dépassée devient un impayé", () => {
+  const payments = [
+    { id: "e1", familyId: "f1", status: "pending", totalTTC: 214, paidAmount: 0, echeancesTotal: 3, echeanceDate: "2026-08-05" },
+    { id: "e2", familyId: "f1", status: "pending", totalTTC: 214, paidAmount: 0, echeancesTotal: 3, echeanceDate: "2026-11-05" },
+  ];
+  const r = resumerAttentes(payments, ["f1"], "2026-09-02");
+  assert.deepEqual(r.impayes.map((p) => p.id), ["e1"]);
+  assert.deepEqual(r.aVenir.map((p) => p.id), ["e2"]);
+});
+
+test("resumerAttentes : une commande simple impayée compte comme impayé, une autre famille est ignorée", () => {
+  const payments = [
+    { id: "c1", familyId: "f1", status: "pending", totalTTC: 26, paidAmount: 0 },
+    { id: "c2", familyId: "f2", status: "pending", totalTTC: 99, paidAmount: 0 },
+    { id: "c3", familyId: "f1", status: "partial", totalTTC: 349, paidAmount: 99.8 },
+    { id: "c4", familyId: "f1", status: "paid", totalTTC: 50, paidAmount: 50 },
+  ];
+  const r = resumerAttentes(payments, ["f1"], "2026-09-02");
+  assert.deepEqual(r.impayes.map((p) => p.id), ["c1", "c3"]);
+  assert.equal(r.totalImpayes, 275.2);
+  assert.equal(r.aVenir.length, 0);
+});
+
+test("resumerAttentes : SEPA programmé et chèques différés sont à venir", () => {
+  const payments = [
+    { id: "s1", familyId: "f1", status: "pending", totalTTC: 120, paidAmount: 0, paymentMode: "prelevement_sepa" },
+    { id: "d1", familyId: "f1", status: "pending", totalTTC: 90, paidAmount: 0, paymentMode: "cheque_differe" },
+  ];
+  const r = resumerAttentes(payments, ["f1"], "2026-09-02");
+  assert.equal(r.impayes.length, 0);
+  assert.equal(r.totalAVenir, 210);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
