@@ -14,6 +14,7 @@ import { renderDerouleStage } from "@/lib/stage-deroule";
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 import { construireEcheancier, nombreEcheances } from "@/lib/echeancier-paiement";
 import { todayLocalString } from "@/lib/date-local";
+import { lignesDetailHtml } from "@/lib/email-prestations";
 
 export type DeclarationPaiement = {
   id: string;
@@ -155,8 +156,39 @@ async function creerEcheancierDeclaration(
   return nb;
 }
 
+/**
+ * Prestations de la commande, avec date et horaires sous chacune.
+ *
+ * La lettre reprenait `declaration.activityTitle`, un simple titre : la
+ * famille lisait « Paiement confirmé — Stage poney » sans jour ni heure.
+ * Les lignes de la commande portent tout cela ; pour une inscription
+ * annuelle, c'est le forfait qui connaît le créneau récurrent.
+ */
+async function prestationsDetaillees(declaration: DeclarationPaiement): Promise<string> {
+  try {
+    if (declaration.paymentId) {
+      const paymentSnap = await getDoc(doc(db, "payments", declaration.paymentId));
+      const items = paymentSnap.exists() ? (paymentSnap.data() as any).items : null;
+      if (Array.isArray(items) && items.length > 0) {
+        const detail = lignesDetailHtml(items);
+        if (detail) return detail;
+      }
+    }
+    const forfaits = (declaration.forfaitPayloads || []) as any[];
+    if (forfaits.length > 0) {
+      return forfaits
+        .map((f) => `${f.childName || ""} — ${f.activityTitle || "Forfait"}<br/><span style="color:#888;font-size:12px;">${[f.dayLabel, f.startTime && f.endTime ? `${f.startTime}–${f.endTime}` : f.startTime].filter(Boolean).join(" · ")}</span>`)
+        .join("<br/><br/>");
+    }
+  } catch {
+    // Le détail enrichit la lettre ; à défaut, le titre de la déclaration suffit.
+  }
+  return declaration.activityTitle || "";
+}
+
 async function envoyerConfirmationDeclaration(declaration: DeclarationPaiement) {
   if (!declaration.familyEmail) return;
+  const prestations = await prestationsDetaillees(declaration);
 
   let derouleHtml = "";
   let typeCgv = "";
@@ -202,7 +234,7 @@ async function envoyerConfirmationDeclaration(declaration: DeclarationPaiement) 
           emailLigne(avecEcheancier ? "Total de l'inscription" : "Montant", total),
           ...(avecEcheancier ? [emailLigne("Échéancier", `${nb} mensualités`)] : []),
           emailLigne("Mode de règlement", libelleModeDeclaration(declaration.mode)),
-          emailLigne("Prestations", declaration.activityTitle || ""),
+          emailLigne("Prestations", prestations),
         ].join("")),
         derouleHtml,
         encadreConditionsPourType(typeCgv),

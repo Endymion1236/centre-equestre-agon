@@ -865,8 +865,16 @@ export default function InscriptionAnnuellePage() {
       // l'encaissement est confirmé. Sans eux, les places tenues posées par
       // /api/enroll resteraient « pending » et le cron de purge les
       // supprimerait une demi-heure après le paiement.
-      const paymentItems = items.flatMap(it =>
-        it.detailLignes.map(l => ({
+      // `creneauLabel` : le créneau récurrent (« Poney club · mercredi ·
+      // 14h00–15h00 ») porté par la ligne forfait. Les emails de confirmation
+      // (retour CAWL, validation admin, encaissement) l'affichent sous la
+      // prestation : sans lui, la famille lisait « Forfait 1×/semaine » sans
+      // jour ni heure.
+      const paymentItems = items.flatMap(it => {
+        const creneauLabel = it.slotsInfo
+          .map(s => `${s.activityTitle} · ${s.dayLabel} · ${s.startTime}–${s.endTime}`)
+          .join(", ");
+        return it.detailLignes.map(l => ({
           childId: it.childId,
           childName: it.childName,
           activityTitle: l.label,
@@ -876,8 +884,9 @@ export default function InscriptionAnnuellePage() {
           label: `${it.childName} — ${l.label}`,
           amount: l.montantTTC,
           creneauIds: it.creneauIds,
-        }))
-      );
+          ...(creneauLabel && /^Forfait/.test(l.label) ? { creneauLabel } : {}),
+        }));
+      });
       const payDoc = await addDoc(collection(db, "payments"), {
         familyId: user.uid,
         familyName: family.parentName,

@@ -53,6 +53,8 @@ export interface StageEnAttente {
   stageTitle: string;
   /** Libellé lisible des jours, tel qu'affiché dans l'email. */
   dates: string;
+  /** Horaires lisibles (« 10h00–12h00 »), affichés sous les dates. */
+  horaires?: string;
   /** Premier jour du stage (YYYY-MM-DD) — échéance du solde. */
   dateDebut: string;
   creneauId?: string;
@@ -219,7 +221,7 @@ async function construireEmail(f: FileConfirmation): Promise<{ subject: string; 
 
   const { subject, html } = emailTemplates.confirmationStages({
     parentName: f.familyName || "",
-    stages: stages.map((s) => ({ stageTitle: s.stageTitle, dates: s.dates, enfants: s.enfants })),
+    stages: stages.map((s) => ({ stageTitle: s.stageTitle, dates: s.dates, horaires: s.horaires || "", enfants: s.enfants })),
     totalTTC,
     aRegler: resteARegler,
     solde,

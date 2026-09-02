@@ -16,6 +16,7 @@ import {
   prestationsCourtes,
   lignesDetailHtml,
   datesStage,
+  horairesStage,
 } from "../../src/lib/email-prestations";
 
 let passes = 0;
@@ -211,6 +212,58 @@ test("sans stageDates, la date de la ligne suffit", () => {
 test("sans aucune date, le repli est rendu tel quel", () => {
   assert.equal(datesStage([], "à confirmer"), "à confirmer");
   assert.equal(datesStage([]), "");
+});
+
+console.log("\n── Horaires ──");
+
+test("un stage aux mêmes heures chaque jour annonce une seule plage", () => {
+  const items = [{ stageDates: [
+    { date: "2026-10-26", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-10-27", startTime: "10h00", endTime: "12h00" },
+  ] }];
+  assert.equal(horairesStage(items), "10h00–12h00");
+});
+
+test("des horaires différents selon les jours sont détaillés jour par jour", () => {
+  const items = [{ stageDates: [
+    { date: "2026-10-27", startTime: "14h00", endTime: "16h00" },
+    { date: "2026-10-26", startTime: "10h00", endTime: "12h00" },
+  ] }];
+  const rendu = horairesStage(items);
+  assert.ok(rendu.indexOf("10h00–12h00") < rendu.indexOf("14h00–16h00"), "les jours ne sont pas dans l'ordre");
+  assert.ok(rendu.includes("lun. 26") && rendu.includes("mar. 27"));
+});
+
+test("une commande saisie au bureau (sans startTime sur la ligne) a quand même ses horaires", () => {
+  const items = [{ activityTitle: "Stage poney (5j) — Léa", stageSchedule: "du lun. 26 au ven. 30 octobre · 10h00–12h00",
+    stageDates: [{ date: "2026-10-26", startTime: "10h00", endTime: "12h00" }] }];
+  assert.equal(horairesStage(items), "10h00–12h00");
+});
+
+test("sans journées, la ligne puis stageSchedule servent de repli", () => {
+  assert.equal(horairesStage([{ startTime: "09h30", endTime: "11h30" }]), "09h30–11h30");
+  assert.equal(horairesStage([{ stageSchedule: "lun. 26 octobre · 10h00–12h00" }]), "lun. 26 octobre · 10h00–12h00");
+  assert.equal(horairesStage([]), "");
+});
+
+test("une heure de début sans heure de fin reste affichée dans le détail", () => {
+  const html = lignesDetailHtml([{ activityTitle: "Balade — Tom", date: "2026-10-23", startTime: "14h00" }]);
+  assert.ok(html.includes("vendredi 23 octobre"));
+  assert.ok(html.includes("14h00"));
+});
+
+test("un stage annonce toute sa période et ses horaires dans le détail", () => {
+  const html = lignesDetailHtml([{ activityTitle: "Stage poney — Léa", date: "2026-10-26", stageDates: [
+    { date: "2026-10-26", startTime: "10h00", endTime: "12h00" },
+    { date: "2026-10-30", startTime: "10h00", endTime: "12h00" },
+  ] }]);
+  assert.ok(html.includes("lundi 26") && html.includes("vendredi 30 octobre") && html.includes("2 jours"));
+  assert.ok(html.includes("10h00–12h00"));
+});
+
+test("un cours à l'année affiche son créneau récurrent", () => {
+  const html = lignesDetailHtml([{ activityTitle: "Forfait 1×/semaine", childName: "Léa", creneauLabel: "Poney club · mercredi · 14h00–15h00" }]);
+  assert.ok(html.includes("mercredi · 14h00–15h00"));
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

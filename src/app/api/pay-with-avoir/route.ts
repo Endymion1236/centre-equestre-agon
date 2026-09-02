@@ -21,6 +21,10 @@ import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
+import { loadTemplate } from "@/lib/email-template-loader";
+import { logEmail } from "@/lib/email-log";
+import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
+import { lignesDetailHtml, libelleModePaiement } from "@/lib/email-prestations";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +108,8 @@ export async function POST(req: NextRequest) {
 
     // ── Transaction atomique : tout ou rien ────────────────────────────────
     const payRef = adminDb.collection("payments").doc();
+    // Lignes de la commande, gardées pour l'email de confirmation.
+    let itemsCommande: any[] = [];
 
     await adminDb.runTransaction(async (tx) => {
       // ── PHASE 1 : LECTURES ────────────────────────────────────────────
@@ -122,19 +128,40 @@ export async function POST(req: NextRequest) {
 
       // ── PHASE 2 : ECRITURES ───────────────────────────────────────────
       // 1. Créer le document payment
-      tx.set(payRef, {
-        familyId: uid,
-        familyName,
-        familyEmail,
-        items: cart.map((i) => ({
+      // Date, horaires et moniteur sur chaque ligne, comme le panier réglé
+      // par carte : c'est ce que lisent l'email de confirmation, la facture
+      // et — si l'avoir ne couvre pas tout — le lien de paiement du reste.
+      // Sans eux, la famille recevait le titre de l'activité, sans jour ni heure.
+      itemsCommande = cart.map((i) => {
+        const ids = (i.creneauIds || []).filter(Boolean);
+        const premier = ids[0] ? creneauxSnaps.get(ids[0]) : null;
+        const jours = i.isStage
+          ? ids.map((cid) => creneauxSnaps.get(cid)).filter(Boolean)
+            .map((c: any) => ({ date: c.date || null, startTime: c.startTime || null, endTime: c.endTime || null }))
+            .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)))
+          : [];
+        return {
           activityTitle: i.activityTitle,
           childId: i.childId,
           childName: i.childName,
           priceTTC: i.prixFinal,
           priceHT: Math.round((i.prixFinal / 1.055) * 100) / 100,
           tva: 5.5,
-          creneauId: i.creneauIds?.[0] || "",
-        })),
+          creneauId: ids[0] || "",
+          creneauIds: i.isStage ? ids : null,
+          activityType: i.isStage ? "stage" : "cours",
+          date: premier?.date || null,
+          startTime: premier?.startTime || null,
+          endTime: premier?.endTime || null,
+          monitor: premier?.monitor || null,
+          stageDates: i.isStage ? jours : null,
+        };
+      });
+      tx.set(payRef, {
+        familyId: uid,
+        familyName,
+        familyEmail,
+        items: itemsCommande,
         totalTTC: cartTotal,
         paidAmount: toUse,
         paymentMode: "avoir",
@@ -269,6 +296,56 @@ export async function POST(req: NextRequest) {
       montant: toUse,
       label: cart.map((i) => i.activityTitle).join(", ") || "Paiement par avoir",
     });
+
+    // ── Confirmation à la famille ──────────────────────────────────────────
+    // Un panier réglé par avoir ne produisait AUCUN email : la carte bancaire
+    // passe par le retour CAWL, qui envoie la confirmation ; l'avoir, lui,
+    // s'arrêtait ici. La famille n'avait ni date ni heure de sa séance par
+    // écrit. Quand l'avoir ne couvre pas tout, c'est le règlement du reste
+    // qui confirmera, avec les mêmes lignes.
+    if (status === "paid") {
+      try {
+        await refreshEmailMode();
+        const resendKey = process.env.RESEND_API_KEY;
+        const to = String(familyEmail || "").trim();
+        if (to && resendKey && isRecipientAllowed(to)) {
+          const { subject, html } = await loadTemplate("confirmationPaiement", {
+            parentName: familyName || "Client",
+            familyId: uid,
+            montant: toUse.toFixed(2),
+            prestations: lignesDetailHtml(itemsCommande),
+            mode: libelleModePaiement("avoir"),
+          });
+          const r = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
+              to,
+              ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}),
+              subject,
+              html,
+            }),
+          });
+          const errText = r.ok ? "" : await r.text().catch(() => "");
+          await logEmail({
+            to, subject, context: "famille_paiement_avoir", template: "confirmationPaiement",
+            status: r.ok ? "sent" : "failed",
+            ...(r.ok ? {} : { error: `HTTP ${r.status}: ${errText}`.slice(0, 500) }),
+            sentBy: "system", paymentId: payRef.id, familyId: uid,
+          }).catch(() => {});
+        } else if (to) {
+          await logEmail({
+            to, subject: "Paiement reçu (avoir)", context: "famille_paiement_avoir", template: "confirmationPaiement",
+            status: "failed", error: resendKey ? "Bloqué par le mode restreint" : "RESEND_API_KEY absente",
+            sentBy: "system", paymentId: payRef.id, familyId: uid,
+          }).catch(() => {});
+        }
+      } catch (e) {
+        // Le paiement est enregistré ; un email manqué se voit dans le journal.
+        console.warn("[pay-with-avoir] email de confirmation:", e);
+      }
+    }
 
     return NextResponse.json({
       ok: true,

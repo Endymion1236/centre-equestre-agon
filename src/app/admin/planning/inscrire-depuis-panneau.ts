@@ -30,6 +30,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { generateOrderId } from "@/lib/utils";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { formatStageSchedule } from "@/lib/format-stage";
+import { horairesStage } from "@/lib/email-prestations";
 import { estSemaineAttendue, formatFrequence } from "@/lib/rythme";
 import { ACOMPTE_PAR_ENFANT } from "@/lib/panier-reservation";
 import { fmtDate, sameStage, type Creneau } from "./types";
@@ -671,6 +672,9 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
                 stageKey,
                 stageTitle: creneau.activityTitle,
                 dates,
+                // La lettre annonçait les jours sans l'heure : « lun. 26,
+                // mar. 27 octobre » et rien sur quand se présenter.
+                horaires: horairesStage([{ stageDates: creneauxAInscrire.map(c => ({ date: c.date, startTime: c.startTime, endTime: c.endTime })) }]),
                 dateDebut: creneauxAInscrire[0]?.date || creneau.date,
                 creneauId: creneau.id,
                 enfants: stageLines.map(l => ({ name: l.childName, prix: l.prixReduit, remise: l.remiseEuros })),

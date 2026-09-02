@@ -170,7 +170,10 @@ export async function POST(req: NextRequest) {
         const lignes = items.map((it, idx) => {
           const cr = premiers[idx].exists ? (premiers[idx].data() as any) : null;
           const debut = cr?.date ? new Date(`${cr.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "";
-          return `<li style="margin:4px 0;"><strong>${it.activityTitle}</strong> — ${it.childName}${debut ? ` · à partir du ${debut}` : ""}${it.creneauIds.length > 1 ? ` (${it.creneauIds.length} jours)` : ""} · ${it.prixFinal.toFixed(2)}€</li>`;
+          // L'heure manquait : la famille savait le jour de la séance, pas
+          // quand s'y présenter.
+          const horaire = cr?.startTime ? ` · ${cr.startTime}${cr.endTime ? `–${cr.endTime}` : ""}` : "";
+          return `<li style="margin:4px 0;"><strong>${it.activityTitle}</strong> — ${it.childName}${debut ? ` · ${it.creneauIds.length > 1 ? "à partir du" : "le"} ${debut}` : ""}${it.creneauIds.length > 1 ? ` (${it.creneauIds.length} jours)` : ""}${horaire} · ${it.prixFinal.toFixed(2)}€</li>`;
         }).join("");
         let derouleHtml = "";
         if (items.some((i) => i.isStage)) {

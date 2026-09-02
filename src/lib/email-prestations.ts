@@ -29,6 +29,10 @@ interface LigneEmail {
   monitor?: string | null;
   /** Stage de vacances : tous les jours de la semaine, posés à l'achat. */
   stageDates?: { date?: string | null; startTime?: string | null; endTime?: string | null }[] | null;
+  /** Stage : libellé déjà composé (« du lun. 26 au ven. 30 octobre · 10h00–12h00 »). Dernier recours. */
+  stageSchedule?: string | null;
+  /** Cours à l'année : le créneau récurrent (« mercredi · 14h00–15h00 »), la ligne n'ayant pas de date. */
+  creneauLabel?: string | null;
 }
 
 /**
@@ -98,24 +102,92 @@ export function prestationsCourtes(items: LigneEmail[]): string {
   return libelles.join(", ") || "Prestation";
 }
 
+/** « 10h00–12h00 », ou « 10h00 » seul si la fin n'est pas connue. Vide sans heure de début. */
+function plageHoraire(startTime?: string | null, endTime?: string | null): string {
+  if (!startTime) return "";
+  return endTime ? `${startTime}–${endTime}` : startTime;
+}
+
+/**
+ * Horaires d'un stage, lisibles dans un email.
+ *
+ * Trois envois de confirmation de stage remplissaient la ligne « Horaires »
+ * chacun à leur façon : l'un lisait `startTime`/`endTime` de la ligne (vides
+ * sur une commande saisie par l'administration, qui ne porte que
+ * `stageSchedule`), les deux autres recopiaient `stageSchedule`, qui répète
+ * les dates déjà annoncées juste au-dessus. Une famille inscrite au bureau et
+ * réglant par le lien de paiement recevait « Horaires : » sans rien derrière.
+ *
+ * On lit d'abord les journées (`stageDates`) : « 10h00–12h00 » quand tous
+ * les jours ont les mêmes heures, « lun. 26 : 10h00–12h00, mar. 27 :
+ * 14h00–16h00 » sinon. À défaut, les heures de la ligne, puis
+ * `stageSchedule` tel quel.
+ */
+export function horairesStage(items: LigneEmail[]): string {
+  const jours: { date: string; plage: string }[] = [];
+  const vu = new Set<string>();
+  for (const i of items) {
+    const liste = Array.isArray(i.stageDates) && i.stageDates.length
+      ? i.stageDates
+      : [{ date: i.date, startTime: i.startTime, endTime: i.endTime }];
+    for (const j of liste) {
+      const plage = plageHoraire(j?.startTime, j?.endTime);
+      if (!plage) continue;
+      const cle = `${j?.date || ""}|${plage}`;
+      if (vu.has(cle)) continue;
+      vu.add(cle);
+      jours.push({ date: j?.date || "", plage });
+    }
+  }
+
+  const plages = Array.from(new Set(jours.map((j) => j.plage)));
+  if (plages.length === 1) return plages[0];
+  if (plages.length > 1) {
+    return jours
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((j) => {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(j.date)) return j.plage;
+        const d = new Date(`${j.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+        return `${d} : ${j.plage}`;
+      })
+      .join(", ");
+  }
+
+  return items.map((i) => String(i.stageSchedule || "").trim()).find(Boolean) || "";
+}
+
 /**
  * Bloc HTML détaillé : une ligne par prestation, avec date, horaires et
  * moniteur en dessous.
+ *
+ * Un stage annonce toute sa période (« du lundi 26 au vendredi 30 octobre
+ * (5 jours) »), pas seulement son premier jour ; un cours à l'année, son
+ * créneau récurrent ; une heure de début sans heure de fin reste affichée.
  */
 export function lignesDetailHtml(items: LigneEmail[]): string {
   return items
     .map((i) => {
       const infos: string[] = [];
-      if (i.date) {
-        // Midi plutôt que minuit : « 2026-10-23 » seul est lu comme minuit
-        // UTC, et une messagerie rendue depuis un fuseau en retard affichait
-        // la veille. Même précaution que `datesStage` plus bas.
-        const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(i.date) ? `${i.date}T12:00:00` : i.date);
-        if (!Number.isNaN(d.getTime())) {
-          infos.push(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }));
+      const plusieursJours = Array.isArray(i.stageDates) && i.stageDates.length > 1;
+      if (plusieursJours) {
+        const periode = datesStage([i]);
+        if (periode) infos.push(periode);
+        const horaires = horairesStage([i]);
+        if (horaires) infos.push(horaires);
+      } else {
+        if (i.date) {
+          // Midi plutôt que minuit : « 2026-10-23 » seul est lu comme minuit
+          // UTC, et une messagerie rendue depuis un fuseau en retard affichait
+          // la veille. Même précaution que `datesStage` plus bas.
+          const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(i.date) ? `${i.date}T12:00:00` : i.date);
+          if (!Number.isNaN(d.getTime())) {
+            infos.push(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }));
+          }
         }
+        const plage = plageHoraire(i.startTime, i.endTime);
+        if (plage) infos.push(plage);
       }
-      if (i.startTime && i.endTime) infos.push(`${i.startTime}–${i.endTime}`);
+      if (i.creneauLabel) infos.push(String(i.creneauLabel));
       if (i.monitor) infos.push(`avec ${i.monitor}`);
       const detail = infos.length
         ? `<br/><span style="color:#888;font-size:12px;">${infos.join(" · ")}</span>`

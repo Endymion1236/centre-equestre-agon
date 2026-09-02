@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
       stageKey: String(stage.stageKey),
       stageTitle: stage.stageTitle || "Stage",
       dates: stage.dates || "",
+      horaires: String(stage.horaires || ""),
       dateDebut: stage.dateDebut || "",
       creneauId: stage.creneauId || "",
       enfants: Array.isArray(stage.enfants) ? stage.enfants : [],

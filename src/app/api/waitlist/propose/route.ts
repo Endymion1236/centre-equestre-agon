@@ -62,18 +62,23 @@ export async function POST(req: NextRequest) {
   let envoye = false;
   if (email && resendKey && isRecipientAllowed(email)) {
     const lien = `${appUrl}/espace-cavalier/reserver?creneau=${encodeURIComponent(String(creneauId))}`;
+    // « 2026-10-23 » arrivait tel quel dans le message : la date se lit
+    // maintenant « vendredi 23 octobre ».
+    const dateLisible = c.date && /^\d{4}-\d{2}-\d{2}$/.test(String(c.date))
+      ? new Date(`${c.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
+      : String(c.date || "");
     const subject = `Une place s'est libérée — ${c.activityTitle || "activité"}`;
     const html = emailLayout([
         emailTitre("Une place s'est libérée"),
         P(`Bonjour <strong>${w.familyName || ""}</strong>,`),
-        P(`Bonne nouvelle : une place vient de se libérer pour <strong>${c.activityTitle || ""}</strong>${c.date ? ` le <strong>${c.date}</strong>` : ""}${c.startTime ? ` (${c.startTime}–${c.endTime || ""})` : ""}, pour laquelle <strong>${w.childName || "votre cavalier"}</strong> est en liste d'attente.`),
+        P(`Bonne nouvelle : une place vient de se libérer pour <strong>${c.activityTitle || ""}</strong>${dateLisible ? ` le <strong>${dateLisible}</strong>` : ""}${c.startTime ? ` (${c.startTime}${c.endTime ? `–${c.endTime}` : ""})` : ""}, pour laquelle <strong>${w.childName || "votre cavalier"}</strong> est en liste d'attente.`),
         P("Elle vous est proposée en priorité pendant <strong>24&nbsp;heures</strong> — passé ce délai, elle sera proposée à la famille suivante.", 14),
         emailButton("Réserver la place", lien),
         P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
         encadreConditionsPourType(String(c.activityType || "")),
         P(`<span style="color:${CE.discret};">Vous n'êtes plus intéressé ? Ignorez simplement ce message.</span>`, 12),
         emailSignature(),
-      ].join("\n"), `Place disponible — ${c.activityTitle || ""}${c.date ? ` le ${c.date}` : ""}`);
+      ].join("\n"), `Place disponible — ${c.activityTitle || ""}${dateLisible ? ` le ${dateLisible}` : ""}`);
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },

@@ -538,7 +538,7 @@ export default function ReservationsPage() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-body text-sm font-semibold text-gray-700">{reservation.activityTitle}</div>
-                          <div className="font-body text-xs text-gray-500 mt-0.5">{reservation.childName} · {shortDate(reservation.date)}</div>
+                          <div className="font-body text-xs text-gray-500 mt-0.5">{reservation.childName} · {shortDate(reservation.date)}{reservation.startTime ? ` · ${reservation.startTime}${reservation.endTime ? `–${reservation.endTime}` : ""}` : ""}</div>
                         </div>
                         {reservation.status === "cancelled" && <Badge color="red"><XCircle size={10} className="inline mr-1" />Annulée</Badge>}
                       </div>

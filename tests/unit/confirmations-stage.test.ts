@@ -83,6 +83,20 @@ console.log("✓ Trois stages tiennent dans un seul message :");
     TROIS_STAGES.every(s => texte.includes(s.dates)));
 }
 
+// ─── 1 bis. L'heure à laquelle se présenter
+console.log("\n✓ Les horaires du stage sont annoncés :");
+{
+  const { html } = T.confirmationStages({
+    parentName: "Marie Lefèvre",
+    stages: [{ ...TROIS_STAGES[0], horaires: "10h00–12h00" }],
+    totalTTC: 275,
+    aRegler: 275,
+    solde: 0,
+  });
+  const texte = lisible(html);
+  assert("la ligne Horaires figure dans le panneau du stage", texte.includes("Horaires") && texte.includes("10h00–12h00"));
+}
+
 // ─── 2. Rien d'encaissé : place retenue, pas inscription confirmée
 console.log("\n✓ Sans règlement reçu, la lettre ne confirme rien :");
 {

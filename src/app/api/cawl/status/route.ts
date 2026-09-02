@@ -13,7 +13,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
+import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, horairesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
 
@@ -428,7 +428,10 @@ export async function GET(req: NextRequest) {
             // Un stage court sur la semaine : `datesStage` lit `stageDates`
             // plutôt que la seule `date` de la ligne (cf. lib/email-prestations).
             dates: datesStage(items, pData.stageDate),
-            horaires: items.map((i: any) => i.startTime && i.endTime ? `${i.startTime}–${i.endTime}` : "").filter(Boolean)[0] || "",
+            // Lu dans `stageDates` : une commande saisie par l'administration
+            // n'a pas de startTime/endTime sur ses lignes, la ligne « Horaires »
+            // partait vide (cf. lib/email-prestations).
+            horaires: horairesStage(items),
             enfants: items.map((i: any) => i.childName).filter(Boolean).join(", "),
             montant: paidAmount.toFixed(2),
             // Variables spécifiques au template acompte

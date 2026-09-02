@@ -14,7 +14,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
-import { prestationsCourtes, lignesDetailHtml, libelleModePaiement, titreSansEnfant, datesStage, dateEcheanceSolde } from "@/lib/email-prestations";
+import { prestationsCourtes, lignesDetailHtml, libelleModePaiement, titreSansEnfant, datesStage, horairesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 
 export const dynamic = "force-dynamic";
@@ -375,7 +375,9 @@ export async function POST(req: NextRequest) {
                   familyId: pData.familyId || "",
                   stageTitle: titreSansEnfant(pData.items?.[0]) || "Stage",
                   dates: datesStage(pData.items || [], pData.stageDate || prestations),
-                  horaires: pData.items?.[0]?.stageSchedule || "",
+                  // Mêmes horaires que la route de retour : `stageSchedule`
+                  // répétait les dates annoncées juste au-dessus.
+                  horaires: horairesStage(pData.items || []),
                   enfants: enfantsList,
                   montant: paidAmount.toFixed(2),
                   acompte: paidAmount.toFixed(2),

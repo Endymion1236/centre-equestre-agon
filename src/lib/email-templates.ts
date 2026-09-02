@@ -361,6 +361,8 @@ export const emailTemplates = {
     stages: {
       stageTitle: string;
       dates: string;
+      /** « 10h00–12h00 » — la lettre ne disait pas à quelle heure venir. */
+      horaires?: string;
       enfants: { name: string; prix: number; remise: number }[];
     }[];
     totalTTC: number;
@@ -416,7 +418,7 @@ export const emailTemplates = {
           : "La place est retenue ; elle sera définitivement acquise dès réception du règlement.") : ""}
         ${stages.map((s) => panneau(
           nbStages === 1 ? `Votre stage · ${s.dates}` : `${s.stageTitle} · ${s.dates}`,
-          `${s.enfants.map((e) => ligne(
+          `${s.horaires ? ligne("Horaires", s.horaires) : ""}${s.enfants.map((e) => ligne(
             e.name + (e.remise > 0 ? ` <span style="color:${C.gris};font-size:12px;">(remise ${e.remise} €)</span>` : ""),
             euros(e.prix),
           )).join("")}`,
