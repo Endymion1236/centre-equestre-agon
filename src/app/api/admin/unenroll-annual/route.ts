@@ -3,6 +3,7 @@ import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { estPrelevementSepa } from "@/lib/sepa";
 import { verifyAuth } from "@/lib/api-auth";
+import { doitAnnulerReservationLorsDesinscriptionAnnuelle } from "@/lib/inscription-annuelle-paiement";
 
 export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire — route admin
@@ -79,8 +80,10 @@ export async function POST(req: NextRequest) {
       const resBatch = adminDb.batch();
       for (const doc of reservationsSnap.docs) {
         const r = doc.data();
-        // Annuler toutes les réservations futures confirmées (peu importe le type)
-        if (r.status === "confirmed" && r.date >= today) {
+        // Une réservation annuelle n'a pas toujours de date propre. Elle doit
+        // quand même disparaître avec le contrat ; sinon elle reste orpheline
+        // après l'annulation d'une commande abandonnée.
+        if (doitAnnulerReservationLorsDesinscriptionAnnuelle(r, today)) {
           resBatch.update(doc.ref, { status: "cancelled", cancelledAt: new Date().toISOString() });
           cancelledReservations++;
         }

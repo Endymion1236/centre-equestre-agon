@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { estCommandeInscriptionAnnuelle } from "@/lib/inscription-annuelle-paiement";
 import AnnulationModal from "./AnnulationModal";
 import { useSearchParams } from "next/navigation";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
@@ -355,7 +356,7 @@ export default function PaiementsPage() {
       return;
     }
     const hasInscriptions = (payment.items || []).some((i: any) => i.childId && (i.creneauId || i.activityType));
-    const isForfait = (payment as any).forfaitType || (payment.items || []).some((i: any) => i.activityTitle?.includes("Forfait"));
+    const isForfait = estCommandeInscriptionAnnuelle(payment);
     const inscriptionMsg = hasInscriptions || isForfait ? "\n\n⚠️ Les cavaliers seront aussi désinscrits des créneaux associés." : "";
 
     if (totalEnc === 0) {
@@ -451,8 +452,7 @@ export default function PaiementsPage() {
     data: { avoir: number; rembourse: number; modeRemboursement: string; motif: string; commentaire: string },
   ) => {
     {
-      const isForfait = (payment as any).forfaitType
-        || (payment.items || []).some((i: any) => i.activityTitle?.includes("Forfait"));
+      const isForfait = estCommandeInscriptionAnnuelle(payment);
 
       // Marquer cancelled d'abord pour éviter double-traitement
       await updateDoc(doc(db, "payments", payment.id), {
