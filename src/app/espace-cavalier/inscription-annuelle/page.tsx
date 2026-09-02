@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, getDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { BasculeReserver } from "@/components/espace-cavalier/BasculeReserver";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Check, ChevronRight, AlertTriangle, Calculator, CreditCard, Loader2, Calendar, Plus, Search } from "lucide-react";
@@ -1025,8 +1026,11 @@ export default function InscriptionAnnuellePage() {
 
   return (
     <div>
-      <h1 className="font-display text-2xl font-bold text-blue-800 mb-2">Inscription aux cours</h1>
-      <p className="font-body text-sm text-gray-400 mb-6">Cours réguliers à l&apos;année.</p>
+      <div className="mb-5">
+        <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Inscription à l&apos;année</h1>
+        <p className="font-body text-sm text-gray-600">Cours réguliers, forfaits et licence.</p>
+      </div>
+      <BasculeReserver active="annuel" />
 
       {/* Step indicator */}
       <div className="flex gap-2 mb-8">

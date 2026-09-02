@@ -7,6 +7,7 @@ import ModalePanier from "./ModalePanier";
 import ModaleChoixCavalier from "./ModaleChoixCavalier";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { BasculeReserver } from "@/components/espace-cavalier/BasculeReserver";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, Check, CalendarDays, LayoutList } from "lucide-react";
@@ -1172,6 +1173,8 @@ export default function ReserverPage() {
           {cart.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>}
         </button>
       </div>
+
+      {initialFilter === "all" && <BasculeReserver active="activites" />}
 
       {success && <Card padding="md" className="mb-4 bg-green-50 border-green-200"><p className="font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> Inscription confirmée ! Rendez-vous au centre équestre.</p></Card>}
 

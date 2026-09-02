@@ -369,21 +369,23 @@ export default function ReservationsPage() {
             return (
               <section className="mb-7">
                 <div className="font-body text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Prochaine activité</div>
-                <Card padding="md" className="!bg-gradient-to-br !from-blue-800 !to-blue-600 !border-blue-700 text-white">
+                {/* Carte blanche comme les autres : la couleur est réservée
+                    aux statuts et aux actions à mener, pas à la mise en avant. */}
+                <Card padding="md">
                   <div className="flex items-start gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-white/15 flex flex-col items-center justify-center flex-shrink-0">
-                      <span className="font-body text-xs font-bold uppercase text-blue-100">{tile.day}</span>
-                      <span className="font-display text-xl font-bold text-white">{tile.number}</span>
+                    <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0">
+                      <span className="font-body text-xs font-bold uppercase text-blue-500">{tile.day}</span>
+                      <span className="font-display text-lg font-bold text-blue-800">{tile.number}</span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-display text-xl font-bold text-white">{nextReservation.activityTitle}</div>
-                      <div className="font-body text-sm text-blue-50 mt-1">🐴 {nextReservation.childName}</div>
-                      <div className="font-body text-sm text-blue-100 mt-2 first-letter:uppercase">
-                        {periode(nextReservation)}
+                      <div className="font-display text-lg font-bold text-blue-800">{nextReservation.activityTitle}</div>
+                      <div className="font-body text-sm text-gray-600 mt-0.5">
+                        {nextReservation.childName}
                         {nextReservation.startTime && ` · ${nextReservation.startTime}${nextReservation.endTime ? `–${nextReservation.endTime}` : ""}`}
                       </div>
+                      <div className="font-body text-xs text-gray-400 mt-0.5 first-letter:uppercase">{periode(nextReservation)}</div>
                       {(nextReservation.nbJours || 1) > 1 && (
-                        <div className="font-body text-xs text-blue-100/90 mt-1">
+                        <div className="font-body text-xs text-gray-500 mt-1">
                           Chaque jour du stage, aux mêmes horaires.
                         </div>
                       )}
@@ -391,33 +393,33 @@ export default function ReservationsPage() {
                     <Badge color={status.color}>{status.label}</Badge>
                   </div>
                   {String(nextReservation.activityType || "").toLowerCase().includes("stage") && derouleEstRempli(deroule) && (
-                    <div className="mt-3 pt-3 border-t border-white/20">
+                    <div className="mt-3 pt-3 border-t border-gray-100">
                       <button
                         type="button"
                         onClick={() => setDerouleOuvert(o => !o)}
-                        className="bg-transparent border-none p-0 cursor-pointer font-body text-xs font-semibold text-blue-100 underline"
+                        className="bg-transparent border-none p-0 cursor-pointer font-body text-xs font-semibold text-blue-500 underline"
                       >
-                        {derouleOuvert ? "Masquer le déroulé de la séance" : "🐴 Comment se déroule la séance ?"}
+                        {derouleOuvert ? "Masquer le déroulé de la séance" : "Comment se déroule la séance ?"}
                       </button>
                       {derouleOuvert && (
-                        <div className="mt-2 bg-white/10 rounded-xl p-3">
+                        <div className="mt-2 bg-blue-50 rounded-xl p-3">
                           {[1, 2].map((n) => {
                             const titre = n === 1 ? deroule.sequence1Titre : deroule.sequence2Titre;
                             const detail = n === 1 ? deroule.sequence1Detail : deroule.sequence2Detail;
                             return (
                               <div key={n} className="flex gap-2 mb-1.5 last:mb-0">
-                                <span className="w-4 h-4 rounded-full bg-white/25 text-white font-body text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
+                                <span className="w-4 h-4 rounded-full bg-blue-500 text-white font-body text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{n}</span>
                                 <div className="min-w-0">
-                                  <div className="font-body text-xs font-semibold text-white leading-snug">{titre}</div>
+                                  <div className="font-body text-xs font-semibold text-blue-800 leading-snug">{titre}</div>
                                   {detail?.trim() && (
-                                    <div className="font-body text-xs text-blue-100 leading-snug">{detail}</div>
+                                    <div className="font-body text-xs text-gray-600 leading-snug">{detail}</div>
                                   )}
                                 </div>
                               </div>
                             );
                           })}
                           {deroule.note?.trim() && (
-                            <p className="font-body text-xs text-blue-100 mt-2 mb-0">{deroule.note}</p>
+                            <p className="font-body text-xs text-gray-600 mt-2 mb-0">{deroule.note}</p>
                           )}
                         </div>
                       )}

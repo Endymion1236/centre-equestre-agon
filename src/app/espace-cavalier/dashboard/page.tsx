@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { collection, doc, getDoc, getDocs, query, where, updateDoc } from "firebase/firestore";
-import { Calendar, ChevronRight, CreditCard, Bell, Wallet, Sparkles } from "lucide-react";
+import { Calendar, ChevronRight, CreditCard, Bell, Wallet, Sparkles, AlertTriangle, Check, Ticket, Users, MessageCircle, Repeat } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
@@ -43,6 +43,9 @@ export default function DashboardPage() {
   // replie de Mes reservations).
   const [waitlist, setWaitlist] = useState<{ enFile: number; placeReservee: number }>({ enFile: 0, placeReservee: 0 });
   const [nextReservation, setNextReservation] = useState<UpcomingReservation | null>(null);
+  // La séance qui suit : une ligne sous la prochaine activité suffit à
+  // répondre à « et après ? » sans ouvrir Mes réservations.
+  const [suivante, setSuivante] = useState<UpcomingReservation | null>(null);
   const [cards, setCards] = useState<SessionCard[]>([]);
   const [fidelity, setFidelity] = useState<{ points: number; rate: number; enabled: boolean } | null>(null);
   const [waCommunity, setWaCommunity] = useState("");
@@ -62,6 +65,7 @@ export default function DashboardPage() {
           .filter((r) => (r.date || "") >= today && r.status !== "cancelled")
           .sort((a, b) => `${a.date || ""} ${a.startTime || ""}`.localeCompare(`${b.date || ""} ${b.startTime || ""}`));
         setNextReservation(upcoming[0] || null);
+        setSuivante(upcoming[1] || null);
         setStats((s) => ({ ...s, upcoming: upcoming.length }));
 
         // Attentes actives : « place reservee » (notifiee, hold en cours)
@@ -219,171 +223,213 @@ export default function DashboardPage() {
   };
   const fidelityValue = fidelity ? fidelity.points / fidelity.rate : 0;
 
+  // Ligne « Puis … » sous la prochaine activité : jour court + heure.
+  const suivanteLibelle = (() => {
+    const r: any = suivante;
+    if (!r?.date) return "";
+    const jour = new Date(`${r.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+    return `${jour}${r.startTime ? ` · ${r.startTime}` : ""}`;
+  })();
+
+  const aFaire = (profileIssues.length > 0 || stats.due > 0 || waitlist.placeReservee > 0 || permission === "default" || pushError);
+  const nbAFaire = profileIssues.length + (stats.due > 0 ? 1 : 0) + (waitlist.placeReservee > 0 ? 1 : 0) + (permission === "default" ? 1 : 0);
+  const euros = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+
+  // Une ligne du bloc « Ma situation » : icône, titre, sous-titre, valeur à droite.
+  const ligneSituation = (opts: { href: string; icone: React.ReactNode; fond: string; titre: string; sous: string; droite?: React.ReactNode; premiere?: boolean }) => (
+    <Link href={opts.href} className={`flex items-center justify-between gap-3 no-underline py-3 ${opts.premiere ? "" : "border-t border-gray-100"}`}>
+      <div className="flex items-center gap-3 min-w-0">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${opts.fond}`}>{opts.icone}</div>
+        <div className="min-w-0">
+          <div className="font-body text-sm font-semibold text-blue-800">{opts.titre}</div>
+          <div className="font-body text-xs text-gray-600">{opts.sous}</div>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
+        {opts.droite}
+        <ChevronRight size={16} className="text-gray-300" />
+      </div>
+    </Link>
+  );
+
   return (
     <div className="pb-8">
       <div className="mb-6">
         <h1 className="font-display text-2xl font-bold text-blue-800 mb-1">Bonjour {firstName} 👋</h1>
-        {relanceGroupes && (
-          <div className="mt-4 rounded-2xl border-2 border-green-500 bg-green-50 p-4">
-            <div className="font-body text-sm font-bold text-green-900">
-              Rejoignez le groupe WhatsApp de votre reprise
-            </div>
-            <div className="mt-1 font-body text-xs text-green-800 leading-relaxed">
-              C&apos;est par là que passent les infos de dernière minute : météo,
-              changement d&apos;horaire, séance annulée. Un seul clic, une seule fois.
-            </div>
-            <div className="mt-3 flex flex-col gap-2">
-              {waGroups.map((g) => (
-                <a key={g.key} href={g.url} target="_blank" rel="noopener noreferrer"
-                  className="flex items-center justify-between gap-2 rounded-xl bg-green-600 px-4 py-3 font-body text-sm font-bold text-white no-underline hover:bg-green-700">
-                  <span>{g.label}</span>
-                  <ChevronRight size={16} />
-                </a>
-              ))}
-            </div>
-            <button type="button" onClick={marquerRejoint}
-              className="mt-2 font-body text-xs text-green-700 bg-transparent border-none cursor-pointer hover:underline p-0">
-              C&apos;est fait, ne plus afficher
-            </button>
-          </div>
-        )}
         <p className="font-body text-sm text-gray-600">Voici l’essentiel pour votre famille.</p>
       </div>
 
-      {/* 1. Prochaine activité */}
-      {nextReservation ? (
-        <Card padding="md" className="mb-4 !bg-gradient-to-br !from-blue-800 !to-blue-600 !border-blue-700 text-white overflow-hidden">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="font-body text-xs uppercase tracking-wider text-blue-100 font-semibold mb-2">Prochaine activité</div>
-              <div className="font-display text-xl font-bold text-white truncate">{nextReservation.activityTitle || "Activité équestre"}</div>
-              <div className="font-body text-sm text-blue-50 mt-1">{nextReservation.childName || "Votre cavalier"}</div>
-              <div className="font-body text-sm text-blue-100 mt-3 capitalize">
-                {formattedNextDate}{nextReservation.startTime ? ` · ${nextReservation.startTime}${nextReservation.endTime ? `–${nextReservation.endTime}` : ""}` : ""}
-              </div>
-              {nextReservation.monitor && <div className="font-body text-xs text-blue-200 mt-1">Avec {nextReservation.monitor}</div>}
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center flex-shrink-0">
-              <Calendar size={24} />
-            </div>
-          </div>
-          <Link href="/espace-cavalier/reservations" className="mt-4 inline-flex items-center gap-1.5 font-body text-sm font-semibold text-white no-underline bg-white/15 hover:bg-white/20 px-3 py-2 rounded-lg">
-            Voir le détail <ChevronRight size={15} />
-          </Link>
-        </Card>
-      ) : (
-        <Card padding="md" className="mb-4 !bg-blue-50 !border-blue-100">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="font-body text-sm font-bold text-blue-800">Aucune activité à venir</div>
-              <div className="font-body text-xs text-gray-600 mt-1">Découvrez les prochains stages, cours et balades.</div>
-            </div>
-            <Calendar size={24} className="text-blue-400" />
-          </div>
-        </Card>
-      )}
-
-      {/* 2. Actions principales */}
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        <Link href="/espace-cavalier/reserver" className="no-underline">
-          <Card hover padding="md" className="h-full !bg-blue-500 !border-blue-500 text-white">
-            <div className="text-2xl mb-3">📅</div>
-            <div className="font-body text-sm font-bold text-white">Réserver une activité</div>
-            <div className="font-body text-xs text-blue-100 mt-1">Stages, cours et balades</div>
-          </Card>
-        </Link>
-        <Link href="/espace-cavalier/reservations" className="no-underline">
-          <Card hover padding="md" className="h-full">
-            <div className="text-2xl mb-3">📋</div>
-            <div className="font-body text-sm font-bold text-blue-800">Mes réservations</div>
-            <div className="font-body text-xs text-gray-600 mt-1">
-              {waitlist.enFile > 0
-                ? `${waitlist.enFile} demande${waitlist.enFile > 1 ? "s" : ""} en liste d'attente`
-                : "Voir les activités à venir"}
-            </div>
-          </Card>
-        </Link>
-      </div>
-
-      {/* Place reservee : action a mener sous 24h, elle passe avant tout */}
-      {waitlist.placeReservee > 0 && (
-        <Link href="/espace-cavalier/reserver" className="no-underline">
-          <div className="mb-5 rounded-2xl border-2 border-green-300 bg-green-50 p-4">
-            <div className="font-body text-sm font-bold text-green-800">
-              🎉 {waitlist.placeReservee > 1
-                ? `${waitlist.placeReservee} places vous sont réservées`
-                : "Une place vous est réservée"}
-            </div>
-            <div className="font-body text-xs text-green-700 mt-1">
-              Une place s'est libérée sur une activité où vous étiez en liste d'attente.
-              Confirmez rapidement — elle est gardée 24h. Touchez pour voir.
-            </div>
-          </div>
-        </Link>
-      )}
-
-      {/* 3. Indicateurs utiles seulement */}
-      <div className={`grid gap-3 mb-5 ${stats.credit > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
-        <Card padding="sm">
-          <div className="font-body text-xl font-bold text-blue-500">{stats.upcoming}</div>
-          <div className="font-body text-xs text-gray-600">À venir</div>
-        </Card>
-        <Link href="/espace-cavalier/factures" className="no-underline">
-          <Card padding="sm" className={stats.due > 0 ? "!bg-red-50 !border-red-100" : "!bg-green-50 !border-green-100"}>
-            <div className={`font-body text-xl font-bold ${stats.due > 0 ? "text-red-500" : "text-green-600"}`}>{stats.due > 0 ? `${stats.due.toFixed(0)}€` : "✓"}</div>
-            <div className="font-body text-xs text-gray-600">{stats.due > 0 ? "À régler" : "Paiements à jour"}</div>
-          </Card>
-        </Link>
-        {stats.credit > 0 && (
-          <Link href="/espace-cavalier/factures" className="no-underline">
-            <Card padding="sm" className="!bg-amber-50 !border-amber-100">
-              <div className="font-body text-xl font-bold text-amber-600">{stats.credit.toFixed(0)}€</div>
-              <div className="font-body text-xs text-gray-600">D’avoir</div>
-            </Card>
-          </Link>
-        )}
-      </div>
-
-      {/* 4. Actions nécessaires regroupées */}
-      {(profileIssues.length > 0 || stats.due > 0 || permission === "default" || pushError) && (
-        <Card padding="md" className="mb-5 !bg-orange-50 !border-orange-200">
-          <div className="font-body text-sm font-bold text-orange-800 mb-3">À faire</div>
-          <div className="flex flex-col gap-3">
-            {stats.due > 0 && (
-              <Link href="/espace-cavalier/factures" className="flex items-center justify-between gap-3 no-underline">
-                <div className="flex items-center gap-2 font-body text-sm text-orange-800"><CreditCard size={16} /> Régler {stats.due.toFixed(2)}€</div>
-                <ChevronRight size={16} className="text-orange-500" />
+      {/* 1. À faire — le seul bloc coloré de la page : tout ce qui attend une
+          action de la famille est ici, et nulle part ailleurs. */}
+      {aFaire && (
+        <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 px-5 pt-4 pb-1.5">
+          <div className="font-body text-[11px] font-bold uppercase tracking-wider text-orange-700 mb-1">À faire{nbAFaire > 1 ? ` · ${nbAFaire}` : ""}</div>
+          <div className="flex flex-col divide-y divide-orange-900/10">
+            {waitlist.placeReservee > 0 && (
+              <Link href="/espace-cavalier/reserver" className="flex items-center justify-between gap-3 no-underline py-2.5">
+                <div className="flex items-center gap-2.5 font-body text-sm text-orange-800"><Bell size={16} className="text-orange-600 flex-shrink-0" /><span>{waitlist.placeReservee > 1 ? `${waitlist.placeReservee} places vous sont réservées` : "Une place vous est réservée"} — à confirmer sous 24 h</span></div>
+                <span className="flex items-center font-body text-xs font-bold text-orange-600 whitespace-nowrap">Réserver <ChevronRight size={14} /></span>
               </Link>
             )}
-            {profileIssues.slice(0, 2).map((issue) => (
-              <Link key={issue} href="/espace-cavalier/profil" className="flex items-center justify-between gap-3 no-underline">
-                <div className="font-body text-sm text-orange-800">⚠️ {issue}</div>
-                <ChevronRight size={16} className="text-orange-500 flex-shrink-0" />
+            {stats.due > 0 && (
+              <Link href="/espace-cavalier/factures" className="flex items-center justify-between gap-3 no-underline py-2.5">
+                <div className="flex items-center gap-2.5 font-body text-sm text-orange-800"><CreditCard size={16} className="text-orange-600 flex-shrink-0" /><span>Un règlement de <strong>{euros(stats.due)}</strong> est attendu</span></div>
+                <span className="flex items-center font-body text-xs font-bold text-orange-600 whitespace-nowrap">Régler <ChevronRight size={14} /></span>
+              </Link>
+            )}
+            {profileIssues.map((issue) => (
+              <Link key={issue} href="/espace-cavalier/profil" className="flex items-center justify-between gap-3 no-underline py-2.5">
+                <div className="flex items-center gap-2.5 font-body text-sm text-orange-800"><AlertTriangle size={16} className="text-orange-600 flex-shrink-0" /><span>{issue}</span></div>
+                <span className="flex items-center font-body text-xs font-bold text-orange-600 whitespace-nowrap">Ma famille <ChevronRight size={14} /></span>
               </Link>
             ))}
             {permission === "default" && (
-              <button type="button" onClick={requestPermission} disabled={pushLoading} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-0 cursor-pointer text-left">
-                <div className="flex items-center gap-2 font-body text-sm text-orange-800"><Bell size={16} /> Activer les rappels et alertes</div>
-                <span className="font-body text-xs font-semibold text-orange-600">{pushLoading ? "..." : "Activer"}</span>
+              <button type="button" onClick={requestPermission} disabled={pushLoading} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-0 py-2.5 cursor-pointer text-left">
+                <div className="flex items-center gap-2.5 font-body text-sm text-orange-800"><Bell size={16} className="text-orange-600 flex-shrink-0" /><span>Activer les rappels de séance sur cet appareil</span></div>
+                <span className="flex items-center font-body text-xs font-bold text-orange-600 whitespace-nowrap">{pushLoading ? "..." : "Activer"} <ChevronRight size={14} /></span>
               </button>
             )}
-            {pushError && <div className="font-body text-xs text-red-600">Notifications : {pushError}</div>}
+            {pushError && <div className="font-body text-xs text-red-600 py-2">Notifications : {pushError}</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Groupe WhatsApp de la reprise : relance jusqu'à ce que la famille
+          l'ait rejoint. Conservé tel quel, c'est un rappel, pas une alerte. */}
+      {relanceGroupes && (
+        <div className="mb-5 rounded-2xl border-2 border-green-500 bg-green-50 p-4">
+          <div className="font-body text-sm font-bold text-green-900">Rejoignez le groupe WhatsApp de votre reprise</div>
+          <div className="mt-1 font-body text-xs text-green-800 leading-relaxed">
+            C&apos;est par là que passent les infos de dernière minute : météo,
+            changement d&apos;horaire, séance annulée. Un seul clic, une seule fois.
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {waGroups.map((g) => (
+              <a key={g.key} href={g.url} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-between gap-2 rounded-xl bg-green-600 px-4 py-3 font-body text-sm font-bold text-white no-underline hover:bg-green-700">
+                <span>{g.label}</span>
+                <ChevronRight size={16} />
+              </a>
+            ))}
+          </div>
+          <button type="button" onClick={marquerRejoint}
+            className="mt-2 font-body text-xs text-green-700 bg-transparent border-none cursor-pointer hover:underline p-0">
+            C&apos;est fait, ne plus afficher
+          </button>
+        </div>
+      )}
+
+      {/* 2. Prochaine activité — une carte blanche compacte, la suivante en
+          dessous. Le détail complet vit dans Mes réservations. */}
+      <div className="font-body text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Prochaine activité</div>
+      {nextReservation ? (
+        <Card padding="sm" className="mb-5 !p-5">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 flex flex-col items-center justify-center flex-shrink-0">
+              <span className="font-body text-[11px] font-bold uppercase text-blue-500 leading-none">{new Date(`${nextReservation.date}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "short" }).replace(".", "")}</span>
+              <span className="font-display text-lg font-bold text-blue-800 leading-tight">{new Date(`${nextReservation.date}T12:00:00`).getDate()}</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-display text-lg font-bold text-blue-800 truncate">{nextReservation.activityTitle || "Activité équestre"}</div>
+              <div className="font-body text-sm text-gray-600">
+                {nextReservation.childName || "Votre cavalier"}
+                {nextReservation.startTime ? ` · ${nextReservation.startTime}${nextReservation.endTime ? `–${nextReservation.endTime}` : ""}` : ""}
+                {nextReservation.monitor ? ` · avec ${nextReservation.monitor}` : ""}
+              </div>
+              <div className="font-body text-xs text-gray-400 first-letter:uppercase">{formattedNextDate}</div>
+            </div>
+            {nextReservation.status === "confirmed" && <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full font-body text-xs font-semibold text-green-700 bg-green-50 whitespace-nowrap">Confirmée</span>}
+          </div>
+          <div className="mt-3.5 pt-3.5 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="font-body text-[13px] text-gray-500">
+              {suivante ? <>Puis <strong className="text-gray-700">{suivante.activityTitle}</strong> · {suivanteLibelle}</> : "Rien d’autre de prévu pour l’instant."}
+            </div>
+            <Link href="/espace-cavalier/reservations" className="inline-flex items-center gap-1 font-body text-[13px] font-bold text-blue-500 no-underline whitespace-nowrap">
+              {stats.upcoming > 1 ? `Mes ${stats.upcoming} réservations` : "Mes réservations"} <ChevronRight size={14} />
+            </Link>
+          </div>
+        </Card>
+      ) : (
+        <Card padding="sm" className="mb-5 !p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="font-body text-sm font-bold text-blue-800">Aucune activité à venir</div>
+              <div className="font-body text-xs text-gray-600 mt-0.5">Découvrez les prochains stages, cours et balades.</div>
+            </div>
+            <Calendar size={22} className="text-blue-300 flex-shrink-0" />
           </div>
         </Card>
       )}
 
-      {/* 5. WhatsApp compact */}
+      {/* 3. Les deux façons de s'inscrire, côte à côte */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <Link href="/espace-cavalier/reserver" className="no-underline">
+          <Card hover padding="sm" className="h-full !p-5 !bg-blue-500 !border-blue-500 text-white">
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center mb-2.5"><Calendar size={20} /></div>
+            <div className="font-body text-base font-bold text-white">Réserver une activité</div>
+            <div className="font-body text-xs text-blue-100 mt-0.5">Stages, cours et balades</div>
+          </Card>
+        </Link>
+        <Link href="/espace-cavalier/inscription-annuelle" className="no-underline">
+          <Card hover padding="sm" className="h-full !p-5">
+            <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center mb-2.5"><Repeat size={20} className="text-gold-600" /></div>
+            <div className="font-body text-base font-bold text-blue-800">Inscription à l’année</div>
+            <div className="font-body text-xs text-gray-600 mt-0.5">Forfaits et cours réguliers</div>
+          </Card>
+        </Link>
+      </div>
+
+      {/* 4. Ma situation — paiements, avoir, fidélité, cartes, famille :
+          des lignes de texte, pas des compteurs. */}
+      <div className="font-body text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Ma situation</div>
+      <Card padding="sm" className="mb-5 !px-5 !py-2">
+        {ligneSituation({
+          href: "/espace-cavalier/factures", premiere: true,
+          icone: stats.due > 0 ? <CreditCard size={19} className="text-orange-600" /> : <Check size={19} className="text-green-600" />,
+          fond: stats.due > 0 ? "bg-orange-50" : "bg-green-50",
+          titre: stats.due > 0 ? `Reste à régler : ${euros(stats.due)}` : "Paiements à jour",
+          sous: stats.due > 0 ? "Règlement en ligne ou au bureau" : "Aucun règlement attendu",
+        })}
+        {stats.credit > 0 && ligneSituation({
+          href: "/espace-cavalier/factures",
+          icone: <Wallet size={19} className="text-gold-600" />, fond: "bg-gold-50",
+          titre: "Avoir disponible", sous: "Utilisable sur une prochaine réservation",
+          droite: <span className="font-body text-sm font-bold text-gold-600">{euros(stats.credit)}</span>,
+        })}
+        {fidelity?.enabled && ligneSituation({
+          href: "/espace-cavalier/factures",
+          icone: <Sparkles size={19} className="text-gold-600" />, fond: "bg-gold-50",
+          titre: `Fidélité : ${fidelity.points} points`,
+          sous: fidelityValue > 0 ? `Soit ${euros(fidelityValue)} de réduction sur une prochaine réservation` : "Chaque règlement rapporte des points",
+          droite: fidelityValue > 0 ? <span className="font-body text-sm font-bold text-gold-600">{euros(fidelityValue)}</span> : undefined,
+        })}
+        {cards.slice(0, 2).map((card) => ligneSituation({
+          href: "/espace-cavalier/factures",
+          icone: <Ticket size={19} className="text-blue-500" />, fond: "bg-blue-50",
+          titre: `Carte ${card.totalSessions || ""} séances${card.familiale ? " · Familiale" : card.childName ? ` · ${card.childName}` : ""}`,
+          sous: card.dateFin ? `Valable jusqu’au ${new Date(card.dateFin).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : "Carte de séances",
+          droite: <span className="font-body text-sm font-bold text-blue-800">{card.remainingSessions || 0} restante{(card.remainingSessions || 0) > 1 ? "s" : ""}</span>,
+        }))}
+        {ligneSituation({
+          href: "/espace-cavalier/profil",
+          icone: <Users size={19} className="text-blue-500" />, fond: "bg-blue-50",
+          titre: `Ma famille${family?.children?.length ? ` · ${family.children.length} cavalier${family.children.length > 1 ? "s" : ""}` : ""}`,
+          sous: (family?.children || []).map((c: any) => c.firstName).filter(Boolean).join(", ") || "Ajoutez vos cavaliers",
+        })}
+      </Card>
+
+      {/* 5. WhatsApp — une ligne, dépliable */}
       {hasWhatsApp && (
-        <Card padding="sm" className="mb-5">
+        <Card padding="sm">
           <button type="button" onClick={() => setShowWhatsApp((v) => !v)} className="w-full flex items-center justify-between bg-transparent border-none cursor-pointer p-0 text-left">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center">💬</div>
+              <div className="w-9 h-9 rounded-xl bg-green-50 flex items-center justify-center"><MessageCircle size={17} className="text-green-700" /></div>
               <div>
-                <div className="font-body text-sm font-bold text-blue-800">Communauté et groupes WhatsApp</div>
-                <div className="font-body text-xs text-gray-600">Les liens utiles du centre</div>
+                <div className="font-body text-sm font-bold text-blue-800">{waGroups.length === 1 ? "Groupe WhatsApp de la reprise" : "Communauté et groupes WhatsApp"}</div>
+                <div className="font-body text-xs text-gray-600">{waGroups.length === 1 ? `${waGroups[0].label} — infos de dernière minute` : "Les liens utiles du centre"}</div>
               </div>
             </div>
-            <ChevronRight size={18} className={`text-gray-400 transition-transform ${showWhatsApp ? "rotate-90" : ""}`} />
+            <ChevronRight size={18} className={`text-gray-300 transition-transform ${showWhatsApp ? "rotate-90" : ""}`} />
           </button>
           {showWhatsApp && (
             <div className="mt-3 pt-3 border-t border-gray-100 flex flex-col gap-2">
@@ -393,55 +439,6 @@ export default function DashboardPage() {
           )}
         </Card>
       )}
-
-      {/* 6. Cartes + fidélité regroupées */}
-      {(cards.length > 0 || fidelity?.enabled) && (
-        <div className="mb-5">
-          <h2 className="font-display text-lg font-bold text-blue-800 mb-3">Mes avantages</h2>
-          <Card padding="md">
-            <div className="flex flex-col divide-y divide-gray-100">
-              {cards.slice(0, 2).map((card) => (
-                <div key={card.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center">🎟️</div>
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Carte {card.totalSessions || ""} séances</div>
-                      <div className="font-body text-xs text-gray-600">{card.familiale ? "Carte familiale" : card.childName || "Carte de séances"}</div>
-                    </div>
-                  </div>
-                  <div className="font-body text-sm font-bold text-gold-600">{card.remainingSessions || 0} restantes</div>
-                </div>
-              ))}
-              {cards.length > 2 && <div className="font-body text-xs text-gray-500 py-2">+ {cards.length - 2} autre{cards.length > 3 ? "s" : ""} carte{cards.length > 3 ? "s" : ""}</div>}
-              {fidelity?.enabled && (
-                <div className="flex items-center justify-between gap-3 py-3 last:pb-0">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-yellow-50 flex items-center justify-center"><Sparkles size={19} className="text-yellow-600" /></div>
-                    <div>
-                      <div className="font-body text-sm font-semibold text-blue-800">Fidélité</div>
-                      <div className="font-body text-xs text-gray-600">{fidelity.points} points</div>
-                    </div>
-                  </div>
-                  <div className="font-body text-sm font-bold text-yellow-700">{fidelityValue.toFixed(2)}€</div>
-                </div>
-              )}
-            </div>
-            <Link href="/espace-cavalier/factures" className="mt-4 flex items-center justify-center gap-1.5 font-body text-sm font-semibold text-blue-500 no-underline bg-blue-50 py-2.5 rounded-lg">
-              Voir mes cartes et avantages <ChevronRight size={15} />
-            </Link>
-          </Card>
-        </div>
-      )}
-
-      {/* Raccourcis secondaires, volontairement discrets */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link href="/espace-cavalier/inscription-annuelle" className="no-underline">
-          <Card hover padding="sm"><div className="font-body text-sm font-semibold text-blue-800">📋 Inscription annuelle</div></Card>
-        </Link>
-        <Link href="/espace-cavalier/profil" className="no-underline">
-          <Card hover padding="sm"><div className="font-body text-sm font-semibold text-blue-800">👨‍👩‍👧‍👦 Ma famille</div></Card>
-        </Link>
-      </div>
     </div>
   );
 }

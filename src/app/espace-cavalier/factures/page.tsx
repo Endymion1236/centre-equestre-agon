@@ -727,11 +727,11 @@ export default function FacturesPage() {
       )}
 
       {totalDue > 0 ? (
-        <Card padding="md" className="mb-5 !bg-gradient-to-br !from-orange-50 !to-amber-50 !border-orange-200">
+        <Card padding="md" className="mb-5 !bg-orange-50 !border-orange-200">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="font-body text-xs uppercase tracking-wider font-bold text-orange-600">Reste à régler</div>
-              <div className="font-display text-3xl font-bold text-orange-700 mt-1">{totalDue.toFixed(2)}€</div>
+              <div className="font-body text-[11px] uppercase tracking-wider font-bold text-orange-700">À faire · reste à régler</div>
+              <div className="font-display text-3xl font-bold text-orange-700 mt-1">{totalDue.toFixed(2).replace(".", ",")} €</div>
               <div className="font-body text-xs text-orange-700 mt-1">
                 {duePayments.length} paiement{duePayments.length > 1 ? "s" : ""} concerné{duePayments.length > 1 ? "s" : ""}
               </div>
@@ -740,28 +740,31 @@ export default function FacturesPage() {
           </div>
         </Card>
       ) : (
-        <Card padding="sm" className="mb-5 !bg-green-50 !border-green-200">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center"><CheckCircle2 size={20} className="text-green-600" /></div>
-            <div>
-              <div className="font-body text-sm font-bold text-green-800">Tout est à jour</div>
-              <div className="font-body text-xs text-green-700">Aucun règlement n'est attendu pour le moment.</div>
+        <Card padding="sm" className="mb-5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center"><CheckCircle2 size={20} className="text-green-600" /></div>
+              <div>
+                <div className="font-body text-sm font-bold text-blue-800">Tout est à jour</div>
+                <div className="font-body text-xs text-gray-600">Aucun règlement n'est attendu pour le moment.</div>
+              </div>
             </div>
+            <Badge color="green">À jour</Badge>
           </div>
         </Card>
       )}
 
       {totalCredit > 0 && (
-        <Card padding="sm" className="mb-6 !bg-gold-50 !border-gold-200">
+        <Card padding="sm" className="mb-6">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center"><Wallet size={19} className="text-gold-600" /></div>
+              <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center"><Wallet size={19} className="text-gold-600" /></div>
               <div>
                 <div className="font-body text-sm font-bold text-blue-800">Avoir disponible</div>
                 <div className="font-body text-xs text-gray-600">Utilisable sur une prochaine réservation</div>
               </div>
             </div>
-            <div className="font-display text-xl font-bold text-gold-600">{totalCredit.toFixed(2)}€</div>
+            <div className="font-display text-xl font-bold text-gold-600">{totalCredit.toFixed(2).replace(".", ",")} €</div>
           </div>
         </Card>
       )}
@@ -939,10 +942,10 @@ export default function FacturesPage() {
               <div className={activeCards.length > 0 ? "mt-2 pt-2 border-t border-gray-100" : ""}>
                 <button type="button" onClick={() => setShowFidelity((value) => !value)} className="w-full flex items-center justify-between gap-3 bg-transparent border-none p-2 cursor-pointer text-left">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-yellow-50 flex items-center justify-center"><Sparkles size={19} className="text-yellow-600" /></div>
+                    <div className="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center"><Sparkles size={19} className="text-gold-600" /></div>
                     <div>
-                      <div className="font-body text-sm font-bold text-blue-800">Fidélité</div>
-                      <div className="font-body text-xs text-gray-600">{fidelity?.points || 0} points · {(((fidelity?.points || 0) / (fidelitySettings.taux || 50))).toFixed(2)}€</div>
+                      <div className="font-body text-sm font-bold text-blue-800">Fidélité : {fidelity?.points || 0} points</div>
+                      <div className="font-body text-xs text-gray-600">Soit {(((fidelity?.points || 0) / (fidelitySettings.taux || 50))).toFixed(2).replace(".", ",")} € de réduction · 1 € pour {fidelitySettings.taux || 50} points</div>
                     </div>
                   </div>
                   <ChevronDown size={18} className={`text-gray-400 transition-transform ${showFidelity ? "rotate-180" : ""}`} />
