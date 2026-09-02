@@ -3,27 +3,19 @@
 import React, { useState, useEffect } from "react";
 import AnnulationModal from "./AnnulationModal";
 import { useSearchParams } from "next/navigation";
-import { collection, getDocs, addDoc, deleteDoc, updateDoc, setDoc, doc, getDoc, serverTimestamp, Timestamp, query, where, orderBy, limit, runTransaction } from "firebase/firestore";
+import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { estPrelevementSepa } from "@/lib/sepa";
-import { emailTemplates } from "@/lib/email-templates";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
-import { Card, Badge, Button } from "@/components/ui";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
 import ModaleModifierCommande from "./ModaleModifierCommande";
 import ModaleEncaisser from "./ModaleEncaisser";
 import { useToast } from "@/components/ui/Toast";
-import { useAgentContext } from "@/hooks/useAgentContext";
-import { Plus, Trash2, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, AlertTriangle, Copy, ChevronDown, Gift, Calendar } from "lucide-react";
-import { openHtmlInTab } from "@/lib/open-html-tab";
-import { downloadInvoicePdf } from "@/lib/download-invoice";
-import { downloadAvoirPdf } from "@/lib/download-avoir";
-import { fetchDiscountSettings, calculateFamilyDiscount, calculateMultiStageDiscount } from "@/lib/discounts";
+import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar } from "lucide-react";
 import type { Family, Activity } from "@/types";
 import { normalizePayment, loadPayments } from "./utils";
 import { BasketItem, Payment, paymentModes } from "./types";
-import { NoteField } from "./NoteField";
 import { TabEncaisser } from "./TabEncaisser";
 import { TabJournal } from "./TabJournal";
 import { TabHistorique } from "./TabHistorique";
@@ -34,7 +26,6 @@ import { TabDeclarations } from "./TabDeclarations";
 import { TabChequesDiffres } from "./TabChequesDiffres";
 import { authFetch } from "@/lib/auth-fetch";
 import { enregistrerEncaissement as enregistrerEncaissementPartage } from "@/lib/encaissement";
-import { maskIban } from "@/lib/sepa-validation";
 
 
 /** Libelles des modes de remboursement, pour le journal comptable. */
@@ -60,7 +51,6 @@ export default function PaiementsPage() {
   );
   const [editPayment, setEditPayment] = useState<any | null>(null);
   const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
-  const [sendingCawlLink, setSendingCawlLink] = useState<string | null>(null);
   const [payLinkModal, setPayLinkModal] = useState<any | null>(null); // payment pour la modale
   const [payLinkEmail, setPayLinkEmail] = useState("");
   const [payLinkAmount, setPayLinkAmount] = useState("");
@@ -107,11 +97,8 @@ export default function PaiementsPage() {
     } catch (e) { console.error(e); toast("Erreur encaissement groupé", "error"); }
     setMultiSaving(false);
   };
-  // Saisie multi-chèques pour le mode "cheque_differe" dans la modale rapide
   // `search` et `family` de l'URL sont transmis à TabImpayes, qui porte l'état
-  // de la recherche et du filtre famille (états locaux ici : morts depuis
-  // l'extraction du composant, la liste s'ouvrait donc sans filtre).
-  const [selectedFamily, setSelectedFamily] = useState<string>(urlFamily);
+  // de la recherche et du filtre famille.
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [activities, setActivities] = useState<(Activity & { firestoreId: string })[]>([]);
   const [payments, setPayments] = useState<(Payment & { id: string })[]>([]);
@@ -120,29 +107,11 @@ export default function PaiementsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [declarations, setDeclarations] = useState<any[]>([]);
-  const [confirmingDeclId, setConfirmingDeclId] = useState<string | null>(null);
   // Chèques différés (pour calcul du badge de retard dans la barre d'onglets)
   const [chequesDiffresCount, setChequesDiffresCount] = useState<{ total: number; overdue: number }>({ total: 0, overdue: 0 });
 
-  // Historique filters
-  const [histModeFilter, setHistModeFilter] = useState<string>("all");
-  const [histStatusFilter, setHistStatusFilter] = useState<string>("all");
-  const [histSearch, setHistSearch] = useState("");
-  const [histPeriod, setHistPeriod] = useState("");
-
-  // Journal filters
-  const [journalDateFrom, setJournalDateFrom] = useState("");
-  const [journalDateTo, setJournalDateTo] = useState("");
-  const [journalMontantMin, setJournalMontantMin] = useState("");
-  const [journalMontantMax, setJournalMontantMax] = useState("");
-  const [journalMode, setJournalMode] = useState("all");
-  const [journalStatus, setJournalStatus] = useState("all");
-  const [journalSearch, setJournalSearch] = useState("");
-  const [correctionEnc, setCorrectionEnc] = useState<any | null>(null);
-  const [correctionMontant, setCorrectionMontant] = useState("");
-  const [correctionMode, setCorrectionMode] = useState("");
-  const [correctionRef, setCorrectionRef] = useState("");
-  const [correctionRaison, setCorrectionRaison] = useState("");
+  // Les filtres de l'historique et du journal, et la correction d'un
+  // encaissement, vivent dans leurs onglets depuis l'extraction : plus rien ici.
 
   // Réductions (chargées ici, consommées par TabEncaisser)
   const [promos, setPromos] = useState<any[]>([]);
@@ -199,11 +168,6 @@ export default function PaiementsPage() {
 
   useEffect(() => { fetchData(); }, []);
 
-
-  // Répartir un total en N parts égales (centimes bien distribués)
-
-  const family = families.find((f) => f.firestoreId === selectedFamily);
-  const children = family?.children || [];
 
   // ═══ ENCAISSEMENT ═══
   // La logique vit dans @/lib/encaissement : elle est partagée avec le panneau
@@ -300,16 +264,6 @@ export default function PaiementsPage() {
 
   // ═══ SUPPRESSION / MODIFICATION DE COMMANDE ═══
   // Règle : non encaissé = supprimable, encaissé = avoir automatique
-
-  // Affichage seulement : calculé sur les 500 encaissements les plus récents
-  // chargés par la page. Suffisant pour une pastille à l'écran, PAS pour
-  // décider d'une suppression (cf. getTotalEncaisseExhaustif).
-  const getTotalEncaisse = (payment: any) => {
-    // Chercher dans la collection encaissements
-    return encaissements
-      .filter((e: any) => e.paymentId === payment.id)
-      .reduce((s: number, e: any) => s + (e.montant || 0), 0);
-  };
 
   /**
    * Total encaissé faisant foi, relu depuis Firestore pour CE paiement.
@@ -850,54 +804,6 @@ export default function PaiementsPage() {
     return inscriptions;
   };
 
-  // ─── Duplication Mode 2 : commande pending vers une autre famille ───
-  const duplicateToFamily = async (payment: any, targetFamilyId: string) => {
-    const targetFamily = families.find(f => f.firestoreId === targetFamilyId);
-    if (!targetFamily) return;
-    const targetChildren = targetFamily.children || [];
-    const targetChild = targetChildren[0];
-
-    const cleanedItems = (payment.items || []).map((item: any, idx: number) => {
-      const mapped = targetChildren[idx] || targetChildren[0];
-      const tc = mapped ? { childId: mapped.id || "", childName: mapped.firstName || "" } : { childId: "", childName: "" };
-      return {
-        ...tc,
-        activityType: item.activityType || "",
-        activityTitle: item.activityTitle || item.label || "",
-        stageKey: item.stageKey || "",
-        priceHT: safeNumber(item.priceHT),
-        priceTTC: safeNumber(item.priceTTC),
-        tva: safeNumber(item.tva || item.tvaTaux || 5.5),
-        creneauId: item.creneauId || "",
-        reservationId: "",
-      };
-    });
-
-    const totalTTC = round2(cleanedItems.reduce((s: number, i: any) => s + safeNumber(i.priceTTC), 0));
-    await addDoc(collection(db, "payments"), {
-      orderId: generateOrderId(),
-      familyId: targetFamily.firestoreId,
-      familyName: targetFamily.parentName || "",
-      items: cleanedItems, totalTTC,
-      status: "pending", paidAmount: 0, paymentMode: "", paymentRef: "",
-      source: "duplicate", sourcePaymentId: payment.id,
-      createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-    });
-
-    // Inscrire l'enfant dans tous les créneaux futurs en utilisant les items ORIGINAUX
-    // (qui ont les creneauIds de référence) plutôt que les cleanedItems
-    const inscriptions = await enrollChildInForfait(payment, targetFamilyId);
-
-    setDuplicateTarget(null);
-    await refreshAll();
-    toast(
-      inscriptions > 0
-        ? `✅ ${targetFamily.parentName} — commande créée + ${inscriptions} séance(s) inscrite(s)`
-        : `⚠️ Commande créée pour ${targetFamily.parentName} — aucune séance inscrite automatiquement`,
-      inscriptions > 0 ? "success" : "error"
-    );
-  };
-
   // ─── Broadcast concours : envoi en masse ───
   const broadcastToFamilies = async () => {
     if (broadcastRows.length === 0) return;
@@ -1033,7 +939,6 @@ export default function PaiementsPage() {
       };
     }));
   };
-  const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   return (
     <div>

@@ -1,23 +1,19 @@
 "use client";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { STAGE_DEROULE_VIDE, derouleEstRempli, renderDerouleTexte, type StageDeroule } from "@/lib/stage-deroule";
 
 import { useState, useEffect } from "react";
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, addDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { CGV_STAGES_CAS, CGV_COURS_ANNUELS, CGV_BALADES, CGV_BALADES_PETIT_GROUPE, CGV_ANNULATION_CENTRE } from "@/lib/cgv-clauses";
 import { Card, Badge } from "@/components/ui";
-import { Save, Plus, Trash2, Loader2, AlertTriangle, Users, Pencil, Calendar, KeyRound, RefreshCw, Search, ShieldCheck, ShieldOff } from "lucide-react";
+import { Save, Plus, Trash2, Loader2, Calendar } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import MareesSection from "./MareesSection";
-import ReservationsToggle from "@/components/admin/ReservationsToggle";
-import ThemeSaisonnierToggle from "@/components/admin/ThemeSaisonnierToggle";
 import SectionMaintenance from "./SectionMaintenance";
 import SectionMoniteurs from "./SectionMoniteurs";
 import SectionReductions from "./SectionReductions";
 import SectionStages from "./SectionStages";
 import SectionProgression from "./SectionProgression";
-import { DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL, type ProgressionLabelsSettings } from "@/lib/progression-helpers";
 
 const defaultAccounts = [
   { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },

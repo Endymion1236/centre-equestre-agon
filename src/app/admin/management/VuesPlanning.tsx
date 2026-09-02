@@ -19,7 +19,7 @@
 import type { TachePlanifiee, TacheType, Salarie, JourSemaine } from "./types";
 import { fmtDuree, calcTempsTravailJour, bornesJournee, JOURS_LABELS, JOURS, formatDateCourte, CATEGORIES } from "./types";
 import { heureToMin, minToHeure, roundToQuarter, TIME_SLOTS } from "./planning-utils";
-import { Check, Printer, Trash2, Plus, X, Loader2, AlignVerticalSpaceAround } from "lucide-react";
+import { Check, Printer, Trash2, AlignVerticalSpaceAround } from "lucide-react";
 
 /** Un jour de la semaine affichée, avec sa date et son libellé. */
 export interface JourAffiche {

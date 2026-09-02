@@ -1,8 +1,7 @@
 "use client";
 import React, { useMemo, useState } from "react";
-import { updateDoc, getDoc, setDoc, doc, serverTimestamp } from "firebase/firestore";
+import { updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { safeNumber, generateOrderId } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Search, X, Receipt, Check, ChevronDown, Plus, Trash2, FileText, Calendar } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";

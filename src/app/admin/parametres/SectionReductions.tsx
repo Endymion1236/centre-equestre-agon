@@ -14,7 +14,7 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Plus, Trash2, Check, Save } from "lucide-react";
+import { Loader2, Plus, Trash2, Save } from "lucide-react";
 
 /** Classe commune des champs de saisie de cet écran. */
 const inputCls = "px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none text-center";

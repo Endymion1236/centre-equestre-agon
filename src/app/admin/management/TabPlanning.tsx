@@ -4,12 +4,12 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
-import { Plus, Trash2, Check, ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate, AlignVerticalSpaceAround, AlertTriangle, Undo2, RotateCcw, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate, AlertTriangle, Undo2, RotateCcw, X } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { Card } from "@/components/ui";
 import type { TacheType, TachePlanifiee, Salarie, JourSemaine, ModelePlanning, TacheModele } from "./types";
 import {
-  TIME_SLOTS, COULEURS_SALARIE, heureToMin, minToHeure, planDecoupage, roundToQuarter,
+  heureToMin, minToHeure, planDecoupage, roundToQuarter,
 } from "./planning-utils";
 import { TableauView, HoraireView, FicheView } from "./VuesPlanning";
 import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour, bornesJournee } from "./types";

@@ -2,43 +2,30 @@
 import { useState, useEffect, useMemo } from "react";
 import { toLocalDateString } from "@/lib/date-local";
 import { estPerimee } from "@/lib/waitlist-cleanup";
-import { encadreConditionsPourType } from "@/lib/cgv-clauses";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import {
-  findStageCreneaux, countExistingStageInscriptions, computeStageReductions,
-  enrollChildInCreneau, createReservation, removeChildFromCreneau, deleteReservations,
-  findLinkedPayment, computeTropPercu, createAvoir, duplicateWeekCreneaux, fmtDate as fmtDateSvc,
-} from "@/lib/planning-services";
+import { duplicateWeekCreneaux } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
-import {
-  emailTemplates, emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
-  emailParagraphe as P, emailSignature,
-} from "@/lib/email-templates";
-import { createEncaissement } from "@/lib/compta-encaissement";
 import { dateSaisieComplete } from "@/lib/date-saisie";
-import { generateOrderId } from "@/lib/utils";
 import {
-  applyDiscounts,
-  findMergeablePayment,
   fetchVacationPeriods,
   fetchDiscountSettings,
   type VacationPeriod,
   type DiscountSettings,
 } from "@/lib/discounts";
-import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, Users, CalendarDays, Briefcase, Bell, Mail, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
+import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, CalendarDays, Briefcase, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, typeColors, dayNames, dayNamesFull, payModes, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage } from "./types";
-import { inscritsMemeFamille, prixInscriptionCavalier, prixCreneauTTC, libellePrixCreneau } from "@/lib/tarif-forfaitaire";
+import { Creneau, EnrolledChild, typeColors, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage } from "./types";
+import { libellePrixCreneau } from "@/lib/tarif-forfaitaire";
 import EnrollPanel from "./EnrollPanel";
 import { inscrireCavalier, desinscrireCavalier, type ContexteInscription } from "./inscription-actions";
 import PeriodGenerator from "./PeriodGenerator";
 import SimpleCreneauForm from "./SimpleCreneauForm";
-import RdvModal, { RDV_CATEGORIES, type RdvForm } from "./RdvModal";
+import RdvModal, { RDV_CATEGORIES } from "./RdvModal";
 import DeleteCreneauModal from "./DeleteCreneauModal";
-import EditCreneauModal, { type EditForm } from "./EditCreneauModal";
+import EditCreneauModal from "./EditCreneauModal";
 import DuplicateCreneauModal from "./DuplicateCreneauModal";
 import MareesBandeau from "@/components/MareesBandeau";
 import MonthView from "./MonthView";

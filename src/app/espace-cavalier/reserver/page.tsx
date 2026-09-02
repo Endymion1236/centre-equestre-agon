@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { derouleEstRempli } from "@/lib/stage-deroule";
-import { CGV_STAGES_COURT, STAGE_ACOMPTE_EUROS } from "@/lib/cgv-clauses";
-import { totauxPanier, ACOMPTE_PAR_ENFANT } from "@/lib/panier-reservation";
+import { totauxPanier } from "@/lib/panier-reservation";
 import ModalePanier from "./ModalePanier";
 import ModaleChoixCavalier from "./ModaleChoixCavalier";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
-import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, X, Check, CreditCard, CalendarDays, LayoutList } from "lucide-react";
+import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, Check, CalendarDays, LayoutList } from "lucide-react";
 import TimelineReservation from "./TimelineReservation";
 import { useSearchParams } from "next/navigation";
 import { authFetch } from "@/lib/auth-fetch";

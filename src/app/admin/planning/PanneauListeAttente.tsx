@@ -16,7 +16,7 @@
  * de le saisir deux fois.
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   collection, addDoc, updateDoc, deleteDoc, deleteField, doc, getDocs, query, where, serverTimestamp,
 } from "firebase/firestore";

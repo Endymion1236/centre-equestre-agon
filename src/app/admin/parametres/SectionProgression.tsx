@@ -14,7 +14,6 @@ import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
-import { Check } from "lucide-react";
 import {
   DEFAULT_ECHELLE_LABELS, DEFAULT_VALIDATED_FFE_LEVEL,
   type ProgressionLabelsSettings,

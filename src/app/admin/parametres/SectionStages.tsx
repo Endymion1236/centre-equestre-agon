@@ -13,8 +13,6 @@
 import { useState, useEffect } from "react";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { Card } from "@/components/ui";
-import { Check } from "lucide-react";
 import { STAGE_DEROULE_VIDE, derouleEstRempli, renderDerouleTexte, type StageDeroule } from "@/lib/stage-deroule";
 
 export default function SectionStages() {
