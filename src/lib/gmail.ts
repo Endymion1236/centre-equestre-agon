@@ -192,6 +192,13 @@ export interface GmailMessage {
   threadId: string;
   messageId: string; // header Message-ID (pour In-Reply-To)
   from: string;
+  /**
+   * Adresse à laquelle RÉPONDRE, quand elle diffère de l'expéditeur.
+   * Le formulaire de contact du site part de noreply@… avec l'adresse du
+   * visiteur en Reply-To : sans ce champ, l'assistant proposait de répondre
+   * au noreply.
+   */
+  replyTo?: string;
   subject: string;
   date: string;
   snippet: string;
@@ -376,16 +383,20 @@ export async function gmailListRecent(max = 25, pageToken?: string): Promise<{ m
       if (!mRes.ok) continue;
       const m = await mRes.json();
       const headers = m.payload?.headers || [];
-      const fromRaw = headerVal(headers, "From");
       // "Nom <email>" → on garde l'email si présent
-      const emailMatch = fromRaw.match(/<([^>]+)>/);
-      const from = emailMatch ? emailMatch[1] : fromRaw;
+      const adresse = (brut: string) => {
+        const match = brut.match(/<([^>]+)>/);
+        return (match ? match[1] : brut).trim();
+      };
+      const from = adresse(headerVal(headers, "From"));
+      const replyTo = adresse(headerVal(headers, "Reply-To"));
       const audio = findAudioAttachment(m.payload);
       messages.push({
         id,
         threadId: m.threadId || "",
         messageId: headerVal(headers, "Message-ID"),
         from,
+        ...(replyTo && replyTo.toLowerCase() !== from.toLowerCase() ? { replyTo } : {}),
         subject: headerVal(headers, "Subject"),
         date: headerVal(headers, "Date"),
         snippet: m.snippet || "",

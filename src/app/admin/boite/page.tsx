@@ -47,6 +47,32 @@ function liensDrive(body: string): { driveFileId: string; url: string }[] {
   return out;
 }
 
+/**
+ * Adresse à laquelle répondre.
+ *
+ * Le formulaire de contact du site envoie au club depuis une adresse
+ * noreply, l'adresse du visiteur en Reply-To et dans le corps du message.
+ * L'assistant proposait de répondre au noreply : la réponse ne serait
+ * jamais arrivée. On préfère le Reply-To ; à défaut, sur un expéditeur
+ * automatique, la première adresse citée dans le message qui n'est pas la
+ * nôtre ; sinon l'expéditeur.
+ */
+function adresseDeReponse(m: any): string {
+  const from = String(m?.from || "").trim();
+  const replyTo = String(m?.replyTo || "").trim();
+  if (replyTo) return replyTo;
+  const automatique = /^(no-?reply|ne-?pas-?repondre|notification|mailer-daemon)@/i.test(from);
+  if (!automatique) return from;
+  const texte = String(m?.body || m?.snippet || "");
+  const candidates = texte.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+  const externe = candidates.find((e) => {
+    const bas = e.toLowerCase();
+    return bas !== from.toLowerCase() && !/^(no-?reply|noreply)@/.test(bas)
+      && !bas.endsWith("@ce-agon.fr") && bas !== "ceagon50@gmail.com";
+  });
+  return externe || from;
+}
+
 function estVocal(m: any): boolean {
   const from = String(m?.from || "").toLowerCase();
   return (
@@ -345,7 +371,7 @@ export default function BoiteAssistantPage() {
   };
 
   const pickMessage = async (m: any) => {
-    setFrom(decodeHtml(m.from || ""));
+    setFrom(decodeHtml(adresseDeReponse(m)));
     setSubject(decodeHtml(m.subject || ""));
     setBody(decodeHtml(m.body || m.snippet || ""));
     setReplyMeta({ threadId: m.threadId || "", messageId: m.messageId || "" });
