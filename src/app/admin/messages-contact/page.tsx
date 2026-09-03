@@ -1,8 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Inbox, Mail, Phone, Loader2, RefreshCw, Check, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Inbox, Mail, Phone, Loader2, RefreshCw, Check, AlertTriangle, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+
+/** Clé de passage vers l'assistant boîte : le message y arrive pré-rempli. */
+const CLE_MESSAGE_BOITE = "ce_boite_message";
 
 /**
  * Messages du formulaire de contact du site public.
@@ -34,6 +38,7 @@ const dateFr = (iso: string | null) =>
 
 export default function MessagesContactPage() {
   const { isAdmin, user } = useAuth();
+  const router = useRouter();
   const [messages, setMessages] = useState<MessageContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -72,6 +77,28 @@ export default function MessagesContactPage() {
     } catch {
       setMessages(prev => prev.map(x => x.id === m.id ? { ...x, traite: m.traite } : x));
     }
+  };
+
+  /**
+   * Ouvre le message dans l'assistant boîte, comme un mail Gmail : il est
+   * classé, résumé, un brouillon est proposé à l'adresse du visiteur, et
+   * les prestations demandées peuvent être inscrites en un clic. Le message
+   * du formulaire n'avait que « Répondre » (client mail) : pas d'assistant.
+   */
+  const ouvrirDansAssistant = (m: MessageContact) => {
+    const corps = [
+      `Nom : ${m.firstName} ${m.lastName}`.trim(),
+      `Email : ${m.email}`,
+      m.phone ? `Téléphone : ${m.phone}` : "",
+      "",
+      m.message,
+    ].filter((l, i) => l !== "" || i === 3).join("\n");
+    try {
+      sessionStorage.setItem(CLE_MESSAGE_BOITE, JSON.stringify({
+        from: m.email, subject: m.subject, body: corps, sourceId: m.id,
+      }));
+    } catch { /* stockage indisponible : l'assistant s'ouvre vide */ }
+    router.push("/admin/boite");
   };
 
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
@@ -150,6 +177,10 @@ export default function MessagesContactPage() {
                     <p className="font-body text-xs text-red-600 mt-2 m-0">Erreur d&apos;envoi : {m.erreur}</p>
                   )}
                   <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <button type="button" onClick={() => ouvrirDansAssistant(m)}
+                      className="inline-flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-800 hover:bg-blue-700 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                      <Sparkles size={13} /> Assistant IA
+                    </button>
                     <a href={`mailto:${m.email}?subject=${encodeURIComponent(`Re: ${m.subject}`)}`}
                       className="inline-flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 px-3 py-1.5 rounded-lg no-underline">
                       <Mail size={13} /> Répondre ({m.email})

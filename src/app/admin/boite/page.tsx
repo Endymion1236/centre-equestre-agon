@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { authFetch } from "@/lib/auth-fetch";
 import { contientUnRib } from "@/lib/rib-texte";
 import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone, Paperclip, Landmark, AlertTriangle, Upload
@@ -545,6 +545,36 @@ export default function BoiteAssistantPage() {
       setEnrollState((prev) => ({ ...prev, [i]: { error: "Erreur réseau" } }));
     }
   };
+
+  // ── Message venu de « Messages du site » (formulaire de contact) ──
+  // La page des messages du site le dépose dans sessionStorage puis ouvre
+  // cette page : il est pré-rempli et analysé tout de suite, comme si on
+  // l'avait choisi dans Gmail. L'adresse est celle du visiteur, la réponse
+  // part depuis Gmail comme pour n'importe quel mail.
+  const analyseAuto = useRef(false);
+  useEffect(() => {
+    try {
+      const brut = sessionStorage.getItem("ce_boite_message");
+      if (!brut) return;
+      sessionStorage.removeItem("ce_boite_message");
+      const m = JSON.parse(brut);
+      setFrom(String(m.from || ""));
+      setSubject(String(m.subject || ""));
+      setBody(String(m.body || ""));
+      setReplyMeta({ threadId: "", messageId: "" });
+      setSelectedId("");
+      setRes(null);
+      setDraft("");
+      setErr("");
+      analyseAuto.current = true;
+    } catch { /* rien à pré-remplir */ }
+  }, []);
+  useEffect(() => {
+    if (!analyseAuto.current || !body.trim()) return;
+    analyseAuto.current = false;
+    analyser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [body]);
 
   const c = res ? CLASSIF[res.classification] || CLASSIF.autre : null;
 
