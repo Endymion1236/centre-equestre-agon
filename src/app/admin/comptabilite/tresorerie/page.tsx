@@ -79,6 +79,11 @@ export default function TresoreriePage() {
   // Saisie d'un mois quand il y a PLUSIEURS comptes : un panneau, un champ par compte.
   const [cellEdit, setCellEdit] = useState<{ saison: string; mm: string } | null>(null);
   const [cellVals, setCellVals] = useState<Record<string, string>>({});
+  // Comptes dont le solde du mois est REPORTÉ du mois précédent : la banque
+  // n'édite pas de relevé quand un compte n'a pas bougé (le second compte en
+  // août 2026), et « Boucler le mois » réclamait pourtant son solde. Le report
+  // s'enregistre avec la note qui le dit et zéro encaissement client.
+  const [cellReports, setCellReports] = useState<Set<string>>(new Set());
   // Relevés PDF déposés, en cours de lecture / de validation.
   const [lectureReleve, setLectureReleve] = useState(0);
   const [propositions, setPropositions] = useState<PropositionReleve[]>([]);
@@ -160,7 +165,15 @@ export default function TresoreriePage() {
       vals[c] = r ? String(r.montant) : "";
     });
     setCellVals(vals);
+    setCellReports(new Set());
     setCellEdit({ saison, mm });
+  };
+
+  /** Mois précédent au format AAAA-MM. */
+  const moisPrecedent = (mois: string) => {
+    const [a, m] = mois.split("-").map(Number);
+    const d = new Date(a, m - 2, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   };
 
   const enregistrerCellule = async () => {
@@ -175,9 +188,17 @@ export default function TresoreriePage() {
         // existant n'a rien à dire, un champ vidé efface le relevé.
         if (brut === "" && !existant) continue;
         if (existant && brut === String(existant.montant)) continue;
-        await api({ method: "POST", body: JSON.stringify({ action: "saisir", compte: c, mois, montant: brut === "" ? null : brut }) });
+        const report = cellReports.has(c) && brut !== "";
+        await api({ method: "POST", body: JSON.stringify({
+          action: "saisir", compte: c, mois, montant: brut === "" ? null : brut,
+          ...(report ? {
+            creditsClients: 0,
+            note: `Aucun mouvement — pas de relevé édité par la banque, solde reporté de ${moisPrecedent(mois).split("-").reverse().join("/")}`,
+          } : {}),
+        }) });
       }
       setCellEdit(null);
+      setCellReports(new Set());
       await load();
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }
@@ -534,15 +555,40 @@ export default function TresoreriePage() {
                 Soldes de fin {NOMS_MOIS[cellEdit.mm].toLowerCase()} {moisDe(cellEdit.saison, cellEdit.mm).slice(0, 4)}
               </div>
               <div className="flex flex-col gap-1.5 max-w-md">
-                {comptes.map(c => (
-                  <label key={c} className="flex items-center justify-between gap-2 font-body text-xs text-slate-600">
-                    <span>{c}{horsTotal.includes(c) && <span className="ml-1.5 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">hors total</span>}</span>
-                    <input value={cellVals[c] ?? ""} inputMode="decimal"
-                      onChange={e => setCellVals(prev => ({ ...prev, [c]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === "Enter") enregistrerCellule(); if (e.key === "Escape") setCellEdit(null); }}
-                      className="w-32 font-body text-sm text-right border border-gray-200 rounded-lg px-2 py-1.5" />
-                  </label>
-                ))}
+                {comptes.map(c => {
+                  const mois = moisDe(cellEdit.saison, cellEdit.mm);
+                  const precedent = parMoisCompte.get(`${moisPrecedent(mois)}|${c}`);
+                  const sansReleve = !parMoisCompte.get(`${mois}|${c}`);
+                  const reporte = cellReports.has(c);
+                  return (
+                    <div key={c} className="flex flex-col gap-0.5">
+                      <label className="flex items-center justify-between gap-2 font-body text-xs text-slate-600">
+                        <span>{c}{horsTotal.includes(c) && <span className="ml-1.5 text-[10px] text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5">hors total</span>}</span>
+                        <input value={cellVals[c] ?? ""} inputMode="decimal"
+                          onChange={e => { setCellVals(prev => ({ ...prev, [c]: e.target.value })); setCellReports(prev => { const n = new Set(prev); n.delete(c); return n; }); }}
+                          onKeyDown={e => { if (e.key === "Enter") enregistrerCellule(); if (e.key === "Escape") setCellEdit(null); }}
+                          className={`w-32 font-body text-sm text-right border rounded-lg px-2 py-1.5 ${reporte ? "border-amber-300 bg-amber-50" : "border-gray-200"}`} />
+                      </label>
+                      {/* Pas de relevé ce mois-ci mais un solde le mois d'avant :
+                          proposer le report (compte sans mouvement). */}
+                      {sansReleve && precedent && !reporte && (
+                        <button type="button"
+                          onClick={() => {
+                            setCellVals(prev => ({ ...prev, [c]: String(precedent.montant) }));
+                            setCellReports(prev => new Set(prev).add(c));
+                          }}
+                          className="self-end font-body text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg cursor-pointer hover:bg-amber-100">
+                          Aucun mouvement : reporter {eur(precedent.montant)} de {NOMS_MOIS[moisPrecedent(mois).slice(5)].toLowerCase()}
+                        </button>
+                      )}
+                      {reporte && (
+                        <span className="self-end font-body text-[11px] text-amber-700">
+                          Solde reporté du mois précédent — sera noté « aucun mouvement, pas de relevé ».
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <div className="flex gap-2 mt-2 items-center">
                 <button type="button" onClick={enregistrerCellule} disabled={saving}

@@ -193,6 +193,32 @@ export default function OngletRapprochement({
                   Relancer le rapprochement
                 </button>
               )}
+              {/* Mois de transition : les factures d'août 2026 sont dans l'ancien
+                  logiciel, aucune ligne du relevé ne peut se rapprocher. Plutôt
+                  que d'ignorer 80 lignes une par une, on les écarte d'un coup,
+                  avec le motif — elles restent consultables et restaurables
+                  d'un coup dans l'onglet Ignorées. */}
+              {bankLines.some(b => !b.matched) && (
+                <button
+                  onClick={async () => {
+                    const aTraiter = bankLines.filter(b => !b.matched);
+                    const motif = window.prompt(
+                      `Écarter d'un coup les ${aTraiter.length} ligne${aTraiter.length > 1 ? "s" : ""} à traiter de ce mois ?\n\n`
+                      + `Elles passeront dans l'onglet Ignorées avec ce motif, et pourront être restaurées d'un coup.\n\n`
+                      + `Motif :`,
+                      "Mois de transition — factures sur l'ancien logiciel",
+                    );
+                    if (motif === null) return;
+                    const detail = `Ignoré en bloc : ${motif.trim() || "sans motif"}`;
+                    const updated = bankLines.map(b => b.matched ? b : { ...b, matched: true, matchType: "Ignoré", matchDetail: detail });
+                    await updateAndSaveBankLines(updated);
+                  }}
+                  title="Écarter toutes les lignes encore à traiter, avec un motif (mois de transition, ancien logiciel…)"
+                  className="flex items-center gap-2 font-body text-sm font-semibold text-slate-600 bg-slate-50 hover:bg-slate-100 px-4 py-3 rounded-lg border border-slate-200 cursor-pointer">
+                  <EyeOff size={16} />
+                  Ignorer les {bankLines.filter(b => !b.matched).length} lignes à traiter
+                </button>
+              )}
               {bankLines.length > 0 && bankLines.some(b => b.matched) && (
                 <button
                   onClick={async () => {
@@ -1159,9 +1185,24 @@ export default function OngletRapprochement({
                         </span>
                       </div>
                     ))}
-                  <div className="px-5 py-3 bg-sand flex justify-between font-body text-sm">
-                    <span className="font-semibold text-slate-600">
+                  <div className="px-5 py-3 bg-sand flex justify-between items-center font-body text-sm">
+                    <span className="font-semibold text-slate-600 flex items-center gap-3">
                       {nbIgnores} ligne{nbIgnores > 1 ? "s" : ""} ignorée{nbIgnores > 1 ? "s" : ""}
+                      {bankLines.some(b => b.matchType === "Ignoré" && (b.matchDetail || "").startsWith("Ignoré en bloc")) && (
+                        <button
+                          onClick={async () => {
+                            const enBloc = bankLines.filter(b => b.matchType === "Ignoré" && (b.matchDetail || "").startsWith("Ignoré en bloc"));
+                            if (!confirm(`Restaurer les ${enBloc.length} ligne${enBloc.length > 1 ? "s" : ""} ignorée${enBloc.length > 1 ? "s" : ""} en bloc ? Elles reviendront « à traiter ».`)) return;
+                            const updated = bankLines.map(b =>
+                              b.matchType === "Ignoré" && (b.matchDetail || "").startsWith("Ignoré en bloc")
+                                ? { ...b, matched: false, matchType: "", matchDetail: "" }
+                                : b);
+                            await updateAndSaveBankLines(updated);
+                          }}
+                          className="px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border-none cursor-pointer">
+                          Restaurer celles ignorées en bloc
+                        </button>
+                      )}
                     </span>
                     <span className="text-slate-500">
                       Total : {bankLines.filter(b => b.matchType === "Ignoré").reduce((s, b) => s + b.amount, 0).toFixed(2)}€
