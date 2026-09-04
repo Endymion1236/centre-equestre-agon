@@ -737,6 +737,29 @@ export default function TresoreriePage() {
               })}
             </div>
           )}
+          {/* Ce que le serveur a renvoyé, compte par compte : quand une case reste
+              vide alors que la colonne de la saison existe, c'est ici qu'on voit
+              sous quel nom de compte les relevés sont rangés (un compte renommé
+              garde ses relevés sous l'ancien nom) et s'ils comptent dans le total. */}
+          {releves.length > 0 && (() => {
+            const parCompte = new Map<string, { n: number; min: string; max: string }>();
+            for (const r of releves) {
+              const c = parCompte.get(r.compte) || { n: 0, min: r.mois, max: r.mois };
+              c.n++; if (r.mois < c.min) c.min = r.mois; if (r.mois > c.max) c.max = r.mois;
+              parCompte.set(r.compte, c);
+            }
+            const fr = (m: string) => m.split("-").reverse().join("/");
+            return (
+              <p className="font-body text-[11px] text-slate-500 mt-3">
+                <strong>Relevés reçus : {releves.length}</strong>
+                {[...parCompte.entries()].map(([c, v]) => (
+                  <span key={c}> · {c} : {v.n} ({fr(v.min)} → {fr(v.max)})
+                    {!comptes.includes(c) ? <span className="text-red-600"> — nom absent de la liste des comptes</span> : horsTotal.includes(c) ? <span className="text-amber-600"> — hors total</span> : ""}
+                  </span>
+                ))}
+              </p>
+            );
+          })()}
           <p className="font-body text-[11px] text-slate-400 mt-3">
             Un relevé de trésorerie n&apos;est pas une écriture comptable : il se corrige librement,
             comme dans le classeur. Un import d&apos;historique ne remplace jamais une valeur saisie à la main.
