@@ -17,7 +17,7 @@
  * rapprochement.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { collection, addDoc, updateDoc, doc, deleteDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
@@ -33,6 +33,44 @@ export interface OngletRemiseProps {
 }
 
 export default function OngletRemise({ payments, remises, encaissementsCompta, fetchData }: OngletRemiseProps) {
+  // ──────────────────────────────────────────────────────────────────
+  // Un bordereau dont toutes les écritures sont déjà rapprochées avec la
+  // banque est pointé de fait : la banque a crédité chacune d'elles. Le
+  // rapprochement le fait déjà quand c'est lui qui écrit ; ici on rattrape
+  // le bordereau créé APRÈS le pointage bancaire, qui restait « non pointé »
+  // sans que rien ne vienne jamais le corriger (remise CB de 117 € du
+  // 04/09/2026). On ne fait que pointer, jamais dépointer : un bordereau
+  // pointé à la main reste tel quel.
+  // ──────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const rapprochesIds = new Set(
+      (encaissementsCompta || []).filter((e: any) => e.reconciledByBank).map((e: any) => e.id),
+    );
+    const aPointer = (remises || []).filter((r: any) => {
+      if (r.pointee) return false;
+      const ids: string[] = r.encaissementIds || [];
+      return ids.length > 0 && ids.every((id) => rapprochesIds.has(id));
+    });
+    if (aPointer.length === 0) return;
+    (async () => {
+      try {
+        for (const r of aPointer) {
+          await updateDoc(doc(db, "remises", r.id), {
+            pointee: true,
+            pointeeDate: new Date().toISOString(),
+            pointeeNote: "Pointée automatiquement : encaissements déjà rapprochés avec la banque",
+            updatedAt: serverTimestamp(),
+          });
+        }
+        console.log(`[remises] ✅ ${aPointer.length} bordereau(x) pointé(s) : encaissements déjà rapprochés`);
+        await fetchData();
+      } catch (e) {
+        console.error("[remises] pointage automatique :", e);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remises, encaissementsCompta]);
+
   // Filtres de l'historique des bordereaux
   const [remiseDateFrom, setRemiseDateFrom] = useState("");
   const [remiseDateTo, setRemiseDateTo] = useState("");

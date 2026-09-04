@@ -28,6 +28,7 @@ import {
   analyserPeriodeCsv,
   cleLigneBancaire,
   dateBancaireIso,
+  encaissementsCouvertsParLigne,
   parserCsvBancaire,
 } from "./rapprochement-utils";
 import { rapprocherReleve } from "./rapprochement-matching";
@@ -152,16 +153,14 @@ export function useRapprochement({
 
         if (bl.manualPaymentId) {
           targetPaymentIds.add(bl.manualPaymentId);
-          // Les virements encaissés pour ce paiement — à la caisse, ou par le
-          // pointage lui-même (encaisserPaiementsPointes) — sont couverts par
-          // cette ligne bancaire. Sans ce lien, l'écriture créée au pointage
-          // serait dé-marquée à la synchronisation suivante.
-          const cle = cleLigneBancaire(bl);
-          for (const e of encaissementsCompta) {
-            if (e.bankLineKey === cle
-              || (e.paymentId === bl.manualPaymentId && e.mode === "virement" && !bl.uncertain)) {
-              targetEncIds.add(e.id);
-            }
+          // Les écritures de cette facture que la banque vient de créditer —
+          // le virement encaissé à la caisse ou par le pointage lui-même, la
+          // CB passée au terminal — sont couvertes par cette ligne. Sans ce
+          // lien, l'écriture restait « à remettre » et une écriture créée au
+          // pointage était dé-marquée à la synchronisation suivante.
+          if (!bl.uncertain) {
+            const duPaiement = encaissementsCompta.filter((e: any) => e.paymentId === bl.manualPaymentId);
+            for (const e of encaissementsCouvertsParLigne(bl, duPaiement)) targetEncIds.add(e.id);
           }
         }
 

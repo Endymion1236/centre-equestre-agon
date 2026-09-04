@@ -310,3 +310,38 @@ export function dateBancaireIso(valeur: string): string | undefined {
   if (!d || Number.isNaN(d.getTime())) return undefined;
   return d.toISOString().slice(0, 10);
 }
+
+/**
+ * Les écritures d'une facture que couvre une ligne bancaire pointée dessus.
+ *
+ * Pointer une ligne du relevé sur une facture ne dit pas, à lui seul, quelle
+ * écriture du journal la banque vient de créditer : une facture peut avoir
+ * été réglée moitié chèque, moitié CB. On tranche par le montant :
+ *   1. l'écriture née de cette ligne (bankLineKey) est toujours couverte ;
+ *   2. sinon, UNE écriture du montant exact — de préférence pas encore
+ *      rapprochée ;
+ *   3. sinon, toutes les écritures si leur somme fait le montant ;
+ *   4. sinon, aucune : on ne devine pas.
+ *
+ * Sans ce lien, une CB pointée par sa facture restait « à remettre », un
+ * bordereau en était fait, et rien ne venait jamais le pointer (cas vécu le
+ * 04/09/2026, remise CB de 117 €).
+ */
+export function encaissementsCouvertsParLigne<
+  T extends { montant?: number; bankLineKey?: string; reconciledByBank?: boolean },
+>(ligne: { date: string; label: string; amount: number }, encaissementsDuPaiement: T[]): T[] {
+  const cle = cleLigneBancaire(ligne);
+  const parCle = encaissementsDuPaiement.filter((e) => e.bankLineKey === cle);
+  if (parCle.length > 0) return parCle;
+
+  const positifs = encaissementsDuPaiement.filter((e) => (e.montant || 0) > 0);
+  const memeMontant = positifs.filter((e) => Math.abs((e.montant || 0) - ligne.amount) < 0.02);
+  if (memeMontant.length > 0) {
+    return [memeMontant.find((e) => !e.reconciledByBank) || memeMontant[0]];
+  }
+
+  const somme = positifs.reduce((s, e) => s + (e.montant || 0), 0);
+  if (positifs.length > 0 && Math.abs(somme - ligne.amount) < 0.02) return positifs;
+
+  return [];
+}

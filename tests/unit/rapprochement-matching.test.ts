@@ -12,6 +12,7 @@
  */
 
 import { rapprocherReleve } from "../../src/app/admin/comptabilite/rapprochement-matching";
+import { encaissementsCouvertsParLigne } from "../../src/app/admin/comptabilite/rapprochement-utils";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -272,6 +273,41 @@ console.log("\n✓ Relevé sans correspondance :");
   );
   assert("la ligne ressort non rapprochée", !r.finalMatched[0].matched);
   assert("rien n'est consommé", r.usedEncIds.size === 0 && r.usedPaymentIds.size === 0);
+}
+
+console.log("\n✓ Écritures couvertes par une ligne pointée sur une facture :");
+{
+  // Ligne « Remise carte » de 117 € pointée sur la facture. La facture a une
+  // CB de 117 € au journal : c'est elle que la banque vient de créditer.
+  // Sans ce lien, la CB restait « à remettre » et le bordereau qu'on en
+  // faisait n'était jamais pointé (04/09/2026).
+  const l = ligne("04/09/2026", "Remise carte CARTE 8067954", 117);
+  const cb = { id: "cb1", montant: 117, mode: "cb_terminal" };
+  assert("la CB du montant exact est couverte",
+    encaissementsCouvertsParLigne(l, [cb]).map(e => e.id).join() === "cb1");
+
+  // Facture réglée moitié chèque (60), moitié CB (57) ; la banque remet 57.
+  const chq = { id: "chq", montant: 60, mode: "cheque" };
+  const cb57 = { id: "cb57", montant: 57, mode: "cb_terminal" };
+  assert("seule l'écriture du montant de la ligne est couverte",
+    encaissementsCouvertsParLigne(ligne("04/09/2026", "REMISE CARTE", 57), [chq, cb57]).map(e => e.id).join() === "cb57");
+
+  // Deux CB de 57 le même jour pour la même facture : la banque crédite 114.
+  assert("la somme des écritures couvre la ligne",
+    encaissementsCouvertsParLigne(ligne("04/09/2026", "REMISE CARTE", 114), [cb57, { id: "cb57b", montant: 57 }]).length === 2);
+
+  // Deux écritures de 57, une déjà rapprochée par une autre ligne : on prend l'autre.
+  assert("une écriture déjà rapprochée laisse la place à l'autre",
+    encaissementsCouvertsParLigne(ligne("05/09/2026", "REMISE CARTE", 57), [{ ...cb57, reconciledByBank: true }, { id: "cb57b", montant: 57 }])[0].id === "cb57b");
+
+  // Rien ne colle : on ne devine pas.
+  assert("aucune écriture si rien ne colle",
+    encaissementsCouvertsParLigne(ligne("04/09/2026", "REMISE CARTE", 100), [chq, cb57]).length === 0);
+
+  // L'écriture créée par le pointage lui-même porte la clé de la ligne.
+  const nee = { id: "v1", montant: 300, bankLineKey: "01/09/2026|VIR ENAUX|300.00" };
+  assert("l'écriture née de la ligne est couverte par sa clé",
+    encaissementsCouvertsParLigne(ligne("01/09/2026", "VIR ENAUX", 300), [nee, { id: "autre", montant: 300 }]).map(e => e.id).join() === "v1");
 }
 
 console.log("\n✓ Relevé vide :");
