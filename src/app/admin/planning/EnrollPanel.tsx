@@ -49,18 +49,6 @@ function SepaWarning({ familyId, onStatus }: { familyId: string; onStatus?: (s: 
 }
 
 
-const calcAge = (birthDate: any): string => {
-  if (!birthDate) return "";
-  const bd = new Date(
-    typeof birthDate === "string" ? birthDate :
-    birthDate?.seconds ? birthDate.seconds * 1000 : birthDate
-  );
-  if (isNaN(bd.getTime())) return "";
-  const now = new Date();
-  let age = now.getFullYear() - bd.getFullYear();
-  if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
-  return `${age} ans`;
-};
 import {
   computeStageReductions,
   computeStageReductionsAsync,
@@ -72,7 +60,7 @@ import {
 } from "@/lib/discounts";
 import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, Mail, Send, FileText, Printer } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, statutPaiementCavalier, sameStage } from "./types";
+import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, statutPaiementCavalier, sameStage, ageCavalier } from "./types";
 import { MOTIFS_OFFERT } from "@/lib/offerts";
 import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
@@ -1494,7 +1482,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             const statut = statutPaiementCavalier(e, payments, creneau);
             const enrolledFam = allFamilies.find(f => f.firestoreId === e.familyId);
             const enrolledChild = (enrolledFam?.children || []).find((c: any) => c.id === e.childId);
-            const age = calcAge(enrolledChild?.birthDate);
+            const ageInfo = ageCavalier(e, allFamilies);
+            const age = ageInfo.label;
             const galop = (enrolledChild as any)?.galopLevel || "—";
             const statusLabel = statut.label;
             const statusColor = statut.point;
@@ -1517,6 +1506,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     {nomActuel(e)}
                   </a>
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
+                  {!age && ageInfo.ficheSansDate && (
+                    <span className="font-body text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5" title="Date de naissance absente de la fiche cavalier — à compléter dans Cavaliers">âge ?</span>
+                  )}
                   {galop && galop !== "—" && <span className="font-body text-[10px] font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full flex-shrink-0">{galop}</span>}
                   {statusLabel && <span title={statut.detail} className={`font-body text-[10px] px-1.5 py-0.5 rounded-full flex-shrink-0 hidden sm:inline ${statut.etat === "regle" ? "text-green-700 bg-green-50" : statut.etat === "partiel" ? "text-orange-600 bg-orange-50" : "text-red-600 bg-red-50"}`}>{statusLabel}</span>}
                   {(e as any).preinscription && (

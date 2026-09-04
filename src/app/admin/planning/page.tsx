@@ -17,7 +17,7 @@ import {
 } from "@/lib/discounts";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, CalendarDays, Briefcase, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
-import { Creneau, EnrolledChild, typeColors, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage } from "./types";
+import { Creneau, EnrolledChild, typeColors, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage, ageCavalier } from "./types";
 import { libellePrixCreneau } from "@/lib/tarif-forfaitaire";
 import EnrollPanel from "./EnrollPanel";
 import { inscrireCavalier, desinscrireCavalier, type ContexteInscription } from "./inscription-actions";
@@ -35,18 +35,6 @@ import { authFetch } from "@/lib/auth-fetch";
 
 // Calcule l'âge "X ans" à partir d'une date de naissance (string, Date ou Timestamp Firestore).
 // Identique au helper de EnrollPanel pour un affichage cohérent.
-const calcAge = (birthDate: any): string => {
-  if (!birthDate) return "";
-  const bd = new Date(
-    typeof birthDate === "string" ? birthDate :
-    birthDate?.seconds ? birthDate.seconds * 1000 : birthDate
-  );
-  if (isNaN(bd.getTime())) return "";
-  const now = new Date();
-  let age = now.getFullYear() - bd.getFullYear();
-  if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
-  return `${age} ans`;
-};
 
 
 type PlanningChangeNotification = {
@@ -1135,9 +1123,7 @@ export default function PlanningPage() {
                 const statusBg = statut.fond;
                 const statusIcon = statut.icone;
                 const statusLabel = statut.label;
-                const famForChild = families.find((f:any) => f.firestoreId === e.familyId);
-                const childRec = (famForChild?.children || []).find((c:any) => c.id === e.childId);
-                const age = calcAge(childRec?.birthDate);
+                const age = ageCavalier(e, families).label;
                 return <span key={e.childId} title={`${e.childName} · ${statusLabel} — ${statut.detail}`}
                   className="font-body text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5 border"
                   style={{ background: statusBg, borderColor: statusColor+"33", color: "#0C1A2E" }}>

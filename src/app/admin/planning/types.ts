@@ -441,3 +441,61 @@ export function moniteursUniques(docs: { data: () => any }[]): string[] {
   }
   return noms.sort();
 }
+
+
+// ═══ Âge d'un cavalier inscrit ═══════════════════════════════════════════
+//
+// Le panneau d'inscription et la vue jour cherchaient l'enfant par son
+// identifiant dans la famille de l'inscription. Quand l'identifiant ne
+// correspond plus (enfant recréé, famille scindée, import Celeris posé avec
+// un autre identifiant) ou que la fiche n'a pas de date de naissance, l'âge
+// disparaissait sans un mot. On cherche plus large — même famille par le
+// nom, toutes les familles par l'identifiant, puis ce que l'inscription
+// porte elle-même — et on dit quand la fiche est incomplète.
+
+function calculerAge(birthDate: any): number | null {
+  if (!birthDate) return null;
+  const bd = new Date(
+    typeof birthDate === "string" ? birthDate :
+    birthDate?.seconds ? birthDate.seconds * 1000 :
+    typeof birthDate?.toDate === "function" ? birthDate.toDate() : birthDate,
+  );
+  if (isNaN(bd.getTime())) return null;
+  const now = new Date();
+  let age = now.getFullYear() - bd.getFullYear();
+  if (now.getMonth() < bd.getMonth() || (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())) age--;
+  return age >= 0 && age < 120 ? age : null;
+}
+
+const normaliserNom = (s: any) =>
+  String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+export interface AgeCavalier {
+  /** « 9 ans », ou "" si inconnu. */
+  label: string;
+  /** Fiche trouvée mais sans date de naissance → à compléter. */
+  ficheSansDate: boolean;
+}
+
+export function ageCavalier(
+  e: { childId?: string; familyId?: string; childName?: string; birthDate?: any; age?: any },
+  families: any[],
+): AgeCavalier {
+  const fam = families.find((f: any) => f.firestoreId === e.familyId || f.id === e.familyId);
+  let enfant = (fam?.children || []).find((c: any) => c.id === e.childId);
+  if (!enfant) {
+    for (const f of families) {
+      enfant = (f?.children || []).find((c: any) => c.id === e.childId);
+      if (enfant) break;
+    }
+  }
+  if (!enfant && fam && e.childName) {
+    const cible = normaliserNom(e.childName);
+    enfant = (fam.children || []).find((c: any) =>
+      normaliserNom(`${c.firstName || ""} ${c.lastName || ""}`) === cible || normaliserNom(c.firstName) === cible);
+  }
+  const age = calculerAge(enfant?.birthDate) ?? calculerAge(e.birthDate)
+    ?? (typeof e.age === "number" && e.age > 0 ? e.age : null);
+  if (age !== null) return { label: `${age} ans`, ficheSansDate: false };
+  return { label: "", ficheSansDate: !!enfant };
+}
