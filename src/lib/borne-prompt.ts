@@ -1,4 +1,5 @@
 import { getClubInfo } from "@/lib/club-info";
+import { libelleCartesSeances } from "@/lib/tarifs-reference";
 import { toParisDateString } from "@/lib/date-local";
 import { POIDS_MAX_PROMENADE, REGLES_PROMENADE, TARIF_EVALUATION } from "@/lib/promenades-securite";
 
@@ -40,6 +41,8 @@ TARIFS DE RÉFÉRENCE :
 - Adhésion : 1er enfant 60€, 2ème 40€, 3ème 20€, 4ème+ gratuit
 - Licence FFE : 25€ (-18 ans) / 36€ (+18 ans)
 - Stage semaine : 175€ | Stage journée : 45€
+- ${libelleCartesSeances()} (cours à l'unité, à consommer sur le planning)
+- Bon cadeau : en ligne sur ${club.website}/offrir-un-bon, montant libre de 10 à 500 €, reçu par email
 Pour les prix exacts d'un créneau précis, utilise chercher_creneaux — les prix du planning font foi.
 
 CONDITIONS DE SÉCURITÉ DES PROMENADES MONTÉES (règles STRICTES, aucune exception) :
