@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
-import { ClipboardCheck, Loader2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { ClipboardCheck, Loader2, RefreshCw, ChevronLeft, ChevronRight, Send, Check } from "lucide-react";
 import {
   NOMS_MOIS_CLOTURE as NOMS_MOIS,
   construirePointsCloture,
@@ -32,6 +32,46 @@ export default function ClotureMoisPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [mois, setMois] = useState(moisDecale(moisCourant(), -1));
+  // Envoi des écritures du mois à la comptable
+  const [envoi, setEnvoi] = useState<{ emailComptable: string; envoiComptableAuto: boolean; envoye: boolean; nbEnvois: number; dernierEnvoi?: { at: string; to: string; declenche: string; pieces: string[]; resume: any } } | null>(null);
+  const [envoiMessage, setEnvoiMessage] = useState("");
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [envoiRetour, setEnvoiRetour] = useState<{ ok: boolean; texte: string } | null>(null);
+
+  const chargerEnvoi = useCallback(async (m: string) => {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      const r = await fetch(`/api/admin/envoi-comptable?mois=${m}`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (r.ok) setEnvoi(d); else setEnvoi(null);
+    } catch { setEnvoi(null); }
+  }, [user]);
+
+  useEffect(() => { setEnvoiRetour(null); if (isAdmin && user) chargerEnvoi(mois); }, [isAdmin, user, mois, chargerEnvoi]);
+
+  const envoyerComptable = async () => {
+    if (!user || envoiEnCours) return;
+    const nom = `${NOMS_MOIS[mois.slice(5)].toLowerCase()} ${mois.slice(0, 4)}`;
+    const deja = envoi?.envoye ? `\n\nDéjà envoyé le ${new Date(envoi.dernierEnvoi?.at || "").toLocaleDateString("fr-FR")} — cet envoi partira en plus.` : "";
+    if (!confirm(`Envoyer les écritures de ${nom} à ${envoi?.emailComptable} ?${deja}`)) return;
+    setEnvoiEnCours(true); setEnvoiRetour(null);
+    try {
+      const token = await user.getIdToken();
+      const r = await fetch("/api/admin/envoi-comptable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ mois, message: envoiMessage.trim() || undefined }),
+      });
+      const d = await r.json().catch(() => null);
+      if (!r.ok) { setEnvoiRetour({ ok: false, texte: d?.error || `Erreur HTTP ${r.status}` }); return; }
+      setEnvoiRetour({ ok: true, texte: `Envoyé à ${d.to} : ${(d.pieces || []).length} pièces jointes.` });
+      setEnvoiMessage("");
+      await chargerEnvoi(mois);
+    } catch (e: any) {
+      setEnvoiRetour({ ok: false, texte: e?.message || String(e) });
+    } finally { setEnvoiEnCours(false); }
+  };
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -137,6 +177,58 @@ export default function ClotureMoisPage() {
               </Card>
             ))}
           </div>
+
+          {/* ── Envoi des écritures à la comptable ── */}
+          <Card padding="md" className="mt-4 border-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center flex-shrink-0">
+                <Send size={17} className="text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-body text-sm font-semibold text-slate-800">Envoyer les écritures de {NOMS_MOIS[mois.slice(5)].toLowerCase()} à la comptable</div>
+                <p className="font-body text-xs text-slate-500 mt-0.5">
+                  Factures, ventes détaillées, journal des encaissements, dépenses, FEC et PDF de synthèse, en pièces jointes d&apos;un seul email.
+                </p>
+                {envoi === null ? (
+                  <p className="font-body text-xs text-slate-400 mt-2">État de l&apos;envoi indisponible.</p>
+                ) : !envoi.emailComptable ? (
+                  <p className="font-body text-xs text-amber-700 mt-2">
+                    Aucune adresse renseignée.{" "}
+                    <Link href="/admin/parametres?section=centre" className="text-blue-700 underline">Renseigner l&apos;email de la comptable</Link>
+                  </p>
+                ) : (
+                  <>
+                    <p className="font-body text-xs text-slate-600 mt-2">
+                      Destinataire : <b>{envoi.emailComptable}</b>
+                      {envoi.envoiComptableAuto ? " · envoi automatique le 5 activé" : " · envoi automatique désactivé"}
+                    </p>
+                    {envoi.envoye && envoi.dernierEnvoi && (
+                      <p className="font-body text-xs text-green-700 mt-1 flex items-center gap-1">
+                        <Check size={13} /> Envoyé le {new Date(envoi.dernierEnvoi.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
+                        {envoi.dernierEnvoi.declenche === "auto" ? " (automatique)" : ""}
+                        {envoi.nbEnvois > 1 ? ` · ${envoi.nbEnvois} envois` : ""}
+                        {envoi.dernierEnvoi.resume ? ` · ${envoi.dernierEnvoi.resume.nbFactures} factures, ${envoi.dernierEnvoi.resume.nbEncaissements} encaissements, ${envoi.dernierEnvoi.resume.nbDepenses} dépenses` : ""}
+                      </p>
+                    )}
+                    <textarea value={envoiMessage} onChange={e => setEnvoiMessage(e.target.value)} rows={2}
+                      placeholder="Un mot pour la comptable (facultatif) : « les factures d'août sont encore dans l'ancien logiciel », etc."
+                      className="w-full mt-2 font-body text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400" />
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <button type="button" onClick={envoyerComptable} disabled={envoiEnCours}
+                        className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                        {envoiEnCours ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                        {envoi.envoye ? "Renvoyer" : "Envoyer"} à la comptable
+                      </button>
+                      {!boucle && <span className="font-body text-[11px] text-amber-700">Le mois n&apos;est pas bouclé : tu peux envoyer quand même, mais la comptable recevra un mois incomplet.</span>}
+                    </div>
+                    {envoiRetour && (
+                      <p className={`font-body text-xs mt-2 ${envoiRetour.ok ? "text-green-700" : "text-red-700"}`}>{envoiRetour.ok ? "✓ " : "✗ "}{envoiRetour.texte}</p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </Card>
 
           <p className="font-body text-[11px] text-slate-400 mt-4">
             Le rapprochement compare les <strong>encaissements clients lus sur le relevé</strong> (remises CB,

@@ -64,6 +64,9 @@ export default function ParametresPage() {
     iban: "FR76 1660 6100 6400 1353 9343 253",
     bic: "AGRIFRPP866",
     website: "https://centreequestreagon.com",
+    // Envoi mensuel des écritures à la comptable (Boucler le mois + cron du 5)
+    emailComptable: "",
+    envoiComptableAuto: false,
     // Seuils poneys
     seuilPoneyOrange: 3,   // nb séances → alerte orange
     seuilPoneyRouge: 4,    // nb séances → alerte rouge
@@ -376,6 +379,29 @@ export default function ParametresPage() {
               ))}
             </div>
             <p className="font-body text-[10px] text-slate-400 mt-3">Ces informations apparaissent sur les factures, bons cadeaux et emails officiels.</p>
+          </Card>
+
+          <Card padding="md">
+            <h3 className="font-body text-base font-semibold text-blue-800 mb-1">📤 Envoi des écritures à la comptable</h3>
+            <p className="font-body text-xs text-slate-500 mb-3">
+              Chaque début de mois, les écritures du mois bouclé (factures, ventes, journal des encaissements, dépenses, FEC, PDF de synthèse)
+              partent à cette adresse depuis « Boucler le mois », ou toutes seules le 5 si l&apos;envoi automatique est coché.
+            </p>
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Email de la comptable</label>
+                <input type="email" value={(centreParams as any).emailComptable || ""}
+                  onChange={e => setCentreParams(prev => ({ ...prev, emailComptable: e.target.value.trim() }))}
+                  placeholder="cabinet@exemple.fr"
+                  className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
+              </div>
+              <label className="flex items-center gap-2 font-body text-sm text-blue-800 cursor-pointer">
+                <input type="checkbox" checked={Boolean((centreParams as any).envoiComptableAuto)}
+                  onChange={e => setCentreParams(prev => ({ ...prev, envoiComptableAuto: e.target.checked }))}
+                  className="accent-blue-500 w-4 h-4" />
+                Envoi automatique le 5 de chaque mois (sauf si déjà envoyé à la main)
+              </label>
+            </div>
           </Card>
 
           <Card padding="md">
