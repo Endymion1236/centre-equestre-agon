@@ -1,6 +1,7 @@
 "use client";
 
 import { titreAvecNiveau } from "@/lib/promenade-niveau";
+import { NotePetitComite } from "./NotePetitComite";
 
 import { useMemo, useState } from "react";
 import {
@@ -43,6 +44,8 @@ interface Props {
   creneaux: Creneau[];
   children: Child[];
   familyId: string;
+  /** Activités (minimum de participants des balades). */
+  activities?: any[];
   onBook: (creneau: Creneau) => void;
 }
 
@@ -89,6 +92,7 @@ export default function TimelineReservation({
   children,
   familyId,
   onBook,
+  activities = [],
 }: Props) {
   const [selectedDate, setSelectedDate] = useState<Date>(() => {
     const date = new Date();
@@ -400,6 +404,7 @@ export default function TimelineReservation({
                         </span>
                         {creneau.monitor && <span className="font-body text-xs">avec {creneau.monitor}</span>}
                       </div>
+                      <NotePetitComite creneau={creneau} activities={activities} className="mt-2" />
                     </div>
 
                     <div className="text-right flex-shrink-0">

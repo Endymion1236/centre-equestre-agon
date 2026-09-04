@@ -8,6 +8,7 @@ import ModaleChoixCavalier from "./ModaleChoixCavalier";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { BasculeReserver } from "@/components/espace-cavalier/BasculeReserver";
+import { NotePetitComite } from "./NotePetitComite";
 import { estPromenadeADefinir, niveauDuCreneau, titreAvecNiveau, libelleNiveauCreneau, LIBELLE_NIVEAU, type NiveauPromenade } from "@/lib/promenade-niveau";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
@@ -1254,6 +1255,7 @@ export default function ReserverPage() {
           creneaux={(creneauxLarge.length > 0 ? creneauxLarge : creneaux).filter(c => c.activityType !== "stage" && c.activityType !== "stage_journee")}
           children={(family?.children || []).map((c: any) => ({ id: c.id, firstName: c.firstName, galopLevel: c.galopLevel }))}
           familyId={familyId}
+          activities={activities}
           onBook={(creneau) => { setBookingCreneau(creneau as any); }}
         />
       </>)}
@@ -1897,19 +1899,7 @@ export default function ReserverPage() {
                           {/* Balades collectives : minimum de participants annoncé AVANT la
                               réservation — c'est ce qui rend le supplément petit comité
                               opposable (cf. CGV_BALADES_PETIT_GROUPE). */}
-                          {c.activityType === "balade" && (() => {
-                            const act = activities.find((a: any) => a.id === c.activityId);
-                            const min = act?.minParticipants;
-                            if (typeof min !== "number" || min < 2) return null;
-                            const sup = typeof act?.supplementPetitGroupe === "number" && act.supplementPetitGroupe > 0
-                              ? act.supplementPetitGroupe : 0;
-                            return (
-                              <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-1.5 font-body text-xs text-amber-800 leading-relaxed">
-                                Balade maintenue à partir de <strong>{min} participants</strong>. En dessous, nous
-                                proposons au choix : maintien en petit comité{sup > 0 ? ` (supplément de ${sup}€/cavalier)` : ""}, report ou avoir.
-                              </div>
-                            );
-                          })()}
+                          <NotePetitComite creneau={c} activities={activities} className="mt-2" />
 
                           {/* Créneau disponible — sélection enfant */}
                           {isSelected && spots > 0 && (
@@ -2012,7 +2002,7 @@ export default function ReserverPage() {
           setShowCart={setShowCart} spotsLeft={spotsLeft} enAttente={enAttente}
           addCoursToCart={addCoursToCart} addToWaitlist={addToWaitlist}
           waitlistLoading={waitlistLoading} waitlistSuccess={waitlistSuccess}
-          family={family} />
+          family={family} activities={activities} />
       )}
 
       {/* PANIER MODAL */}

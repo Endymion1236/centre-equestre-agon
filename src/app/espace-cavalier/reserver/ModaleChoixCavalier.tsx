@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { NIVEAUX_PROMENADE, LIBELLE_NIVEAU, resumeNiveau, estPromenadeADefinir, niveauDuCreneau, compatibiliteCavalier, type NiveauPromenade } from "@/lib/promenade-niveau";
+import { NotePetitComite } from "./NotePetitComite";
 
 /**
  * src/app/espace-cavalier/reserver/ModaleChoixCavalier.tsx
@@ -33,6 +34,8 @@ export interface ModaleChoixCavalierProps {
   addToWaitlist: (c: any, childId: string) => void | Promise<void>;
   waitlistLoading: string | null;
   waitlistSuccess: string | null;
+  /** Activités (minimum de participants des balades). */
+  activities?: any[];
   /** La famille connectée — son identifiant sert aux inscriptions. */
   family: any;
 }
@@ -40,7 +43,7 @@ export interface ModaleChoixCavalierProps {
 export default function ModaleChoixCavalier({
   bookingCreneau, onClose, children, cart, filter, selCavaliers, setSelCavaliers,
   setShowCart, spotsLeft, enAttente, addCoursToCart, addToWaitlist,
-  waitlistLoading, waitlistSuccess, family,
+  waitlistLoading, waitlistSuccess, family, activities = [],
 }: ModaleChoixCavalierProps) {
   const setBookingCreneau = (v: any) => { if (!v) onClose(); };
 
@@ -62,6 +65,7 @@ export default function ModaleChoixCavalier({
           <div className="p-5 border-b border-gray-100">
             <div className="font-display text-base font-bold text-blue-800">{bookingCreneau.activityTitle}</div>
             <div className="font-body text-xs text-slate-500 mt-0.5">{bookingCreneau.startTime}–{bookingCreneau.endTime} · {bookingCreneau.monitor}</div>
+            <NotePetitComite creneau={bookingCreneau} activities={activities} className="mt-2" />
             {promenadeADefinir && (
               niveauVerrouille ? (
                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-body text-xs font-semibold text-blue-800">
