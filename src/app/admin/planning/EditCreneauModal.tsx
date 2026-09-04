@@ -32,6 +32,10 @@ export interface EditForm {
   tarifForfaitaire?: boolean;
   priceTTCDay?: number | string;
   themeStage?: string;
+  /** Promenade : niveau fixé par la première inscription. */
+  niveauADefinir?: boolean;
+  /** Niveau verrouillé ("" = à définir). */
+  niveauFixe?: string;
 }
 
 interface Props {
@@ -327,6 +331,38 @@ export default function EditCreneauModal({
                   </div>
                 </div>
               </label>
+            </div>
+          )}
+
+          {/* Promenade au niveau fixé par la première inscription */}
+          {creneau.activityType === "balade" && (
+            <div className="bg-blue-50 rounded-xl p-3 flex flex-col gap-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={!!form.niveauADefinir}
+                  onChange={e => onFormChange({ ...form, niveauADefinir: e.target.checked, ...(e.target.checked ? {} : { niveauFixe: "" }) })}
+                  className="accent-blue-600 w-4 h-4 mt-0.5"/>
+                <div>
+                  <div className="font-body text-sm font-semibold text-blue-800">Niveau fixé par la première inscription</div>
+                  <div className="font-body text-xs text-slate-600 mt-0.5">
+                    Un seul créneau « Promenade du dimanche » au lieu de trois : la première famille qui réserve
+                    déclare son niveau, qui devient celui de la promenade. Les suivants doivent être du même niveau.
+                    Premier arrivé, premier servi. Le niveau se libère si le créneau se vide.
+                  </div>
+                </div>
+              </label>
+              {form.niveauADefinir && (
+                <div>
+                  <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Niveau actuel</label>
+                  <select value={form.niveauFixe || ""} onChange={e => onFormChange({ ...form, niveauFixe: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-blue-200 font-body text-sm bg-white focus:border-blue-500 focus:outline-none cursor-pointer">
+                    <option value="">À définir (par la première inscription)</option>
+                    <option value="debutant">Débutants</option>
+                    <option value="debrouille">Débrouillés</option>
+                    <option value="confirme">Confirmés</option>
+                  </select>
+                  <div className="font-body text-[10px] text-slate-500 mt-1">Pour forcer ou remettre à zéro le niveau à la main.</div>
+                </div>
+              )}
             </div>
           )}
 

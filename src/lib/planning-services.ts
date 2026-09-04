@@ -10,6 +10,7 @@
  * - duplicateWeek() : duplique les créneaux sur N semaines
  */
 
+import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -370,11 +371,14 @@ export async function removeChildFromCreneau(creneauId: string, childId: string)
       const creneauRef = doc(db, "creneaux", creneauId);
       const snap = await transaction.get(creneauRef);
       if (!snap.exists()) return;
-      const enrolled = snap.data().enrolled || [];
+      const donnees = snap.data();
+      const enrolled = donnees.enrolled || [];
       const newEnrolled = enrolled.filter((e: any) => e.childId !== childId);
       transaction.update(creneauRef, {
         enrolled: newEnrolled,
         enrolledCount: newEnrolled.length,
+        // Promenade « niveau à définir » vidée : le niveau redevient libre.
+        ...champsNiveauApresRetrait(donnees as any, newEnrolled),
       });
     });
   } catch (e) {

@@ -21,6 +21,7 @@ import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { dateExpirationHold } from "@/lib/places-tenues";
 import { isForfaitActif } from "@/lib/forfaits";
+import { deciderInscriptionNiveau, compatibiliteCavalier, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
 
 interface EnrollItem {
   childId: string;
@@ -32,6 +33,8 @@ interface EnrollItem {
   pending?: boolean;           // place tenue mais non confirmée (paiement différé)
   holdUntil?: string;          // ISO — au-delà, la place tenue est purgée
   paymentMethod?: string;
+  /** Promenade « niveau à définir » : niveau déclaré par la famille pour ce cavalier. */
+  niveauPromenade?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -107,6 +110,10 @@ export async function POST(req: NextRequest) {
       // inexistant. On n'accepte l'identifiant que s'il désigne un forfait
       // réel, appartenant à la famille connectée et non clôturé. Sinon on
       // stocke null — l'inscription reste tenue et devra être payée.
+      // Fiche de l'enfant (âge, galop) pour la compatibilité de niveau d'une
+      // promenade. Un enfant lié vit dans une autre famille : pas de fiche
+      // ici, la compatibilité n'est alors pas vérifiée côté serveur.
+      const enfant: any = (family.children || []).find((c: any) => c.id === item.childId) || null;
       let forfaitIdValide: string | null = null;
       if (item.forfaitId) {
         try {
@@ -133,6 +140,7 @@ export async function POST(req: NextRequest) {
           const refs = creneauIds.map((cid) => adminDb.collection("creneaux").doc(cid));
           const snaps = await Promise.all(refs.map((r) => tx.get(r)));
           // 1) Vérifier tous les créneaux avant toute écriture
+          const aFixer = new Map<number, string>();
           for (let i = 0; i < snaps.length; i++) {
             const s = snaps[i];
             if (!s.exists) return { status: "missing" as const, cid: creneauIds[i] };
@@ -141,6 +149,18 @@ export async function POST(req: NextRequest) {
             if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit = ok
             const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
             if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
+            // Promenade au niveau fixé par la première inscription : le
+            // premier verrouille, les suivants doivent être du même niveau.
+            // Décidé ICI, dans la transaction, pour que deux premières
+            // inscriptions simultanées ne fixent pas deux niveaux.
+            const decision = deciderInscriptionNiveau(cr, item.niveauPromenade, estStaff);
+            if (!decision.ok) return { status: decision.code, cid: creneauIds[i], niveauFixe: decision.niveauFixe };
+            const niveauVise = decision.fixer || (estNiveauPromenade(cr.niveauFixe) ? cr.niveauFixe : null);
+            if (niveauVise && !estStaff) {
+              const compat = compatibiliteCavalier(niveauVise, { birthDate: enfant?.birthDate, galopLevel: enfant?.galopLevel });
+              if (!compat.ok) return { status: "niveau_inapte" as const, cid: creneauIds[i], niveauFixe: niveauVise, raison: compat.raison };
+            }
+            if (decision.fixer) aFixer.set(i, decision.fixer);
           }
           // 2) Tout est bon → inscrire partout
           for (let i = 0; i < snaps.length; i++) {
@@ -179,13 +199,29 @@ export async function POST(req: NextRequest) {
               entry.holdUntil = dateExpirationHold(new Date(), item.paymentMethod);
               if (item.paymentMethod) entry.paymentMethod = item.paymentMethod;
             }
-            tx.update(refs[i], { enrolled: [...list, entry], enrolledCount: list.length + 1 });
+            if (item.niveauPromenade && estNiveauPromenade(item.niveauPromenade)) entry.niveauPromenade = item.niveauPromenade;
+            const fixer = aFixer.get(i);
+            tx.update(refs[i], {
+              enrolled: [...list, entry],
+              enrolledCount: list.length + 1,
+              ...(fixer ? { niveauFixe: fixer, niveauFixeLe: new Date().toISOString(), niveauFixePar: childName } : {}),
+            });
           }
           return { status: "ok" as const };
         });
         if (outcome.status === "ok") enrolled.push(...creneauIds);
         else if (outcome.status === "full") full.push(outcome.cid);
         else if (outcome.status === "missing") missing.push(outcome.cid);
+        else if (outcome.status === "niveau_requis" || outcome.status === "niveau_different" || outcome.status === "niveau_inapte") {
+          // Refus lié au niveau de la promenade : message clair, rien d'inscrit.
+          const fixe = estNiveauPromenade(outcome.niveauFixe) ? LIBELLE_NIVEAU[outcome.niveauFixe] : "";
+          const error = outcome.status === "niveau_requis"
+            ? "Indiquez le niveau de votre cavalier pour cette promenade."
+            : outcome.status === "niveau_different"
+              ? `Cette promenade est réservée au niveau ${fixe}, fixé par la première inscription. Choisissez une promenade de votre niveau ou un autre dimanche.`
+              : `Cette promenade est de niveau ${fixe}. ${(outcome as any).raison || ""}`.trim();
+          return NextResponse.json({ error, code: "NIVEAU_PROMENADE", creneauId: outcome.cid, niveauFixe: outcome.niveauFixe }, { status: 409 });
+        }
       } catch (e) {
         console.error(`/api/enroll — échec item (child ${item.childId}):`, e);
         full.push(creneauIds[0]);

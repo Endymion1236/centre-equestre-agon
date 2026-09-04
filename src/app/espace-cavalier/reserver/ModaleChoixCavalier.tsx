@@ -1,5 +1,8 @@
 "use client";
 
+import { useState } from "react";
+import { NIVEAUX_PROMENADE, LIBELLE_NIVEAU, resumeNiveau, estPromenadeADefinir, niveauDuCreneau, compatibiliteCavalier, type NiveauPromenade } from "@/lib/promenade-niveau";
+
 /**
  * src/app/espace-cavalier/reserver/ModaleChoixCavalier.tsx
  *
@@ -26,7 +29,7 @@ export interface ModaleChoixCavalierProps {
   spotsLeft: (c: any) => number;
   /** Le cavalier est-il déjà en liste d'attente sur ce créneau ? */
   enAttente: (creneauId: string, childId: string) => boolean;
-  addCoursToCart: (creneau: any, childId: string, opts?: { viaHold?: boolean }) => void;
+  addCoursToCart: (creneau: any, childId: string, opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade }) => void;
   addToWaitlist: (c: any, childId: string) => void | Promise<void>;
   waitlistLoading: string | null;
   waitlistSuccess: string | null;
@@ -41,6 +44,17 @@ export default function ModaleChoixCavalier({
 }: ModaleChoixCavalierProps) {
   const setBookingCreneau = (v: any) => { if (!v) onClose(); };
 
+  // ── Promenade au niveau fixé par la première inscription ──
+  // Personne n'a encore réservé : la famille déclare le niveau de son
+  // cavalier, qui devient celui de la promenade. Sinon le niveau verrouillé
+  // s'impose et seuls les cavaliers compatibles sont proposés.
+  const promenadeADefinir = estPromenadeADefinir(bookingCreneau);
+  const niveauVerrouille = promenadeADefinir ? niveauDuCreneau(bookingCreneau) : null;
+  const [niveauChoisi, setNiveauChoisi] = useState<NiveauPromenade | null>(null);
+  const niveauEffectif: NiveauPromenade | null = niveauVerrouille || niveauChoisi;
+  const niveauManquant = promenadeADefinir && !niveauEffectif;
+  const ajouter = (cid: string) => addCoursToCart(bookingCreneau, cid, niveauEffectif ? { niveauPromenade: niveauEffectif } : undefined);
+
   return (
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
         onClick={() => setBookingCreneau(null)}>
@@ -48,6 +62,15 @@ export default function ModaleChoixCavalier({
           <div className="p-5 border-b border-gray-100">
             <div className="font-display text-base font-bold text-blue-800">{bookingCreneau.activityTitle}</div>
             <div className="font-body text-xs text-slate-500 mt-0.5">{bookingCreneau.startTime}–{bookingCreneau.endTime} · {bookingCreneau.monitor}</div>
+            {promenadeADefinir && (
+              niveauVerrouille ? (
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-body text-xs font-semibold text-blue-800">
+                  Niveau {LIBELLE_NIVEAU[niveauVerrouille]} — fixé par la première inscription
+                </div>
+              ) : (
+                <div className="mt-2 font-body text-xs text-amber-700">Niveau fixé par la première inscription : la vôtre, si vous réservez maintenant.</div>
+              )
+            )}
           </div>
           <div className="p-5">
             {spotsLeft(bookingCreneau) === 0 ? (
@@ -63,7 +86,7 @@ export default function ModaleChoixCavalier({
                   {selCavaliers.size > 0 && (
                     <button type="button"
                       onClick={() => {
-                        selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
+                        selCavaliers.forEach((cid) => ajouter(cid));
                         setBookingCreneau(null);
                         setShowCart(true);
                       }}
@@ -132,6 +155,24 @@ export default function ModaleChoixCavalier({
               )
             ) : (
             <>
+            {promenadeADefinir && !niveauVerrouille && (
+              <div className="mb-4">
+                <div className="font-body text-sm font-semibold text-slate-700 mb-2">Quel est le niveau de votre cavalier ?</div>
+                <div className="flex flex-col gap-2">
+                  {NIVEAUX_PROMENADE.map((n) => (
+                    <button type="button" key={n} onClick={() => setNiveauChoisi(n)}
+                      className={`text-left px-4 py-3 rounded-xl border font-body cursor-pointer transition-all ${
+                        niveauChoisi === n ? "border-green-500 bg-green-50" : "border-gray-200 bg-white hover:border-blue-300"}`}>
+                      <div className={`text-sm font-bold ${niveauChoisi === n ? "text-green-800" : "text-blue-800"}`}>{niveauChoisi === n ? "✓ " : ""}{LIBELLE_NIVEAU[n]}</div>
+                      <div className="text-xs text-slate-600 mt-0.5 leading-snug">{resumeNiveau(n)}</div>
+                    </button>
+                  ))}
+                </div>
+                <p className="font-body text-[11px] text-slate-500 mt-2 leading-snug">
+                  Ce niveau devient celui de la promenade pour tous les cavaliers qui réserveront après vous. Le niveau est vérifié par l’équipe au départ.
+                </p>
+              </div>
+            )}
             <div className="font-body text-sm font-semibold text-slate-700 mb-3">Pour quel cavalier ?</div>
             <div className="flex flex-col gap-2">
               {(family?.children || [])
@@ -149,6 +190,11 @@ export default function ModaleChoixCavalier({
                   // — un double ajout ferait payer deux fois la meme place.
                   const dejaAuPanier = cart.some((i) =>
                     i.childId === ch.id && i.creneauIds.includes(bookingCreneau.id));
+                  // Niveau verrouillé ou choisi : le cavalier doit y être
+                  // compatible (âge, galop connu). Sinon il reste visible,
+                  // avec la raison, mais ne se coche pas.
+                  const compat = niveauEffectif ? compatibiliteCavalier(niveauEffectif, ch) : { ok: true, raison: "" };
+                  const incompatible = !compat.ok;
                   return (
                     <button type="button" key={ch.id}
                       onClick={() => {
@@ -157,16 +203,17 @@ export default function ModaleChoixCavalier({
                           alert(`Les promenades sont réservées aux cavaliers de 12 ans et plus (nés en ${new Date().getFullYear() - 12} ou avant).`);
                           return;
                         }
+                        if (incompatible) { alert(`${ch.firstName} : ${compat.raison}`); return; }
                         setSelCavaliers((prev) => {
                           const n = new Set(prev);
                           if (n.has(ch.id)) n.delete(ch.id); else n.add(ch.id);
                           return n;
                         });
                       }}
-                      disabled={tooYoung || dejaAuPanier}
-                      title={dejaAuPanier ? "Déjà dans votre panier pour ce créneau" : tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
+                      disabled={tooYoung || dejaAuPanier || incompatible}
+                      title={dejaAuPanier ? "Déjà dans votre panier pour ce créneau" : tooYoung ? "Promenades réservées aux 12 ans et plus" : incompatible ? compat.raison : undefined}
                       className={`flex items-center justify-between px-4 py-3 rounded-xl border font-body text-sm transition-all ${
-                        dejaAuPanier
+                        dejaAuPanier || incompatible
                           ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
                           : tooYoung
                           ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
@@ -178,6 +225,7 @@ export default function ModaleChoixCavalier({
                         {selCavaliers.has(ch.id) && !dejaAuPanier && "✓ "}{ch.firstName}
                         {dejaAuPanier && <span className="ml-2 text-xs">🛒 Déjà au panier</span>}
                         {!dejaAuPanier && tooYoung && <span className="ml-2 text-xs">🔒 Moins de 12 ans</span>}
+                        {!dejaAuPanier && !tooYoung && incompatible && <span className="ml-2 text-xs">🔒 {compat.raison}</span>}
                       </span>
                       {ch.galopLevel && ch.galopLevel !== "—" && (
                         <span className="font-body text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">{/^\d/.test(String(ch.galopLevel)) ? `G${ch.galopLevel}` : ch.galopLevel}</span>
@@ -195,19 +243,21 @@ export default function ModaleChoixCavalier({
                   visible en permanence, la famille croit que rien ne se
                   passe. Desactive tant que rien n'est coche. */}
               <button type="button"
-                disabled={selCavaliers.size === 0}
+                disabled={selCavaliers.size === 0 || niveauManquant}
                 onClick={() => {
-                  selCavaliers.forEach((cid) => addCoursToCart(bookingCreneau, cid));
+                  selCavaliers.forEach((cid) => ajouter(cid));
                   setSelCavaliers(new Set());
                   setBookingCreneau(null);
                   setShowCart(true);
                 }}
                 className={`w-full py-3 rounded-xl font-body text-sm font-bold border-none ${
-                  selCavaliers.size === 0
+                  selCavaliers.size === 0 || niveauManquant
                     ? "bg-gray-100 text-gray-400 cursor-not-allowed"
                     : "text-white bg-green-600 hover:bg-green-500 cursor-pointer"
                 }`}>
-                {selCavaliers.size === 0
+                {niveauManquant
+                  ? "Choisissez d’abord le niveau"
+                  : selCavaliers.size === 0
                   ? "Sélectionnez un cavalier ci-dessus"
                   : `Valider — ${selCavaliers.size} cavalier${selCavaliers.size > 1 ? "s" : ""} au panier`}
               </button>

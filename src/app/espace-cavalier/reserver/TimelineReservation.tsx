@@ -1,5 +1,7 @@
 "use client";
 
+import { titreAvecNiveau } from "@/lib/promenade-niveau";
+
 import { useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -379,7 +381,7 @@ export default function TimelineReservation({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <div className="font-body text-base font-bold text-blue-800">{creneau.activityTitle}</div>
+                        <div className="font-body text-base font-bold text-blue-800">{titreAvecNiveau(creneau as any)}</div>
                         {relevance === "perfect" && (
                           <span className="inline-flex items-center gap-1 font-body text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
                             <Sparkles size={10} /> Recommandé

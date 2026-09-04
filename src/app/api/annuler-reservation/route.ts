@@ -32,6 +32,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { FieldValue } from "firebase-admin/firestore";
@@ -120,7 +121,7 @@ export async function POST(req: NextRequest) {
             (e) => !(e?.pending === true && e.familyId === uid && childIds.has(e.childId))
           );
           const n = list.length - conserves.length;
-          if (n > 0) tx.update(ref, { enrolled: conserves, enrolledCount: conserves.length });
+          if (n > 0) tx.update(ref, { enrolled: conserves, enrolledCount: conserves.length, ...champsNiveauApresRetrait(snap.data() as any, conserves) });
           return n;
         });
         if (retire > 0) { placesLiberees += retire; creneauxLiberes.push(creneauId); }

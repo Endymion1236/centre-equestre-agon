@@ -1,3 +1,4 @@
+import { titreAvecNiveau } from "./promenade-niveau";
 /**
  * Disponibilités réelles du planning — source unique de vérité.
  *
@@ -164,7 +165,7 @@ export async function calculerDisponibilites(
       const elig = eligByTitle.get(String(c.activityTitle || "").trim().toLowerCase()) || {};
       available.push({
         creneauId: doc.id,
-        titre: c.activityTitle || "",
+        titre: titreAvecNiveau(c) || c.activityTitle || "",
         type: c.activityType || "cours",
         date: c.date,
         jour: jourFr(c.date),
@@ -190,7 +191,7 @@ export async function calculerDisponibilites(
         } as Record<number, number | null>,
       });
       creneauMap.set(doc.id, {
-        titre: c.activityTitle || "",
+        titre: titreAvecNiveau(c) || c.activityTitle || "",
         type: c.activityType || "cours",
         date: c.date,
         horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),

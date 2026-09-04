@@ -23,6 +23,8 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [date, setDate] = useState(defaultDate || fmtDate(new Date()));
   const [saving, setSaving] = useState(false);
   const [multiDay, setMultiDay] = useState(false);
+  // Promenade au niveau fixé par la première inscription.
+  const [niveauADefinir, setNiveauADefinir] = useState(false);
   // Dates supplémentaires choisies à la main via le mini-calendrier (réplication
   // du créneau sur des dates exactes, en plus de la date principale).
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -134,6 +136,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         ...(stageGroupId ? { stageGroupId } : {}),
         monitor: [...new Set(((multiDay && customMonitors[idx] !== undefined ? customMonitors[idx] : mon) || "").split(",").map(x => x.trim()).filter(Boolean))].join(", "), maxPlaces: mp, enrolledCount: 0, enrolled: [],
         status: "planned",
+        ...(act.type === "balade" && niveauADefinir ? { niveauADefinir: true, niveauFixe: null } : {}),
         ...(color ? { color } : {}),
         priceHT: ttc / (1 + (act.tvaTaux || 5.5) / 100),
         priceTTC: ttc, tvaTaux: act.tvaTaux || 5.5,
@@ -250,6 +253,18 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         <div>
           <input type="number" value={mp} onChange={e => setMp(parseInt(e.target.value))} className={`${inp} w-full`} placeholder="Places max"/>
         </div>
+
+        {act?.type === "balade" && (
+          <label className="flex items-start gap-3 cursor-pointer bg-blue-50 rounded-xl p-3">
+            <input type="checkbox" checked={niveauADefinir} onChange={e => setNiveauADefinir(e.target.checked)} className="accent-blue-600 w-4 h-4 mt-0.5"/>
+            <div>
+              <div className="font-body text-sm font-semibold text-blue-800">Niveau fixé par la première inscription</div>
+              <div className="font-body text-xs text-slate-600 mt-0.5">
+                La première famille qui réserve déclare son niveau, qui devient celui de la promenade. Premier arrivé, premier servi.
+              </div>
+            </div>
+          </label>
+        )}
 
         <div>
           <label className="font-body text-[10px] text-slate-500 block mb-1.5">Couleur (optionnel)</label>

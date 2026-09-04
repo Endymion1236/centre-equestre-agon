@@ -8,6 +8,7 @@ import ModaleChoixCavalier from "./ModaleChoixCavalier";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { BasculeReserver } from "@/components/espace-cavalier/BasculeReserver";
+import { estPromenadeADefinir, niveauDuCreneau, titreAvecNiveau, libelleNiveauCreneau, LIBELLE_NIVEAU, type NiveauPromenade } from "@/lib/promenade-niveau";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, Check, CalendarDays, LayoutList, Tent } from "lucide-react";
@@ -22,7 +23,7 @@ import { useToast } from "@/components/ui/Toast";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
-interface CartItem { creneauIds: string[]; activityTitle: string; dates: string; childId: string; childName: string; prixBase: number; remiseEuros: number; rang: number; prixFinal: number; isStage: boolean; }
+interface CartItem { creneauIds: string[]; activityTitle: string; dates: string; childId: string; childName: string; prixBase: number; remiseEuros: number; rang: number; prixFinal: number; isStage: boolean; niveauPromenade?: NiveauPromenade; }
 
 const typeLabels: Record<string, { label: string; color: string }> = {
   stage: { label: "Stage", color: "#27ae60" }, stage_journee: { label: "Stage", color: "#16a085" },
@@ -533,7 +534,7 @@ export default function ReserverPage() {
     setShowCart(true);
   };
 
-  const addCoursToCart = (creneau: Creneau, childId: string, opts?: { viaHold?: boolean }) => {
+  const addCoursToCart = (creneau: Creneau, childId: string, opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade }) => {
     if (reservationsFermees) {
       alert(messageFermeture ||
         "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande.");
@@ -562,6 +563,17 @@ export default function ReserverPage() {
       return;
     }
     const child = children.find((c: any) => c.id === childId);
+
+    // ── Promenade au niveau fixé par la première inscription ──────────
+    // Tant que personne n'a réservé, la famille doit déclarer le niveau de
+    // son cavalier : on passe par la fenêtre de choix, qui le demande.
+    // Une fois le niveau verrouillé, il est repris tel quel.
+    let niveauPromenade: NiveauPromenade | undefined = opts?.niveauPromenade;
+    if (estPromenadeADefinir(creneau as any)) {
+      const fixe = niveauDuCreneau(creneau as any);
+      if (fixe) niveauPromenade = fixe;
+      else if (!niveauPromenade) { setBookingCreneau(creneau); return; }
+    }
 
     // ── Règle métier : 12 ans minimum pour les promenades ──────────────
     // "Année des 12 ans" : l'enfant doit être né au plus tard l'année N-12
@@ -613,8 +625,13 @@ export default function ReserverPage() {
       const prix = prixInscriptionCavalier(creneau as any, dejaFamille);
       return [...prev, {
         creneauIds: [creneau.id],
-        activityTitle: creneau.activityTitle
+        // Le niveau de la promenade fait partie du libellé : réservation,
+        // commande, facture et emails le reprennent.
+        activityTitle: (niveauPromenade && estPromenadeADefinir(creneau as any)
+            ? `${creneau.activityTitle} — ${LIBELLE_NIVEAU[niveauPromenade]}`
+            : creneau.activityTitle)
           + ((creneau as any).tarifForfaitaire && prix <= 0 ? " — inclus au forfait" : ""),
+        ...(niveauPromenade ? { niveauPromenade } : {}),
         dates: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
         childId,
         childName: cleanName,
@@ -672,6 +689,9 @@ export default function ReserverPage() {
               // l'encaissement est confirme.
               pending: true,
               ...(( item as any).sourceFamilyId ? { sourceFamilyId: (item as any).sourceFamilyId } : {}),
+              // Promenade « niveau à définir » : le serveur verrouille ce
+              // niveau à la première inscription, ou refuse s'il diffère.
+              ...(item.niveauPromenade ? { niveauPromenade: item.niveauPromenade } : {}),
             }],
           }),
         });
@@ -1859,8 +1879,11 @@ export default function ReserverPage() {
                             <div className="flex items-center gap-3">
                               <div className="w-1 h-10 rounded-full" style={{ backgroundColor: tl.color }} />
                               <div>
-                                <div className="font-body text-sm font-semibold text-blue-800">{c.activityTitle}</div>
+                                <div className="font-body text-sm font-semibold text-blue-800">{titreAvecNiveau(c as any)}</div>
                                 <div className="font-body text-xs text-slate-600">{c.startTime}–{c.endTime} · {c.monitor}</div>
+                                {estPromenadeADefinir(c as any) && !niveauDuCreneau(c as any) && (
+                                  <div className="font-body text-[11px] text-amber-700 mt-0.5">{libelleNiveauCreneau(c as any)} — premier arrivé, premier servi.</div>
+                                )}
                               </div>
                             </div>
                             <div className="text-right">
@@ -1904,7 +1927,7 @@ export default function ReserverPage() {
                                   }
                                   return (
                                     <button key={ch.id}
-                                      onClick={(e) => { e.stopPropagation(); addCoursToCart(c, ch.id); }}
+                                      onClick={(e) => { e.stopPropagation(); if (estPromenadeADefinir(c as any)) { setBookingCreneau(c); return; } addCoursToCart(c, ch.id); }}
                                       disabled={tooYoung}
                                       title={tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
                                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${

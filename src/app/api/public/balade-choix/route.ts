@@ -23,6 +23,7 @@
  * fournit AUCUN montant, aucun identifiant de famille ou de créneau.
  */
 import { NextRequest, NextResponse } from "next/server";
+import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
@@ -319,7 +320,7 @@ export async function POST(req: NextRequest) {
       if (crSnap.exists) {
         const list: any[] = (crSnap.data() as any).enrolled || [];
         const rest = list.filter((e: any) => !(e.familyId === d.familyId && childIds.has(e.childId)));
-        tx.update(crRef, { enrolled: rest, enrolledCount: rest.length });
+        tx.update(crRef, { enrolled: rest, enrolledCount: rest.length, ...champsNiveauApresRetrait(crSnap.data() as any, rest) });
       }
       tx.update(ref, { status: choice, choiceAt: new Date().toISOString() });
     });

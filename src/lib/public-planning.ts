@@ -1,3 +1,5 @@
+import { titreAvecNiveau } from "./promenade-niveau";
+
 export interface PublicPlanningSlot {
   id: string;
   activityTitle: string;
@@ -83,7 +85,14 @@ export function toPublicPlanningSlot(id: string, data: Record<string, unknown>):
 
   const slot: PublicPlanningSlot = {
     id,
-    activityTitle: text(data.activityTitle) || "Activité équestre",
+    // Promenade au niveau fixé par la première inscription : le niveau
+    // verrouillé (ou « niveau à définir ») fait partie du titre annoncé.
+    activityTitle: titreAvecNiveau({
+      activityTitle: text(data.activityTitle) || "Activité équestre",
+      activityType: text(data.activityType),
+      niveauADefinir: data.niveauADefinir === true,
+      niveauFixe: (data.niveauFixe as any) || null,
+    }),
     activityType: text(data.activityType) || "animation",
     date,
     startTime: text(data.startTime),

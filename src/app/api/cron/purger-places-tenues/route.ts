@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
 import { adminDb } from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
@@ -104,7 +105,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      await doc.ref.update({ enrolled: conserves, enrolledCount: conserves.length });
+      await doc.ref.update({ enrolled: conserves, enrolledCount: conserves.length, ...champsNiveauApresRetrait(c, conserves) });
     }
 
     // ── Nettoyage des waitlistHold (priorité 24h de liste d'attente) ──
