@@ -18,6 +18,7 @@ import {
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import type { DocumentSnapshot } from "firebase/firestore";
 import { auth, db, googleProvider, facebookProvider } from "@/lib/firebase";
 import { estEmailAdmin, repliEmailAutorise } from "@/lib/admin-emails";
 import type { Family } from "@/types";
@@ -79,10 +80,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setEmailAConfirmer(false);
         } else {
         // 1. Chercher une fiche famille par uid (cas normal : déjà lié)
+        //
+        // Cette lecture n'était protégée par rien : sur une 4G qui coupe
+        // (« Failed to get document because the client is offline »), la
+        // promesse rejetait hors de tout catch — Sentry recevait l'alerte, et
+        // surtout setLoading(false) n'était jamais atteint : l'espace famille
+        // restait sur son sablier (alerte du 04/09/2026, /espace-cavalier/
+        // factures). On réessaie une fois après un court délai, puis on
+        // continue sans fiche : la page s'affiche, la fiche reviendra à la
+        // prochaine connexion.
         const familyRef = doc(db, "families", firebaseUser.uid);
-        const familySnap = await getDoc(familyRef);
+        let familySnap: DocumentSnapshot | null = null;
+        for (let tentative = 0; tentative < 2 && !familySnap; tentative++) {
+          try {
+            familySnap = await getDoc(familyRef);
+          } catch (e) {
+            console.warn(`Fiche famille illisible (tentative ${tentative + 1}) :`, e);
+            if (tentative === 0) await new Promise((r) => setTimeout(r, 1500));
+          }
+        }
 
-        if (familySnap.exists()) {
+        if (!familySnap) {
+          setFamily(null);
+          setEmailAConfirmer(false);
+        } else if (familySnap.exists()) {
           const data = familySnap.data() as any;
           let resolved = false;
           // Compte fusionné : on bascule sur le compte conservé.

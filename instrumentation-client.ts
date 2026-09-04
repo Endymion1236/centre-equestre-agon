@@ -44,6 +44,12 @@ Sentry.init({
     // Erreurs Firebase Auth normales (utilisateur deconnecte par expiration)
     "auth/user-token-expired",
     "auth/network-request-failed",
+
+    // Firestore injoignable depuis le navigateur (4G coupee, tunnel, mode
+    // avion) : meme famille que « Failed to fetch ». Les pages retombent sur
+    // un etat vide et reessaient a la prochaine visite.
+    "Failed to get document because the client is offline",
+    "Failed to get documents because the client is offline",
   ],
 
   // ─── Anonymisation : pas d'email ni IP dans les events par defaut ─────
