@@ -25,6 +25,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "./types";
 import { Loader2, X } from "lucide-react";
+import { montantsEcheances, repartirEntreDeuxMandats } from "@/lib/sepa-remise";
 import { maskIban } from "@/lib/sepa-validation";
 
 export interface ModaleEncaisserProps {
@@ -53,6 +54,12 @@ export default function ModaleEncaisser({
   const [quickMandatActif, setQuickMandatActif] = useState<boolean | null>(null);
   const [quickMandats, setQuickMandats] = useState<any[]>([]);
   const [quickMandatId, setQuickMandatId] = useState<string>("");
+  // Répartition entre deux mandats (compte du père, compte de la mère) :
+  // le second porte le montant saisi, le premier le reste. Les échéances des
+  // deux restent rattachées à la commande.
+  const [quickRepartir, setQuickRepartir] = useState(false);
+  const [quickMandatId2, setQuickMandatId2] = useState<string>("");
+  const [quickMontant2, setQuickMontant2] = useState<string>("");
   const [quickChequesDiffres, setQuickChequesDiffres] = useState<
     { numero: string; banque: string; montant: string; dateEncaissementPrevue: string }[]
   >([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
@@ -74,6 +81,7 @@ export default function ModaleEncaisser({
     
     setQuickMandatActif(null);
     setQuickMandats([]); setQuickMandatId("");
+    setQuickRepartir(false); setQuickMandatId2(""); setQuickMontant2("");
     getDocs(query(collection(db, "mandats-sepa"),
       where("familyId", "==", payment.familyId),
       where("status", "==", "active")
@@ -233,30 +241,49 @@ export default function ModaleEncaisser({
         }
         const mandatData = mandat.data();
 
+        // Répartition sur deux mandats : le second porte le montant saisi,
+        // le premier le reste. Chaque mandat a son propre échéancier, tous
+        // deux rattachés à la commande.
+        const plans: { mandat: any; montant: number }[] = [];
+        if (quickRepartir) {
+          const mandat2 = mandatSnap.docs.find(d => d.id === quickMandatId2);
+          if (!mandat2 || mandat2.id === mandat.id) {
+            toast("Choisissez un second mandat différent du premier.", "error");
+            setQuickSaving(false);
+            return;
+          }
+          const rep = repartirEntreDeuxMandats({ montantTotal: montant, montantMandat2: parseFloat(quickMontant2) });
+          if (!rep.ok) { toast(rep.raison, "error"); setQuickSaving(false); return; }
+          plans.push({ mandat: mandatData, montant: rep.montant1 }, { mandat: mandat2.data(), montant: rep.montant2 });
+        } else {
+          plans.push({ mandat: mandatData, montant });
+        }
+
         // Créer les échéances
-        const montantEch = Math.floor(montant / nbEch * 100) / 100;
-        const reste = Math.round((montant - montantEch * nbEch) * 100) / 100;
         const desc = (p.items || []).map((i: any) => i.activityTitle).join(", ") || "Forfait";
-
-        for (let i = 0; i < nbEch; i++) {
-          const d = new Date(startDate);
-          d.setMonth(d.getMonth() + i);
-          const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-          const m = i === nbEch - 1 ? montantEch + reste : montantEch;
-
-          await addDoc(collection(db, "echeances-sepa"), {
-            familyId: p.familyId,
-            familyName: p.familyName,
-            mandatId: mandatData.mandatId,
-            montant: Math.round(m * 100) / 100,
-            dateEcheance: dateStr,
-            reference: `Paiement ${p.id}`,
-            description: `${desc} — ${i + 1}/${nbEch}`,
-            status: "pending",
-            remiseId: null,
-            paymentId: p.id,
-            createdAt: serverTimestamp(),
-          });
+        for (const plan of plans) {
+          const montants = montantsEcheances(plan.montant, nbEch);
+          const qui = plans.length > 1 ? ` (${plan.mandat.libelle || plan.mandat.titulaire || plan.mandat.mandatId})` : "";
+          for (let i = 0; i < nbEch; i++) {
+            const d = new Date(startDate);
+            d.setMonth(d.getMonth() + i);
+            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            await addDoc(collection(db, "echeances-sepa"), {
+              familyId: p.familyId,
+              familyName: p.familyName,
+              mandatId: plan.mandat.mandatId,
+              montant: montants[i],
+              dateEcheance: dateStr,
+              reference: `Paiement ${p.id}`,
+              description: `${desc} — ${i + 1}/${nbEch}${qui}`,
+              status: "pending",
+              remiseId: null,
+              paymentId: p.id,
+              echeance: i + 1,
+              echeancesTotal: nbEch,
+              createdAt: serverTimestamp(),
+            });
+          }
         }
 
         // Marquer le paiement comme SEPA (mais pas payé — il sera payé quand la
@@ -266,7 +293,7 @@ export default function ModaleEncaisser({
         await updateDoc(doc(db, "payments", p.id), {
           paymentMode: "prelevement_sepa",
           status: "sepa_scheduled",
-          paymentRef: `${nbEch}× SEPA · ${mandatData.mandatId}`,
+          paymentRef: `${nbEch}× SEPA · ${plans.map(pl => pl.mandat.mandatId).join(" + ")}`,
           updatedAt: serverTimestamp(),
         });
 
@@ -460,14 +487,53 @@ export default function ModaleEncaisser({
                   Compte à débiter {quickMandats.length > 1 && <span className="text-orange-600">({quickMandats.length} mandats actifs)</span>}
                 </label>
                 {quickMandats.length > 1 ? (
-                  <select value={quickMandatId} onChange={e => setQuickMandatId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
-                    {quickMandats.map(m => (
-                      <option key={m.id} value={m.id}>
-                        {m.libelle ? `${m.libelle} — ` : ""}{m.titulaire} · {maskIban(m.iban || "")} · {m.mandatId}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select value={quickMandatId} onChange={e => setQuickMandatId(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none">
+                      {quickMandats.map(m => (
+                        <option key={m.id} value={m.id}>
+                          {m.libelle ? `${m.libelle} — ` : ""}{m.titulaire} · {maskIban(m.iban || "")} · {m.mandatId}
+                        </option>
+                      ))}
+                    </select>
+                    {/* Deux parents, deux comptes : chacun sa part, même
+                        nombre d'échéances, mêmes dates. */}
+                    <label className="mt-2 flex items-center gap-2 font-body text-xs text-blue-800 cursor-pointer">
+                      <input type="checkbox" checked={quickRepartir}
+                        onChange={e => { setQuickRepartir(e.target.checked); if (e.target.checked && !quickMandatId2) setQuickMandatId2(quickMandats.find(m => m.id !== quickMandatId)?.id || ""); }}
+                        className="accent-blue-600 w-4 h-4" />
+                      Répartir sur deux mandats (père / mère)
+                    </label>
+                    {quickRepartir && (() => {
+                      const total = parseFloat(quickMontant) || 0;
+                      const m2 = parseFloat(quickMontant2) || 0;
+                      const m1 = Math.max(0, Math.round((total - m2) * 100) / 100);
+                      return (
+                        <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <label className="font-body text-[10px] text-gray-400 block mb-1">Second compte</label>
+                            <select value={quickMandatId2} onChange={e => setQuickMandatId2(e.target.value)}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white">
+                              {quickMandats.filter(m => m.id !== quickMandatId).map(m => (
+                                <option key={m.id} value={m.id}>{m.libelle ? `${m.libelle} — ` : ""}{m.titulaire} · {maskIban(m.iban || "")}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="font-body text-[10px] text-gray-400 block mb-1">Montant sur le second compte (€)</label>
+                            <input type="number" step="0.01" min="0" value={quickMontant2} onChange={e => setQuickMontant2(e.target.value)}
+                              placeholder={total > 0 ? (total / 2).toFixed(2) : ""}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
+                          </div>
+                          {total > 0 && m2 > 0 && (
+                            <div className="sm:col-span-2 font-body text-xs text-blue-700">
+                              Premier compte : <strong>{m1.toFixed(2)} €</strong> · Second compte : <strong>{m2.toFixed(2)} €</strong> · Total {total.toFixed(2)} €
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </>
                 ) : (
                   <div className="font-body text-xs text-slate-600 bg-slate-50 rounded-xl px-3 py-2.5">
                     {quickMandats[0].titulaire} · <span className="font-mono">{maskIban(quickMandats[0].iban || "")}</span> · {quickMandats[0].mandatId}

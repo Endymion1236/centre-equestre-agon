@@ -8,6 +8,7 @@ import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { generateSepaXml, regrouperParMandat, SEPA_CREDITOR } from "@/lib/sepa";
 import { createEncaissement } from "@/lib/compta-encaissement";
+import { etatCommandeApresRemise } from "@/lib/sepa-remise";
 import type { SepaTransaction, SepaRemise } from "@/lib/sepa";
 import { validateIban, validateBic, formatIban } from "@/lib/sepa-validation";
 import type { Family } from "@/types";
@@ -544,65 +545,42 @@ export default function SepaPage() {
       });
     }
 
-    // ── Mettre à jour les paiements de référence ──
-    const orderIds = [...new Set(remiseEcheances.map(e => e.orderId).filter(Boolean))];
-    for (const orderId of orderIds) {
-      const allForOrder = echeances.filter(e => e.orderId === orderId);
-      const allPreleve = allForOrder.every(e => e.remiseId === remiseId || e.status === "preleve");
-      const totalPreleve = allForOrder
-        .filter(e => e.remiseId === remiseId || e.status === "preleve")
-        .reduce((s, e) => s + (e.montant || 0), 0);
+    // ── Mettre à jour les commandes concernées ──
+    // Depuis le JOURNAL des encaissements, jamais depuis les seuls
+    // prélèvements : un forfait réglé moitié par chèque et moitié en SEPA
+    // perdait sa moitié chèque à chaque remise (cf. lib/sepa-remise).
+    const commandesTouchees = new Map<string, string>(); // paymentId → orderId éventuel
+    for (const ech of remiseEcheances) {
+      if (ech.paymentId) { commandesTouchees.set(ech.paymentId, ech.orderId || ""); continue; }
+      if (ech.orderId) {
+        for (const p of payments.filter((x: any) => x.orderId === ech.orderId)) commandesTouchees.set(p.id, ech.orderId);
+      }
+    }
+    for (const [pid, orderId] of commandesTouchees) {
       try {
-        const paySnap = await getDocs(query(
-          collection(db, "payments"),
-          where("orderId", "==", orderId),
-        ));
-        for (const payDoc of paySnap.docs) {
-          const payData = payDoc.data();
-          if (payData.status === "cancelled") continue;
-          const facture = allPreleve ? await numeroFactureSiSoldee(payDoc.id, payData) : {};
-          await updateDoc(doc(db, "payments", payDoc.id), allPreleve ? {
-            status: "paid",
-            paidAmount: Math.round(totalPreleve * 100) / 100,
+        const paySnap = await getDoc(doc(db, "payments", pid));
+        if (!paySnap.exists()) continue;
+        const payData = paySnap.data() as any;
+        if (payData.status === "cancelled") continue;
+        const encPay = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", pid)));
+        const totalEnc = encPay.docs.reduce((sum, d) => sum + ((d.data() as any).montant || 0), 0);
+        const restantes = echeances.filter(e =>
+          (e.paymentId === pid || (orderId && e.orderId === orderId))
+          && e.remiseId !== remiseId && e.status !== "preleve" && e.status !== "rejete",
+        ).length;
+        const etat = etatCommandeApresRemise({ totalTTC: payData.totalTTC || 0, totalEncaisse: totalEnc, echeancesRestantes: restantes });
+        const facture = etat.status === "paid" ? await numeroFactureSiSoldee(pid, payData) : {};
+        await updateDoc(doc(db, "payments", pid), {
+          status: etat.status,
+          paidAmount: etat.paidAmount,
+          ...(etat.status === "paid" ? {
             paidAt: serverTimestamp(),
-            paymentMode: "prelevement_sepa",
             paymentRef: `SEPA prélevé — remise n°${remiseDoc?.numero || remiseId.slice(-6)}`,
             ...facture,
-          } : {
-            status: "partial",
-            paidAmount: Math.round(totalPreleve * 100) / 100,
-          });
-        }
-      } catch (e) { console.error("Mise à jour paiement SEPA:", e); }
-    }
-
-    // Échéances manuelles sans orderId mais avec paymentId
-    const directPayIds = [...new Set(
-      remiseEcheances.filter(e => !e.orderId && e.paymentId).map(e => e.paymentId!)
-    )];
-    for (const payId of directPayIds) {
-      const allForPay = echeances.filter(e => e.paymentId === payId);
-      const allPreleve = allForPay.every(e => e.remiseId === remiseId || e.status === "preleve");
-      const totalPreleve = allForPay
-        .filter(e => e.remiseId === remiseId || e.status === "preleve")
-        .reduce((s, e) => s + (e.montant || 0), 0);
-      try {
-        const paySnapDirect = allPreleve ? await getDoc(doc(db, "payments", payId)) : null;
-        const facture = allPreleve
-          ? await numeroFactureSiSoldee(payId, paySnapDirect?.exists() ? paySnapDirect.data() : null)
-          : {};
-        await updateDoc(doc(db, "payments", payId), allPreleve ? {
-          status: "paid",
-          paidAmount: Math.round(totalPreleve * 100) / 100,
-          paidAt: serverTimestamp(),
-          paymentMode: "prelevement_sepa",
-          paymentRef: `SEPA prélevé — remise n°${remiseDoc?.numero || remiseId.slice(-6)}`,
-          ...facture,
-        } : {
-          status: "partial",
-          paidAmount: Math.round(totalPreleve * 100) / 100,
+          } : {}),
+          updatedAt: serverTimestamp(),
         });
-      } catch (e) { console.error("Mise à jour directe paiement SEPA:", e); }
+      } catch (e) { console.error("Mise à jour paiement SEPA:", e); }
     }
 
     toast("Remise marquée comme déposée — encaissements enregistrés", "success");
