@@ -18,14 +18,19 @@
  * Les cas traités, dans l'ordre où ils sont tentés :
  *   1. versement CAWL (CB en ligne), net de commission ;
  *   2. remise CB terminal, par total de la journée puis par sous-ensemble ;
- *   3. virement, prélèvement et remise SEPA, par nom puis par montant ;
+ *   3. virement, prélèvement et remise SEPA, par nom puis par montant —
+ *      le libellé est lu sans accents, car le Crédit Agricole écrit
+ *      « Avis de prélèvement emis PREL ECH DU … » pour une remise SEPA ;
  *   4. remise de chèques ou d'espèces, par bordereau puis par sous-ensemble.
  */
 
 import {
   cleLigneBancaire,
   encaissementEnDetail,
+  encaissementsDeRemiseSepa,
   estDansFenetreBancaire,
+  estLibellePrelevement,
+  estLibelleVirement,
   parserDateBancaire,
   periodePrecedente,
   trouverSousEnsembleMontant,
@@ -81,6 +86,9 @@ export function rapprocherReleve(
   const matched = parsed.map((bl) => {
     const label = bl.label.toUpperCase();
     const bankDate = parserDateBancaire(bl.date);
+    // Virement reçu / prélèvement émis : lus sans accents (cf. rapprochement-utils).
+    const libelleVirement = estLibelleVirement(bl.label);
+    const libellePrelevement = estLibellePrelevement(bl.label);
 
     // Calcul de la période précédente pour élargir le pool
     // (les chèques / CB terminal peuvent être datés du mois d'avant)
@@ -236,11 +244,12 @@ export function rapprocherReleve(
     }
 
     // ── 3. Virement / SEPA / Prélèvement ──────────────────────────────
-    if (label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV")) {
+    if (libelleVirement || libellePrelevement) {
 
       // a) Match remise SEPA (somme des prélèvements groupés) — priorité maximum
-      //    Les remises SEPA sont typiquement reçues sous forme "PRLV SEPA" ou avec la référence ICS
-      if (label.includes("PRLV") || label.includes("SEPA") || label.includes("ICS")) {
+      //    Les remises SEPA arrivent sous "PRLV SEPA", avec la référence ICS, ou
+      //    au Crédit Agricole sous "Avis de prélèvement emis PREL ECH DU JJ/MM/AA".
+      if (libellePrelevement) {
         const remiseMatch = remisesSepa.find(r => {
           if (usedRemiseSepaIds.has(r.id)) return false; // déjà consommée
           if (Math.abs((r.montantTotal || 0) - bl.amount) >= 0.02) return false;
@@ -255,7 +264,17 @@ export function rapprocherReleve(
         });
         if (remiseMatch) {
           usedRemiseSepaIds.add(remiseMatch.id);
-          return { ...bl, matched: true, matchType: "Prélèvement SEPA", matchDetail: `Remise SEPA n°${remiseMatch.numero} — ${remiseMatch.nbTransactions} prélèvements` };
+          // Les écritures du journal nées du dépôt de la remise (une par
+          // échéance) sont consommées avec elle : c'est ce qui les marque
+          // rapprochées, même quand la ligne bancaire regroupe 40 prélèvements.
+          const encsRemise = encaissementsDeRemiseSepa(remiseMatch, encaissementsCompta)
+            .filter((e: any) => !usedEncIds.has(e.id));
+          encsRemise.forEach((e: any) => usedEncIds.add(e.id));
+          return {
+            ...bl, matched: true, matchType: "Prélèvement SEPA",
+            matchDetail: `Remise SEPA n°${remiseMatch.numero} — ${remiseMatch.nbTransactions} prélèvements`,
+            ...(encsRemise.length > 0 ? { matchedEncs: encsRemise.map(encaissementEnDetail), remiseSepaId: remiseMatch.id } : {}),
+          };
         }
       }
 
@@ -288,8 +307,13 @@ export function rapprocherReleve(
       }
 
       // b.2) Parmi les PAIEMENTS virement en attente (pending/partial), match par nom
+      //      Une facture créée à la main en attendant le virement n'a pas de mode
+      //      de paiement (« » tant que rien n'est encaissé) : pour un libellé de
+      //      virement, elle est candidate au même titre qu'une facture « virement ».
+      const attendVirement = (p: any) =>
+        p.paymentMode === "virement" || (!p.paymentMode && libelleVirement);
       const virPayments = payments.filter(p => {
-        if (p.paymentMode !== "virement") return false;
+        if (!attendVirement(p)) return false;
         if (p.status !== "pending" && p.status !== "partial") return false;
         if (usedPaymentIds.has(p.id)) return false;
         if (bankDate && p.date?.seconds) {
@@ -348,7 +372,7 @@ export function rapprocherReleve(
 
       // d) Match par montant exact sur les paiements virement EN ATTENTE uniquement
       const pendingVirPayments = payments.filter(p =>
-        p.paymentMode === "virement" &&
+        attendVirement(p) &&
         (p.status === "pending" || p.status === "partial") &&
         !usedPaymentIds.has(p.id)
       );
@@ -562,7 +586,7 @@ export function rapprocherReleve(
     // cb_terminal "Nicolas Richard — animation" de 30€ d'un autre jour).
     // IMPORTANT : même quand on l'accepte, on marque uncertain=true car ce match
     // ne repose que sur le montant, sans confirmation par le nom. Badge ⚠️ visible.
-    const isVirementLabel = label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV");
+    const isVirementLabel = libelleVirement || libellePrelevement;
     if (!isVirementLabel) {
       const exactMatch = periodEnc.filter(inWindow).find(e =>
         Math.abs((e.montant || 0) - bl.amount) < 0.02
@@ -636,7 +660,7 @@ export function rapprocherReleve(
     const blType = label.includes("REMISE") && (label.includes("CARTE") || label.includes("CB") || label.includes("TPE")) ? "CB_TERMINAL"
       : label.includes("CHQ") || label.includes("CHEQUE") ? "CHEQUE"
       : label.includes("ESP") || label.includes("VERSEMENT") ? "ESPECES"
-      : label.includes("VIR") || label.includes("SEPA") || label.includes("PRLV") ? "VIREMENT"
+      : libelleVirement || libellePrelevement ? "VIREMENT"
       : "INCONNU";
 
     // Log à plat (format texte) pour faciliter la lecture/copie sans avoir à dérouler
@@ -719,6 +743,7 @@ export function rapprocherReleve(
         matchDetail: prev.matchDetail,
         matchedEncs: prev.matchedEncs || bl.matchedEncs,
         manualPaymentId: prev.manualPaymentId,
+        ...(prev.remiseSepaId ? { remiseSepaId: prev.remiseSepaId } : {}),
       };
     }
     return bl;

@@ -23,15 +23,12 @@
 import { useState, useEffect } from "react";
 import { collection, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { enregistrerEncaissement } from "@/lib/encaissement";
 import {
   analyserPeriodeCsv,
-  
-  
-  
+  cleLigneBancaire,
+  dateBancaireIso,
   parserCsvBancaire,
-  
-  
-  
 } from "./rapprochement-utils";
 import { rapprocherReleve } from "./rapprochement-matching";
 
@@ -46,6 +43,8 @@ export interface LigneBancaire {
   matchedEncs?: { familyName: string; montant: number; date: string; activityTitle: string; mode: string }[];
   missingAmounts?: number[];
   manualPaymentId?: string;
+  /** Remise de prélèvements SEPA à laquelle la ligne est rapprochée. */
+  remiseSepaId?: string;
   uncertain?: boolean;
 }
 
@@ -65,6 +64,68 @@ export function useRapprochement({
 }: DonneesRapprochement) {
   const [bankLines, setBankLines] = useState<LigneBancaire[]>([]);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  //  encaisserPaiementsPointes : une facture en attente pointée sur une ligne
+  //  du relevé est ENCAISSÉE, pas seulement marquée « réglée ».
+  //
+  //  Avant, pointer un virement attendu se contentait de passer le paiement à
+  //  « paid » : pas d'écriture au journal, pas de numéro de facture, et le
+  //  mode restait vide. La somme était pourtant bien reçue. On passe donc par
+  //  enregistrerEncaissement, la même porte que la caisse (journal chaîné
+  //  NF525, numéro séquentiel, points de fidélité), avec la date et le libellé
+  //  de la banque.
+  //
+  //  Règles :
+  //   - une ligne « à vérifier » (uncertain) n'encaisse rien : le lien est
+  //     posé, l'écriture attend la confirmation de Nicolas ;
+  //   - une facture déjà soldée n'est pas ré-encaissée, on la marque juste
+  //     rapprochée ;
+  //   - une facture en échéancier SEPA se règle par la remise, jamais ici ;
+  //   - la clé de la ligne bancaire est écrite sur l'encaissement : relancer
+  //     la synchronisation ne crée pas de doublon.
+  // ─────────────────────────────────────────────────────────────────────────
+  const encaisserPaiementsPointes = async (lines: LigneBancaire[]) => {
+    let nbEncaisses = 0;
+    for (const bl of lines) {
+      if (!bl.matched || bl.uncertain || bl.matchType === "Ignoré" || !bl.manualPaymentId) continue;
+      const pid = bl.manualPaymentId;
+      try {
+        const pSnap = await getDoc(doc(db, "payments", pid));
+        if (!pSnap.exists()) continue;
+        const p = pSnap.data() as any;
+        if (p.status === "cancelled" || p.status === "sepa_scheduled") continue;
+        if (p.status === "paid") {
+          if (!p.reconciledByBank) await updateDoc(doc(db, "payments", pid), { reconciledByBank: true });
+          continue;
+        }
+        const cle = cleLigneBancaire(bl);
+        const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", pid)));
+        if (encSnap.docs.some(d => (d.data() as any).bankLineKey === cle)) {
+          // Déjà encaissée par cette ligne (synchronisation relancée).
+          if (!p.reconciledByBank) await updateDoc(doc(db, "payments", pid), { reconciledByBank: true });
+          continue;
+        }
+        await enregistrerEncaissement(
+          pid, p, bl.amount, "virement",
+          `Virement reçu le ${bl.date} — ${bl.label.slice(0, 80)}`,
+          "",
+          dateBancaireIso(bl.date),
+          {
+            bankLineKey: cle,
+            bankLineLabel: bl.label,
+            reconciledByBank: true,
+            reconciledAt: serverTimestamp(),
+          },
+        );
+        await updateDoc(doc(db, "payments", pid), { reconciledByBank: true });
+        nbEncaisses++;
+      } catch (e) {
+        console.error(`[encaisser-pointes] paiement ${pid} :`, e);
+      }
+    }
+    if (nbEncaisses > 0) console.log(`[encaisser-pointes] ✅ ${nbEncaisses} virement(s) encaissé(s) au journal`);
+    return nbEncaisses;
+  };
 
   // ─────────────────────────────────────────────────────────────────────────
   //  syncReconciledFromBankLines : synchronise reconciledByBank sur les
@@ -89,7 +150,20 @@ export function useRapprochement({
         if (!bl.matched) continue;
         if (bl.matchType === "Ignoré") continue;
 
-        if (bl.manualPaymentId) targetPaymentIds.add(bl.manualPaymentId);
+        if (bl.manualPaymentId) {
+          targetPaymentIds.add(bl.manualPaymentId);
+          // Les virements encaissés pour ce paiement — à la caisse, ou par le
+          // pointage lui-même (encaisserPaiementsPointes) — sont couverts par
+          // cette ligne bancaire. Sans ce lien, l'écriture créée au pointage
+          // serait dé-marquée à la synchronisation suivante.
+          const cle = cleLigneBancaire(bl);
+          for (const e of encaissementsCompta) {
+            if (e.bankLineKey === cle
+              || (e.paymentId === bl.manualPaymentId && e.mode === "virement" && !bl.uncertain)) {
+              targetEncIds.add(e.id);
+            }
+          }
+        }
 
         // Pour chaque encs référencé dans matchedEncs, on prend UN candidat
         // pas encore consommé. C'est crucial : une remise "Sous-ensemble CB
@@ -135,36 +209,29 @@ export function useRapprochement({
         }
       }
 
-      // 3. Payments virement : marquer paid ceux qui sont pointés, dé-marquer
-      //    ceux qui étaient rapprochés mais ne le sont plus.
-      const paymentUpdates: Promise<any>[] = [];
-      for (const pid of targetPaymentIds) {
-        const pSnap = await getDoc(doc(db, "payments", pid));
-        if (!pSnap.exists()) continue;
-        const p = pSnap.data() as any;
-        if (p.status === "paid" && p.reconciledByBank) continue;
-        paymentUpdates.push(updateDoc(doc(db, "payments", pid), {
-          status: "paid",
-          paidAmount: p.totalTTC || p.paidAmount || 0,
-          paidAt: serverTimestamp(),
-          reconciledByBank: true,
-        }));
-      }
+      // 3. Factures pointées : encaissées au journal (ou simplement marquées
+      //    rapprochées si déjà soldées), cf. encaisserPaiementsPointes.
+      await encaisserPaiementsPointes(lines);
+
       // Dé-marquer les payments précédemment rapprochés qui ne sont plus cibles
+      const paymentUpdates: Promise<any>[] = [];
       for (const p of payments) {
         if (!p.reconciledByBank) continue;
         if (targetPaymentIds.has(p.id)) continue;
-        if (p.paymentMode !== "virement") continue;
+        if (p.paymentMode !== "virement" && p.paymentMode) continue;
         // Uniquement période courante
         const pd = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
         if (!pd) continue;
         const pm = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, "0")}`;
         if (pm !== period) continue;
-        paymentUpdates.push(updateDoc(doc(db, "payments", p.id), {
-          status: "pending",
-          paidAmount: 0,
-          reconciledByBank: false,
-        }));
+        // Une facture dont le virement est au journal reste réglée : dé-pointer
+        // ne retire que le lien avec la banque (le journal est inaltérable, une
+        // erreur se corrige par contre-passation à la caisse). Seule une facture
+        // marquée réglée SANS écriture — l'ancien pointage — revient en attente.
+        const aUneEcriture = encaissementsCompta.some((e: any) => e.paymentId === p.id && (e.montant || 0) > 0);
+        paymentUpdates.push(updateDoc(doc(db, "payments", p.id), aUneEcriture
+          ? { reconciledByBank: false }
+          : { status: "pending", paidAmount: 0, reconciledByBank: false }));
       }
 
       if (encUpdates.length > 0 || paymentUpdates.length > 0) {
@@ -296,6 +363,7 @@ export function useRapprochement({
             matchedEncs: nb.matchedEncs || null,
             missingAmounts: nb.missingAmounts || null,
             manualPaymentId: nb.manualPaymentId || null,
+            remiseSepaId: nb.remiseSepaId || null,
             uncertain: nb.uncertain || false,
           };
 
@@ -577,36 +645,21 @@ export function useRapprochement({
       }
 
       // ─────────────────────────────────────────────────────────────────────
-      //  Bug #8 : Mise à jour du status des paiements virement pointés
+      //  Bug #8 : encaisser les virements attendus que le relevé confirme
       // ─────────────────────────────────────────────────────────────────────
-      // Quand un virement est rapproché (auto ou manuel), on marque le paiement
-      // comme "paid" dans Firestore pour qu'il ne réapparaisse pas dans l'alerte
-      // "virements attendus >7j" et pour que l'encaissement soit reflété côté compta.
-      const paymentsToUpdate = new Set<string>();
-      for (const bl of finalMatched as any[]) {
-        if (bl.matched && bl.manualPaymentId) {
-          paymentsToUpdate.add(bl.manualPaymentId);
-        }
-      }
-      if (paymentsToUpdate.size > 0) {
+      // Quand un virement attendu est rapproché, la facture sort de l'alerte
+      // « virements attendus > 7 j ». Elle passait autrefois à « paid » d'un
+      // trait, sans écriture ; désormais l'encaissement est réel (journal,
+      // numéro de facture, mode « virement »), cf. encaisserPaiementsPointes.
+      // Les lignes « à vérifier » attendent la confirmation avant d'écrire.
+      if ((finalMatched as any[]).some(bl => bl.matched && bl.manualPaymentId)) {
         try {
-          await Promise.all(Array.from(paymentsToUpdate).map(async (pid) => {
-            const pSnap = await getDoc(doc(db, "payments", pid));
-            if (!pSnap.exists()) return;
-            const p = pSnap.data() as any;
-            if (p.status === "paid") return; // déjà marqué
-            await updateDoc(doc(db, "payments", pid), {
-              status: "paid",
-              paidAmount: p.totalTTC || p.paidAmount || 0,
-              paidAt: serverTimestamp(),
-              reconciledByBank: true,
-            });
-          }));
-          console.log(`✅ ${paymentsToUpdate.size} paiement(s) virement marqué(s) comme encaissé(s)`);
+          const nb = await encaisserPaiementsPointes(finalMatched as any);
+          if (nb > 0) console.log(`✅ ${nb} virement(s) attendu(s) encaissé(s) depuis le relevé`);
           // Recharger les paiements pour rafraîchir l'UI
           fetchData();
         } catch (e) {
-          console.error("Erreur mise à jour paiements rapprochés:", e);
+          console.error("Erreur encaissement des virements rapprochés:", e);
         }
       }
 
@@ -634,6 +687,7 @@ export function useRapprochement({
             ...bl,
             matchedEncs: bl.matchedEncs || undefined,
             manualPaymentId: bl.manualPaymentId || undefined,
+            remiseSepaId: bl.remiseSepaId || undefined,
             uncertain: bl.uncertain || false,
           })));
         } else {
@@ -643,9 +697,36 @@ export function useRapprochement({
     })();
   }, [period]);
 
+  // ─────────────────────────────────────────────────────────────────────────
+  //  relancerRapprochement : rejouer le rapprochement automatique sur le
+  //  relevé déjà importé, avec l'état ACTUEL des recettes.
+  //
+  //  Le rapprochement ne tournait qu'à l'import du CSV. Une facture créée
+  //  ensuite pour un virement déjà sur le relevé, une remise SEPA déposée
+  //  après coup : la ligne restait « à traiter » jusqu'au prochain import.
+  //  Ici, les lignes pointées à la main ou ignorées sont conservées telles
+  //  quelles ; les autres sont recalculées comme à un import.
+  // ─────────────────────────────────────────────────────────────────────────
+  const relancerRapprochement = async () => {
+    if (bankLines.length === 0) return { avant: 0, apres: 0 };
+    const avant = bankLines.filter(b => b.matched && b.matchType !== "Ignoré").length;
+    const base: LigneBancaire[] = bankLines.map(bl =>
+      bl.matched && (bl.matchType === "Manuel" || bl.matchType === "Ignoré")
+        ? bl
+        : { date: bl.date, label: bl.label, amount: bl.amount, matched: false, matchType: "", matchDetail: "" },
+    );
+    const { finalMatched } = rapprocherReleve(base, {
+      encaissementsCompta, payments, remises, remisesSepa, period, bankLines,
+    });
+    await updateAndSaveBankLines(finalMatched);
+    const apres = finalMatched.filter(b => b.matched && b.matchType !== "Ignoré").length;
+    return { avant, apres };
+  };
+
   return {
     bankLines, setBankLines,
     handleCSVImport,
+    relancerRapprochement,
     updateAndSaveBankLines,
     saveBankLinesByMonth,
     syncVersementsEspeces,

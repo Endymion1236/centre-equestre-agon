@@ -111,7 +111,7 @@ export default function ComptabilitePage() {
   // et report dans la base — vit dans son propre hook (useRapprochement.ts).
   const {
     bankLines, setBankLines,
-    handleCSVImport, updateAndSaveBankLines, syncVersementsEspeces, saveBankLinesByMonth,
+    handleCSVImport, relancerRapprochement, updateAndSaveBankLines, syncVersementsEspeces, saveBankLinesByMonth,
   } = useRapprochement({ payments, remises, remisesSepa, encaissementsCompta, period, fetchData });
 
   const filteredPayments = useMemo(
@@ -513,9 +513,10 @@ export default function ComptabilitePage() {
       {/* ─── Rapprochement bancaire, pointage manuel et lignes ignorées ─── */}
       <OngletRapprochement
         tab={tab} loading={loading} bankLines={bankLines}
-        payments={payments} remises={remises} encaissementsCompta={encaissementsCompta}
+        payments={payments} remises={remises} remisesSepa={remisesSepa} encaissementsCompta={encaissementsCompta}
         filteredPayments={filteredPayments}
-        handleCSVImport={handleCSVImport} updateAndSaveBankLines={updateAndSaveBankLines}
+        handleCSVImport={handleCSVImport} relancerRapprochement={relancerRapprochement}
+        updateAndSaveBankLines={updateAndSaveBankLines}
         setBankLines={setBankLines} saveBankLinesByMonth={saveBankLinesByMonth}
         syncVersementsEspeces={syncVersementsEspeces} fetchData={fetchData}
         analyserRapprochement={analyserRapprochement}

@@ -259,3 +259,54 @@ export function trouverSousEnsembleMontant<T extends { montant?: number }>(
   }
   return null;
 }
+
+// ─── Reconnaissance du libellé bancaire ─────────────────────────────────────
+//
+// Le Crédit Agricole n'écrit pas « PRLV » quand c'est le club qui prélève :
+// la remise SEPA arrive sous « Avis de prélèvement emis PREL ECH DU 02/09/26 ».
+// Ni « PRLV », ni « SEPA », ni « VIR » : la ligne passait à côté du bloc
+// virements/prélèvements et restait « à traiter » (cas vécu le 02/09/2026).
+// On compare donc sans accents, et on reconnaît aussi « PRELEVEMENT » et
+// « PREL ».
+
+/** Libellé en majuscules, sans accents : « prélèvement » → « PRELEVEMENT ». */
+export function normaliserLibelleBancaire(label: string) {
+  return (label || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+}
+
+/** Prélèvement SEPA émis par le club (remise de prélèvements). */
+export function estLibellePrelevement(label: string) {
+  const l = normaliserLibelleBancaire(label);
+  return l.includes("PRLV") || l.includes("PRELEVEMENT") || /\bPREL\b/.test(l)
+    || l.includes("SEPA") || l.includes("ICS");
+}
+
+/** Virement reçu d'une famille. */
+export function estLibelleVirement(label: string) {
+  return normaliserLibelleBancaire(label).includes("VIR");
+}
+
+/**
+ * Les écritures du journal produites par une remise SEPA.
+ *
+ * La remise porte les échéances qu'elle contient (`echeanceIds`) ; chaque
+ * échéance déposée donne UN encaissement, qui la référence par
+ * `sepaEcheanceId`. C'est par ce lien qu'on retrouve, pour une ligne
+ * bancaire de 40 prélèvements, les 40 écritures à marquer rapprochées.
+ * Une remise créée avant le dépôt, ou avant ce lien, ne rend rien.
+ */
+export function encaissementsDeRemiseSepa<T extends { sepaEcheanceId?: string }>(
+  remise: { echeanceIds?: string[] } | null | undefined,
+  encaissements: T[],
+): T[] {
+  const ids = new Set(remise?.echeanceIds || []);
+  if (ids.size === 0) return [];
+  return encaissements.filter((e) => Boolean(e.sepaEcheanceId) && ids.has(e.sepaEcheanceId as string));
+}
+
+/** Date bancaire « JJ/MM/AAAA » → « AAAA-MM-JJ » (format attendu par la caisse). */
+export function dateBancaireIso(valeur: string): string | undefined {
+  const d = parserDateBancaire(valeur);
+  if (!d || Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString().slice(0, 10);
+}

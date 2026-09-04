@@ -16,9 +16,9 @@ import { useState } from "react";
 import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { Loader2, Upload, Search, Sparkles, AlertTriangle, EyeOff } from "lucide-react";
+import { Loader2, Upload, Search, Sparkles, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
-import { parserDetailCa } from "./rapprochement-utils";
+import { encaissementEnDetail, encaissementsDeRemiseSepa, parserDetailCa } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 
 export interface OngletRapprochementProps {
@@ -27,9 +27,13 @@ export interface OngletRapprochementProps {
   bankLines: LigneBancaire[];
   payments: any[];
   remises: any[];
+  /** Remises de prélèvements SEPA (collection remises-sepa). */
+  remisesSepa: any[];
   encaissementsCompta: any[];
   filteredPayments: any[];
   handleCSVImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Rejoue le rapprochement automatique sur le relevé déjà importé. */
+  relancerRapprochement: () => Promise<{ avant: number; apres: number }>;
   updateAndSaveBankLines: (lignes: LigneBancaire[]) => Promise<void> | void;
   setBankLines: (lignes: LigneBancaire[]) => void;
   saveBankLinesByMonth: (lignes: LigneBancaire[], mode?: "user-update" | "csv-import") => Promise<void> | void;
@@ -43,8 +47,8 @@ export interface OngletRapprochementProps {
 }
 
 export default function OngletRapprochement({
-  tab, loading, bankLines, payments, remises, encaissementsCompta, filteredPayments,
-  handleCSVImport, updateAndSaveBankLines, setBankLines, saveBankLinesByMonth,
+  tab, loading, bankLines, payments, remises, remisesSepa, encaissementsCompta, filteredPayments,
+  handleCSVImport, relancerRapprochement, updateAndSaveBankLines, setBankLines, saveBankLinesByMonth,
   syncVersementsEspeces, fetchData,
   analyserRapprochement, iaLoading, iaAnalysis, iaStats,
 }: OngletRapprochementProps) {
@@ -52,6 +56,7 @@ export default function OngletRapprochement({
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null);
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
   const [manualSearch, setManualSearch] = useState("");
+  const [relanceEnCours, setRelanceEnCours] = useState(false);
   // Saisie du détail d'une remise collé depuis le site Crédit Agricole
   const [showCADetailModal, setShowCADetailModal] = useState<number | null>(null);
   const [caDetailText, setCaDetailText] = useState("");
@@ -141,7 +146,9 @@ export default function OngletRapprochement({
 
           <Card padding="md" className="bg-blue-50 border-blue-500/8">
             <div className="font-body text-sm text-blue-800">
-              Importez votre relevé bancaire au format CSV pour rapprocher les mouvements avec vos encaissements. Les virements sont également matchés par nom de famille dans le libellé. Cliquez sur "Pointer" pour les lignes non rapprochées.
+              Importez votre relevé bancaire au format CSV pour rapprocher les mouvements avec vos encaissements. Les virements sont également matchés par nom de famille dans le libellé, et les prélèvements SEPA par le total de la remise. Cliquez sur "Pointer" pour les lignes non rapprochées : la fenêtre propose les factures en attente de règlement, les remises SEPA et les factures du mois.
+              <br />
+              Une facture en attente pointée sur un virement est <b>encaissée</b> (écriture au journal, numéro de facture) à la date du relevé. Si tu as créé une facture ou déposé une remise après l'import, "Relancer le rapprochement" refait le calcul sans réimporter le CSV.
             </div>
           </Card>
 
@@ -161,6 +168,31 @@ export default function OngletRapprochement({
                 <Upload size={16} /> Importer CSV
                 <input type="file" accept=".csv" onChange={handleCSVImport} className="hidden" />
               </label>
+              {bankLines.some(b => !b.matched) && (
+                <button
+                  disabled={relanceEnCours}
+                  onClick={async () => {
+                    setRelanceEnCours(true);
+                    try {
+                      const { avant, apres } = await relancerRapprochement();
+                      const gain = apres - avant;
+                      alert(gain > 0
+                        ? `✅ ${gain} ligne${gain > 1 ? "s" : ""} supplémentaire${gain > 1 ? "s" : ""} rapprochée${gain > 1 ? "s" : ""} (${apres} au total).`
+                        : gain < 0
+                          ? `⚠️ ${-gain} ligne${-gain > 1 ? "s" : ""} auparavant rapprochée${-gain > 1 ? "s" : ""} automatiquement ne trouve${-gain > 1 ? "nt" : ""} plus de correspondance (${apres} rapprochée${apres > 1 ? "s" : ""}). Les pointages faits à la main sont conservés.`
+                          : `Aucune nouvelle correspondance : ${apres} ligne${apres > 1 ? "s" : ""} rapprochée${apres > 1 ? "s" : ""}, les autres restent à pointer à la main.`);
+                    } catch (e: any) {
+                      console.error("[relancer-rapprochement]", e);
+                      alert(`Erreur : ${e?.message || e}`);
+                    }
+                    setRelanceEnCours(false);
+                  }}
+                  title="Refaire le rapprochement automatique avec les factures, encaissements et remises actuels, sans réimporter le relevé"
+                  className="flex items-center gap-2 font-body text-sm font-semibold text-green-700 bg-green-50 hover:bg-green-100 px-4 py-3 rounded-lg border border-green-200 cursor-pointer disabled:opacity-50">
+                  {relanceEnCours ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+                  Relancer le rapprochement
+                </button>
+              )}
               {bankLines.length > 0 && bankLines.some(b => b.matched) && (
                 <button
                   onClick={async () => {
@@ -505,10 +537,24 @@ export default function OngletRapprochement({
                     {/* Bouton "Dé-pointer" universel pour tout match hors Ignoré.
                         La sync auto dans updateAndSaveBankLines se charge de repasser
                         les encs à reconciledByBank=false et les payments virement à pending. */}
+                    {/* Une correspondance « à vérifier » n'a rien écrit : confirmer
+                        lève le doute et, s'il s'agit d'une facture en attente,
+                        déclenche son encaissement au journal. */}
+                    {bl.matched && bl.uncertain && bl.matchType !== "Ignoré" && (
+                      <button onClick={async () => {
+                        const updated = [...bankLines];
+                        updated[i] = { ...updated[i], uncertain: false, matchDetail: bl.matchDetail.replace(/ ⚠️ montant:.*$/, "") };
+                        await updateAndSaveBankLines(updated);
+                      }}
+                        className="font-body text-[10px] text-green-700 bg-green-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-green-100 mb-1"
+                        title="Confirmer cette correspondance">
+                        Confirmer
+                      </button>
+                    )}
                     {bl.matched && bl.matchType !== "Ignoré" && (
                       <button onClick={async () => {
                         const updated = [...bankLines];
-                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", matchedEncs: undefined, manualPaymentId: undefined, uncertain: false };
+                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", matchedEncs: undefined, manualPaymentId: undefined, remiseSepaId: undefined, uncertain: false };
                         await updateAndSaveBankLines(updated);
                       }}
                         className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100"
@@ -635,64 +681,194 @@ export default function OngletRapprochement({
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-4 pb-4">
-              <div className="flex flex-col gap-1.5">
-                {filteredPayments
-                  .filter(p => {
-                    if (!manualSearch) return true;
-                    const q = manualSearch.toLowerCase();
+              {(() => {
+                const ligne = bankLines[showManualMatch];
+                if (!ligne) return null;
+                const q = manualSearch.toLowerCase();
+                const montantProche = (m: number) => Math.abs((m || 0) - ligne.amount) < 0.02;
+
+                // 1. Factures en attente de règlement (toutes périodes) : c'est
+                //    là que se trouve la facture créée pour un virement attendu.
+                //    Elles étaient absentes de cette liste — filtrées avec les
+                //    « pending » — et un virement ne pouvait donc jamais être
+                //    relié à sa facture.
+                const idsDuMois = new Set(filteredPayments.map((p: any) => p.id));
+                const enAttente = payments
+                  .filter((p: any) => (p.status === "pending" || p.status === "partial") && !idsDuMois.has(p.id))
+                  .filter((p: any) => {
+                    if (!q) return true;
+                    return p.familyName?.toLowerCase().includes(q)
+                      || (p.totalTTC || 0).toFixed(2).includes(q)
+                      || (p.invoiceNumber || "").toLowerCase().includes(q);
+                  })
+                  .sort((a: any, b: any) => {
+                    const ea = montantProche(a.totalTTC - (a.paidAmount || 0)) ? 0 : 1;
+                    const eb = montantProche(b.totalTTC - (b.paidAmount || 0)) ? 0 : 1;
+                    if (ea !== eb) return ea - eb;
+                    return (b.date?.seconds || 0) - (a.date?.seconds || 0);
+                  })
+                  .slice(0, 30);
+
+                // 2. Remises de prélèvements SEPA : une ligne bancaire pour 1
+                //    ou 40 prélèvements, son montant est le total de la remise.
+                const remisesCandidates = (remisesSepa || [])
+                  .filter((r: any) => {
+                    if (!q) return true;
+                    return String(r.numero || "").includes(q)
+                      || (r.montantTotal || 0).toFixed(2).includes(q)
+                      || (r.datePrelevement || "").includes(q)
+                      || "sepa".includes(q) || "prélèvement".includes(q);
+                  })
+                  .sort((a: any, b: any) => {
+                    const ea = montantProche(a.montantTotal) ? 0 : 1;
+                    const eb = montantProche(b.montantTotal) ? 0 : 1;
+                    if (ea !== eb) return ea - eb;
+                    return (b.datePrelevement || "").localeCompare(a.datePrelevement || "");
+                  })
+                  .slice(0, 20);
+
+                // 3. Factures du mois (réglées ou partielles) — la liste d'origine.
+                const duMois = filteredPayments
+                  .filter((p: any) => {
+                    if (!q) return true;
                     return p.familyName?.toLowerCase().includes(q) ||
                       (p.totalTTC || 0).toFixed(2).includes(q) ||
                       (modeLabels[p.paymentMode] || "").toLowerCase().includes(q);
                   })
-                  .slice(0, 50)
-                  .map(p => {
-                    const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-                    const amountMatch = bankLines[showManualMatch] && Math.abs((p.totalTTC || 0) - bankLines[showManualMatch].amount) < 0.02;
-                    return (
-                      <div key={p.id}
-                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
-                        onClick={async () => {
-                          const updated = [...bankLines];
-                          updated[showManualMatch!] = {
-                            ...updated[showManualMatch!],
-                            matched: true,
-                            matchType: "Manuel",
-                            matchDetail: `${p.familyName} — ${(p.totalTTC || 0).toFixed(2)}€ (${modeLabels[p.paymentMode] || p.paymentMode})`,
-                            manualPaymentId: p.id,
-                          };
-                          await updateAndSaveBankLines(updated);
+                  .slice(0, 50);
 
-                          // Bug #8 : si le paiement pointé est un virement pending/partial,
-                          // on le marque comme encaissé pour sortir de l'alerte "virements attendus"
-                          if (p.paymentMode === "virement" && (p.status === "pending" || p.status === "partial")) {
-                            try {
-                              await updateDoc(doc(db, "payments", p.id), {
-                                status: "paid",
-                                paidAmount: p.totalTTC || 0,
-                                paidAt: serverTimestamp(),
-                                reconciledByBank: true,
-                              });
-                              fetchData();
-                            } catch (e) {
-                              console.error("Erreur mise à jour paiement:", e);
-                            }
-                          }
-                          setShowManualMatch(null);
-                        }}>
-                        <div>
-                          <div className="font-body text-sm font-semibold text-blue-800">{p.familyName || "—"}</div>
-                          <div className="font-body text-xs text-slate-500">
-                            {d?.toLocaleDateString("fr-FR")} · {(p.items || []).map((i: any) => i.activityTitle).join(", ") || "—"} · {modeLabels[p.paymentMode] || p.paymentMode}
+                const pointerFacture = async (p: any) => {
+                  const restant = Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100;
+                  const enAttenteDeReglement = p.status === "pending" || p.status === "partial";
+                  if (enAttenteDeReglement && !montantProche(restant)) {
+                    const ok = window.confirm(
+                      `Le virement fait ${ligne.amount.toFixed(2)}€ et il reste ${restant.toFixed(2)}€ à régler sur cette facture.\n\n`
+                      + `Encaisser quand même ${ligne.amount.toFixed(2)}€ sur la facture de ${p.familyName} ?`,
+                    );
+                    if (!ok) return;
+                  }
+                  const updated = [...bankLines];
+                  updated[showManualMatch!] = {
+                    ...updated[showManualMatch!],
+                    matched: true,
+                    matchType: "Manuel",
+                    matchDetail: enAttenteDeReglement
+                      ? `Virement ${p.familyName} — facture ${p.invoiceNumber || "en attente"} encaissée (${ligne.amount.toFixed(2)}€)`
+                      : `${p.familyName} — ${(p.totalTTC || 0).toFixed(2)}€ (${modeLabels[p.paymentMode] || p.paymentMode})`,
+                    manualPaymentId: p.id,
+                    remiseSepaId: undefined,
+                    uncertain: false,
+                  };
+                  // L'encaissement au journal (facture en attente) est fait par
+                  // la synchronisation, cf. encaisserPaiementsPointes.
+                  await updateAndSaveBankLines(updated);
+                  setShowManualMatch(null);
+                };
+
+                const pointerRemiseSepa = async (r: any) => {
+                  if (!montantProche(r.montantTotal)) {
+                    const ok = window.confirm(
+                      `La ligne bancaire fait ${ligne.amount.toFixed(2)}€ et la remise n°${r.numero} totalise ${(r.montantTotal || 0).toFixed(2)}€ (un prélèvement rejeté ?).\n\nPointer quand même ?`,
+                    );
+                    if (!ok) return;
+                  }
+                  const encs = encaissementsDeRemiseSepa(r, encaissementsCompta);
+                  const updated = [...bankLines];
+                  updated[showManualMatch!] = {
+                    ...updated[showManualMatch!],
+                    matched: true,
+                    matchType: "Manuel",
+                    matchDetail: `Remise SEPA n°${r.numero} du ${r.datePrelevement || "?"} — ${r.nbTransactions || encs.length} prélèvement(s) = ${(r.montantTotal || 0).toFixed(2)}€`,
+                    matchedEncs: encs.length > 0 ? encs.map(encaissementEnDetail) : undefined,
+                    manualPaymentId: undefined,
+                    remiseSepaId: r.id,
+                    uncertain: false,
+                  };
+                  await updateAndSaveBankLines(updated);
+                  setShowManualMatch(null);
+                };
+
+                const titre = (t: string) => (
+                  <div className="font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider mt-3 mb-1.5 first:mt-0">{t}</div>
+                );
+
+                return (
+                  <div className="flex flex-col gap-1.5">
+                    {enAttente.length > 0 && titre(`Factures en attente de règlement (${enAttente.length})`)}
+                    {enAttente.map((p: any) => {
+                      const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                      const restant = Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100;
+                      const amountMatch = montantProche(restant);
+                      return (
+                        <div key={p.id}
+                          className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
+                          onClick={() => pointerFacture(p)}>
+                          <div>
+                            <div className="font-body text-sm font-semibold text-blue-800">{p.familyName || "—"}</div>
+                            <div className="font-body text-xs text-slate-500">
+                              {d?.toLocaleDateString("fr-FR")} · {(p.items || []).map((i: any) => i.activityTitle).join(", ") || p.label || "—"} · {p.status === "partial" ? "partiellement réglée" : "en attente"}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-orange-500"}`}>{restant.toFixed(2)}€</div>
+                            {amountMatch
+                              ? <div className="font-body text-[10px] text-green-500">Montant exact · sera encaissée</div>
+                              : <div className="font-body text-[10px] text-slate-400">reste dû</div>}
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-blue-500"}`}>{(p.totalTTC || 0).toFixed(2)}€</div>
-                          {amountMatch && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
+                      );
+                    })}
+
+                    {remisesCandidates.length > 0 && titre(`Remises de prélèvements SEPA (${remisesCandidates.length})`)}
+                    {remisesCandidates.map((r: any) => {
+                      const amountMatch = montantProche(r.montantTotal);
+                      const nbEncs = encaissementsDeRemiseSepa(r, encaissementsCompta).length;
+                      return (
+                        <div key={r.id}
+                          className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
+                          onClick={() => pointerRemiseSepa(r)}>
+                          <div>
+                            <div className="font-body text-sm font-semibold text-blue-800">🏦 Remise SEPA n°{r.numero}</div>
+                            <div className="font-body text-xs text-slate-500">
+                              Prélèvement du {r.datePrelevement || "?"} · {r.nbTransactions || "?"} prélèvement(s) · {r.status === "deposited" ? `${nbEncs} au journal` : "pas encore déposée"}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-blue-500"}`}>{(r.montantTotal || 0).toFixed(2)}€</div>
+                            {amountMatch && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
-              </div>
+                      );
+                    })}
+
+                    {duMois.length > 0 && titre(`Factures du mois (${duMois.length})`)}
+                    {duMois.map((p: any) => {
+                      const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
+                      const amountMatch = montantProche(p.totalTTC);
+                      return (
+                        <div key={p.id}
+                          className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
+                          onClick={() => pointerFacture(p)}>
+                          <div>
+                            <div className="font-body text-sm font-semibold text-blue-800">{p.familyName || "—"}</div>
+                            <div className="font-body text-xs text-slate-500">
+                              {d?.toLocaleDateString("fr-FR")} · {(p.items || []).map((i: any) => i.activityTitle).join(", ") || "—"} · {modeLabels[p.paymentMode] || p.paymentMode}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-blue-500"}`}>{(p.totalTTC || 0).toFixed(2)}€</div>
+                            {amountMatch && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {enAttente.length === 0 && remisesCandidates.length === 0 && duMois.length === 0 && (
+                      <div className="font-body text-sm text-slate-500 text-center py-6">Aucune facture ni remise ne correspond à cette recherche.</div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>

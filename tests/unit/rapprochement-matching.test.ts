@@ -123,6 +123,104 @@ console.log("\n✓ Un rejet SEPA laisse la ligne non rapprochée :");
   assert("le lot n'est pas consommé à tort", !r.usedRemiseSepaIds.has("rs1"));
 }
 
+console.log("\n✓ Remise SEPA au libellé Crédit Agricole (« Avis de prélèvement emis PREL ECH DU ») :");
+{
+  // Le 02/09/2026, la banque crédite 300 € sous « Avis de prélèvement emis
+  // PREL ECH DU 02/09/26 » : ni PRLV, ni SEPA dans le libellé. La remise
+  // n°14 (une échéance de pension, déposée) totalise 300 €. La ligne restait
+  // « à traiter ». Elle doit se rapprocher de la remise, et l'écriture du
+  // journal née du dépôt (sepaEcheanceId) doit être consommée avec elle.
+  const encaissements = [
+    { ...enc("s1", 300, "prelevement_sepa", "2026-08-28", "ENAUX"), sepaEcheanceId: "ech1" },
+    { ...enc("s2", 45, "prelevement_sepa", "2026-08-28", "MARTIN"), sepaEcheanceId: "ech2" },
+  ];
+  const r = rapprocherReleve(
+    [ligne("02/09/2026", "Avis de prélèvement emis PREL ECH DU 02/09/26", 300)],
+    {
+      ...etatVide,
+      encaissementsCompta: encaissements,
+      remisesSepa: [{ id: "rs14", numero: 14, montantTotal: 300, nbTransactions: 1, datePrelevement: "2026-09-02", echeanceIds: ["ech1"] }],
+    },
+  );
+  const l = r.finalMatched[0];
+  assert("la ligne est rapprochée", l.matched, l.matchDetail);
+  assert("classée en prélèvement SEPA", l.matchType === "Prélèvement SEPA", l.matchType);
+  assert("la remise est consommée", r.usedRemiseSepaIds.has("rs14"));
+  assert("l'écriture de la remise est consommée", r.usedEncIds.has("s1"));
+  assert("celle d'une autre remise ne l'est pas", !r.usedEncIds.has("s2"));
+  assert("l'écriture figure dans le détail de la ligne", (l.matchedEncs || []).length === 1 && l.matchedEncs![0].familyName === "ENAUX");
+  assert("la remise est référencée sur la ligne", l.remiseSepaId === "rs14", l.remiseSepaId);
+}
+
+console.log("\n✓ Remise SEPA de 40 prélèvements : toutes les écritures suivent :");
+{
+  const encaissements: any[] = [];
+  const echeanceIds: string[] = [];
+  for (let i = 0; i < 40; i++) {
+    encaissements.push({ ...enc(`s${i}`, 57, "prelevement_sepa", "2026-09-01", `FAMILLE${i}`), sepaEcheanceId: `ech${i}` });
+    echeanceIds.push(`ech${i}`);
+  }
+  const r = rapprocherReleve(
+    [ligne("05/09/2026", "AVIS DE PRELEVEMENT EMIS PREL ECH DU 05/09/26", 2280)],
+    {
+      ...etatVide,
+      encaissementsCompta: encaissements,
+      remisesSepa: [{ id: "rs15", numero: 15, montantTotal: 2280, nbTransactions: 40, datePrelevement: "2026-09-05", echeanceIds }],
+    },
+  );
+  assert("la ligne est rapprochée", r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("les 40 écritures sont consommées", r.usedEncIds.size === 40, `${r.usedEncIds.size}`);
+}
+
+console.log("\n✓ Un prélèvement sans remise correspondante reste à traiter :");
+{
+  // Pas de rapprochement « au montant » sur un prélèvement : sans remise SEPA
+  // de ce total, la ligne attend le pointage manuel plutôt que de prendre
+  // n'importe quel encaissement de 300 €.
+  const encaissements = [enc("x1", 300, "cheque", "2026-09-02", "DURAND")];
+  const r = rapprocherReleve(
+    [ligne("02/09/2026", "Avis de prélèvement emis PREL ECH DU 02/09/26", 300)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("la ligne reste à traiter", !r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("le chèque n'est pas consommé", r.usedEncIds.size === 0);
+}
+
+console.log("\n✓ Virement reçu pour une facture créée en attente (sans mode de paiement) :");
+{
+  // Nicolas crée la facture « pension » de 300 € pour la famille Enaux, en
+  // attendant leur virement. Elle n'a pas de mode de paiement. Le virement
+  // arrive : « Virement en votre faveur M OU MME HENRI ENAUX … ». La facture
+  // doit être reconnue par le nom et le montant.
+  const payments = [{
+    id: "f1", familyName: "Enaux", totalTTC: 300, paidAmount: 0, status: "pending", paymentMode: "",
+    date: { seconds: Math.floor(new Date("2026-08-30T12:00:00Z").getTime() / 1000) },
+  }];
+  const r = rapprocherReleve(
+    [ligne("01/09/2026", "Virement en votre faveur M OU MME HENRI ENAUX C08V26244L0 - pension Dalhia", 300)],
+    { ...etatVide, payments },
+  );
+  const l = r.finalMatched[0];
+  assert("la ligne est rapprochée", l.matched, l.matchDetail);
+  assert("reliée à la facture", l.manualPaymentId === "f1", l.manualPaymentId);
+  assert("sans réserve (nom + montant)", !l.uncertain);
+  assert("la facture est consommée", r.usedPaymentIds.has("f1"));
+}
+
+console.log("\n✓ Une facture sans mode n'est pas candidate pour un prélèvement :");
+{
+  const payments = [{
+    id: "f1", familyName: "Enaux", totalTTC: 300, paidAmount: 0, status: "pending", paymentMode: "",
+    date: { seconds: Math.floor(new Date("2026-08-30T12:00:00Z").getTime() / 1000) },
+  }];
+  const r = rapprocherReleve(
+    [ligne("02/09/2026", "Avis de prélèvement emis PREL ECH DU 02/09/26", 300)],
+    { ...etatVide, payments },
+  );
+  assert("la ligne reste à traiter", !r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("la facture n'est pas consommée", r.usedPaymentIds.size === 0);
+}
+
 console.log("\n✓ Unicité : deux lignes de même montant :");
 {
   // Deux virements de 120 € le même jour, mais une seule recette de 120 € en

@@ -43,6 +43,9 @@ export async function enregistrerEncaissement(
   ref: string = "",
   activityTitle: string = "",
   customDate?: string, // format YYYY-MM-DD, si absent → serverTimestamp()
+  /** Champs de suivi non comptables ajoutés à l'écriture (ex. la clé de la
+   *  ligne bancaire qui l'a produite, pour ne pas l'enregistrer deux fois). */
+  extra: Record<string, unknown> = {},
 ): Promise<ResultatEncaissement> {
   // 1. Créer le doc encaissement (journal) — avec hash SHA-256 chaîné
   const explicitDate = customDate ? new Date(customDate + "T12:00:00") : undefined;
@@ -57,6 +60,7 @@ export async function enregistrerEncaissement(
     activityTitle: activityTitle || (paymentData.items || []).map((i: any) => i.activityTitle).join(", "),
     explicitDate,
     createdAt: serverTimestamp(), // heure réelle de l'encaissement (pour tri chronologique)
+    ...extra,
   });
 
   // 2. Recalculer paidAmount depuis TOUS les encaissements de ce payment
