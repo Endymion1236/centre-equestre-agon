@@ -42,6 +42,11 @@ interface PropositionReleve {
   lectureIncomplete?: boolean;
   fichier: string;
   compteChoisi: string; soldeEdit: string; soldeEnregistre: boolean;
+  /** Identifiant local : les débits arrivent dans un second temps. */
+  id: string;
+  /** Lecture des débits : en cours, faite, ou échouée (le solde reste utilisable). */
+  operationsEtat: "lecture" | "ok" | "echec";
+  operationsErreur?: string;
 }
 
 const eur = (v: number) =>
@@ -94,8 +99,18 @@ export default function TresoreriePage() {
       ...init,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, ...(init?.headers || {}) },
     });
-    const d = await res.json();
-    if (!res.ok) throw new Error(d?.error || "Erreur");
+    // Quand une fonction dépasse le temps accordé par Vercel, la réponse n'est
+    // pas du JSON mais une page « An error occurred… » en 504 : on le dit en
+    // clair plutôt que « Unexpected token 'A' ».
+    const texte = await res.text();
+    let d: any = null;
+    try { d = JSON.parse(texte); } catch { d = null; }
+    if (!res.ok) {
+      if (d?.error) throw new Error(d.error);
+      if (res.status === 504) throw new Error("Le serveur a mis trop de temps à répondre (délai dépassé) — réessaie, ou avec un relevé plus court");
+      throw new Error(`Réponse inattendue du serveur (HTTP ${res.status})`);
+    }
+    if (!d) throw new Error("Réponse illisible du serveur");
     return d;
   }, [user]);
 
@@ -121,6 +136,14 @@ export default function TresoreriePage() {
     () => calculerTotauxTresorerieParMois(releves, horsTotal),
     [releves, horsTotal],
   );
+  // Les mois où SEULS des comptes « hors total » ont un relevé. Sans ça, un
+  // compte principal décoché par mégarde faisait disparaître tout l'historique
+  // du tableau — la base l'avait toujours, mais l'écran montrait un crayon
+  // vide, et Nicolas a cru avoir tout perdu (04/09/2026). On l'affiche en gris.
+  const totalHorsParMois = useMemo(() => {
+    const comptesComptes = comptes.filter(c => !horsTotal.includes(c));
+    return calculerTotauxTresorerieParMois(releves, comptesComptes);
+  }, [releves, comptes, horsTotal]);
 
   const saisons = useMemo(() => saisonsDisponiblesTresorerie(releves), [releves]);
   const saisonCourante = saisons[saisons.length - 1];
@@ -211,18 +234,35 @@ export default function TresoreriePage() {
       setLectureReleve(n => n + 1);
       try {
         const b64 = btoa(new Uint8Array(await f.arrayBuffer()).reduce((s, o) => s + String.fromCharCode(o), ""));
+        // 1. Le solde et les encaissements clients : court, c'est l'essentiel.
         const d = await api({ method: "POST", body: JSON.stringify({ action: "extraire", pdfBase64: b64, filename: f.name }) });
         const p = d.propositionReleve;
         // Pré-choix du compte : celui dont le nom recoupe le libellé lu, sinon le premier.
         const libelle = `${p.banque} ${p.compte}`.toLowerCase();
         const compteChoisi = comptes.find(c => c.toLowerCase().split(/\s+/).some((mot: string) => mot.length > 3 && libelle.includes(mot))) || comptes[0] || "Compte courant";
+        const id = `${Date.now()}-${f.name}`;
         setPropositions(prev => [...prev, {
           ...p,
-          operations: (p.operations || []).map((o: any) => ({ ...o, garder: o.poste !== POSTE_HORS_DEPENSES })),
+          id,
+          operations: [],
+          operationsEtat: "lecture",
           compteChoisi,
           soldeEdit: p.soldeFin != null ? String(p.soldeFin) : "",
           soldeEnregistre: false,
         }]);
+        // 2. Les débits catégorisés : long, et facultatif — s'il échoue (délai
+        //    dépassé sur un mois chargé), le solde est déjà à l'écran.
+        try {
+          const ops = await api({ method: "POST", body: JSON.stringify({ action: "extraire-operations", pdfBase64: b64, filename: f.name }) });
+          setPropositions(prev => prev.map(x => x.id === id ? {
+            ...x,
+            operations: (ops.operations || []).map((o: any) => ({ ...o, garder: o.poste !== POSTE_HORS_DEPENSES })),
+            lectureIncomplete: Boolean(ops.lectureIncomplete),
+            operationsEtat: "ok",
+          } : x));
+        } catch (e: any) {
+          setPropositions(prev => prev.map(x => x.id === id ? { ...x, operationsEtat: "echec", operationsErreur: e?.message || String(e) } : x));
+        }
       } catch (e: any) {
         setError(`${f.name} : ${e?.message || String(e)}`);
       } finally {
@@ -286,6 +326,10 @@ export default function TresoreriePage() {
     const vals = releves.map(r => totalParMois.get(r.mois) || 0);
     if (vals.length === 0) return null;
     const maxV = Math.max(...vals) * 1.05;
+    // Aucun total positif (tous les comptes décochés, ou soldes à zéro) : les
+    // divisions par maxV donnaient des NaN et le navigateur criait sur chaque
+    // <line>. Pas de courbe plutôt qu'une courbe cassée.
+    if (!Number.isFinite(maxV) || maxV <= 0) return null;
     const x = (i: number) => PAD.l + (i * (W - PAD.l - PAD.r)) / 11;
     const y = (v: number) => H - PAD.b - (v / maxV) * (H - PAD.t - PAD.b);
     const ligne = (saison: string) => {
@@ -398,6 +442,20 @@ export default function TresoreriePage() {
           </div>
 
           {/* Les débits catégorisés → dépenses par poste */}
+          {p.operationsEtat === "lecture" && (
+            <div className="flex items-center gap-2 font-body text-[11px] text-slate-500 px-1 py-1">
+              <Loader2 size={12} className="animate-spin" /> Lecture des débits du relevé en cours… le solde ci-dessus est déjà utilisable.
+            </div>
+          )}
+          {p.operationsEtat === "echec" && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-body text-[11px] text-amber-800">
+              ⚠ Les débits n&apos;ont pas pu être lus ({p.operationsErreur || "erreur"}). Le solde, lui, est bien lu :
+              enregistre-le, et saisis les dépenses de ce mois à la main dans Dépenses par poste.
+            </div>
+          )}
+          {p.operationsEtat === "ok" && p.operations.length === 0 && (
+            <div className="font-body text-[11px] text-slate-500 px-1 py-1">Aucun débit lu sur ce relevé.</div>
+          )}
           {p.operations.length > 0 && (() => {
             const gardees = p.operations.filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES);
             return (
@@ -645,7 +703,11 @@ export default function TresoreriePage() {
                           onClick={() => comptes.length > 1 ? ouvrirCellule(s, mm) : (setEdit(k), setEditVal(releve ? String(releve.montant) : ""))}
                           title={comptes.length > 1 ? `${detail}\nCliquer pour saisir les soldes du mois` : "Cliquer pour saisir"}
                           className={`px-3 py-2 text-right cursor-pointer ${estCellEdit ? "bg-blue-100/70 rounded" : ""} ${s === saisonCourante ? "font-semibold text-blue-800" : "text-slate-600"}`}>
-                          {total !== undefined ? eur(total) : <Pencil size={11} className="inline text-slate-300" />}
+                          {total !== undefined
+                            ? eur(total)
+                            : totalHorsParMois.get(mois) !== undefined
+                              ? <span className="text-slate-400 italic font-normal" title="Relevé présent, mais sur un compte non compté dans le total">{eur(totalHorsParMois.get(mois)!)}<span className="text-[9px] ml-1 not-italic">hors total</span></span>
+                              : <Pencil size={11} className="inline text-slate-300" />}
                         </td>
                       );
                     })}
@@ -655,6 +717,13 @@ export default function TresoreriePage() {
             </table>
           </Card>
 
+          {horsTotal.length > 0 && [...totalHorsParMois.keys()].filter(m => totalParMois.get(m) === undefined).length > 3 && (
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 font-body text-xs text-red-800">
+              <strong>Historique masqué :</strong> {[...totalHorsParMois.keys()].filter(m => totalParMois.get(m) === undefined).length} mois n&apos;ont de relevé
+              que sur un compte <em>non compté dans le total</em>. Si c&apos;est ton compte principal, ouvre les réglages des comptes
+              et recoche « compté dans le total » : rien n&apos;est perdu, les relevés sont toujours en base.
+            </div>
+          )}
           {horsTotal.length > 0 && (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 font-body text-xs text-amber-800">
               <strong>Non compté dans le total</strong> (épargne bloquée, réserve coup dur) :{" "}

@@ -5,6 +5,10 @@
  *       → pose (ou efface si null) le solde de fin de mois d'un compte.
  *   { action: "comptes", comptes: string[] }
  *       → la liste des comptes bancaires suivis (settings/tresorerie).
+ *   { action: "extraire", pdfBase64, filename }
+ *       → lit le solde de fin de mois et les encaissements clients d'un relevé
+ *         PDF (court). { action: "extraire-operations", pdfBase64 } → les
+ *         débits catégorisés du même relevé (long, appelé ensuite).
  *   { action: "importer", compte, releves: [{ mois, montant }] }
  *       → reprise d'historique (le classeur Excel 2018→2026). N'écrase JAMAIS
  *         un relevé déjà saisi : l'import complète, la saisie manuelle prime.
@@ -116,7 +120,15 @@ export async function POST(req: NextRequest) {
     // la main (avec le risque de faute de frappe), on dépose le relevé — le
     // solde de fin de mois est extrait et PROPOSÉ, l'admin valide. Le PDF
     // n'est jamais conservé, comme pour les fiches de paie.
-    if (body.action === "extraire") {
+    //
+    // DEUX appels, pas un : lire le solde prend quelques secondes, lister les
+    // débits d'un mois chargé (jusqu'à 200 opérations à catégoriser) peut
+    // dépasser la minute que Vercel accorde à une fonction. En un seul appel,
+    // le relevé de juillet 2026 est parti en 504 et l'écran n'a rien reçu, pas
+    // même le solde (04/09/2026). Désormais « extraire » rend le solde et les
+    // encaissements clients tout de suite ; « extraire-operations » vient
+    // ensuite, et s'il échoue, le solde est déjà là.
+    if (body.action === "extraire" || body.action === "extraire-operations") {
       const pdfBase64 = String(body.pdfBase64 || "");
       if (!pdfBase64 || pdfBase64.length > 6_000_000) {
         return NextResponse.json({ error: "PDF manquant ou trop lourd (4 Mo max)" }, { status: 400 });
@@ -126,26 +138,31 @@ export async function POST(req: NextRequest) {
 
       const nomsPostes = POSTES_DEPENSES.map((p) => p.nom);
       const anthropic = new Anthropic({ apiKey });
+      const seulementOperations = body.action === "extraire-operations";
+
+      const consigneEntete =
+        "Ce document est un RELEVÉ DE COMPTE bancaire français d'un centre équestre. Réponds par un objet JSON seul, sans autre texte :\n" +
+        '{ "typeDoc": "releve", "banque": "nom de la banque", "compte": "libellé ou intitulé du compte (et fin de numéro le cas échéant)", "mois": "AAAA-MM du solde de clôture (le mois de la date d\'arrêté du NOUVEAU solde)", "soldeFin": nombre (le NOUVEAU solde / solde en fin de période, NÉGATIF si le compte est débiteur), "soldeDebut": nombre ou null (ancien solde), "dateSoldeFin": "AAAA-MM-JJ" ou null,\n' +
+        '  "creditsClients": nombre ou null (la SOMME des CRÉDITS qui sont des encaissements clients : remises de cartes bancaires, remises de chèques, versements d\'espèces, virements Stripe/CAWL/SumUp ou virements de clients — en EXCLUANT les virements internes entre comptes du centre, les remboursements MSA/impôts/assurances et les déblocages d\'emprunt) }\n' +
+        "Montants en euros, point décimal, sans séparateur de milliers. Si ce n'est pas un relevé de compte, réponds {\"erreur\": \"document non reconnu\"}.";
+
+      const consigneOperations =
+        "Ce document est un RELEVÉ DE COMPTE bancaire français d'un centre équestre. Réponds par un objet JSON seul, sans autre texte :\n" +
+        '{ "operations": [ { "date": "AAAA-MM-JJ", "libelle": "libellé de l\'opération, nom du fournisseur mis en avant", "montant": nombre positif, "poste": "…" } ] }\n' +
+        "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. \"libelle\" : le nom du fournisseur/bénéficiaire en 2 à 5 mots, sans les codes ni numéros. Réponds en JSON COMPACT (une opération par ligne, pas d'indentation). Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
+        nomsPostes.map((n) => `- "${n}"`).join("\n") + "\n" +
+        `- "${POSTE_HORS_DEPENSES}" pour tout débit qui n'est PAS une dépense de fonctionnement à suivre : échéance ou remboursement d'emprunt, salaire ou virement à un salarié, cotisations MSA/URSSAF/DGFiP/TESA, TVA et impôts, virement interne entre comptes du centre, retrait d'espèces, remboursement à un client, ÉPARGNE et placements (assurance-vie, retraite, prévoyance type Swisslife), dépense PERSONNELLE de l'exploitant (courses alimentaires type Hellofresh, abonnements privés).\n` +
+        "Cas fréquents : « Commission vente à distance », « Com Carte », frais et factures Crédit Agricole, commissions Stripe → \"Frais bancaires & commissions (CB, Stripe)\".\n" +
+        "Montants en euros, point décimal, sans séparateur de milliers. Si ce n'est pas un relevé de compte, réponds {\"erreur\": \"document non reconnu\"}.";
+
       const rep = await anthropic.messages.create({
         model: "claude-haiku-4-5",
-        max_tokens: 8000,
+        max_tokens: seulementOperations ? 8000 : 600,
         messages: [{
           role: "user",
           content: [
             { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdfBase64 } },
-            {
-              type: "text",
-              text:
-                "Ce document est un RELEVÉ DE COMPTE bancaire français d'un centre équestre. Réponds par un objet JSON seul, sans autre texte :\n" +
-                '{ "typeDoc": "releve", "banque": "nom de la banque", "compte": "libellé ou intitulé du compte (et fin de numéro le cas échéant)", "mois": "AAAA-MM du solde de clôture (le mois de la date d\'arrêté du NOUVEAU solde)", "soldeFin": nombre (le NOUVEAU solde / solde en fin de période, NÉGATIF si le compte est débiteur), "soldeDebut": nombre ou null (ancien solde), "dateSoldeFin": "AAAA-MM-JJ" ou null,\n' +
-                '  "creditsClients": nombre ou null (la SOMME des CRÉDITS qui sont des encaissements clients : remises de cartes bancaires, remises de chèques, versements d\'espèces, virements Stripe/CAWL/SumUp ou virements de clients — en EXCLUANT les virements internes entre comptes du centre, les remboursements MSA/impôts/assurances et les déblocages d\'emprunt),\n' +
-                '  "operations": [ { "date": "AAAA-MM-JJ", "libelle": "libellé de l\'opération, nom du fournisseur mis en avant", "montant": nombre positif, "poste": "…" } ] }\n' +
-                "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. \"libelle\" : le nom du fournisseur/bénéficiaire en 2 à 5 mots, sans les codes ni numéros. Réponds en JSON COMPACT (une opération par ligne, pas d'indentation). Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
-                nomsPostes.map((n) => `- "${n}"`).join("\n") + "\n" +
-                `- "${POSTE_HORS_DEPENSES}" pour tout débit qui n'est PAS une dépense de fonctionnement à suivre : échéance ou remboursement d'emprunt, salaire ou virement à un salarié, cotisations MSA/URSSAF/DGFiP/TESA, TVA et impôts, virement interne entre comptes du centre, retrait d'espèces, remboursement à un client, ÉPARGNE et placements (assurance-vie, retraite, prévoyance type Swisslife), dépense PERSONNELLE de l'exploitant (courses alimentaires type Hellofresh, abonnements privés).\n` +
-                "Cas fréquents : « Commission vente à distance », « Com Carte », frais et factures Crédit Agricole, commissions Stripe → \"Frais bancaires & commissions (CB, Stripe)\".\n" +
-                "Montants en euros, point décimal, sans séparateur de milliers. Si ce n'est pas un relevé de compte, réponds {\"erreur\": \"document non reconnu\"}.",
-            },
+            { type: "text", text: seulementOperations ? consigneOperations : consigneEntete },
           ],
         }],
       });
@@ -153,9 +170,9 @@ export async function POST(req: NextRequest) {
       const texte = rep.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
       // Un mois chargé peut faire déborder la réponse du plafond de tokens :
       // le JSON arrive alors TRONQUÉ en plein milieu du tableau operations.
-      // Le solde, lui, est en tête — on répare en reculant jusqu'à la dernière
-      // opération complète et en refermant les crochets, plutôt que de tout
-      // jeter. `lectureIncomplete` prévient l'admin que la fin manque.
+      // On répare en reculant jusqu'à la dernière opération complète et en
+      // refermant les crochets, plutôt que de tout jeter. `lectureIncomplete`
+      // prévient l'admin que la fin manque.
       const reparerJsonTronque = (brut: string): any => {
         let fin = brut.lastIndexOf("}");
         for (let n = 0; fin > 0 && n < 300; n++, fin = brut.lastIndexOf("}", fin - 1)) {
@@ -182,22 +199,26 @@ export async function POST(req: NextRequest) {
       if (data.erreur) return NextResponse.json({ error: String(data.erreur) }, { status: 422 });
 
       const nb = (v: unknown) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : null);
-      const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-      // Chaque débit lu devient une dépense PROPOSÉE : poste ramené à la liste
-      // connue (sinon « hors dépenses », l'admin re-catégorise), mois tiré de
-      // la date de l'opération (pas de celle du relevé — un relevé à cheval
-      // sur deux mois range chaque débit dans le sien).
-      const operations = (Array.isArray(data.operations) ? data.operations : [])
-        .slice(0, 200)
-        .map((o: any) => {
-          const montant = nb(o?.montant);
-          const date = DATE_RE.test(String(o?.date)) ? String(o.date) : "";
-          const poste = nomsPostes.includes(String(o?.poste)) ? String(o.poste) : POSTE_HORS_DEPENSES;
-          return montant !== null && montant > 0
-            ? { date, mois: date.slice(0, 7), libelle: String(o?.libelle || "").trim().slice(0, 80), montant, poste }
-            : null;
-        })
-        .filter(Boolean);
+
+      if (seulementOperations) {
+        const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+        // Chaque débit lu devient une dépense PROPOSÉE : poste ramené à la liste
+        // connue (sinon « hors dépenses », l'admin re-catégorise), mois tiré de
+        // la date de l'opération (pas de celle du relevé — un relevé à cheval
+        // sur deux mois range chaque débit dans le sien).
+        const operations = (Array.isArray(data.operations) ? data.operations : [])
+          .slice(0, 200)
+          .map((o: any) => {
+            const montant = nb(o?.montant);
+            const date = DATE_RE.test(String(o?.date)) ? String(o.date) : "";
+            const poste = nomsPostes.includes(String(o?.poste)) ? String(o.poste) : POSTE_HORS_DEPENSES;
+            return montant !== null && montant > 0
+              ? { date, mois: date.slice(0, 7), libelle: String(o?.libelle || "").trim().slice(0, 80), montant, poste }
+              : null;
+          })
+          .filter(Boolean);
+        return NextResponse.json({ operations, lectureIncomplete });
+      }
 
       // Proposition seulement — c'est l'admin qui valide, aucune écriture ici.
       return NextResponse.json({
@@ -209,8 +230,8 @@ export async function POST(req: NextRequest) {
           soldeDebut: nb(data.soldeDebut),
           dateSoldeFin: String(data.dateSoldeFin || ""),
           creditsClients: nb(data.creditsClients),
-          operations,
-          lectureIncomplete,
+          operations: [],
+          lectureIncomplete: false,
           fichier: String(body.filename || ""),
         },
       });
