@@ -19,6 +19,7 @@ import {
   listerImpayes,
   preparerMultiEncaissements,
   soldeRestant,
+  duMaintenant,
   type ImpayeTypeFilter,
 } from "./impayes-utils";
 
@@ -222,7 +223,7 @@ export function TabImpayes({
                 <span className="font-body text-[11px] text-slate-500">
                   · {g.payments.length} commande{g.payments.length > 1 ? "s" : ""}
                   {g.payments.length > 1 && (
-                    <> · {g.payments.reduce((s, p) => s + soldeRestant(p), 0).toFixed(2)}€</>
+                    <> · {g.payments.reduce((s, p) => s + duMaintenant(p), 0).toFixed(2)}€</>
                   )}
                 </span>
               </div>
@@ -230,7 +231,7 @@ export function TabImpayes({
             <div className="flex flex-col gap-2">
               {g.payments.map(p => {
                 const date = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                const due = soldeRestant(p);
+                const due = duMaintenant(p);
                 const daysLate = Math.floor((Date.now() - date.getTime()) / 86400000);
                 const isOpen = expanded.has(p.id);
                 const isEcheance = Number(p.echeancesTotal || 0) > 1;
@@ -250,6 +251,11 @@ export function TabImpayes({
                             <Calendar size={14} className="text-orange-500 flex-shrink-0" aria-label="Échéance d'un échéancier" />
                           ) : (
                             <FileText size={14} className="text-red-500 flex-shrink-0" aria-label="Facture impayée" />
+                          )}
+                          {typeof p.sepaRestant === "number" && p.sepaRestant > 0.005 && (
+                            <span className="font-body text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 whitespace-nowrap" title="Cette part est planifiée en prélèvement SEPA ; seul le reste est dû ici">
+                              {p.sepaRestant.toFixed(2)} € en SEPA
+                            </span>
                           )}
                           <a
                             href={p.familyId

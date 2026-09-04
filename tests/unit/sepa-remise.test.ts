@@ -10,7 +10,8 @@
  * remise, puis finissait « payé » avec 325 € réglés.
  */
 import assert from "node:assert/strict";
-import { etatCommandeApresRemise, montantsEcheances, repartirEntreDeuxMandats } from "../../src/lib/sepa-remise";
+import { etatCommandeApresRemise, montantsEcheances, repartirEntreDeuxMandats, resteHorsSepa } from "../../src/lib/sepa-remise";
+import { listerImpayes } from "../../src/app/admin/paiements/impayes-utils";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -68,6 +69,30 @@ test("second montant absent ou égal au total : refus expliqué", () => {
   assert.equal(repartirEntreDeuxMandats({ montantTotal: 650, montantMandat2: 0 }).ok, false);
   assert.equal(repartirEntreDeuxMandats({ montantTotal: 650, montantMandat2: 650 }).ok, false);
   assert.equal(repartirEntreDeuxMandats({ montantTotal: 650, montantMandat2: 700 }).ok, false);
+});
+
+console.log("\n── Reste dû hors SEPA (sens inverse : la mère en SEPA d'abord, le père plus tard) ──");
+
+test("moitié planifiée en SEPA : l'autre moitié reste due, et visible dans les impayés", () => {
+  const p = { id: "p1", totalTTC: 650, paidAmount: 0, paymentMode: "prelevement_sepa", status: "sepa_scheduled", sepaRestant: 325 };
+  assert.equal(resteHorsSepa(p), 325);
+  assert.equal(listerImpayes([p], "2026-09-04").length, 1);
+});
+
+test("après trois prélèvements et le chèque du père : plus rien de dû hors SEPA", () => {
+  const p = { id: "p2", totalTTC: 650, paidAmount: 325 + 97.5, paymentMode: "prelevement_sepa", status: "sepa_scheduled", sepaRestant: 227.5 };
+  assert.equal(resteHorsSepa(p), 0);
+  assert.equal(listerImpayes([p], "2026-09-04").length, 0);
+});
+
+test("commande SEPA d'avant le champ : considérée entièrement prélevée, hors impayés", () => {
+  const p = { id: "p3", totalTTC: 650, paidAmount: 0, paymentMode: "prelevement_sepa", status: "sepa_scheduled" };
+  assert.equal(resteHorsSepa(p), 0);
+  assert.equal(listerImpayes([p], "2026-09-04").length, 0);
+});
+
+test("commande ordinaire : le reste dû est simplement total moins réglé", () => {
+  assert.equal(resteHorsSepa({ totalTTC: 100, paidAmount: 40, status: "partial" }), 60);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

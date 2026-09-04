@@ -968,6 +968,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
             paymentMode: "prelevement_sepa",
             paymentRef: `${nbEcheances}× SEPA · ${mandatData.mandatId}`,
             status: "sepa_scheduled",
+            sepaRestant: totalAnnuel,
             paidAmount: 0,
             echeance: 1,
             echeancesTotal: nbEcheances,

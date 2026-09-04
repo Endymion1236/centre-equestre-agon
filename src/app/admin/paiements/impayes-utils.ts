@@ -1,3 +1,4 @@
+import { resteHorsSepa } from "@/lib/sepa-remise";
 export type ImpayeTypeFilter = "all" | "invoice" | "echeance";
 
 export interface ImpayeFilters {
@@ -29,11 +30,24 @@ export function soldeRestant(payment: any): number {
   return Number(payment?.totalTTC || 0) - Number(payment?.paidAmount || 0);
 }
 
+/**
+ * Ce qui est dû MAINTENANT, hors prélèvements déjà planifiés : une commande
+ * réglée moitié en SEPA garde sa seconde moitié visible dans les impayés
+ * (lib/sepa-remise). Le reste brut (`soldeRestant`) sert aux montants « à
+ * venir », où la part SEPA compte bel et bien.
+ */
+export function duMaintenant(payment: any): number {
+  return resteHorsSepa(payment);
+}
+
 export function listerImpayes(payments: any[], today: string): any[] {
   return payments.filter((payment) => {
     if (payment?.status === "cancelled" || payment?.status === "paid") return false;
-    if (soldeRestant(payment) <= 0) return false;
-    if (estPaiementSepa(payment)) return false;
+    if (duMaintenant(payment) <= 0.005) return false;
+    // Commande SEPA : elle ne reste ici que pour la part NON couverte par
+    // l'échéancier (`sepaRestant` connu) ; sans ce champ, elle est
+    // considérée entièrement prélevée, comme avant.
+    if (estPaiementSepa(payment) && typeof payment?.sepaRestant !== "number") return false;
     if (payment?.paymentMode === "cheque_differe") return false;
     if (Number(payment?.echeancesTotal || 0) > 1) {
       return Boolean(payment?.echeanceDate && payment.echeanceDate < today);
@@ -68,8 +82,8 @@ export function filtrerImpayes(unpaid: any[], filters: ImpayeFilters): any[] {
 
 export function calculerResumeImpayes(unpaid: any[], filtered = unpaid) {
   return {
-    totalDue: unpaid.reduce((total, payment) => total + soldeRestant(payment), 0),
-    totalFiltre: filtered.reduce((total, payment) => total + soldeRestant(payment), 0),
+    totalDue: unpaid.reduce((total, payment) => total + duMaintenant(payment), 0),
+    totalFiltre: filtered.reduce((total, payment) => total + duMaintenant(payment), 0),
     nbInvoice: unpaid.filter((payment) => Number(payment?.echeancesTotal || 0) <= 1).length,
     nbEcheance: unpaid.filter((payment) => Number(payment?.echeancesTotal || 0) > 1).length,
   };
@@ -184,6 +198,8 @@ export function resumerAttentes(payments: any[], familyIds: string[], today: str
   const impayes = listerImpayes(dus, today);
   const idsImpayes = new Set(impayes.map((payment) => payment.id));
   const aVenir = dus.filter((payment) => !idsImpayes.has(payment.id));
-  const somme = (liste: any[]) => Math.round(liste.reduce((s, payment) => s + soldeRestant(payment), 0) * 100) / 100;
-  return { impayes, totalImpayes: somme(impayes), aVenir, totalAVenir: somme(aVenir) };
+  const somme = (liste: any[], montant: (p: any) => number) => Math.round(liste.reduce((s, payment) => s + montant(payment), 0) * 100) / 100;
+  // Impayé : ce qui est dû maintenant, hors SEPA. À venir : le reste brut,
+  // part SEPA comprise — c'est bien de l'argent attendu.
+  return { impayes, totalImpayes: somme(impayes, duMaintenant), aVenir, totalAVenir: somme(aVenir, soldeRestant) };
 }

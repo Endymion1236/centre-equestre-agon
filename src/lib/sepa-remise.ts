@@ -61,3 +61,27 @@ export function repartirEntreDeuxMandats(e: {
   if (m2 >= total) return { ok: false, raison: "Le second mandat ne peut pas porter la totalité : décochez la répartition." };
   return { ok: true, montant1: Math.round((total - m2) * 100) / 100, montant2: m2 };
 }
+
+/**
+ * Ce qu'il reste à régler AUTREMENT que par les prélèvements déjà planifiés.
+ *
+ * Une commande planifiée en SEPA sortait entièrement des impayés, même
+ * quand l'échéancier ne couvrait qu'une partie — la moitié de la mère en dix
+ * fois, le père réglant sa part plus tard, autrement. Cette part restait
+ * invisible. `sepaRestant` (montant des échéances non encore prélevées,
+ * tenu à jour à la planification, au dépôt d'une remise et au rejet)
+ * permet de la faire réapparaître.
+ *
+ * Une commande SEPA sans `sepaRestant` (planifiée avant ce champ) est
+ * considérée entièrement couverte, comme avant.
+ */
+export function resteHorsSepa(payment: {
+  totalTTC?: number; paidAmount?: number; sepaRestant?: number | null;
+  paymentMode?: string; status?: string;
+}): number {
+  const solde = Math.round(((Number(payment?.totalTTC) || 0) - (Number(payment?.paidAmount) || 0)) * 100) / 100;
+  const sepa = payment?.paymentMode === "prelevement_sepa" || payment?.status === "sepa_scheduled";
+  if (!sepa) return Math.max(0, solde);
+  const planifie = typeof payment?.sepaRestant === "number" ? payment.sepaRestant : solde;
+  return Math.max(0, Math.round((solde - planifie) * 100) / 100);
+}

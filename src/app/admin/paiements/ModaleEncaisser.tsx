@@ -25,7 +25,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { paymentModes } from "./types";
 import { Loader2, X } from "lucide-react";
-import { montantsEcheances, repartirEntreDeuxMandats } from "@/lib/sepa-remise";
+import { montantsEcheances, repartirEntreDeuxMandats, resteHorsSepa } from "@/lib/sepa-remise";
 import { maskIban } from "@/lib/sepa-validation";
 
 export interface ModaleEncaisserProps {
@@ -68,7 +68,8 @@ export default function ModaleEncaisser({
   // montant dû, la date du jour, aucune référence, le chèque par défaut.
   // Les onglets qui l'ouvrent n'ont plus à le faire pour elle.
   useEffect(() => {
-    const du = Math.max(0, Math.round(((payment?.totalTTC || 0) - (payment?.paidAmount || 0)) * 100) / 100);
+    // Hors part déjà planifiée en SEPA : on encaisse ce qui reste à régler autrement.
+    const du = resteHorsSepa(payment || {});
     setQuickMontant(du > 0 ? du.toFixed(2) : "");
     setQuickDate(new Date().toISOString().split("T")[0]);
     setQuickRef("");
@@ -135,7 +136,7 @@ export default function ModaleEncaisser({
   const handleQuickEncaisser = async () => {
     
     const p = payment;
-    const montant = parseFloat(quickMontant) || ((p.totalTTC || 0) - (p.paidAmount || 0));
+    const montant = parseFloat(quickMontant) || resteHorsSepa(p);
     if (montant <= 0) return;
     setQuickSaving(true);
     try {
@@ -293,6 +294,9 @@ export default function ModaleEncaisser({
         await updateDoc(doc(db, "payments", p.id), {
           paymentMode: "prelevement_sepa",
           status: "sepa_scheduled",
+          // Part couverte par l'échéancier : le reste, s'il y en a un, reste
+          // dû autrement et visible dans les impayés (lib/sepa-remise).
+          sepaRestant: Math.round(plans.reduce((s, pl) => s + pl.montant, 0) * 100) / 100,
           paymentRef: `${nbEch}× SEPA · ${plans.map(pl => pl.mandat.mandatId).join(" + ")}`,
           updatedAt: serverTimestamp(),
         });

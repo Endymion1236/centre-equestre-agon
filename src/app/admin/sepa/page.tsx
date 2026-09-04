@@ -567,12 +567,14 @@ export default function SepaPage() {
         const restantes = echeances.filter(e =>
           (e.paymentId === pid || (orderId && e.orderId === orderId))
           && e.remiseId !== remiseId && e.status !== "preleve" && e.status !== "rejete",
-        ).length;
-        const etat = etatCommandeApresRemise({ totalTTC: payData.totalTTC || 0, totalEncaisse: totalEnc, echeancesRestantes: restantes });
+        );
+        const sepaRestant = Math.round(restantes.reduce((s, e) => s + (e.montant || 0), 0) * 100) / 100;
+        const etat = etatCommandeApresRemise({ totalTTC: payData.totalTTC || 0, totalEncaisse: totalEnc, echeancesRestantes: restantes.length });
         const facture = etat.status === "paid" ? await numeroFactureSiSoldee(pid, payData) : {};
         await updateDoc(doc(db, "payments", pid), {
           status: etat.status,
           paidAmount: etat.paidAmount,
+          sepaRestant,
           ...(etat.status === "paid" ? {
             paidAt: serverTimestamp(),
             paymentRef: `SEPA prélevé — remise n°${remiseDoc?.numero || remiseId.slice(-6)}`,
@@ -701,13 +703,20 @@ export default function SepaPage() {
         // Représenté : la commande reste planifiée en SEPA, elle n'a pas à
         // réapparaître dans les impayés. Sinon elle y retourne, c'est bien
         // de l'argent qui n'est pas rentré.
+        // Part encore planifiée en SEPA : les échéances en attente de cette
+        // commande, plus la représentation si on en crée une. Sans elle, le
+        // montant rejeté redevient dû autrement, donc visible en impayés.
+        const encorePlanifie = echeances
+          .filter(e => e.id !== ech.id && e.paymentId === pid && (e.status === "pending" || e.status === "remis"))
+          .reduce((s, e) => s + (e.montant || 0), 0) + (representer ? ech.montant : 0);
         const statut = totalEnc >= totalTTC - 0.01 ? "paid"
-          : representer ? "sepa_scheduled"
+          : representer || encorePlanifie > 0.005 ? "sepa_scheduled"
           : totalEnc > 0 ? "partial"
           : "pending";
         await updateDoc(doc(db, "payments", pid), {
           paidAmount: Math.max(0, totalEnc),
           status: statut,
+          sepaRestant: Math.round(encorePlanifie * 100) / 100,
           updatedAt: serverTimestamp(),
         });
       }
