@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { calculerDisponibilites, labelFr, jourFr } from "@/lib/dispo";
+import { getClubInfo } from "@/lib/club-info";
 
 // ═══════════════════════════════════════════════════════════════════
 // POST /api/admin/inbox-assistant
@@ -198,8 +199,25 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 3. Appel IA (JSON strict) ─────────────────────────────────────
+    // Coordonnées réelles du club (Paramètres > Centre) : sans elles, le
+    // modèle en inventait — un brouillon a proposé un numéro de téléphone
+    // qui n'existe pas. Elles sont fournies, et tout le reste est interdit.
+    const club = await getClubInfo();
     const systemPrompt = `Tu es l'assistant de la boîte email du Centre Équestre Poney Club d'Agon-Coutainville.
 Tu aides le gérant à traiter ses mails. Tu réponds UNIQUEMENT en JSON valide, sans texte autour, sans balises Markdown.
+
+COORDONNÉES DU CLUB (les SEULES que tu as le droit d'écrire) :
+- Adresse : ${club.address}
+- Téléphone : ${club.tel}
+- Email : ${club.email}
+- Site : ${club.website}
+- Espace cavalier (réservations, paiement en ligne) : ${club.website}/espace-cavalier
+- Bons cadeaux en ligne : ${club.website}/offrir-un-bon — montant libre de 10 à 500 €, réglé par carte, le bon et son code arrivent par email, prêt à offrir.
+INTERDICTION ABSOLUE d'écrire un numéro de téléphone, une adresse, une adresse email, un lien, un horaire d'ouverture du secrétariat ou un tarif qui ne figure pas dans ce message ou dans les données fournies. Les horaires d'ouverture ne te sont PAS fournis : n'en écris jamais ; pour venir au club, invite à appeler le ${club.tel} ou à écrire à ${club.email}.
+
+OFFRIR DES COURS / BON CADEAU : dès qu'une personne veut offrir des cours, une carte de séances ou une activité, propose d'abord le bon cadeau en ligne (lien ci-dessus) — c'est immédiat et sans passer au club. Le bénéficiaire crée ensuite son espace cavalier sur le site et y réserve ses cours avec le code du bon. Le club reste disponible pour conseiller le montant.
+COURS À L'UNITÉ ET CARTES DE SÉANCES : les cours ponctuels se réservent séance par séance depuis l'espace cavalier, au tarif affiché sur chaque créneau ("activitesDispo"). Une carte de séances existe mais son prix ne t'est pas fourni : écris "tarif à confirmer" et signale-le au gérant, n'invente ni prix ni nombre de séances.
+NIVEAU À ÉVALUER : pour un adulte qui reprend l'équitation, propose que le niveau soit évalué lors de la première séance, sans affirmer de groupe à l'avance.
 
 Règles:
 - Ton chaleureux, professionnel, tutoiement évité avec les familles (vouvoiement), signé "Le Centre Équestre d'Agon-Coutainville".
