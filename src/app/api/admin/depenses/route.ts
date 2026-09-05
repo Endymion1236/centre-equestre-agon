@@ -2,8 +2,14 @@
  * GET  /api/admin/depenses — toutes les factures saisies (une ligne = une facture).
  * POST /api/admin/depenses
  *   { action: "ajouter",  poste, mois: "AAAA-MM", montant, fournisseur?, note? }
+ *   { action: "ajouter-lot", factures: [{ mois, poste, montant, fournisseur?, note?, date? }] }
+ *       → débits d'un relevé. GARDE-FOU : une ligne déjà présente le même
+ *         mois (même libellé, même montant) n'est pas réajoutée — le même
+ *         relevé déposé deux fois ne double plus la matrice. Renvoie
+ *         { ajoutees, doublons, invalides }.
  *   { action: "modifier", id, montant?, fournisseur?, note? }
  *   { action: "supprimer", id }
+ *   { action: "supprimer-lot", ids: string[] }  → nettoyage des doublons.
  *
  * Le pendant « charges » de la trésorerie : le bilan n'arrive qu'une fois par
  * an, six mois après la clôture — ici, les postes qui dérapent (entretien,
@@ -25,6 +31,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { empreinteDepense, filtrerNouvellesLignes } from "@/app/admin/comptabilite/depenses/depenses-utils";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,6 +53,8 @@ export async function GET(req: NextRequest) {
         fournisseur: r.fournisseur || "",
         montant: Number(r.montant || 0),
         note: r.note || "",
+        source: r.source || "",
+        dateOperation: r.dateOperation || "",
       };
     }).filter((l) => MOIS_RE.test(l.mois) && l.poste);
     return NextResponse.json({ depenses });
@@ -91,22 +100,44 @@ export async function POST(req: NextRequest) {
       if (lignes.length === 0 || lignes.length > 200) {
         return NextResponse.json({ error: "Entre 1 et 200 factures" }, { status: 400 });
       }
-      let ajoutees = 0, invalides = 0;
+      let invalides = 0;
+      const valides: { mois: string; poste: string; montant: number; fournisseur: string; note: string; dateOperation: string }[] = [];
       for (const l of lignes) {
         const poste = String(l?.poste || "").trim().slice(0, 80);
         const mois = String(l?.mois || "");
         const montant = nbMontant(l?.montant);
         if (!MOIS_RE.test(mois) || !poste || montant === null) { invalides++; continue; }
-        await adminDb.collection("depenses").add({
+        valides.push({
           mois, poste, montant,
           fournisseur: String(l?.fournisseur || "").trim().slice(0, 80),
           note: String(l?.note || "").slice(0, 500),
+          dateOperation: String(l?.date || "").trim().slice(0, 12),
+        });
+      }
+
+      // Garde-fou : ce qui existe déjà sur les mois concernés ne repasse pas.
+      const moisConcernes = [...new Set(valides.map((l) => l.mois))];
+      const existantes: { mois: string; fournisseur: string; montant: number }[] = [];
+      for (let i = 0; i < moisConcernes.length; i += 10) {
+        const snap = await adminDb.collection("depenses").where("mois", "in", moisConcernes.slice(i, i + 10)).get();
+        for (const d of snap.docs) {
+          const r = d.data() as any;
+          existantes.push({ mois: r.mois || "", fournisseur: r.fournisseur || "", montant: Number(r.montant || 0) });
+        }
+      }
+      const { aAjouter, doublons } = filtrerNouvellesLignes(existantes, valides);
+
+      const batch = adminDb.batch();
+      for (const l of aAjouter) {
+        batch.set(adminDb.collection("depenses").doc(), {
+          ...l,
+          empreinte: empreinteDepense(l),
           source: "releve-bancaire",
           updatedAt: FieldValue.serverTimestamp(),
         });
-        ajoutees++;
       }
-      return NextResponse.json({ ok: true, ajoutees, invalides });
+      if (aAjouter.length > 0) await batch.commit();
+      return NextResponse.json({ ok: true, ajoutees: aAjouter.length, doublons: doublons.length, invalides });
     }
 
     if (body.action === "modifier") {
@@ -129,6 +160,19 @@ export async function POST(req: NextRequest) {
       if (!id) return NextResponse.json({ error: "Id manquant" }, { status: 400 });
       await adminDb.collection("depenses").doc(id).delete();
       return NextResponse.json({ ok: true });
+    }
+
+    // Nettoyage des doublons proposé par l'écran Dépenses (lignes en trop
+    // d'un relevé importé deux fois avant le garde-fou).
+    if (body.action === "supprimer-lot") {
+      const ids = (Array.isArray(body.ids) ? body.ids : []).map((x: unknown) => String(x || "")).filter(Boolean);
+      if (ids.length === 0 || ids.length > 200) {
+        return NextResponse.json({ error: "Entre 1 et 200 identifiants" }, { status: 400 });
+      }
+      const batch = adminDb.batch();
+      for (const id of ids) batch.delete(adminDb.collection("depenses").doc(id));
+      await batch.commit();
+      return NextResponse.json({ ok: true, supprimees: ids.length });
     }
 
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });

@@ -295,12 +295,16 @@ export default function TresoreriePage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           action: "ajouter-lot",
-          factures: gardees.map(o => ({ mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, note: `Relevé ${p.fichier}` })),
+          factures: gardees.map(o => ({ mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, date: o.date, note: `Relevé ${p.fichier}` })),
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d?.error || "Erreur");
-      setInfo(`${d.ajoutees} dépense(s) ajoutée(s) à l'écran Dépenses par poste.`);
+      const doublons = Number(d.doublons || 0);
+      setInfo(
+        `${d.ajoutees} dépense(s) ajoutée(s) à l'écran Dépenses par poste.` +
+        (doublons > 0 ? ` ${doublons} déjà présente(s) ce mois-ci (même libellé, même montant) : ignorée(s) — ce relevé avait sans doute déjà été importé.` : ""),
+      );
       setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: [] } : x));
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }

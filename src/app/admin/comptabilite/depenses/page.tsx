@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
-import { Receipt, Loader2, RefreshCw, Plus, Pencil, Trash2 } from "lucide-react";
+import { Receipt, Loader2, RefreshCw, Plus, Pencil, Trash2, CopyX } from "lucide-react";
 import { POSTES_DEPENSES as POSTES_DEFAUT } from "@/lib/postes-depenses";
 import {
   MOIS_EXERCICE,
@@ -22,7 +22,9 @@ import {
   nombreMoisEcoules,
   posteEnDepassement,
   totalDe as totalDepensesDe,
+  totalEnTrop,
   totalMois,
+  trouverDoublons,
   type Depense,
 } from "./depenses-utils";
 
@@ -42,6 +44,8 @@ export default function DepensesPage() {
   const [saving, setSaving] = useState(false);
   const [postesPerso, setPostesPerso] = useState<string[]>([]);
   const [nouveauPoste, setNouveauPoste] = useState<string | null>(null);
+  const [voirDoublons, setVoirDoublons] = useState(false);
+  const [nettoyage, setNettoyage] = useState(false);
 
   const api = useCallback(async (body?: any) => {
     const token = await user!.getIdToken();
@@ -85,6 +89,28 @@ export default function DepensesPage() {
   );
   const moisEcoules = useMemo(() => nombreMoisEcoules(exercice), [exercice]);
   const facturesSel = sel ? facturesDe(sel.poste, sel.mois) : [];
+
+  // Doublons probables (même mois, même libellé, même montant) — typiquement
+  // un relevé importé deux fois avant que le garde-fou n'existe.
+  const doublons = useMemo(() => trouverDoublons(depenses), [depenses]);
+  const nbEnTrop = doublons.reduce((n, g) => n + g.enTrop.length, 0);
+
+  const retirerEnTrop = async (ids: string[], libelle: string) => {
+    if (ids.length === 0 || nettoyage) return;
+    if (!confirm(`Retirer ${ids.length} ligne(s) en double ${libelle} ?\n\nUne ligne de chaque groupe est conservée. Un doublon légitime (deux opérations identiques le même mois) peut être ressaisi ensuite.`)) return;
+    setNettoyage(true);
+    setError("");
+    try {
+      for (let i = 0; i < ids.length; i += 200) {
+        await api({ action: "supprimer-lot", ids: ids.slice(i, i + 200) });
+      }
+      await load();
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setNettoyage(false);
+    }
+  };
 
   const enregistrerFacture = async () => {
     if (!sel || saving || form.montant.trim() === "") return;
@@ -148,6 +174,52 @@ export default function DepensesPage() {
       </div>
 
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">{error}</div>}
+
+      {!loading && doublons.length > 0 && (
+        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 font-body text-sm text-amber-900">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="flex items-center gap-2">
+              <CopyX size={16} className="text-amber-600 flex-shrink-0" />
+              <span>
+                <strong>{nbEnTrop} ligne{nbEnTrop > 1 ? "s" : ""} en double probable</strong> ({doublons.length} groupe{doublons.length > 1 ? "s" : ""},
+                {" "}{eur(totalEnTrop(doublons))} comptés en trop) — même mois, même libellé, même montant. Un relevé importé deux fois, sans doute.
+              </span>
+            </span>
+            <span className="flex items-center gap-2">
+              <button type="button" onClick={() => setVoirDoublons(v => !v)}
+                className="font-body text-xs font-semibold text-amber-800 bg-white border border-amber-300 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-amber-100">
+                {voirDoublons ? "Masquer le détail" : "Voir le détail"}
+              </button>
+              <button type="button" disabled={nettoyage}
+                onClick={() => retirerEnTrop(doublons.flatMap(g => g.enTrop.map(l => l.id)), "sur tous les groupes")}
+                className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                {nettoyage ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Retirer les {nbEnTrop} doublons
+              </button>
+            </span>
+          </div>
+          {voirDoublons && (
+            <div className="mt-3 flex flex-col gap-1 max-h-80 overflow-y-auto">
+              {doublons.map(g => (
+                <div key={g.empreinte} className="flex items-center justify-between gap-2 rounded-lg bg-white/70 border border-amber-200 px-3 py-1.5 text-xs">
+                  <span className="min-w-0 flex-1 truncate">
+                    <span className="text-slate-500">{NOMS_MOIS[g.mois.slice(5)]} {g.mois.slice(0, 4)}</span>
+                    {" · "}<span className="text-slate-800">{g.fournisseur}</span>
+                    {" · "}<strong>{eur(g.montant)}</strong>
+                    {" × "}<span className="font-semibold text-amber-700">{g.lignes.length}</span>
+                    {g.postes.length > 1 && <span className="text-slate-400"> · postes : {g.postes.join(", ")}</span>}
+                    {g.postes.length === 1 && <span className="text-slate-400"> · {g.postes[0]}</span>}
+                  </span>
+                  <button type="button" disabled={nettoyage}
+                    onClick={() => retirerEnTrop(g.enTrop.map(l => l.id), `« ${g.fournisseur} »`)}
+                    className="flex-shrink-0 font-body text-[11px] font-semibold text-amber-800 bg-white border border-amber-300 px-2 py-1 rounded cursor-pointer hover:bg-amber-100 disabled:opacity-50">
+                    Garder 1, retirer {g.enTrop.length}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex items-center gap-2 mb-3 flex-wrap">
         {exercices.map(ex => (
