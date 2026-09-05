@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
-import { TrendingUp, Loader2, RefreshCw } from "lucide-react";
+import { TrendingUp, Loader2, RefreshCw, Pencil, Check, X, Trash2 } from "lucide-react";
 import {
   NOMS_MOIS,
   REF_BILAN,
@@ -28,6 +28,9 @@ export default function ResultatPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [exercice, setExercice] = useState(exerciceDe(moisCourant()));
+  // Saisie du CA repris de l'ancien logiciel (Celeris) pour un mois.
+  const [edition, setEdition] = useState<{ mois: string; montant: string; note: string } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -43,6 +46,24 @@ export default function ResultatPage() {
   }, [user]);
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
+
+  const enregistrerCaExterne = async (mois: string, montant: string | null, note: string) => {
+    if (!user || saving) return;
+    setSaving(true); setError("");
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/resultat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: "ca-externe", mois, montant, note }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      setEdition(null);
+      await load();
+    } catch (e: any) { setError(e?.message || String(e)); }
+    finally { setSaving(false); }
+  };
 
   const courant = moisCourant();
   const exercices = useMemo(() => exercicesDisponibles(donnees, courant), [donnees, courant]);
@@ -100,7 +121,9 @@ export default function ResultatPage() {
             <Card padding="sm">
               <div className="font-body text-[11px] uppercase tracking-wider text-slate-500">CA encaissé (cumul)</div>
               <div className="font-display text-xl font-bold text-emerald-700">{eur(cumul.ca)}</div>
-              <div className="font-body text-[11px] text-slate-400">bilan 24-25 : {eur(REF_BILAN.ca)} HT/an</div>
+              <div className="font-body text-[11px] text-slate-400">
+                {cumul.caExterne > 0 ? `dont ${eur(cumul.caExterne)} repris de Celeris — ` : ""}bilan 24-25 : {eur(REF_BILAN.ca)} HT/an
+              </div>
             </Card>
             <Card padding="sm">
               <div className="font-body text-[11px] uppercase tracking-wider text-slate-500">Masse salariale</div>
@@ -137,14 +160,52 @@ export default function ResultatPage() {
                 {lignes.map(l => {
                   const { reste: resteMois, pctMasse: pct } = resultatMensuel(l);
                   const vide = !l.futur && l.ca === 0 && l.masse === 0 && l.depenses === 0;
+                  const enEdition = edition?.mois === l.mois;
+                  // Bouton crayon : saisir / corriger le CA repris de Celeris pour ce mois.
+                  const boutonCaExterne = !l.futur && !enEdition && (
+                    <button type="button" title={l.caExterne > 0 ? "Corriger le CA repris de Celeris" : "Ajouter le CA encaissé dans Celeris ce mois-là"}
+                      onClick={() => setEdition({ mois: l.mois, montant: l.caExterne > 0 ? String(l.caExterne) : "", note: l.caExterneNote || "Celeris" })}
+                      className="ml-1 text-slate-300 hover:text-emerald-700 bg-transparent border-none cursor-pointer p-0.5 align-middle">
+                      <Pencil size={11} />
+                    </button>
+                  );
+                  const formulaireCaExterne = enEdition && (
+                    <span className="inline-flex items-center gap-1 flex-wrap justify-end">
+                      <input autoFocus value={edition.montant} inputMode="decimal"
+                        onChange={e => setEdition({ ...edition, montant: e.target.value })}
+                        onKeyDown={e => { if (e.key === "Enter") enregistrerCaExterne(l.mois, edition.montant, edition.note); if (e.key === "Escape") setEdition(null); }}
+                        placeholder="CA TTC encaissé" className="font-body text-xs border border-emerald-300 rounded px-2 py-1 w-28 text-right" />
+                      <input value={edition.note} onChange={e => setEdition({ ...edition, note: e.target.value })}
+                        placeholder="Source (Celeris)" className="font-body text-xs border border-gray-200 rounded px-2 py-1 w-24" />
+                      <button type="button" disabled={saving || edition.montant.trim() === ""} onClick={() => enregistrerCaExterne(l.mois, edition.montant, edition.note)}
+                        title="Enregistrer" className="text-white bg-emerald-600 hover:bg-emerald-700 rounded p-1 border-none cursor-pointer disabled:opacity-50"><Check size={12} /></button>
+                      {l.caExterne > 0 && (
+                        <button type="button" disabled={saving} onClick={() => { if (confirm(`Retirer le CA repris de Celeris pour ${NOMS_MOIS[l.mm]} ?`)) enregistrerCaExterne(l.mois, null, edition.note); }}
+                          title="Retirer" className="text-red-500 bg-red-50 hover:bg-red-100 rounded p-1 border-none cursor-pointer disabled:opacity-50"><Trash2 size={12} /></button>
+                      )}
+                      <button type="button" onClick={() => setEdition(null)} title="Annuler"
+                        className="text-slate-500 bg-white border border-gray-200 rounded p-1 cursor-pointer"><X size={12} /></button>
+                    </span>
+                  );
                   return (
                     <tr key={l.mois} className={`border-b border-gray-100 ${l.futur ? "text-slate-300" : "hover:bg-emerald-50/30"}`}>
                       <td className="px-3 py-2 font-medium text-slate-700">{NOMS_MOIS[l.mm]} {l.mois.slice(0, 4)}{l.futur ? " (à venir)" : ""}</td>
-                      {l.futur || vide ? (
-                        <td colSpan={5} className="px-3 py-2 text-right text-slate-300">—</td>
+                      {l.futur || (vide && !enEdition) ? (
+                        <td colSpan={5} className="px-3 py-2 text-right text-slate-300">—{boutonCaExterne}</td>
                       ) : (
                         <>
-                          <td className="px-3 py-2 text-right font-semibold text-emerald-800">{eur(l.ca)}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-emerald-800">
+                            {enEdition ? formulaireCaExterne : (
+                              <>
+                                {eur(l.ca)}{boutonCaExterne}
+                                {l.caExterne > 0 && (
+                                  <div className="font-body text-[10px] font-normal text-slate-400" title={l.caExterneNote}>
+                                    caisse {eur(l.caCaisse)} + {l.caExterneNote || "Celeris"} {eur(l.caExterne)}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-right text-purple-800">{l.masse > 0 ? `− ${eur(l.masse)}` : "—"}</td>
                           <td className="px-3 py-2 text-right text-orange-800">{l.depenses > 0 ? `− ${eur(l.depenses)}` : "—"}</td>
                           <td className={`px-3 py-2 text-right font-bold ${resteMois >= 0 ? "text-emerald-700" : "text-red-600"}`}>{eur(resteMois)}</td>
@@ -168,7 +229,9 @@ export default function ResultatPage() {
 
           <p className="font-body text-[11px] text-slate-400 mt-3">
             Le <strong>CA encaissé</strong> vient directement de la caisse (avoirs, apports et versements en
-            banque exclus, remboursements déduits) — aucune saisie. Il est <strong>TTC et encaissé</strong>,
+            banque exclus, remboursements déduits) — aucune saisie, sauf le <strong>CA repris de Celeris</strong>
+            (crayon sur le mois) pour les mois encaissés dans l&apos;ancien logiciel avant la bascule : saisis-y
+            les « Encaissements TTC » nets des remboursements, il s&apos;ajoute à la caisse et reste affiché à part. Il est <strong>TTC et encaissé</strong>,
             là où le bilan parle HT et facturé : la comparaison aux repères 2024-25 est une tendance, pas une
             équivalence. La <strong>masse salariale</strong> reprend l&apos;écran du même nom (coût employeur +
             charges à part), les <strong>dépenses</strong> tes factures saisies — le « reste » n&apos;est donc
