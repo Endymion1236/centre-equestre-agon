@@ -541,8 +541,16 @@ export default function OngletRapprochement({
                           </button>
                         )}
                         <button onClick={() => {
+                          // Le motif suit la ligne dans l'onglet Ignorées et sert à
+                          // expliquer le relevé à la comptable : « remise de chèques
+                          // vacances d'août encaissés dans l'ancien logiciel », etc.
+                          const motif = window.prompt(
+                            `Écarter « ${bl.label.slice(0, 60)} » (${bl.amount.toFixed(2)}€) du rapprochement.\n\nMotif (facultatif) :`,
+                            "",
+                          );
+                          if (motif === null) return;
                           const updated = [...bankLines];
-                          updated[i] = { ...updated[i], matched: true, matchType: "Ignoré", matchDetail: "Ignoré manuellement" };
+                          updated[i] = { ...updated[i], matched: true, matchType: "Ignoré", matchDetail: motif.trim() ? `Ignoré : ${motif.trim()}` : "Ignoré manuellement" };
                           updateAndSaveBankLines(updated);
                         }}
                           className="font-body text-[10px] text-slate-400 bg-slate-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-slate-100">
