@@ -12,6 +12,8 @@ import { verrouCommande } from "./commande-verrou";
 import { NoteField } from "./NoteField";
 import { authFetch } from "@/lib/auth-fetch";
 import { useConfirm } from "@/components/ui/Confirm";
+import { estCompteProfessionnel } from "@/lib/facturx";
+import { echeanceParDefaut } from "./facturx-depot-utils";
 import {
   calculerResumeImpayes,
   filtrerImpayes,
@@ -70,6 +72,40 @@ export function TabImpayes({
       setVerdictMit(prev => ({ ...prev, [paymentId]: { ok: bloquants.length === 0, bloquants } }));
     } catch (e: any) {
       setVerdictMit(prev => ({ ...prev, [paymentId]: { ok: false, bloquants: [e?.message || "Vérification impossible"] } }));
+    }
+  };
+
+  // Échéance choisie par commande avant « Émettre la facture » (clients pros).
+  const [echeances, setEcheances] = useState<Record<string, string>>({});
+
+  /** Client professionnel : facture émise AVANT règlement, avec échéance,
+   *  puis dépôt sur la Plateforme Agréée (onglet Factur-X). */
+  const emettreFacturePro = async (p: any) => {
+    const dueDate = echeances[p.id] || echeanceParDefaut();
+    if (!(await confirmer({
+      titre: `Émettre la facture — ${p.familyName} ?`,
+      details: [
+        "Un numéro séquentiel définitif sera attribué (F-AAAA-NNNN) sans attendre le règlement.",
+        `Échéance de paiement portée sur la facture : ${new Date(dueDate).toLocaleDateString("fr-FR")}.`,
+        "Les lignes de la commande seront figées. La facture apparaîtra dans l'onglet Factur-X, à déposer sur Cecurity.",
+      ],
+      libelleConfirmer: "Émettre",
+      danger: true,
+    }))) return;
+    try {
+      const res = await authFetch("/api/admin/attribuer-numero-facture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: p.id, dueDate }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.error || `HTTP ${res.status}`);
+      if (!d?.invoiceNumber) throw new Error("numéro absent de la réponse");
+      setPayments(prev => prev.map(x => x.id === p.id ? { ...x, invoiceNumber: d.invoiceNumber, invoiceDate: new Date(), dueDate } as any : x));
+      toast(`Facture ${d.invoiceNumber} émise pour ${p.familyName} — à déposer sur Cecurity (onglet Factur-X)`, "success", 6000);
+    } catch (e: any) {
+      console.error(e);
+      toast(e?.message || "Erreur à l'émission", "error", 6000);
     }
   };
 
@@ -444,7 +480,17 @@ export function TabImpayes({
                                   className="font-body text-[10px] font-bold text-white bg-indigo-500 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-600 whitespace-nowrap leading-none">F-X</button>
                               </>
                             )}
-                            {!p.invoiceNumber && (
+                            {!p.invoiceNumber && estCompteProfessionnel(families.find(f => f.firestoreId === p.familyId)) && (
+                              <span className="inline-flex items-center gap-1">
+                                <input type="date" value={echeances[p.id] || echeanceParDefaut()} title="Échéance de règlement portée sur la facture"
+                                  onChange={e => setEcheances(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                  className="font-body text-[10px] text-slate-600 bg-white border border-gray-200 rounded px-1.5 py-0.5"/>
+                                <button type="button" onClick={() => emettreFacturePro(p)}
+                                  title="Client professionnel : facture émise avant règlement, à déposer sur Cecurity"
+                                  className="font-body text-[10px] font-semibold text-white bg-indigo-500 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-indigo-600 flex items-center gap-1"><FileText size={10}/> Émettre la facture</button>
+                              </span>
+                            )}
+                            {!p.invoiceNumber && !estCompteProfessionnel(families.find(f => f.firestoreId === p.familyId)) && (
                               <button type="button" onClick={async () => {
                                 if (!(await confirmer({
                                   titre: `Convertir en facture définitive — ${p.familyName} ?`,

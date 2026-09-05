@@ -83,6 +83,14 @@ export interface Paiement {
    *  Attribué UNIQUEMENT par attribuerNumeroFacture() — jamais à la main. */
   invoiceNumber?: string;
   invoiceDate?: unknown;
+  /** Échéance de règlement (AAAA-MM-JJ) d'une facture émise AVANT
+   *  encaissement à un client professionnel. BT-9 du Factur-X. */
+  dueDate?: string;
+  /** Dépôt du Factur-X sur la Plateforme Agréée (Cecurity). Absent = à
+   *  déposer, si le client est professionnel. Posé/retiré à la main depuis
+   *  l'onglet Factur-X tant que l'envoi n'est pas automatisé. */
+  facturxDeposeLe?: unknown;
+  facturxDeposePar?: string;
 
   // ── CAWL ──────────────────────────────────────────────────────────────
   cawlRef?: string;

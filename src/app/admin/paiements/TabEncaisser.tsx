@@ -39,7 +39,7 @@ interface TabEncaisserProps {
     mode: string, ref?: string, activityTitle?: string, customDate?: string
   ) => Promise<any>;
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
-  setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes">>;
+  setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes" | "facturx">>;
   refreshAll: () => Promise<void>;
   /** Pré-remplissage du panier (flux « Dupliquer » du journal). */
   prefill?: { familyId: string; familySearch: string; items: BasketItem[] } | null;

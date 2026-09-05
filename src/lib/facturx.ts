@@ -21,6 +21,15 @@ import type { ClubInfo } from "@/lib/club-info";
  * accepte donc les deux. Retourne undefined si rien d'exploitable (famille
  * particulière, ou numéro mal saisi).
  */
+/** Types de compte famille relevant de la facturation électronique B2B
+ *  (réforme 2026-2027) : la facture doit transiter par la Plateforme Agréée.
+ *  Les particuliers restent hors périmètre (B2C → e-reporting seulement). */
+export const COMPTES_PROFESSIONNELS = ["asso", "collectivite", "entreprise"] as const;
+
+export function estCompteProfessionnel(f: { accountType?: unknown } | null | undefined): boolean {
+  return !!f && (COMPTES_PROFESSIONNELS as readonly string[]).includes(String(f.accountType || ""));
+}
+
 export function sirenDepuisFiche(f: { siren?: unknown; siret?: unknown } | null | undefined): string | undefined {
   if (!f) return undefined;
   const siren = String(f.siren ?? "").replace(/\D/g, "");

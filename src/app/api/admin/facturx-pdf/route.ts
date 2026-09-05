@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
         // S2 si la facture est déjà intégralement réglée au dépôt, S1 sinon.
         // Choix par défaut à faire confirmer par le cabinet comptable / la PA.
         businessProcess: p.status === "paid" ? "S2" : "S1",
-        dueDate: p.stageDate || null,
+        dueDate: p.dueDate || p.stageDate || null, // échéance saisie à l'émission (client pro), sinon début du stage
       },
       club
     );

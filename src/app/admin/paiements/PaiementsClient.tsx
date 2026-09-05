@@ -13,7 +13,7 @@ import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
 import ModaleModifierCommande from "./ModaleModifierCommande";
 import ModaleEncaisser from "./ModaleEncaisser";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar } from "lucide-react";
+import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar, FileText } from "lucide-react";
 import type { Family, Activity } from "@/types";
 import { normalizePayment, loadPayments } from "./utils";
 import { BasketItem, Payment, paymentModes } from "./types";
@@ -25,6 +25,8 @@ import { TabImpayes } from "./TabImpayes";
 import { TabOfferts } from "./TabOfferts";
 import { TabDeclarations } from "./TabDeclarations";
 import { TabChequesDiffres } from "./TabChequesDiffres";
+import { TabFacturX } from "./TabFacturX";
+import { resumerDepots } from "./facturx-depot-utils";
 import { authFetch } from "@/lib/auth-fetch";
 import { enregistrerEncaissement as enregistrerEncaissementPartage } from "@/lib/encaissement";
 
@@ -43,8 +45,8 @@ export default function PaiementsPage() {
   // Onglet d'ouverture : celui demandé par l'URL s'il est connu (seul
   // `impayes` était honoré — un lien vers l'historique retombait sur
   // « Encaisser »), sinon les impayés dès qu'un filtre est passé.
-  type PaiementsTab = "encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes";
-  const TABS: PaiementsTab[] = ["encaisser", "journal", "historique", "echeances", "impayes", "offerts", "declarations", "cheques_differes"];
+  type PaiementsTab = "encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes" | "facturx";
+  const TABS: PaiementsTab[] = ["encaisser", "journal", "historique", "echeances", "impayes", "offerts", "declarations", "cheques_differes", "facturx"];
   const [tab, setTab] = useState<PaiementsTab>(
     TABS.includes(urlTab as PaiementsTab) ? (urlTab as PaiementsTab)
       : (urlSearch || urlFamily) ? "impayes"
@@ -940,6 +942,10 @@ export default function PaiementsPage() {
     }));
   };
 
+  // Factures pros pas encore déposées sur la Plateforme Agréée (Cecurity) :
+  // le badge de l'onglet Factur-X est le rappel, tant que l'envoi est manuel.
+  const facturxADeposer = resumerDepots(payments as any[], families as any[]).aDeposer.length;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -960,7 +966,7 @@ export default function PaiementsPage() {
           pas être là. Au-delà de `sm`, tout tient sur une ligne et l'ancien
           comportement reprend. */}
       <div className="flex flex-wrap gap-1 mb-6 pb-1 -mx-1 px-1 sm:flex-nowrap sm:overflow-x-auto hide-scrollbar">
-        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques diff.", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclar.", Receipt]] as const).map(([id, label, Icon]) => (
+        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques diff.", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclar.", Receipt], ["facturx", "Factur-X", FileText]] as const).map(([id, label, Icon]) => (
           <button type="button" key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-body text-[11px] sm:text-xs font-medium cursor-pointer transition-all whitespace-nowrap sm:flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
@@ -983,6 +989,9 @@ export default function PaiementsPage() {
             )}
             {id === "declarations" && declarations.length > 0 && (
               <span className="bg-orange-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{declarations.length}</span>
+            )}
+            {id === "facturx" && facturxADeposer > 0 && (
+              <span className="bg-indigo-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center" title={`${facturxADeposer} facture(s) pro à déposer sur Cecurity`}>{facturxADeposer}</span>
             )}
           </button>
         ))}
@@ -1059,6 +1068,11 @@ export default function PaiementsPage() {
       {/* ─── Onglet Offerts ─── */}
       {tab === "offerts" && (
         <TabOfferts payments={payments} />
+      )}
+
+      {/* ─── Factur-X (dépôts Plateforme Agréée) ─── */}
+      {tab === "facturx" && (
+        <TabFacturX loading={loading} payments={payments} families={families} toast={toast} setPayments={setPayments as any} />
       )}
 
       {/* ─── Onglet Déclarations ─── */}
