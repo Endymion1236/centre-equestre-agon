@@ -21,7 +21,20 @@ const FLECHAGE_OPTIONS = [
   { id: "passage", label: "Passage", emoji: "👋" },
 ] as const;
 
-type AccountType = "particulier" | "asso" | "collectivite";
+type AccountType = "particulier" | "asso" | "collectivite" | "entreprise";
+
+/** Libellé du champ « raison sociale » selon la structure. */
+const LIBELLE_STRUCTURE: Record<Exclude<AccountType, "particulier">, { label: string; placeholder: string; compte: string }> = {
+  asso: { label: "Nom de l'association", placeholder: "Ex: Club équestre...", compte: "association" },
+  collectivite: { label: "Nom du centre / service", placeholder: "Ex: Centre de loisirs", compte: "collectivité" },
+  entreprise: { label: "Raison sociale", placeholder: "Ex: SARL Les Écuries du Bocage", compte: "entreprise" },
+};
+
+/** 14 chiffres → SIREN (9 premiers). Vide si le SIRET est incomplet. */
+const sirenDepuisSiret = (siret: string) => {
+  const digits = siret.replace(/\D/g, "");
+  return /^\d{14}$/.test(digits) ? digits.slice(0, 9) : "";
+};
 
 interface Props {
   onClose: () => void;
@@ -123,7 +136,10 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
         ...(newFamily.accountType !== "particulier" && {
           raisonSociale: newFamily.raisonSociale.trim(),
           structureParente: newFamily.structureParente.trim(),
-          siret: newFamily.siret.trim(),
+          siret: newFamily.siret.replace(/\s/g, ""),
+          // Le SIREN (9 premiers chiffres) est ce que lit la facture
+          // électronique (Factur-X) et ce que modifie la fiche ensuite.
+          siren: sirenDepuisSiret(newFamily.siret) || null,
           referent: newFamily.referent.trim(),
         }),
         authProvider: "admin", authUid: "",
@@ -169,7 +185,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
           <div>
             <div className="font-body text-xs font-semibold text-blue-500 uppercase tracking-wider mb-3">Type de compte</div>
             <div className="flex gap-2">
-              {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"]] as const).map(([val, label]) => (
+              {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"],["entreprise","🏢 Entreprise"]] as const).map(([val, label]) => (
                 <button type="button" key={val} onClick={() => setNewFamily(f => ({ ...f, accountType: val }))}
                   className={`flex-1 py-2 px-3 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${newFamily.accountType === val ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
                   {label}
@@ -222,12 +238,10 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                     </div>
                   )}
                   <div>
-                    <label className={labelStyle}>
-                      {newFamily.accountType === "collectivite" ? "Nom du centre / service *" : "Nom de l'association *"}
-                    </label>
+                    <label className={labelStyle}>{LIBELLE_STRUCTURE[newFamily.accountType].label} *</label>
                     <input className={inputStyle} value={newFamily.raisonSociale}
                       onChange={e => setNewFamily({ ...newFamily, raisonSociale: e.target.value })}
-                      placeholder={newFamily.accountType === "collectivite" ? "Ex: Centre de loisirs" : "Ex: Club équestre..."}/>
+                      placeholder={LIBELLE_STRUCTURE[newFamily.accountType].placeholder}/>
                     {newFamily.accountType === "collectivite" && newFamily.structureParente && newFamily.raisonSociale && (
                       <div className="font-body text-[10px] text-green-600 mt-1">
                         → <strong>{newFamily.structureParente} — {newFamily.raisonSociale}</strong>
@@ -235,9 +249,16 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
                     )}
                   </div>
                   <div>
-                    <label className={labelStyle}>SIRET (optionnel)</label>
-                    <input className={inputStyle} value={newFamily.siret}
+                    <label className={labelStyle}>
+                      SIRET {newFamily.accountType === "entreprise"
+                        ? <span className="text-slate-400 font-normal">(requis pour la facture électronique)</span>
+                        : <span className="text-slate-400 font-normal">(optionnel)</span>}
+                    </label>
+                    <input className={inputStyle} value={newFamily.siret} inputMode="numeric"
                       onChange={e => setNewFamily({ ...newFamily, siret: e.target.value })} placeholder="123 456 789 00012"/>
+                    {newFamily.siret.trim() && !sirenDepuisSiret(newFamily.siret) && (
+                      <p className="font-body text-[10px] text-orange-500 mt-1">Un SIRET fait 14 chiffres : sans lui, la facture ne pourra pas être routée vers cette structure.</p>
+                    )}
                   </div>
                   <div>
                     <label className={labelStyle}>Référent</label>
@@ -303,7 +324,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
               })}
             </div>
             {newFamily.accountType !== "particulier" && (
-              <p className="font-body text-[11px] text-slate-400 mt-1.5">🏫 « Établissement » sera ajouté automatiquement (compte {newFamily.accountType === "asso" ? "association" : "collectivité"}).</p>
+              <p className="font-body text-[11px] text-slate-400 mt-1.5">🏫 « Établissement » sera ajouté automatiquement (compte {LIBELLE_STRUCTURE[newFamily.accountType].compte}).</p>
             )}
           </div>
 

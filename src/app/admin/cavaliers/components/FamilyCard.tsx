@@ -104,7 +104,9 @@ export default function FamilyCard({
       parentEmail: family.parentEmail || "",
       parentPhone: family.parentPhone || "", parentPhone2: (family as any).parentPhone2 || "", address: family.address || "",
       zipCode: family.zipCode || "", city: family.city || "",
-      siren: String((family as any).siren || ""),
+      // Les fiches créées via « Nouvelle famille » n'ont qu'un SIRET : on en
+      // déduit le SIREN pour ne pas afficher un champ vide trompeur.
+      siren: String((family as any).siren || String((family as any).siret || "").replace(/\D/g, "").slice(0, 9) || ""),
       accountType: (family as any).accountType || "particulier",
       raisonSociale: (family as any).raisonSociale || "",
       structureParente: (family as any).structureParente || "",
@@ -411,7 +413,8 @@ export default function FamilyCard({
     setCreneauxLoaded(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.date || "").localeCompare(b.date || "")));
   };
 
-  const accountColor = family.accountType === "asso" ? "bg-purple-500" : family.accountType === "collectivite" ? "bg-teal-500" : "bg-blue-500";
+  const accountColor = family.accountType === "asso" ? "bg-purple-500" : family.accountType === "collectivite" ? "bg-teal-500" : family.accountType === "entreprise" ? "bg-amber-500" : "bg-blue-500";
+  const estParticulier = !family.accountType || family.accountType === "particulier";
 
   return (
     <>
@@ -431,11 +434,12 @@ export default function FamilyCard({
                     : family.parentName || "Sans nom"
                   }
                 </div>
-                {!(family as any).lastName && family.accountType !== "asso" && family.accountType !== "collectivite" && (
+                {!(family as any).lastName && estParticulier && (
                   <span title="Nom/prénom séparés manquants" className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded cursor-default">⚠️ à compléter</span>
                 )}
                 {family.accountType === "asso" && <span className="font-body text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">ASSO</span>}
                 {family.accountType === "collectivite" && <span className="font-body text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">COLLECTIVITÉ</span>}
+                {family.accountType === "entreprise" && <span className="font-body text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">ENTREPRISE</span>}
                 {(family.tags || []).map((tag: string) => {
                   const t = FAMILY_TAGS.find(ft => ft.id === tag);
                   return t ? <span key={tag} className={`font-body text-[10px] font-semibold ${t.color} px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap`}>{t.emoji} {t.label}</span> : null;
@@ -519,7 +523,7 @@ export default function FamilyCard({
                 <div className="mb-3">
                   <label className={labelStyle}>Type de compte</label>
                   <div className="flex gap-2">
-                    {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"]] as const).map(([val, label]) => (
+                    {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"],["entreprise","🏢 Entreprise"]] as const).map(([val, label]) => (
                       <button key={val} type="button" onClick={() => setEditForm(f => ({ ...f, accountType: val }))}
                         className={`flex-1 py-2 px-3 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${editForm.accountType === val ? "border-blue-500 bg-blue-100 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
                         {label}
@@ -545,11 +549,11 @@ export default function FamilyCard({
                     )}
                     <div>
                       <label className={labelStyle}>
-                        {editForm.accountType === "collectivite" ? "Nom du centre / service" : "Nom de l'association"}
+                        {editForm.accountType === "collectivite" ? "Nom du centre / service" : editForm.accountType === "entreprise" ? "Raison sociale" : "Nom de l'association"}
                       </label>
                       <input value={editForm.raisonSociale}
                         onChange={e => setEditForm(f => ({ ...f, raisonSociale: e.target.value }))}
-                        placeholder={editForm.accountType === "collectivite" ? "Ex: Centre de loisirs" : "Ex: Club équestre..."} className={inputStyle}/>
+                        placeholder={editForm.accountType === "collectivite" ? "Ex: Centre de loisirs" : editForm.accountType === "entreprise" ? "Ex: SARL Les Écuries du Bocage" : "Ex: Club équestre..."} className={inputStyle}/>
                       {(editForm.structureParente.trim() || editForm.raisonSociale.trim()) && (
                         <div className="font-body text-[10px] text-green-600 mt-1">
                           → <strong>{editForm.accountType === "collectivite" && editForm.structureParente.trim() && editForm.raisonSociale.trim()
@@ -635,7 +639,7 @@ export default function FamilyCard({
                   </div>
                 </div>
                 <div className="mb-3">
-                  <label className={labelStyle}>SIREN (clients pros / collectivités — requis sur les factures électroniques B2B)</label>
+                  <label className={labelStyle}>SIREN (entreprises, associations, collectivités — requis sur les factures électroniques B2B)</label>
                   <input value={editForm.siren} onChange={e => setEditForm(f => ({ ...f, siren: e.target.value }))}
                     placeholder="9 chiffres — laisser vide pour un particulier" maxLength={11} className={inputStyle}/>
                 </div>

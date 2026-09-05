@@ -11,6 +11,25 @@
 
 import type { ClubInfo } from "@/lib/club-info";
 
+/**
+ * SIREN (9 chiffres) d'une fiche famille pro, pour le routage de la
+ * facture électronique (BT-47 / BT-49).
+ *
+ * Deux générations de fiches coexistent : la création stocke un `siret`
+ * (14 chiffres, saisi dans « Nouvelle famille »), la modification stocke
+ * un `siren`. Le SIREN est simplement les 9 premiers chiffres du SIRET, on
+ * accepte donc les deux. Retourne undefined si rien d'exploitable (famille
+ * particulière, ou numéro mal saisi).
+ */
+export function sirenDepuisFiche(f: { siren?: unknown; siret?: unknown } | null | undefined): string | undefined {
+  if (!f) return undefined;
+  const siren = String(f.siren ?? "").replace(/\D/g, "");
+  if (/^\d{9}$/.test(siren)) return siren;
+  const siret = String(f.siret ?? "").replace(/\D/g, "");
+  if (/^\d{14}$/.test(siret)) return siret.slice(0, 9);
+  return undefined;
+}
+
 const esc = (s: any) =>
   String(s ?? "")
     .replace(/&/g, "&amp;")
