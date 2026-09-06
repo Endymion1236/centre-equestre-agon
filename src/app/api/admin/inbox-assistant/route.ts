@@ -5,6 +5,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { calculerDisponibilites, labelFr, jourFr } from "@/lib/dispo";
 import { getClubInfo } from "@/lib/club-info";
+import { trouverPeriodeNommee, resumePeriodes, type PeriodeVacances } from "@/lib/periode-vacances";
 import { niveauxAdmissibles, niveauConseille, niveauxAtteignablesParAuMoinsUn, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
 import { libelleCartesSeances } from "@/lib/tarifs-reference";
 
@@ -66,7 +67,9 @@ async function extractPeriode(
   from: string,
   subject: string,
   body: string,
-  today: string
+  today: string,
+  /** Périodes de vacances configurées (Paramètres), pour traduire « la Toussaint » en dates. */
+  periodesConnues: string = "",
 ): Promise<{ start: string; end: string; borne: boolean; cavaliers: CavalierDeclare[] }> {
   const defStart = today;
   const defEnd = addDaysStr(today, 63);
@@ -78,6 +81,7 @@ async function extractPeriode(
     const sys = `Tu extrais d'un mail la fenêtre de dates demandée et les cavaliers mentionnés. Date du jour : ${today}. Ce week-end = ${we.samedi} au ${we.dimanche}.
 Réponds UNIQUEMENT en JSON : {"dateStart":"YYYY-MM-DD"|null,"dateEnd":"YYYY-MM-DD"|null,"cavaliers":[{"prenom":"..."|null,"age":13|null,"galop":"Galop 2"|null}]}
 Règles dates : "cette semaine" = lundi→dimanche de la semaine du jour ; "ce week-end" = ${we.samedi} et ${we.dimanche} ; "demain" = jour+1 ; "en juillet 2027" = 2027-07-01 à 2027-07-31 ; "la semaine du 20 juillet" = ce lundi-là au dimanche ; "cet été" = juin→août de l'année concernée. Si AUCUNE période n'est mentionnée, mets les deux à null.
+${periodesConnues ? `Vacances scolaires configurées (quand le mail nomme l'une d'elles — Toussaint, Noël, février/hiver, Pâques/printemps, été — utilise EXACTEMENT ses dates, la prochaine à venir) : ${periodesConnues}.` : ""}
 Règles cavaliers : uniquement ce qui est ÉCRIT (âge, niveau de galop, "débutant", "galop d'argent"…) ; n'invente ni âge ni niveau ; liste vide si aucun cavalier n'est décrit.`;
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
@@ -161,8 +165,29 @@ export async function POST(req: NextRequest) {
     }
 
     const today = todayParis();
+    // Périodes de vacances configurées (Paramètres > Réductions) : elles
+    // traduisent « les vacances de la Toussaint » en dates exactes.
+    let periodesVacances: PeriodeVacances[] = [];
+    try {
+      const vSnap = await adminDb.collection("vacationPeriods").get();
+      periodesVacances = vSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as PeriodeVacances))
+        .filter((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.startDate || "") && /^\d{4}-\d{2}-\d{2}$/.test(p.endDate || ""));
+    } catch { /* pas de périodes → extraction sans repère */ }
+
     // Passe légère : on détecte la période demandée pour ne lire que l'utile.
-    const periode = await extractPeriode(from || "", subject || "", body || "", today);
+    const periode = await extractPeriode(from || "", subject || "", body || "", today, resumePeriodes(periodesVacances, today));
+
+    // Repli DÉTERMINISTE : si le mail nomme une période de vacances, la
+    // fenêtre est celle configurée, quoi qu'ait extrait le modèle. Sans ça,
+    // « pendant la Toussaint » donnait deux mois à partir du jour, et les
+    // promenades du dimanche d'avant les vacances entraient dans la liste.
+    const periodeNommee = trouverPeriodeNommee(`${subject || ""}\n${body || ""}`, periodesVacances, today);
+    if (periodeNommee) {
+      periode.start = periodeNommee.startDate > today ? periodeNommee.startDate : today;
+      periode.end = periodeNommee.endDate;
+      periode.borne = true;
+      console.log(`[inbox-assistant] période nommée : ${periodeNommee.name} → ${periode.start} → ${periode.end}`);
+    }
 
     // ── 1. Créneaux disponibles SUR LA PÉRIODE DEMANDÉE (lecture ciblée) ───
     //    Logique partagée : lib/dispo.ts (assistant email, agent admin, et
@@ -318,7 +343,7 @@ Format JSON attendu:
     const we = prochainWeekend(today);
     const userContent = `DATE DU JOUR : ${labelFr(today)} (${today}).
 CE WEEK-END = samedi ${we.samedi} et dimanche ${we.dimanche}.
-ACTIVITÉS FOURNIES CI-DESSOUS : elles couvrent la période du ${periode.start} au ${periode.end} (extraite de la demande). Si la famille évoque une AUTRE période que celle-ci, invite-la poliment à préciser ses dates, que tu vérifieras — ne dis pas "rien de disponible".
+ACTIVITÉS FOURNIES CI-DESSOUS : elles couvrent la période du ${periode.start} au ${periode.end} (extraite de la demande${periodeNommee ? ` — ${periodeNommee.name}` : ""}). ${periode.borne ? "La famille a demandé CETTE période : ne propose rien en dehors, même si tu connais d'autres dates." : ""} Si la famille évoque une AUTRE période que celle-ci, invite-la poliment à préciser ses dates, que tu vérifieras — ne dis pas "rien de disponible".
 IMPORTANT : n'essaie JAMAIS de recalculer un jour de semaine toi-même. Chaque activité fournie contient déjà son champ "jour" (le vrai jour de la semaine) — utilise-le tel quel.
 
 MAIL REÇU (LE PLUS RÉCENT — c'est à CELUI-CI que tu réponds)
