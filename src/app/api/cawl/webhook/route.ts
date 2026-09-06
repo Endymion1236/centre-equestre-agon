@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { paiementAbouti } from "@/lib/cawl-status";
-import { encadreConditionsStage } from "@/lib/cgv-clauses";
+import { encadreConditionsStage, encadreConsignesBalade, estBalade } from "@/lib/cgv-clauses";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
 import { loadTemplate } from "@/lib/email-template-loader";
@@ -388,7 +388,8 @@ export async function POST(req: NextRequest) {
                 };
               }
 
-              const { subject, html } = await loadTemplate(templateKey, vars, hasStage ? encadreConditionsStage() : "");
+              const hasBalade = (pData.items || []).some((i: any) => estBalade(i));
+              const { subject, html } = await loadTemplate(templateKey, vars, hasStage ? encadreConditionsStage() : hasBalade ? encadreConsignesBalade() : "");
               // Rappel des conditions d'annulation, comme sur le retour de
               // paiement : le webhook est le chemin emprunté quand la famille
               // ferme son onglet avant le retour, elle recevait donc la

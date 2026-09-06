@@ -10,6 +10,7 @@ import { db } from "@/lib/firebase";
 import { BasculeReserver } from "@/components/espace-cavalier/BasculeReserver";
 import { NotePetitComite } from "./NotePetitComite";
 import { estPromenadeADefinir, niveauDuCreneau, titreAvecNiveau, libelleNiveauCreneau, LIBELLE_NIVEAU, type NiveauPromenade } from "@/lib/promenade-niveau";
+import { estBalade, CONSIGNE_ARRIVEE_BALADE, CONSIGNE_ARRIVEE_BALADE_COURTE } from "@/lib/cgv-clauses";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
 import { Calendar, Clock, Users, Loader2, ShoppingCart, ChevronLeft, ChevronRight, Check, CalendarDays, LayoutList, Tent } from "lucide-react";
@@ -1885,6 +1886,9 @@ export default function ReserverPage() {
                                 <div className="font-body text-xs text-slate-600">{c.startTime}–{c.endTime} · {c.monitor}</div>
                                 {estPromenadeADefinir(c as any) && !niveauDuCreneau(c as any) && (
                                   <div className="font-body text-[11px] text-amber-700 mt-0.5">{libelleNiveauCreneau(c as any)} — premier arrivé, premier servi.</div>
+                                )}
+                                {estBalade(c) && (
+                                  <div className="font-body text-[11px] text-slate-500 mt-0.5" title={CONSIGNE_ARRIVEE_BALADE}>⏱ {CONSIGNE_ARRIVEE_BALADE_COURTE}</div>
                                 )}
                               </div>
                             </div>

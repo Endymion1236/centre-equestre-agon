@@ -156,6 +156,39 @@ export function encadreConditionsStage(): string {
 export const CGV_ANNULATION_CENTRE =
   `En cas d'annulation par le centre (météo, force majeure) : report proposé ou remboursement intégral.`;
 
+/* ── Consignes d'arrivée pour les balades ─────────────────────────────────
+ * Même principe que les clauses : une seule formulation, reprise par le site
+ * vitrine, les confirmations (paiement en ligne, inscription au bureau), le
+ * rappel de la veille et l'écran de réservation. */
+
+export const BALADE_ARRIVEE_MINUTES = 30;
+
+/** Version courte, pour une liste ou une ligne d'écran. */
+export const CONSIGNE_ARRIVEE_BALADE_COURTE =
+  `Arrivée ${BALADE_ARRIVEE_MINUTES} minutes avant le départ`;
+
+/** Version complète, pour un email ou une page. */
+export const CONSIGNE_ARRIVEE_BALADE =
+  `Merci d'arriver au centre équestre ${BALADE_ARRIVEE_MINUTES} minutes avant l'heure de départ : ` +
+  `le temps de préparer le cheval, de régler le matériel et de donner les consignes de sécurité. ` +
+  `Un départ en retard raccourcit la balade pour tout le groupe.`;
+
+/** Une ligne de commande ou un créneau désigne-t-il une balade ? Le type est
+ *  la référence ; le libellé sert de repli pour les commandes anciennes ou
+ *  saisies au bureau, qui n'en portent pas toujours. */
+export function estBalade(x: { activityType?: string | null; activityTitle?: string | null } | null | undefined): boolean {
+  if (!x) return false;
+  if (String(x.activityType || "").toLowerCase() === "balade") return true;
+  return /balade|promenade|randonn/i.test(String(x.activityTitle || ""));
+}
+
+/** Encadré « Avant le départ » à joindre aux emails concernant une balade. */
+export function encadreConsignesBalade(): string {
+  return emailPanneau("Avant le départ",
+    emailParagraphe(`<strong>Rendez-vous ${BALADE_ARRIVEE_MINUTES} minutes avant l'heure de départ.</strong> ${CONSIGNE_ARRIVEE_BALADE}`, 13)
+    + emailParagraphe("À prévoir : pantalon long, chaussures fermées. Bombe fournie si besoin.", 13));
+}
+
 /** Même encadré que pour les stages, avec les clauses balades. */
 export function encadreConditionsBalade(): string {
   return emailPanneau("Conditions d'annulation",

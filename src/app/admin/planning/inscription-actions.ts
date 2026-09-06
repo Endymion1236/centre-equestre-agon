@@ -22,6 +22,7 @@ import {
   query, where, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { encadreConsignesBalade, estBalade } from "@/lib/cgv-clauses";
 import { generateOrderId } from "@/lib/utils";
 import { authFetch } from "@/lib/auth-fetch";
 import { applyDiscounts, type VacationPeriod, type DiscountSettings } from "@/lib/discounts";
@@ -533,6 +534,8 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
         coursTitle: c.activityTitle,
         date: new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
         horaire: `${c.startTime}–${c.endTime}`, prix: priceTTC,
+        // Balade : rendez-vous 30 minutes avant le départ.
+        supplementHtml: estBalade(c) ? encadreConsignesBalade() : "",
         // Inscription au bureau sans encaissement : le montant reste du.
         // Sans ce drapeau, l'email disait « confirmee » avec le prix, et la
         // famille comprenait qu'elle n'avait rien a payer.
