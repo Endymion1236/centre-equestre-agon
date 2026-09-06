@@ -10,13 +10,8 @@
  * le paiement : ce que la famille lit ici est ce qu'elle règle.
  */
 
-/** Un créneau tel que l'écran de réservation le manipule. */
-export interface Creneau {
-  id: string; activityId: string; activityTitle: string; activityType: string;
-  date: string; startTime: string; endTime: string; monitor: string;
-  maxPlaces: number; enrolled: any[]; enrolledCount: number;
-  priceHT: number; priceTTC?: number; tvaTaux: number;
-}
+import type { Creneau } from "./types";
+export type { Creneau };
 
 import { CGV_STAGES_COURT } from "@/lib/cgv-clauses";
 import { ACOMPTE_PAR_ENFANT, type TotauxPanier } from "@/lib/panier-reservation";
