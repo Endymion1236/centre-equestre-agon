@@ -20,12 +20,13 @@ import { authFetch } from "@/lib/auth-fetch";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { compareCreneauxByDate } from "@/lib/creneau-sort";
 import { todayLocalString } from "@/lib/date-local";
+import { choisirCarte, compterReservationsParCarte, libelleCarte, type CarteLike } from "@/lib/cartes-seances";
 import { prixInscriptionCavalier } from "@/lib/tarif-forfaitaire";
 import { useToast } from "@/components/ui/Toast";
 
 interface Creneau { id: string; activityId: string; activityTitle: string; activityType: string; date: string; startTime: string; endTime: string; monitor: string; maxPlaces: number; enrolled: any[]; enrolledCount: number; priceHT: number; priceTTC?: number; tvaTaux: number; }
 
-interface CartItem { creneauIds: string[]; activityTitle: string; dates: string; childId: string; childName: string; prixBase: number; remiseEuros: number; rang: number; prixFinal: number; isStage: boolean; niveauPromenade?: NiveauPromenade; }
+interface CartItem { creneauIds: string[]; activityTitle: string; dates: string; childId: string; childName: string; prixBase: number; remiseEuros: number; rang: number; prixFinal: number; isStage: boolean; niveauPromenade?: NiveauPromenade; /** Séance prise sur une carte de séances : rien à payer. */ cardId?: string; carteLabel?: string; }
 
 const typeLabels: Record<string, { label: string; color: string }> = {
   stage: { label: "Stage", color: "#27ae60" }, stage_journee: { label: "Stage", color: "#16a085" },
@@ -145,6 +146,19 @@ export default function ReserverPage() {
       );
     } catch { setFamilyAvoirs([]); }
   };
+  // Cartes de séances actives de la famille : une séance de cours ou de
+  // balade couverte par une carte se réserve sans paiement, la séance est
+  // décomptée au montoir. Chargées au montage comme les avoirs.
+  const [familyCartes, setFamilyCartes] = useState<CarteLike[]>([]);
+  const rechargerCartes = async (uid: string) => {
+    try {
+      const snap = await getDocs(query(collection(db, "cartes"), where("familyId", "==", uid)));
+      setFamilyCartes(
+        snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }) as CarteLike)
+          .filter((c) => c.status === "active" && (Number(c.remainingSessions) || 0) > 0)
+      );
+    } catch { setFamilyCartes([]); }
+  };
   const [stageBookingMode, setStageBookingMode] = useState<"semaine" | "jour">("semaine");
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [expandedStageDetail, setExpandedStageDetail] = useState<string | null>(null); // key du stage dont le détail est ouvert
@@ -236,7 +250,7 @@ export default function ReserverPage() {
 
   // Avoirs disponibles, chargés dès l'arrivée sur la page.
   useEffect(() => {
-    if (user?.uid) rechargerAvoirs(user.uid);
+    if (user?.uid) { rechargerAvoirs(user.uid); rechargerCartes(user.uid); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
@@ -625,6 +639,16 @@ export default function ReserverPage() {
         prev.filter(i => i.creneauIds.includes(creneau.id)).length
         + ((creneau as any).enrolled || []).filter((e: any) => e?.familyId === user?.uid).length;
       const prix = prixInscriptionCavalier(creneau as any, dejaFamille);
+      // ── Carte de séances ──────────────────────────────────────────────
+      // Si une carte active couvre ce créneau pour ce cavalier, la séance est
+      // prise dessus : 0 € au panier, inscription ferme sans paiement. Les
+      // séances déjà réservées (créneaux à venir + panier) sont déduites pour
+      // ne pas réserver au-delà de la carte. Le serveur revérifie tout.
+      const reservees = compterReservationsParCarte(creneaux as any[], todayLocalString());
+      for (const i of prev) if (i.cardId) reservees[i.cardId] = (reservees[i.cardId] || 0) + 1;
+      const carte = !(creneau as any).tarifForfaitaire && prix > 0
+        ? choisirCarte(familyCartes, { childId, activityType: creneau.activityType, date: creneau.date }, reservees)
+        : null;
       return [...prev, {
         creneauIds: [creneau.id],
         // Le niveau de la promenade fait partie du libellé : réservation,
@@ -640,9 +664,10 @@ export default function ReserverPage() {
         prixBase: Math.round(prix * 100) / 100,
         remiseEuros: 0,
         rang: 0,
-        prixFinal: Math.round(prix * 100) / 100,
+        prixFinal: carte ? 0 : Math.round(prix * 100) / 100,
         isStage: false,
         ...(sourceFamilyId ? { sourceFamilyId } : {}),
+        ...(carte ? { cardId: carte.id, carteLabel: libelleCarte(carte) } : {}),
       }];
     });
     setSelectedCreneau(null);
@@ -694,11 +719,25 @@ export default function ReserverPage() {
               // Promenade « niveau à définir » : le serveur verrouille ce
               // niveau à la première inscription, ou refuse s'il diffère.
               ...(item.niveauPromenade ? { niveauPromenade: item.niveauPromenade } : {}),
+              // Carte de séances : le serveur la vérifie et rend la place ferme.
+              ...(item.cardId ? { cardId: item.cardId } : {}),
             }],
           }),
         });
         if (!enrollRes.ok) {
           const err = await enrollRes.json().catch(() => ({} as any));
+          if (item.cardId && (err.code === "CARTE_INVALIDE" || err.code === "CARTE_EPUISEE")) {
+            // La carte ne couvre finalement pas cette séance : on la remet au
+            // tarif normal dans le panier, la famille décide.
+            setCart(prev => prev.map(i =>
+              i.cardId === item.cardId && i.childId === item.childId && i.creneauIds[0] === item.creneauIds[0]
+                ? { ...i, cardId: undefined, carteLabel: undefined, prixFinal: i.prixBase }
+                : i));
+            if (user?.uid) rechargerCartes(user.uid);
+            alert(`${err.error || "Carte de séances non utilisable."}\n\nLa séance a été remise au tarif normal dans votre panier.`);
+            setPaying(false);
+            return;
+          }
           throw new Error(err.error || "Inscription refusée (créneau complet ?)");
         }
 
@@ -800,13 +839,30 @@ export default function ReserverPage() {
               date: firstCreneau?.date || "",
               startTime: firstCreneau?.startTime || "",
               endTime: firstCreneau?.endTime || "",
-              priceTTC: item.prixFinal, status: "pending_payment", source: "client",
+              priceTTC: item.prixFinal,
+              // Séance sur carte : place ferme, rien à payer.
+              status: item.cardId ? "confirmed" : "pending_payment",
+              ...(item.cardId ? { paymentSource: "card", cardId: item.cardId } : {}),
+              source: "client",
               createdAt: serverTimestamp(),
             });
           } else {
             console.log(`[handlePay] Reservation cours deja existante, skip : ${item.childName} - creneau ${item.creneauIds[0]}`);
           }
         }
+      }
+
+      // Séances prises sur une carte : inscrites et confirmées, rien à payer.
+      // Elles ne figurent ni dans la commande ni dans le panier CAWL.
+      const cartAPayer = cart.filter(i => !i.cardId);
+      if (cartAPayer.length === 0) {
+        setCart([]);
+        if (user?.uid) rechargerCartes(user.uid);
+        toast("Réservation confirmée — la séance sera décomptée de votre carte le jour du cours.", "success");
+        setSuccess(true);
+        setTimeout(() => setSuccess(false), 5000);
+        setPaying(false);
+        return;
       }
 
       // 2. Créer le paiement pending
@@ -819,7 +875,7 @@ export default function ReserverPage() {
         cgvVersion: cartHasStage ? "2026-07-stages-3semaines" : null,
         familyId: user.uid, familyName: family.parentName,
         familyEmail: family.parentEmail || user.email || "",
-        items: cart.map(i => {
+        items: cartAPayer.map(i => {
           const firstCr = creneaux.find(c => c.id === i.creneauIds[0]);
           const stageCrs = i.isStage ? i.creneauIds.map(id => creneaux.find(c => c.id === id)).filter(Boolean) : [];
           return {
@@ -885,7 +941,7 @@ export default function ReserverPage() {
             totalTTC: isDeposit ? acompteFixe : cartTotal,
             depositPercent: isDeposit ? Math.round(acompteFixe / cartTotal * 100) : null,
             stageDate,
-            items: cart.map(i => ({
+            items: cartAPayer.map(i => ({
               name: `${i.activityTitle} — ${i.childName}`,
               description: i.dates || null,
               priceInCents: Math.round(i.prixFinal * 100),
@@ -1203,7 +1259,7 @@ export default function ReserverPage() {
         <button type="button" onClick={async () => {
           setShowCart(true); setCartPaySuccess(false); setCartPayMode("cb");
           // Rafraîchit au cas où un avoir aurait été créé depuis l'arrivée.
-          if (user?.uid) await rechargerAvoirs(user.uid);
+          if (user?.uid) { await rechargerAvoirs(user.uid); await rechargerCartes(user.uid); }
         }} className="relative flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-4 py-2.5 rounded-lg border-none cursor-pointer hover:bg-blue-600">
           <ShoppingCart size={16} /> Panier
           {cart.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">{cart.length}</span>}

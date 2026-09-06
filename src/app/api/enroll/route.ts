@@ -12,8 +12,8 @@
  *   - Transaction par créneau : vérifie la capacité (maxPlaces) et les doublons.
  *   - Nom de l'enfant/famille pris depuis la fiche famille (pas depuis le client).
  *
- * Body : { enrollments: [{ childId, creneauIds: string[], sourceFamilyId?, childName? }] }
- * Réponse : { ok, enrolled: string[], full: string[], notOwned: string[] }
+ * Body : { enrollments: [{ childId, creneauIds: string[], sourceFamilyId?, childName?, cardId? }] }
+ * Réponse : { ok, enrolled: string[], viaCarte: string[], full: string[], notOwned: string[] }
  */
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
@@ -22,6 +22,8 @@ import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { dateExpirationHold } from "@/lib/places-tenues";
 import { isForfaitActif } from "@/lib/forfaits";
 import { deciderInscriptionNiveau, compatibiliteCavalier, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
+import { carteCouvreCreneau, compterReservationsParCarte, libelleCarte, seancesDisponibles, type CarteLike } from "@/lib/cartes-seances";
+import { toParisDateString } from "@/lib/date-local";
 
 interface EnrollItem {
   childId: string;
@@ -30,6 +32,8 @@ interface EnrollItem {
   childName?: string;
   paymentSource?: string;      // ex. "forfait" pour une inscription annuelle
   forfaitId?: string | null;
+  /** Carte de séances annoncée par la famille : vérifiée ici, jamais crue sur parole. */
+  cardId?: string | null;
   pending?: boolean;           // place tenue mais non confirmée (paiement différé)
   holdUntil?: string;          // ISO — au-delà, la place tenue est purgée
   paymentMethod?: string;
@@ -76,6 +80,8 @@ export async function POST(req: NextRequest) {
     const familyName = family.parentName || "";
 
     const enrolled: string[] = [];
+    /** Créneaux inscrits sur une carte de séances (place ferme, rien à payer). */
+    const viaCarte: string[] = [];
     const full: string[] = [];
     const notOwned: string[] = [];
     const missing: string[] = [];
@@ -131,6 +137,42 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // ── Carte de séances annoncée : vérifiée à la source ────────────────
+      // Même principe que le forfait : la famille annonce `cardId`, le serveur
+      // vérifie que la carte existe, lui appartient, est active, et qu'il lui
+      // reste des séances NON ENCORE RÉSERVÉES (les inscrits à venir portant
+      // cette carte comptent, même si le montoir ne les a pas décomptés).
+      // Une carte valide rend l'inscription FERME sans paiement : la séance
+      // est décomptée au montoir, à la présence constatée.
+      let carteValide: CarteLike | null = null;
+      if (item.cardId) {
+        const cSnap = await adminDb.collection("cartes").doc(String(item.cardId)).get();
+        const cd = cSnap.exists ? ({ id: cSnap.id, ...(cSnap.data() as any) } as CarteLike) : null;
+        const proprietaire = !!cd && (cd.familyId === uid
+          || (!!item.sourceFamilyId && cd.familyId === item.sourceFamilyId && linkedMap.has(item.childId)));
+        if (!cd || !proprietaire || cd.status !== "active") {
+          console.warn(`/api/enroll — cardId ${item.cardId} refusé pour uid=${uid}, child=${item.childId}`);
+          return NextResponse.json(
+            { error: "Cette carte de séances n'est pas utilisable pour cette réservation.", code: "CARTE_INVALIDE" },
+            { status: 409 },
+          );
+        }
+        const aujourdhui = toParisDateString(); // heure de Paris, pas celle du serveur
+        const futurs = await adminDb.collection("creneaux").where("date", ">=", aujourdhui).select("date", "enrolled").get();
+        const reservees = compterReservationsParCarte(futurs.docs.map((d) => d.data() as any), aujourdhui);
+        const dispo = seancesDisponibles(cd, reservees);
+        if (dispo < creneauIds.length) {
+          return NextResponse.json(
+            {
+              error: `Votre ${libelleCarte(cd)} n'a plus de séance disponible : ${Number(cd.remainingSessions) || 0} restante(s), dont ${reservees[cd.id] || 0} déjà réservée(s) sur des séances à venir.`,
+              code: "CARTE_EPUISEE",
+            },
+            { status: 409 },
+          );
+        }
+        carteValide = cd;
+      }
+
       // ── Inscription ATOMIQUE de l'item : on lit TOUS les créneaux, on vérifie
       // que chacun a de la place (ou l'enfant déjà inscrit), puis on inscrit
       // PARTOUT ou NULLE PART. Évite qu'un stage soit inscrit à moitié mais
@@ -149,6 +191,10 @@ export async function POST(req: NextRequest) {
             if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit = ok
             const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
             if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
+            // La carte doit couvrir CE créneau (type cours/balade, cavalier, validité).
+            if (carteValide && !carteCouvreCreneau(carteValide, { childId: item.childId, activityType: cr.activityType, date: cr.date })) {
+              return { status: "carte_inapte" as const, cid: creneauIds[i] };
+            }
             // Promenade au niveau fixé par la première inscription : le
             // premier verrouille, les suivants doivent être du même niveau.
             // Décidé ICI, dans la transaction, pour que deux premières
@@ -175,8 +221,10 @@ export async function POST(req: NextRequest) {
               enrolledAt: new Date().toISOString(),
             };
             if (item.sourceFamilyId) entry.sourceFamilyId = item.sourceFamilyId;
-            if (item.paymentSource) entry.paymentSource = item.paymentSource;
+            // « card » ne se déclare pas : il découle d'une carte vérifiée ci-dessus.
+            if (item.paymentSource && item.paymentSource !== "card") entry.paymentSource = item.paymentSource;
             if ("forfaitId" in item) entry.forfaitId = forfaitIdValide;
+            if (carteValide) { entry.paymentSource = "card"; entry.cardId = carteValide.id; }
 
             // ── Place tenue : décidée par le SERVEUR, jamais par le client ──
             // Auparavant `pending` et `holdUntil` étaient recopiés du corps de
@@ -190,7 +238,9 @@ export async function POST(req: NextRequest) {
             // (confirmerPlacesTenues, appelé par /api/cawl/status, le webhook et
             // la validation admin d'une déclaration), et repart sinon via le cron
             // de purge. Seul le staff pose une inscription ferme.
-            const tenue = estStaff ? !!item.pending : true;
+            // Exception : une séance prise sur une carte vérifiée n'a rien à
+            // payer, la place est ferme tout de suite.
+            const tenue = carteValide ? false : estStaff ? !!item.pending : true;
             if (tenue) {
               entry.pending = true;
               // Durée calculée côté serveur à partir du mode de règlement :
@@ -209,8 +259,14 @@ export async function POST(req: NextRequest) {
           }
           return { status: "ok" as const };
         });
-        if (outcome.status === "ok") enrolled.push(...creneauIds);
+        if (outcome.status === "ok") { enrolled.push(...creneauIds); if (carteValide) viaCarte.push(...creneauIds); }
         else if (outcome.status === "full") full.push(outcome.cid);
+        else if (outcome.status === "carte_inapte") {
+          return NextResponse.json(
+            { error: "Votre carte de séances ne couvre pas ce créneau (type d'activité, cavalier ou date de validité).", code: "CARTE_INVALIDE", creneauId: outcome.cid },
+            { status: 409 },
+          );
+        }
         else if (outcome.status === "missing") missing.push(outcome.cid);
         else if (outcome.status === "niveau_requis" || outcome.status === "niveau_different" || outcome.status === "niveau_inapte") {
           // Refus lié au niveau de la promenade : message clair, rien d'inscrit.
@@ -271,7 +327,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, enrolled, full, notOwned });
+    return NextResponse.json({ ok: true, enrolled, viaCarte, full, notOwned });
   } catch (e: any) {
     console.error("/api/enroll — erreur:", e);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

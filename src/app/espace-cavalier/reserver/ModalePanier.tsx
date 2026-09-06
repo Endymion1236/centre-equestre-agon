@@ -61,6 +61,11 @@ export default function ModalePanier({
   } = totaux;
   const setShowCart = (v: boolean) => { if (!v) onClose(); };
   const { toast } = useToast();
+  // Séances prises sur une carte de séances : rien à régler pour elles. Si
+  // TOUT le panier est sur carte, on ne demande pas de mode de règlement.
+  const contientCarte = cart.some(i => i.cardId);
+  const toutSurCarte = cart.length > 0 && cart.every(i => i.cardId);
+  const modeEffectif: string = toutSurCarte ? "carte" : cartPayMode;
 
   return (
       <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setShowCart(false)}>
@@ -83,11 +88,16 @@ export default function ModalePanier({
                         <div className="font-body text-sm font-semibold text-blue-800">{item.activityTitle}</div>
                         <div className="font-body text-xs text-gray-600">{item.childName} · {item.dates}</div>
                         {item.remiseEuros > 0 && <div className="font-body text-xs text-green-600">Reduction : -{item.remiseEuros}€</div>}
+                        {item.cardId && <div className="font-body text-xs text-emerald-700">🎫 {item.carteLabel || "Carte de séances"} — séance incluse</div>}
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-right">
-                          {item.remiseEuros > 0 && <div className="font-body text-xs text-gray-600 line-through">{item.prixBase.toFixed(0)}€</div>}
-                          <div className="font-body text-sm font-bold text-blue-500">{item.prixFinal.toFixed(2)}€</div>
+                          {item.cardId
+                            ? <div className="font-body text-sm font-bold text-emerald-600" title={`Tarif normal : ${item.prixBase.toFixed(2)}€`}>Inclus</div>
+                            : <>
+                                {item.remiseEuros > 0 && <div className="font-body text-xs text-gray-600 line-through">{item.prixBase.toFixed(0)}€</div>}
+                                <div className="font-body text-sm font-bold text-blue-500">{item.prixFinal.toFixed(2)}€</div>
+                              </>}
                         </div>
                         <button type="button" onClick={() => removeFromCart(idx)} className="text-red-400 bg-transparent border-none cursor-pointer p-1 hover:text-red-600"><X size={14} /></button>
                       </div>
@@ -132,7 +142,7 @@ export default function ModalePanier({
                 )}
 
                 {/* Choix mode de paiement */}
-                <div className="mb-4">
+                {!toutSurCarte && <div className="mb-4">
                   <div className="font-body text-xs font-semibold text-slate-600 mb-2">Comment souhaitez-vous régler ?</div>
                   <div className="grid grid-cols-2 gap-2">
                     {([
@@ -147,8 +157,11 @@ export default function ModalePanier({
                       </button>
                     ))}
                   </div>
-                  {/* Bouton avoir si la famille a un solde */}
-                  {familyAvoirs.length > 0 && (() => {
+                  {/* Bouton avoir si la famille a un solde. Pas quand le panier
+                      mêle séances sur carte et séances à payer : le règlement
+                      par avoir passe par une autre route, qui ne connaît pas
+                      les cartes. */}
+                  {familyAvoirs.length > 0 && !contientCarte && (() => {
                     const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
                     return (
                       <button type="button" onClick={() => setCartPayMode("avoir")}
@@ -157,7 +170,7 @@ export default function ModalePanier({
                       </button>
                     );
                   })()}
-                </div>
+                </div>}
 
                 {/* Conditions d'annulation — acceptation AVANT paiement.
                     Une clause n'est opposable que si le client en a eu
@@ -185,8 +198,23 @@ export default function ModalePanier({
                   Continuer mes réservations
                 </button>
 
+                {/* Tout le panier sur carte de séances : confirmation directe, rien à payer */}
+                {modeEffectif === "carte" && (
+                  <>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 mb-3 font-body text-xs text-emerald-800 leading-relaxed">
+                      Ces séances sont prises sur votre <strong>carte de séances</strong> : rien à régler aujourd'hui.
+                      La séance est décomptée de la carte le jour du cours, à la présence du cavalier.
+                    </div>
+                    <button type="button" onClick={handlePay} disabled={paying}
+                      className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying ? "bg-gray-200 text-gray-600 cursor-not-allowed" : "bg-emerald-600 text-white hover:bg-emerald-500"}`}>
+                      {paying ? <Loader2 size={18} className="animate-spin" /> : <ShoppingCart size={18} />}
+                      {paying ? "Réservation en cours..." : "Confirmer mes réservations"}
+                    </button>
+                  </>
+                )}
+
                 {/* Bouton CB → CAWL */}
-                {cartPayMode === "cb" && (
+                {modeEffectif === "cb" && (
                   <>
                     <button type="button" onClick={handlePay} disabled={paying || (cartHasStage && !cgvAccepted)}
                       className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying || (cartHasStage && !cgvAccepted) ? "bg-gray-200 text-gray-600 cursor-not-allowed" : depositMode === "deposit" ? "bg-orange-500 text-white hover:bg-orange-400" : "bg-green-600 text-white hover:bg-green-500"}`}>
@@ -198,7 +226,7 @@ export default function ModalePanier({
                 )}
 
                 {/* Bouton Chèque/Espèces/Virement → déclaration */}
-                {cartPayMode === "avoir" && (() => {
+                {modeEffectif === "avoir" && (() => {
                   const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
                   const couvre = totalAvoir >= cartTotal;
                   return cartPaySuccess ? (
@@ -259,7 +287,7 @@ export default function ModalePanier({
                     </>
                   );
                 })()}
-                {cartPayMode !== "cb" && cartPayMode !== "avoir" && (
+                {modeEffectif !== "cb" && modeEffectif !== "avoir" && modeEffectif !== "carte" && (
                   cartPaySuccess ? (
                     <div className="text-center py-4">
                       <div className="text-4xl mb-2">✅</div>
