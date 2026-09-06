@@ -19,7 +19,7 @@ export const maxDuration = 120;
 
 // Emails toujours destinataires du récap GLOBAL (les gérants), même sans
 // cours assigné. Les monitrices, elles, viennent des fiches `moniteurs`.
-const ADMIN_RECAP_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com"];
+const ADMIN_RECAP_EMAILS = ["ceagon50@gmail.com"];
 
 /**
  * Destinataires du récap : construits depuis les fiches moniteurs

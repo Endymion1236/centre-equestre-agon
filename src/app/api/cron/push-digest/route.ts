@@ -21,7 +21,6 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const ADMIN_EMAILS = new Set([
-  "ceagon@orange.fr",
   "ceagon50@gmail.com",
   "emmelinelagy@gmail.com",
 ]);

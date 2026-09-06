@@ -11,6 +11,8 @@ import assert from "node:assert/strict";
 import {
   deciderInscriptionNiveau, champsNiveauApresRetrait, titreAvecNiveau,
   libelleNiveauCreneau, niveauDuCreneau, compatibiliteCavalier,
+  niveauxAdmissibles,
+  niveauConseille,
 } from "../../src/lib/promenade-niveau";
 
 let passes = 0;
@@ -105,6 +107,36 @@ test("galop inconnu : l'âge suffit, l'équipe vérifie au départ", () => {
 
 test("sans date de naissance : pas de réservation directe", () => {
   assert.equal(compatibiliteCavalier("debutant", { galopLevel: "2" }).ok, false);
+});
+
+console.log("\n── Niveaux admissibles d'un cavalier (assistant boîte mail) ──");
+
+test("13 ans, Galop 2 : débutants et débrouillés, pas confirmés", () => {
+  assert.deepEqual(niveauxAdmissibles({ birthDate: naissance(13), galopLevel: "Galop 2" }), ["debutant", "debrouille"]);
+  assert.equal(niveauConseille({ birthDate: naissance(13), galopLevel: "Galop 2" }), "debrouille");
+});
+
+test("14 ans, Galop 4 : les trois niveaux, confirmés conseillé", () => {
+  assert.deepEqual(niveauxAdmissibles({ birthDate: naissance(14), galopLevel: "4" }), ["debutant", "debrouille", "confirme"]);
+  assert.equal(niveauConseille({ birthDate: naissance(14), galopLevel: "4" }), "confirme");
+});
+
+test("12 ans, Galop 3 : confirmés fermé par l'âge (13 ans)", () => {
+  assert.deepEqual(niveauxAdmissibles({ birthDate: naissance(12), galopLevel: "3" }), ["debutant", "debrouille"]);
+});
+
+test("10 ans : aucune promenade", () => {
+  assert.deepEqual(niveauxAdmissibles({ birthDate: naissance(10), galopLevel: "3" }), []);
+  assert.equal(niveauConseille({ birthDate: naissance(10), galopLevel: "3" }), null);
+});
+
+test("galop inconnu : l'âge seul décide, le doute se lève par l'évaluation", () => {
+  assert.deepEqual(niveauxAdmissibles({ birthDate: naissance(15) }), ["debutant", "debrouille", "confirme"]);
+});
+
+test("sans date de naissance : on ne tranche pas", () => {
+  assert.equal(niveauxAdmissibles({ galopLevel: "2" }), null);
+  assert.equal(niveauConseille({ galopLevel: "2" }), null);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

@@ -31,6 +31,9 @@ const DEFAULTS: ClubInfo = {
   website: "https://centreequestreagon.com",
 };
 
+/** Adresses de contact abandonnées : remplacées par le défaut si elles traînent dans les réglages. */
+const ANCIENNES_ADRESSES = new Set(["ceagon@orange.fr"]);
+
 let cache: ClubInfo | null = null;
 let cacheTs = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
@@ -49,6 +52,10 @@ export async function getClubInfo(): Promise<ClubInfo> {
       for (const [k, v] of Object.entries(data || {})) {
         if (typeof v === "string" ? v.trim() !== "" : v !== null && v !== undefined) merged[k] = v;
       }
+      // L'ancienne adresse (orange.fr) restait dans settings/centre et
+      // ressortait sur les factures et dans les réponses de l'assistant : le
+      // club écrit et reçoit sur l'adresse gmail, partout.
+      if (ANCIENNES_ADRESSES.has(String(merged.email || "").trim().toLowerCase())) merged.email = DEFAULTS.email;
       cache = merged as ClubInfo;
       cacheTs = Date.now();
       return cache;

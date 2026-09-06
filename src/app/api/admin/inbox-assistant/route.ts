@@ -5,6 +5,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { calculerDisponibilites, labelFr, jourFr } from "@/lib/dispo";
 import { getClubInfo } from "@/lib/club-info";
+import { niveauxAdmissibles, niveauConseille, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
 import { libelleCartesSeances } from "@/lib/tarifs-reference";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -163,7 +164,7 @@ export async function POST(req: NextRequest) {
     let familleContexte: any = null;
     let familyId: string | null = null;
     const childrenMap = new Map<string, string>(); // childId → prénom (validation)
-    const childElig = new Map<string, { age: number | null; galop: string | null }>();
+    const childElig = new Map<string, { age: number | null; galop: string | null; niveauxPromenade: string[] | null }>();
     const fromEmail = (from || "").trim().toLowerCase();
     if (fromEmail) {
       try {
@@ -181,6 +182,7 @@ export async function POST(req: NextRequest) {
               childElig.set(ch.id, {
                 age: ageFrom(ch.birthDate),
                 galop: ch.galopLevel && ch.galopLevel !== "—" ? ch.galopLevel : null,
+                niveauxPromenade: niveauxAdmissibles({ birthDate: ch.birthDate, galopLevel: ch.galopLevel }),
               });
             }
           });
@@ -191,6 +193,10 @@ export async function POST(req: NextRequest) {
               prenom: ch.firstName || "",
               age: ageFrom(ch.birthDate),
               galop: ch.galopLevel && ch.galopLevel !== "—" ? ch.galopLevel : null,
+              // Calculé ici, pas par le modèle : les niveaux de promenade que
+              // la fiche autorise (âge + galop), et celui à conseiller.
+              niveauxPromenade: niveauxAdmissibles({ birthDate: ch.birthDate, galopLevel: ch.galopLevel }),
+              promenadeConseillee: niveauConseille({ birthDate: ch.birthDate, galopLevel: ch.galopLevel }),
             })),
           };
         }
@@ -245,7 +251,12 @@ Règles:
     • Promenade DÉBROUILLÉS : 12 ans minimum, bonne maîtrise du trot enlevé OU Galop 2, 85 kg maximum.
     • Promenade DÉBUTANTS : 12 ans minimum, 85 kg maximum.
     • POIDS MAXIMUM 85 kg pour TOUTES les promenades, sans exception.
-  Tu ne confirmes JAMAIS une promenade si un critère chiffrable connu n'est pas respecté (âge, poids, galop). Le poids et la maîtrise des allures ne sont pas dans nos données : demande-les et ne les suppose jamais acquis. En cas de doute ou de niveau insuffisant, propose l'ÉVALUATION la veille à 10 € ; précise que SANS évaluation validée, la promenade n'est PAS remboursée si le niveau se révèle insuffisant sur place. Ne contourne jamais un critère d'âge ou de poids par l'évaluation : elle ne lève qu'un doute sur le niveau technique, pas une inaptitude.
+  Tu ne confirmes JAMAIS une promenade si un critère chiffrable connu n'est pas respecté (âge, poids, galop). Le poids et la maîtrise des allures ne sont pas dans nos données : demande-les et ne les suppose jamais acquis.
+  CHOIX DU NIVEAU — c'est calculé pour toi, ne le refais pas : chaque promenade porte "niveauPromenade" ("debutant", "debrouille", "confirme", ou "a_definir" = le niveau sera celui du premier inscrit, la famille choisit) ; chaque enfant connu porte "niveauxPromenade" (les niveaux que sa fiche autorise) et "promenadeConseillee" (le plus exigeant autorisé). Règles :
+    • Propose UNIQUEMENT une promenade dont "niveauPromenade" est dans "niveauxPromenade" de l'enfant, ou "a_definir" (précise alors le niveau à choisir : "promenadeConseillee").
+    • Un galop CONNU et insuffisant n'est pas un doute, c'est un refus : ne propose PAS la promenade d'un niveau supérieur, même avec évaluation. Propose à la place la promenade du niveau adapté (débutants ou débrouillés) ou une promenade "a_definir" de la même période — cherche-les dans la liste avant de conclure qu'il n'y a rien.
+    • L'ÉVALUATION la veille à 10 € ne sert qu'à lever un DOUTE (galop inconnu, "niveauxPromenade" null, maîtrise des allures à confirmer). Quand tu la proposes, précise que SANS évaluation validée, la promenade n'est PAS remboursée si le niveau se révèle insuffisant sur place. Ne contourne jamais un critère d'âge ou de poids par l'évaluation : elle ne lève qu'un doute sur le niveau technique, pas une inaptitude.
+    • Les promenades exigent 12 ans (13 pour confirmés) : la fiche donne l'âge, applique-le.
 - STAGES DE 2 H — composition à préciser si on te pose la question de la durée : un stage de 2 h n'est PAS 2 h d'équitation d'affilée. Il comprend AU MOINS 2 séquences : une séance d'équitation ET une autre séquence (soins, hippologie, théorie, voltige ou attelage selon le niveau). Mentionne-le pour éviter le malentendu.
 - ÉLIGIBILITÉ : chaque activité peut porter des critères "ageMin", "ageMax", "galopRequired" et un texte libre "conditionsAcces". Respecte-les STRICTEMENT. Applique ce qui est VÉRIFIABLE d'après le contexte famille (âge, galop) : ne propose une activité que si l'enfant satisfait l'âge [ageMin, ageMax] et le galop requis (table d'équivalence). Pour les conditions du texte "conditionsAcces" qui ne sont PAS vérifiables dans nos données (ex : "maîtrise du trot enlevé", "maîtrise des 3 allures", "évaluation préalable en carrière"), ne les affirme jamais comme acquises : mentionne-les comme "à confirmer avec la famille". Si "conditionsAcces" mentionne une clause de non-remboursement ou une évaluation préalable, rappelle-la dans ta réponse. Dans le doute, demande à confirmer plutôt que de proposer à tort.
 - PRIORITÉ DES CRITÈRES D'ÂGE : seuls les champs "ageMin"/"ageMax" (et "conditionsAcces") font foi. Si le TITRE d'une activité mentionne un âge ou une tranche d'âge (ex : "Stage bronze 6/7 ans") qui contredit les champs, IGNORE l'âge du titre : c'est un libellé commercial, les champs sont la règle réelle. Exemple : titre "6/7 ans" mais ageMin=5 et ageMax=8 → un enfant de 8 ans EST éligible, propose-lui l'activité. Ne rejette JAMAIS un enfant sur la seule base d'un âge écrit dans le titre.
@@ -285,7 +296,9 @@ ACTIVITÉS (à venir). ATTENTION : certaines portent "complet": true — elles E
 ${JSON.stringify(activitesDispo)}`;
 
     const message = await client.messages.create({
-      model: "claude-sonnet-4-5",
+      // Génération courante du même palier (Sonnet 4.5 → Sonnet 5) : mieux
+      // sur le raisonnement d'éligibilité, moins cher au jeton.
+      model: "claude-sonnet-5",
       max_tokens: 2000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
@@ -413,7 +426,19 @@ ${JSON.stringify(activitesDispo)}`;
       const cr = s.creneauId ? creneauMap.get(s.creneauId) : null;
       const placeOk = !!cr && cr.spots > 0;
       const { ok: ageOk, note: ageNote } = cr ? checkAge(cr.ageMin, cr.ageMax) : { ok: true, note: null };
-      const actionable = placeOk && ageOk;
+      // Promenade d'un niveau que la fiche de l'enfant n'autorise pas : le
+      // modèle ne décide pas, le serveur refuse (galop connu insuffisant, âge).
+      let niveauOk = true;
+      let niveauNote: string | null = null;
+      const niveauCreneau: unknown = cr?.niveauPromenade;
+      if (cr && childId && estNiveauPromenade(niveauCreneau)) {
+        const admissibles = childElig.get(childId)?.niveauxPromenade ?? null;
+        if (admissibles && !admissibles.includes(niveauCreneau)) {
+          niveauOk = false;
+          niveauNote = `niveau ${LIBELLE_NIVEAU[niveauCreneau].toLowerCase()} non autorisé par la fiche (âge ou galop)`;
+        }
+      }
+      const actionable = placeOk && ageOk && niveauOk;
       return {
         groupId: null,
         creneauId: cr ? s.creneauId : null,
@@ -433,7 +458,7 @@ ${JSON.stringify(activitesDispo)}`;
         childName,
         pourquoi: s.pourquoi || "",
         actionable,
-        note: !cr ? "créneau/stage introuvable ou plus dispo" : !placeOk ? "complet" : !ageOk ? ageNote : null,
+        note: !cr ? "créneau/stage introuvable ou plus dispo" : !placeOk ? "complet" : !ageOk ? ageNote : !niveauOk ? niveauNote : null,
       };
     });
 

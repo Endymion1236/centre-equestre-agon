@@ -10,7 +10,7 @@ import { REPLY_TO } from "@/lib/email-reply-to";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
+const ADMIN_EMAILS = ["ceagon50@gmail.com", "emmelinelagy@gmail.com"];
 
 // Date du jour / fin de période au format YYYY-MM-DD (fuseau Europe/Paris)
 function parisYMD(d = new Date()): string {

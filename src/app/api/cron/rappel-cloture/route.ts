@@ -9,7 +9,7 @@ import { POSTES_DEPENSES } from "@/lib/postes-depenses";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com"];
+const ADMIN_EMAILS = ["ceagon50@gmail.com"];
 
 /**
  * CRON rappel-cloture — le 2 de chaque mois.

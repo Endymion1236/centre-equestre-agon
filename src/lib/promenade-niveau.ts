@@ -114,6 +114,28 @@ export function compatibiliteCavalier(
 }
 
 /**
+ * Niveaux de promenade qu'un cavalier PEUT réserver d'après sa fiche, du plus
+ * accessible au plus exigeant. `null` si la fiche ne permet pas de trancher
+ * (date de naissance absente). Un galop inconnu ne ferme aucun niveau : le
+ * doute se lève par l'évaluation, pas par un refus.
+ *
+ * Sert à l'assistant de la boîte mail : il proposait une promenade
+ * « confirmés » à une cavalière Galop 2 alors que la promenade débrouillés
+ * de la même semaine lui convenait. Le calcul est fait ici, une fois, plutôt
+ * que laissé au modèle.
+ */
+export function niveauxAdmissibles(cavalier: { birthDate?: any; galopLevel?: any }): NiveauPromenade[] | null {
+  if (ageFromBirth(cavalier.birthDate) === null) return null;
+  return NIVEAUX_PROMENADE.filter((n) => compatibiliteCavalier(n, cavalier).ok);
+}
+
+/** Le niveau à conseiller : le plus exigeant que la fiche autorise. */
+export function niveauConseille(cavalier: { birthDate?: any; galopLevel?: any }): NiveauPromenade | null {
+  const admissibles = niveauxAdmissibles(cavalier);
+  return admissibles && admissibles.length > 0 ? admissibles[admissibles.length - 1] : null;
+}
+
+/**
  * Ce qu'il faut écrire sur le créneau après un retrait d'inscrits : si une
  * promenade « à définir » se vide, son niveau redevient à définir.
  */

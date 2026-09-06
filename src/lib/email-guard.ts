@@ -15,7 +15,7 @@
 //
 // Par défaut (variable absente), le mode restreint est ACTIF — sécurité maximale.
 
-const ADMIN_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com", "emmelinelagy@gmail.com"];
+const ADMIN_EMAILS = ["ceagon50@gmail.com", "emmelinelagy@gmail.com"];
 // Comptes de test whitelistes : le compte interne + le client testeur
 // (Benoit Vrancken), qui valide le tunnel famille en conditions reelles.
 const TEST_EMAILS = ["laserbayagon@gmail.com", "benoit.vrancken@free.fr"];
