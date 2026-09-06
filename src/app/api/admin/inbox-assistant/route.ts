@@ -299,7 +299,12 @@ ${JSON.stringify(activitesDispo)}`;
       // Génération courante du même palier (Sonnet 4.5 → Sonnet 5) : mieux
       // sur le raisonnement d'éligibilité, moins cher au jeton.
       model: "claude-sonnet-5",
-      max_tokens: 2000,
+      // Sonnet 5 réfléchit par défaut avant de répondre, et cette réflexion
+      // compte dans max_tokens : avec 2 000, le JSON arrivait tronqué
+      // (« réponse IA non parsable »). Réflexion coupée — la réponse est un
+      // JSON strict, pas un raisonnement — et budget élargi par sécurité.
+      thinking: { type: "disabled" },
+      max_tokens: 6000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -308,14 +313,21 @@ ${JSON.stringify(activitesDispo)}`;
       .map((b: any) => (b.type === "text" ? b.text : ""))
       .join("")
       .trim();
-    const cleaned = raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    // Le modèle doit répondre en JSON seul, mais un mot avant l'accolade ou
+    // une clôture de bloc de code suffisait à tout faire échouer : on isole
+    // ce qui va de la première accolade à la dernière.
+    const sansCloture = raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    const debut = sansCloture.indexOf("{");
+    const fin = sansCloture.lastIndexOf("}");
+    const cleaned = debut >= 0 && fin > debut ? sansCloture.slice(debut, fin + 1) : sansCloture;
 
     let parsed: any;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
+      console.error("[inbox-assistant] réponse non parsable", { stop: message.stop_reason, longueur: raw.length, debut: raw.slice(0, 300) });
       return NextResponse.json(
-        { error: "Réponse IA non parsable", raw: cleaned.slice(0, 500) },
+        { error: `Réponse IA non parsable${message.stop_reason === "max_tokens" ? " (réponse tronquée)" : ""}`, raw: cleaned.slice(0, 500) },
         { status: 502 }
       );
     }
