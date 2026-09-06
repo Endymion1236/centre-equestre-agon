@@ -1,58 +1,22 @@
 "use client";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { ACOMPTE_PAR_ENFANT, montantsAcompteStage, acompteApplicable } from "@/lib/panier-reservation";
-import { collection, getDocs, getDoc, updateDoc, deleteField, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, getDoc, updateDoc, doc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Badge } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { paymentModes } from "@/app/admin/paiements/types";
-import { estQuinzaine, estSemaineAttendue, libelleRythme, expliqueRythme, frequenceEquivalente, formatFrequence } from "@/lib/rythme";
+import { estQuinzaine, libelleRythme, expliqueRythme, formatFrequence } from "@/lib/rythme";
 import { tarifPourFrequence, calculerForfaitAnnuel } from "@/lib/forfait-pricing";
 import { isForfaitActif } from "@/lib/forfaits";
-import { annulerMinuterieConfirmation } from "./minuteries-confirmation";
 import { resumerAttentes } from "@/app/admin/paiements/impayes-utils";
 
-/** Libellé lisible d'un moyen de règlement d'acompte, aligné sur la caisse. */
-function libelleModeAcompte(mode: string): string {
-  return paymentModes.find(m => m.id === mode)?.label || mode;
-}
 
-// ── Composant warning mandat SEPA ─────────────────────────────────────────────
-function SepaWarning({ familyId, onStatus }: { familyId: string; onStatus?: (s: "loading" | "ok" | "missing") => void }) {
-  const [status, setStatus] = useState<"loading" | "ok" | "missing">("loading");
-  useEffect(() => {
-    const maj = (v: "loading" | "ok" | "missing") => { setStatus(v); onStatus?.(v); };
-    if (!familyId) { maj("missing"); return; }
-    getDocs(query(collection(db, "mandats-sepa"),
-      where("familyId", "==", familyId),
-      where("status", "==", "active")
-    )).then(snap => maj(snap.empty ? "missing" : "ok"))
-      .catch(() => maj("missing"));
-  }, [familyId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (status === "loading") return (
-    <div className="mt-1.5 font-body text-[10px] text-slate-400 bg-slate-50 rounded-lg px-2 py-1 flex items-center gap-1">
-      ⏳ Vérification du mandat SEPA...
-    </div>
-  );
-  if (status === "missing") return (
-    <div className="mt-1.5 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2">
-      <p className="font-body text-[11px] font-semibold text-red-600">⚠️ Aucun mandat SEPA actif pour cette famille</p>
-      <p className="font-body text-[10px] text-red-400 mt-0.5">Créez un mandat dans <strong>Prélèvements SEPA</strong> avant de valider.</p>
-    </div>
-  );
-  return (
-    <div className="mt-1.5 font-body text-[10px] text-green-700 bg-green-50 border border-green-200 rounded-lg px-2 py-1">
-      ✅ Mandat SEPA actif — les échéances seront créées dans Prélèvements SEPA.
-    </div>
-  );
-}
 
 
 import {
   computeStageReductions,
   computeStageReductionsAsync,
-  createReservation, removeChildFromCreneau, deleteReservations,
 } from "@/lib/planning-services";
 import {
   fetchVacationPeriods, fetchDiscountSettings,
@@ -62,7 +26,6 @@ import { X, Plus, Check, Loader2, Trash2, Users, UserPlus, Search, Mail, Send, F
 import type { Activity, Family } from "@/types";
 import { Creneau, EnrolledChild, payModes, typeColors, fmtDate, statutPaiementCavalier, sameStage, ageCavalier } from "./types";
 import { MOTIFS_OFFERT } from "@/lib/offerts";
-import { authFetch } from "@/lib/auth-fetch";
 import { useAuth } from "@/lib/auth-context";
 import PanneauPedagogie from "./PanneauPedagogie";
 import FormulaireEmailCreneau from "./FormulaireEmailCreneau";
@@ -70,6 +33,16 @@ import PanneauListeAttente from "./PanneauListeAttente";
 import FormulaireNouvelleFamille from "./FormulaireNouvelleFamille";
 import { inscrireDepuisPanneau } from "./inscrire-depuis-panneau";
 import { nomDeduitDuParent } from "@/lib/nom-foyer";
+import { SepaWarning } from "./SepaWarning";
+import { FormulaireAjoutCavalier } from "./FormulaireAjoutCavalier";
+import { PanneauJoursSupplementaires } from "./PanneauJoursSupplementaires";
+import * as actions from "./enroll-panel-actions";
+import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
+import {
+  libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche,
+  holdActifDuCreneau, cavaliersDisponibles, finSaisonEffective,
+  rangEnfantFamille as calculerRangEnfantFamille, frequenceDejaInscrite as calculerFrequenceDejaInscrite,
+} from "./enroll-panel-utils";
 
 function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allForfaits, onClose, onEnroll, onUnenroll, onRefresh }: {
   creneau: Creneau & { id: string }; families: (Family & { firestoreId: string })[]; allCreneaux: (Creneau & { id: string })[]; payments: any[]; allCartes: any[]; allForfaits: any[];  onClose: () => void;
@@ -91,46 +64,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     familyId: string; familyName: string; nbStages: number; envoiPrevuA: string;
   } | null>(null);
   const [envoiConfirmation, setEnvoiConfirmation] = useState<"" | "envoi" | "envoye" | "annule">("");
+  const envoyerConfirmationMaintenant = () => actions.envoyerConfirmationMaintenant(ctxActions(), rappelsActions());
+  const annulerConfirmationEnAttente = () => actions.annulerConfirmationEnAttente(ctxActions(), rappelsActions());
 
-  const envoyerConfirmationMaintenant = async () => {
-    if (!confirmationEnAttente) return;
-    setEnvoiConfirmation("envoi");
-    annulerMinuterieConfirmation(confirmationEnAttente.familyId);
-    try {
-      const res = await authFetch("/api/admin/confirmation-stage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "envoyer", familyId: confirmationEnAttente.familyId, force: true }),
-      });
-      const json = await res.json().catch(() => null);
-      if (json?.sent) {
-        setEnvoiConfirmation("envoye");
-        panelToast(`Confirmation envoyée — 1 email pour ${confirmationEnAttente.nbStages} stage(s)`, "success");
-      } else {
-        setEnvoiConfirmation("");
-        panelToast(`Envoi impossible : ${json?.reason || "erreur"}`, "error");
-      }
-    } catch (e: any) {
-      setEnvoiConfirmation("");
-      panelToast(`Envoi impossible : ${e?.message || e}`, "error");
-    }
-  };
-
-  const annulerConfirmationEnAttente = async () => {
-    if (!confirmationEnAttente) return;
-    annulerMinuterieConfirmation(confirmationEnAttente.familyId);
-    try {
-      await authFetch("/api/admin/confirmation-stage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "annuler", familyId: confirmationEnAttente.familyId }),
-      });
-      setEnvoiConfirmation("annule");
-      panelToast("Confirmation annulée — aucun email ne partira", "success");
-    } catch (e: any) {
-      panelToast(`Annulation impossible : ${e?.message || e}`, "error");
-    }
-  };
 
   // ── Inscription établissement sur TOUTE la saison ──
   // Inscrit l'enfant dans tous les créneaux récurrents à venir (même titre,
@@ -138,101 +74,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // L'établissement est facturé à part (forfait fixe par séance). Le suivi péda
   // (présences, progression) fonctionne normalement sur chaque créneau.
   const [enrollingSaison, setEnrollingSaison] = useState(false);
-  const inscrireSaisonEtablissement = async (childId: string, childName: string, familyId: string, familyName: string) => {
-    if (!childId) { panelToast("Sélectionne d'abord un cavalier", "error"); return; }
-    setEnrollingSaison(true);
-    try {
-      const creneauDate = new Date(creneau.date); creneauDate.setHours(0, 0, 0, 0);
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const start = creneauDate > today ? creneauDate : today;
-      const startStr = start.toISOString().split("T")[0];
-      const endStr = dateFinSaisonEffective.toISOString().split("T")[0];
-      const jourRef = new Date(creneau.date + "T12:00:00").getDay();
-
-      const snap = await getDocs(query(
-        collection(db, "creneaux"),
-        where("date", ">=", startStr),
-        where("date", "<=", endStr),
-      ));
-      // Créneaux récurrents : même cours, même heure, même jour de semaine, à venir
-      const cibles = snap.docs.filter(d => {
-        const c = d.data() as any;
-        if (c.activityTitle !== creneau.activityTitle) return false;
-        if (c.startTime !== creneau.startTime) return false;
-        if (new Date(c.date + "T12:00:00").getDay() !== jourRef) return false;
-        // Pas déjà inscrit
-        return !(c.enrolled || []).some((e: any) => e.childId === childId);
-      });
-
-      let count = 0;
-      for (const d of cibles) {
-        const c = d.data() as any;
-        const inscrit = {
-          childId, childName, familyId, familyName,
-          enrolledAt: new Date().toISOString(), presence: null,
-          institutional: true, // marqueur : séance facturée à l'établissement
-        };
-        const newEnrolled = [...(c.enrolled || []), inscrit];
-        await updateDoc(doc(db, "creneaux", d.id), { enrolled: newEnrolled, enrolledCount: newEnrolled.length });
-        // La fiche du cavalier et l'espace famille listent les « prochaines
-        // séances » depuis les réservations, pas depuis les créneaux : sans
-        // cette écriture, un enfant inscrit pour la saison n'avait aucune
-        // séance à venir sur sa fiche.
-        await createReservation(inscrit as EnrolledChild, { id: d.id, ...c });
-        count++;
-      }
-      panelToast(`🏫 ${childName} inscrit(e) sur ${count} séance(s) de la saison (établissement, sans facturation)`, "success");
-      setJustEnrolled(`🏫 ${childName} — ${count} séances de la saison (établissement)`);
-      // L'inscription est faite : le panneau peut se fermer sans demander
-      // « quitter sans enregistrer ? ».
-      setInscriptionFaite(true);
-      await onRefresh?.();
-    } catch (e) {
-      console.error("Inscription saison établissement:", e);
-      panelToast("Erreur lors de l'inscription saison", "error");
-    }
-    setEnrollingSaison(false);
-  };
+  const inscrireSaisonEtablissement = (childId: string, childName: string, familyId: string, familyName: string) =>
+    actions.inscrireSaisonEtablissement(ctxActions(), rappelsActions(), childId, childName, familyId, familyName);
 
   // ── Désinscription établissement de TOUTE la saison ──
   // Le miroir exact de l'inscription : les mêmes créneaux récurrents à venir,
   // où l'enfant est inscrit avec le marqueur établissement. Rien d'autre n'est
   // touché : ni paiement, ni avoir, puisque rien n'a été facturé aux parents.
   const [unenrollingSaison, setUnenrollingSaison] = useState("");
-  const desinscrireSaisonEtablissement = async (childId: string, childName: string) => {
-    if (!confirm(`Retirer ${childName} de toutes les séances de la saison de ce cours (inscription établissement) ?`)) return;
-    setUnenrollingSaison(childId);
-    try {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      const startStr = today.toISOString().split("T")[0];
-      const endStr = dateFinSaisonEffective.toISOString().split("T")[0];
-      const jourRef = new Date(creneau.date + "T12:00:00").getDay();
-      const snap = await getDocs(query(
-        collection(db, "creneaux"),
-        where("date", ">=", startStr),
-        where("date", "<=", endStr),
-      ));
-      const cibles = snap.docs.filter(d => {
-        const c = d.data() as any;
-        if (c.activityTitle !== creneau.activityTitle) return false;
-        if (c.startTime !== creneau.startTime) return false;
-        if (new Date(c.date + "T12:00:00").getDay() !== jourRef) return false;
-        return (c.enrolled || []).some((e: any) => e.childId === childId && e.institutional);
-      });
-      let count = 0;
-      for (const d of cibles) {
-        await removeChildFromCreneau(d.id, childId);
-        await deleteReservations(d.id, childId);
-        count++;
-      }
-      panelToast(`🏫 ${childName} retiré(e) de ${count} séance(s) de la saison`, "success");
-      await onRefresh?.();
-    } catch (e) {
-      console.error("Désinscription saison établissement:", e);
-      panelToast("Erreur lors de la désinscription saison", "error");
-    }
-    setUnenrollingSaison("");
-  };
+  const desinscrireSaisonEtablissement = (childId: string, childName: string) =>
+    actions.desinscrireSaisonEtablissement(ctxActions(), rappelsActions(), childId, childName);
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
@@ -243,6 +94,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // conditions reunies.
   const [preinscription, setPreinscription] = useState(false);
   const [conversion, setConversion] = useState<string | null>(null);
+  const convertirPreinscription = (e: any) => actions.convertirPreinscription(ctxActions(), rappelsActions(), e);
 
   /**
    * Transforme une pré-inscription en inscription définitive.
@@ -254,31 +106,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
    * saurait deviner. Le cavalier et sa famille sont pré-sélectionnés, il ne
    * reste qu'à choisir le règlement et valider.
    */
-  const convertirPreinscription = async (e: any) => {
-    if (!confirm(
-      `Transformer la pré-inscription de ${e.childName} en inscription définitive ?\n\n` +
-      `Elle sera retirée de la liste et le formulaire s'ouvrira pré-rempli : ` +
-      `vous choisirez le mode de règlement (dont le prélèvement SEPA) avant de valider.`
-    )) return;
-    setConversion(e.childId);
-    try {
-      await onUnenroll(creneau.id!, e.childId);
-      setSelFam(e.familyId);
-      setSelChild(e.childId);
-      setSelectedChildren([e.childId]);
-      setPreinscription(false);
-      setShowPay(false);
-      setSearch(e.familyName || "");
-      if ((e as any).preinscriptionMode === "annuel") setInscriptionMode("annuel");
-      // Sur un stage, le cavalier se coche dans le selecteur multi-enfants.
-      if ((e as any).preinscriptionMode === "stage") setSelectedChildren([e.childId]);
-      panelToast(`${e.childName} — choisissez le règlement puis validez l'inscription`, "success");
-      await onRefresh?.();
-    } catch (err: any) {
-      panelToast(`Échec : ${err?.message || err}`, "error");
-    }
-    setConversion(null);
-  };
   const [freeReason, setFreeReason] = useState("Rattrapage");
   const [childRattrapages, setChildRattrapages] = useState<any[]>([]);
   const [useRattrapage, setUseRattrapage] = useState<string | null>(null); // rattrapageId
@@ -357,42 +184,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Marqueur libre, porte par l'INSCRIPTION a un creneau precis (pas par le
   // cavalier) : surligner Lola sur le stage de mardi ne marque pas ses
   // autres cours. Un clic pose, un clic retire.
+  const nomActuel = (e: any): string => nomActuelInscrit(families, e);
   const [highlightBusy, setHighlightBusy] = useState<string>("");
-  const toggleHighlight = async (e: any) => {
-    if (!creneau.id || highlightBusy) return;
-    setHighlightBusy(e.childId);
-    try {
-      const snap = await getDoc(doc(db, "creneaux", creneau.id));
-      if (!snap.exists()) return;
-      const list = (snap.data() as any).enrolled || [];
-      const maj = list.map((x: any) =>
-        x.childId === e.childId ? { ...x, highlight: !x.highlight } : x
-      );
-      await updateDoc(doc(db, "creneaux", creneau.id), { enrolled: maj });
-      await onRefresh?.();
-    } catch (err) {
-      console.error("Surlignage :", err);
-    }
-    setHighlightBusy("");
-  };
+  const toggleHighlight = (e: any) => actions.toggleHighlight(ctxActions(), rappelsActions(), e);
 
-  const nomActuel = (e: any): string => {
-    const fam = families.find((f: any) => f.firestoreId === e.familyId);
-    let child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
-    if (!child && e.childId) {
-      // L'inscription garde le familyId du moment : si l'enfant a depuis
-      // changé de fiche (« Lier cavaliers », fusion, fiche recréée), on le
-      // retrouve par son id à travers TOUTES les familles plutôt que de
-      // retomber sur la copie figée (souvent le prénom seul).
-      for (const f of families) {
-        const c = ((f as any).children || []).find((c: any) => c.id === e.childId);
-        if (c) { child = c; break; }
-      }
-    }
-    if (!child) return e.childName || "—";
-    const nom = `${child.firstName || ""} ${child.lastName || ""}`.trim();
-    return nom || e.childName || "—";
-  };
 
 
   // Cavaliers ajoutés depuis cette modale : `families` vient du parent et ne
@@ -414,73 +209,12 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [childDraft, setChildDraft] = useState({ firstName: "", lastName: "", birthDate: "", galopLevel: "—" });
 
   // Formulaire d'ajout d'un cavalier, partagé entre les créneaux ordinaires et
-  // les stages. Fonction et non sous-composant : un composant déclaré ici
-  // serait recréé à chaque rendu, et le champ perdrait le focus à chaque
-  // lettre tapée.
+  // les stages : composant FormulaireAjoutCavalier, de niveau module.
   const renderAjoutCavalier = (fam: any) => (
-                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3">
-                    <div className="font-body text-xs font-semibold text-blue-800 mb-2">
-                      Nouveau cavalier chez {fam.parentName}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input value={childDraft.firstName} autoFocus
-                        onChange={e => setChildDraft({ ...childDraft, firstName: e.target.value })}
-                        placeholder="Prénom *"
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
-                      <input value={childDraft.lastName}
-                        onChange={e => setChildDraft({ ...childDraft, lastName: e.target.value })}
-                        placeholder="Nom"
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
-                      <input type="date" value={childDraft.birthDate}
-                        onChange={e => setChildDraft({ ...childDraft, birthDate: e.target.value })}
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm" />
-                      <select value={childDraft.galopLevel}
-                        onChange={e => setChildDraft({ ...childDraft, galopLevel: e.target.value })}
-                        className="px-3 py-2 rounded-lg border border-gray-200 font-body text-sm">
-                        {["—","Galop 1","Galop 2","Galop 3","Galop 4","Galop 5","Galop 6","Galop 7"].map(g => <option key={g} value={g}>{g}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex gap-2 mt-2">
-                      <button type="button" disabled={addingChild || !childDraft.firstName.trim()}
-                        onClick={async () => {
-                          setAddingChild(true);
-                          try {
-                            const nouveau = {
-                              id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                              firstName: childDraft.firstName.trim(),
-                              lastName: (childDraft.lastName || "").trim(),
-                              birthDate: childDraft.birthDate ? new Date(childDraft.birthDate) : null,
-                              galopLevel: childDraft.galopLevel || "—",
-                              sanitaryForm: null,
-                            };
-                            const liste = [...(fam.children || []), nouveau];
-                            await updateDoc(doc(db, "families", fam.firestoreId), {
-                              children: liste, updatedAt: serverTimestamp(),
-                            });
-                            // Le cavalier apparaît immédiatement dans la liste,
-                            // sans recharger tout le planning.
-                            setChildOverrides(prev => ({ ...prev, [fam.firestoreId]: liste }));
-                            // Et il est présélectionné : c'est bien pour l'inscrire
-                            // qu'on vient de le créer.
-                            setSelectedChildren(inscriptionMode === "annuel" ? [nouveau.id] : [...selectedChildren, nouveau.id]);
-                            if (!selChild) setSelChild(nouveau.id);
-                            setShowAddChild(false);
-                            panelToast(`${nouveau.firstName} ajouté(e) à la famille`, "success");
-                          } catch (e: any) {
-                            panelToast(`Échec : ${e?.message || e}`, "error");
-                          }
-                          setAddingChild(false);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-body text-xs font-semibold border-none cursor-pointer disabled:opacity-50">
-                        {addingChild ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                        Ajouter
-                      </button>
-                      <button onClick={() => setShowAddChild(false)}
-                        className="px-3 py-2 rounded-lg bg-white border border-gray-200 font-body text-xs cursor-pointer">
-                        Annuler
-                      </button>
-                    </div>
-                  </div>
+    <FormulaireAjoutCavalier fam={fam} childDraft={childDraft} setChildDraft={setChildDraft}
+      addingChild={addingChild} setAddingChild={setAddingChild} setChildOverrides={setChildOverrides}
+      inscriptionMode={inscriptionMode} selectedChildren={selectedChildren} setSelectedChildren={setSelectedChildren}
+      selChild={selChild} setSelChild={setSelChild} setShowAddChild={setShowAddChild} panelToast={panelToast} />
   );
 
 
@@ -491,7 +225,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
   // La recherche de famille sert à l'inscription comme à la liste d'attente :
   // une seule saisie, une seule liste filtrée.
-  const filteredFamilies = useMemo(() => { if (!search) return allFamilies; const terms = search.toLowerCase().trim().split(/\s+/); return allFamilies.filter(f => { const childText = (f.children || []).map((c: any) => `${c.firstName || ""} ${c.lastName || ""}`).join(" "); const searchable = `${f.parentName || ""} ${f.parentEmail || ""} ${childText}`.toLowerCase(); return terms.every(t => searchable.includes(t)); }); }, [allFamilies, search]);
+  const filteredFamilies = useMemo(() => filtrerFamilles(allFamilies, search), [allFamilies, search]);
 
   // Libérer une place tenue doit faire réapparaître l'entrée en attente : on
   // demande au panneau de se relire plutôt que de partager son état.
@@ -594,20 +328,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // explication inquiète le moniteur et fait rouvrir le dossier. On les
   // affiche donc en grisé, à partir de leur forfait, comme un rappel : ils
   // existent, ils ne sont simplement pas là aujourd'hui.
-  const nonAttendusQuinzaine = useMemo(() => {
-    if (isStage) return [];
-    const jour = new Date(creneau.date + "T12:00:00")
-      .toLocaleDateString("fr-FR", { weekday: "long" }).toLowerCase();
-    return (allForfaits || []).filter((f: any) => {
-      if (!estQuinzaine(f)) return false;
-      if (f.status !== "actif" && f.status !== "active") return false;
-      if (enrolledIds.includes(f.childId)) return false;
-      if (estSemaineAttendue(creneau.date, f)) return false;
-      return (f.activityTitle || "").toLowerCase() === (creneau.activityTitle || "").toLowerCase()
-        && (f.dayLabel || "").toLowerCase() === jour
-        && (f.startTime || "") === (creneau.startTime || "");
-    });
-  }, [allForfaits, creneau.date, creneau.activityTitle, creneau.startTime, enrolledIds.join(","), isStage]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nonAttendusQuinzaine = useMemo(
+    () => cavaliersNonAttendusQuinzaine(allForfaits, creneau, enrolledIds, isStage),
+    [allForfaits, creneau.date, creneau.activityTitle, creneau.startTime, enrolledIds.join(","), isStage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // À l'ouverture, arriver directement sur la liste des inscrits (une seule
   // fois), sur mobile ET desktop — évite de scroller sous le plan et les notes.
@@ -627,17 +350,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
   const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
   // Prix affiché dans l'en-tête : pour les stages, utiliser le tarif configuré si dispo
-  const displayPrice = useMemo(() => {
-    if (!isStage) return priceTTC;
-    const nbJours = stageDaysCount || 1;
-    const cr = creneau as any;
-    const prices: Record<number, number> = {};
-    if (cr.price1day) prices[1] = cr.price1day;
-    if (cr.price2days) prices[2] = cr.price2days;
-    if (cr.price3days) prices[3] = cr.price3days;
-    if (cr.price4days) prices[4] = cr.price4days;
-    return prices[nbJours] || priceTTC;
-  }, [isStage, priceTTC, creneau, stageDaysCount]);
+  const displayPrice = useMemo(() => prixAffiche(creneau, isStage, priceTTC, stageDaysCount), [isStage, priceTTC, creneau, stageDaysCount]);
   // ── Place tenue pour une famille en liste d'attente ──────────────────
   // Le hold pose par la notification "une place s'est liberee" reste sur le
   // creneau tant que la famille n'a pas reserve. Si l'admin remplit la place
@@ -646,94 +359,28 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // d'attente reste bloquee en "notifiee" et ne sera jamais renotifiee.
   // On expose donc une liberation EXPLICITE plutot qu'un nettoyage silencieux.
   const [holdReleasing, setHoldReleasing] = useState(false);
-  const holdActif = (() => {
-    const h = (creneau as any).waitlistHold;
-    if (!h?.until) return null;
-    if (new Date(h.until).getTime() < Date.now()) return null;
-    if (enrolled.some((e: any) => e.childId === h.childId)) return null;
-    return h;
-  })();
-  const libererHold = async () => {
-    const h = holdActif;
-    if (!h || holdReleasing) return;
-    if (!confirm(`Libérer la place réservée à ${h.childName} ? Sa demande repassera en liste d'attente.`)) return;
-    setHoldReleasing(true);
-    try {
-      await updateDoc(doc(db, "creneaux", creneau.id!), { waitlistHold: deleteField() });
-      if (h.waitlistEntryId) {
-        // La famille garde sa place dans la file : on ne supprime pas
-        // l'entrée, on la remet simplement en attente.
-        await updateDoc(doc(db, "waitlist", h.waitlistEntryId), {
-          status: "waiting",
-          holdUntil: deleteField(),
-          releasedByAdminAt: new Date().toISOString(),
-        }).catch(() => {});
-      }
-      setRechargerAttente(n => n + 1);   // l'entree repasse en « waiting » : la reafficher
-      await onRefresh?.();
-    } catch (e) {
-      console.error("Libération hold :", e);
-      alert("Libération impossible. Réessayez.");
-    }
-    setHoldReleasing(false);
-  };
+  const holdActif = holdActifDuCreneau(creneau, enrolled);
+  const libererHold = () => actions.libererHold(ctxActions(), rappelsActions());
 
   // ── Test « balade sous le minimum » (petit groupe) ───────────────────
   // Rejoue à la demande la vérification que le cron fait chaque soir à J-2,
   // sur LA date de ce créneau : d'abord une simulation (rien n'est envoyé),
   // puis, après confirmation, l'envoi réel des emails de choix aux familles.
   const [petitGroupeEnCours, setPetitGroupeEnCours] = useState(false);
-  const testerPetitGroupe = async () => {
-    if (petitGroupeEnCours) return;
-    setPetitGroupeEnCours(true);
-    try {
-      const appel = async (dry: boolean) => {
-        const r = await authFetch("/api/admin/tester-petit-groupe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date: creneau.date, dry }),
-        });
-        const d = await r.json().catch(() => ({} as any));
-        if (!r.ok) throw new Error(d?.error || "Erreur");
-        return d;
-      };
-      const sim = await appel(true);
-      if (sim.desactive) {
-        alert("L'option « balades petit comité » est désactivée dans Paramètres → Annulation. Active-la pour tester.");
-        return;
-      }
-      if (sim.horsPeriode) {
-        alert(`Hors période : l'option « petit comité » ne s'applique que du 1er septembre au 10 juillet. Aucune vérification pour le ${creneau.date}.`);
-        return;
-      }
-      if (!sim.baladesSousSeuil) {
-        alert(
-          sim.baladesExaminees === 0
-            ? `Aucune balade à examiner le ${creneau.date} — déjà traitée (un seul envoi par balade), clôturée, ou sans minimum de participants configuré sur l'activité.`
-            : `Balade au-dessus du minimum : les inscrits confirmés atteignent le seuil, aucun email à envoyer. (Rappel : une inscription « place tenue » non réglée ne compte pas.)`
-        );
-        return;
-      }
-      if (!confirm(
-        `⚠️ ${sim.baladesSousSeuil} balade(s) sous le minimum le ${creneau.date} — ` +
-        `${sim.famillesNotifiees} famille(s) recevront l'email de choix (supplément / report / avoir).\n\n` +
-        `ENVOYER POUR DE VRAI ? Chaque balade ne peut être traitée qu'une seule fois.`
-      )) return;
-      const reel = await appel(false);
-      panelToast(
-        `🌙 ${reel.famillesNotifiees} famille(s) notifiée(s)` +
-        (reel.bloques ? ` · ${reel.bloques} bloquée(s) par le mode restreint (voir Journal des emails)` : "") +
-        (reel.sansEmail ? ` · ${reel.sansEmail} sans adresse email` : ""),
-        "success",
-      );
-      await onRefresh?.();
-    } catch (e: any) {
-      console.error("Test petit groupe:", e);
-      panelToast(e?.message || "Erreur lors du test", "error");
-    } finally {
-      setPetitGroupeEnCours(false);
-    }
-  };
+  const testerPetitGroupe = () => actions.testerPetitGroupe(ctxActions(), rappelsActions());
+
+  // Contexte et rappels des actions (enroll-panel-actions.ts). Fonctions et
+  // non constantes : certains états lus ici sont déclarés plus bas.
+  const ctxActions = (): ContexteActions => ({
+    creneau, families, allFamilies, enrolled, confirmationEnAttente, dateFinSaisonEffective,
+    highlightBusy, holdActif, holdReleasing, petitGroupeEnCours,
+  });
+  const rappelsActions = (): RappelsActions => ({
+    panelToast, onRefresh, onUnenroll, setEnvoiConfirmation, setEnrollingSaison, setUnenrollingSaison,
+    setJustEnrolled, setInscriptionFaite, setConversion, setSelFam, setSelChild, setSelectedChildren,
+    setPreinscription, setShowPay, setSearch, setInscriptionMode, setHighlightBusy, setHoldReleasing,
+    setRechargerAttente, setPetitGroupeEnCours,
+  });
 
   // ── Ajout MANUEL en liste d'attente (admin) ──────────────────────────
   // Une famille appelle, le créneau est complet : on l'inscrit en attente
@@ -742,21 +389,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // notification fonctionnent à l'identique.
 
   const fam = allFamilies.find(f => f.firestoreId === selFam); const children = fam?.children || [];
-  const available = children.filter((c: any) => {
-    if (enrolledIds.includes(c.id)) return false;
-    // Vérifier si l'enfant est déjà inscrit sur un autre créneau qui chevauche cet horaire
-    const conflict = allCreneaux.find(other => {
-      if (other.id === creneau.id) return false;
-      if (other.date !== creneau.date) return false;
-      if (!(other.enrolled || []).some((e: any) => e.childId === c.id)) return false;
-      // Vérifier le chevauchement horaire : deux créneaux se chevauchent si
-      // l'un commence avant que l'autre ne finisse et vice versa
-      const s1 = creneau.startTime, e1 = creneau.endTime;
-      const s2 = other.startTime, e2 = other.endTime;
-      return s1 < e2 && s2 < e1;
-    });
-    return !conflict;
-  });
+  const available = cavaliersDisponibles(children, enrolledIds, allCreneaux, creneau);
 
   // ─── Paramètres inscription depuis Firestore ──────────────────────────────
   const [inscParams, setInscParams] = useState({
@@ -805,6 +438,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const prixForfaitPlein = (f: number) => tarifPourFrequence(inscParams, f);
   const totalSessionsSaison = inscParams.totalSessionsSaison * frequenceCours;
   const dateFinSaisonRef = inscParams.dateFinSaison;
+  const dateFinSaisonEffective = useMemo(() => finSaisonEffective(dateFinSaisonRef, creneau.date), [dateFinSaisonRef, creneau.date]);
 
   /**
    * Calcule la fin de saison "effective" pour un créneau donné.
@@ -819,17 +453,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
    * Cela permet de pré-inscrire un cavalier pour la saison suivante au
    * tarif plein, sans avoir à modifier les paramètres globaux.
    */
-  const dateFinSaisonEffective = useMemo(() => {
-    const refFin = new Date(dateFinSaisonRef);
-    const creneauDate = new Date(creneau.date);
-    if (creneauDate <= refFin) return refFin;
-    // Créneau dans une saison future — calculer le 30/06 qui suit
-    const m = creneauDate.getMonth(); // 0-11
-    const y = creneauDate.getFullYear();
-    // Saison qui démarre en septembre Y_start et finit le 30/06 Y_start+1
-    const yearStart = m >= 8 ? y : y - 1;
-    return new Date(yearStart + 1, 5, 30); // mois 5 = juin
-  }, [dateFinSaisonRef, creneau.date]);
 
   // Calculer 2 compteurs depuis Firestore en une seule requête :
   //   - sessionsTotalSaison : nombre de séances générées pour ce cours sur
@@ -913,15 +536,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // La saison FFE va du 1er septembre Y au 30 juin Y+1.
   // - mois >= 8 (sept-déc) → saison Y/Y+1, on retourne Y
   // - mois <= 7 (janv-août) → saison Y-1/Y, on retourne Y-1
-  const seasonOf = (dateStr: string | Date | { seconds: number }): number => {
-    let d: Date;
-    if (typeof dateStr === "string") d = new Date(dateStr);
-    else if (dateStr instanceof Date) d = dateStr;
-    else if (dateStr && (dateStr as any).seconds) d = new Date((dateStr as any).seconds * 1000);
-    else return 0;
-    if (isNaN(d.getTime())) return 0;
-    return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1;
-  };
 
   // Adhésion dégressive : compter enfants déjà inscrits en forfait annuel
   // POUR LA MÊME SAISON que le créneau qu'on est en train d'inscrire.
@@ -933,23 +547,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Source de la saison cible : la date du créneau cliqué.
   // Source de la saison d'un forfait existant : son createdAt à défaut
   // d'un champ dédié (les anciens forfaits n'avaient pas seasonStartYear).
-  const rangEnfantFamille = useMemo(() => {
-    if (!fam) return 1;
-    const targetSeason = seasonOf(creneau.date);
-    const enfantsInscrits = new Set<string>();
-    allForfaits
-      .filter((f: any) => f.familyId === fam.firestoreId)
-      .forEach((f: any) => {
-        if (!f.childId || f.childId === selChild) return;
-        if (f.status && f.status !== "actif" && f.status !== "active") return;
-        // Comparaison de saison : on accepte le forfait si sa saison
-        // (champ dédié ou createdAt) correspond à celle du créneau cible.
-        const forfaitSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
-        if (forfaitSeason !== targetSeason) return;
-        enfantsInscrits.add(f.childId);
-      });
-    return enfantsInscrits.size + 1;
-  }, [fam, allForfaits, selChild, creneau.date]);
+  const rangEnfantFamille = useMemo(() => calculerRangEnfantFamille(fam, allForfaits, selChild, creneau.date), [fam, allForfaits, selChild, creneau.date]);
 
   // Fréquence (cours/semaine) déjà inscrite pour CET enfant cette saison.
   // Sert à facturer une heure supplémentaire au DIFFÉRENTIEL (dégressivité
@@ -959,20 +557,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // alternée inscrit samedi les semaines paires et mercredi les impaires ne
   // monte qu'une fois par semaine. Le compter 2 le faisait passer au tarif
   // 2×/semaine, et son second forfait était facturé au différentiel 1×→2×.
-  const frequenceDejaInscrite = useMemo(() => {
-    if (!fam || !selChild) return 0;
-    const targetSeason = seasonOf(creneau.date);
-    let total = 0;
-    allForfaits
-      .filter((f: any) => f.familyId === fam.firestoreId && f.childId === selChild)
-      .forEach((f: any) => {
-        if (f.status && f.status !== "actif" && f.status !== "active") return;
-        const forfaitSeason = f.seasonStartYear ?? seasonOf(f.createdAt);
-        if (forfaitSeason !== targetSeason) return;
-        total += frequenceEquivalente(f.frequence, f);
-      });
-    return total;
-  }, [fam, allForfaits, selChild, creneau.date]);
+  const frequenceDejaInscrite = useMemo(() => calculerFrequenceDejaInscrite(fam, allForfaits, selChild, creneau.date), [fam, allForfaits, selChild, creneau.date]);
   // Place restante sous le plafond de 3×/semaine, exprimée en créneaux à
   // cocher : sous rythme quinzaine, chaque créneau ne consomme que 0,5.
   const coefRythme = quinzaine ? 0.5 : 1;
@@ -1183,49 +768,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Plus fiable que de tenter de calculer enrolled+1 nous-mêmes (cas des
   // conflits horaires, doublons childId, etc. qui font qu'un onEnroll
   // n'incrémente pas toujours le compteur).
-  const checkAndAlertIfFull = async (creneauIds: string[]) => {
-    if (creneauIds.length === 0) return;
-    try {
-      const checks = await Promise.all(creneauIds.map(async (cid) => {
-        try {
-          const snap = await getDoc(doc(db, "creneaux", cid));
-          if (!snap.exists()) return null;
-          const data = snap.data() as any;
-          const enrolledCount = (data.enrolled || []).length;
-          const maxPlaces = data.maxPlaces || 0;
-          if (maxPlaces > 0 && enrolledCount >= maxPlaces) {
-            return {
-              title: data.activityTitle || "Créneau",
-              date: data.date as string,
-              isStage: data.activityType === "stage" || data.activityType === "stage_journee",
-            };
-          }
-          return null;
-        } catch { return null; }
-      }));
-      const fulls = checks.filter(Boolean) as Array<{ title: string; date: string; isStage: boolean }>;
-      if (fulls.length === 0) return;
 
-      // Regrouper par titre pour ne pas spammer si un stage occupe plusieurs jours
-      const byTitle = new Map<string, { count: number; isStage: boolean }>();
-      for (const f of fulls) {
-        const cur = byTitle.get(f.title) || { count: 0, isStage: f.isStage };
-        cur.count += 1;
-        byTitle.set(f.title, cur);
-      }
-      byTitle.forEach(({ count, isStage }, title) => {
-        const label = isStage ? "Stage" : "Créneau";
-        const suffix = count > 1 ? ` (${count} jours)` : "";
-        panelToast(
-          `⚠️ ${label} "${title}"${suffix} COMPLET — pense à ouvrir un nouveau créneau`,
-          "warning",
-          10000, // 10s pour avoir le temps de lire
-        );
-      });
-    } catch (e) {
-      console.warn("checkAndAlertIfFull:", e);
-    }
-  };
+  const checkAndAlertIfFull = (creneauIds: string[]) => actions.checkAndAlertIfFull(ctxActions(), rappelsActions(), creneauIds);
 
   // Ce que l'inscription consulte et remet à zéro, en toutes lettres :
   // voir inscrire-depuis-panneau.ts.
@@ -1264,77 +808,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // ── Email créneau : envoi à toutes les familles inscrites ──
 
   // ── Fiches de progression (stage) ──────────────────────────────────
-  const handlePrintProgressions = async () => {
-    if (enrolled.length === 0) return;
-    // Ouvrir la fenêtre immédiatement (geste utilisateur) pour Safari/iOS
-    const w = window.open("", "_blank");
-    if (!w) { panelToast("Le navigateur a bloqué l'ouverture. Autorisez les popups.", "error"); return; }
-    w.document.write('<html><body style="font-family:sans-serif;padding:20px;"><p>Chargement des bilans...</p></body></html>');
-    // Collecter tous les bilans HTML
-    const allHtml: string[] = [];
-    for (const e of enrolled) {
-      try {
-        const res = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
-        if (res.ok) {
-          let html = await res.text();
-          const bodyMatch = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-          if (bodyMatch) allHtml.push(bodyMatch[1]);
-          else allHtml.push(html);
-        }
-      } catch {}
-    }
-    if (allHtml.length === 0) { w.document.write('<p>Aucun bilan disponible.</p>'); w.document.close(); return; }
-    const combined = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Bilans de progression</title>
-      <style>
-        @media print { .page-break { page-break-before: always; } }
-        @page { size: A4 portrait; margin: 10mm; }
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
-      </style>
-    </head><body>
-      ${allHtml.map((h, i) => i === 0 ? h : `<div class="page-break"></div>${h}`).join("\n")}
-    </body></html>`;
-    w.document.open();
-    w.document.write(combined);
-    w.document.close();
-  };
+  const handlePrintProgressions = () => actions.imprimerProgressions(ctxActions(), rappelsActions());
+  const sendProgressionTo = (e: any) => actions.envoyerProgressionA(ctxActions(), rappelsActions(), e);
 
   // Envoie la fiche de progression (bilan + commentaire ⭐) d'UN enfant à SA famille.
   // Retourne true si envoyé. Réutilisé par l'envoi groupé et le bouton individuel.
-  const sendProgressionTo = async (e: any): Promise<{ ok: boolean; reason?: string }> => {
-    const fam = allFamilies.find((f: any) => f.firestoreId === e.familyId);
-    if (!fam) return { ok: false, reason: "famille introuvable (inscription orpheline ?)" };
-    const email = fam?.parentEmail;
-    if (!email) return { ok: false, reason: "email parent manquant sur la fiche famille" };
-    try {
-      // Récupérer le HTML de la fiche progression
-      const pdfRes = await authFetch(`/api/progression-pdf?childId=${e.childId}&familyId=${e.familyId}&childName=${encodeURIComponent(e.childName)}`);
-      if (pdfRes.status === 404) return { ok: false, reason: "aucune progression enregistrée — ouvre 📊 et crée le bilan d'abord" };
-      if (!pdfRes.ok) return { ok: false, reason: `fiche indisponible (HTTP ${pdfRes.status})` };
-      const progressionHtml = await pdfRes.text();
-      // Retirer les éléments no-print (barre d'impression)
-      const cleanHtml = progressionHtml.replace(/<div class="no-print"[\s\S]*?<\/div>\s*<div class="no-print"[\s\S]*?<\/div>/g, "");
-      const r = await authFetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to: email,
-          subject: `Bilan de progression — ${e.childName} — ${creneau.activityTitle}`,
-          html: cleanHtml,
-          context: "admin_bilan_progression",
-          template: "bilanProgression",
-          familyId: e.familyId,
-          creneauId: creneau.id,
-        }),
-      });
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}));
-        return { ok: false, reason: d?.error || `envoi refusé (HTTP ${r.status})` };
-      }
-      return { ok: true };
-    } catch {
-      return { ok: false, reason: "erreur réseau" };
-    }
-  };
 
   const handleEmailProgressions = async () => {
     if (enrolled.length === 0) return;
@@ -2750,134 +2228,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           </div></div>)}
 
           {/* Panel proposant d'autres jours après inscription jour */}
-          {showAddDays && (
-            <div className="border-t border-green-200 p-4 bg-green-50/50">
-              <div className="font-body text-sm font-semibold text-green-700 mb-2">
-                Inscrire aussi dans d'autres jours ?
-              </div>
-              <p className="font-body text-xs text-slate-600 mb-3">
-                {showAddDays.enfants.map(e => e.childName).join(", ")} inscrit(s) pour 1 jour. Voulez-vous ajouter d'autres jours du même stage ?
-              </p>
-              <div className="flex flex-col gap-1.5 mb-3">
-                {showAddDays.joursRestants.map(j => (
-                  <button key={j.id} onClick={async () => {
-                    setEnrolling(true);
-                    try {
-                      const fam2 = families.find(f => f.firestoreId === showAddDays.familyId);
-                      let inscritsCeJour = 0;
-                      if (fam2) {
-                        for (const enfant of showAddDays.enfants) {
-                          const ok = await onEnroll(j.id, {
-                            childId: enfant.childId, childName: enfant.childName,
-                            familyId: showAddDays.familyId, familyName: fam2.parentName || "—",
-                            enrolledAt: new Date().toISOString(),
-                          }, undefined, { skipPayment: true, skipEmail: true });
-                          if (ok !== false) inscritsCeJour++;
-                        }
-                      }
-
-                      // Sans ce contrôle, un jour complet (ou déjà pris) était
-                      // facturé sans que personne n'y soit inscrit : la facture
-                      // passait à 2 jours pour une seule journée réelle.
-                      if (inscritsCeJour === 0) {
-                        panelToast(
-                          `Inscription impossible le ${j.label} — journée complète ou déjà inscrit. Tarif inchangé.`,
-                          "error"
-                        );
-                        return;
-                      }
-                      // Recalcul tarif : jours inscrits AVANT + 1 (ce jour qu'on vient d'ajouter)
-                      try {
-                        const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", showAddDays.familyId), where("status", "==", "pending")));
-                        const stagePayment = paySnap.docs.find(d => {
-                          const items = d.data().items || [];
-                          return items.some((i: any) => (i.activityType === "stage" || i.activityType === "stage_journee") && i.stageKey?.includes(showAddDays.stageTitle));
-                        }) || paySnap.docs.find(d => {
-                          const items = d.data().items || [];
-                          return items.some((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
-                        });
-                        if (stagePayment) {
-                          const pData = stagePayment.data();
-                          const oldItems = pData.items || [];
-                          const totalDaysNow = showAddDays.joursInscrits + 1;
-                          const totalJoursStage = showAddDays.totalJoursStage || 1;
-                          const cr = showAddDays.creneauRef as any;
-                          const prixComplet = (cr.priceTTC || (cr.priceHT || 0) * (1 + (cr.tvaTaux || 5.5) / 100)) || 0;
-                          // Prix jour défini dans le stage (price1day), brut.
-                          // Fallback prorata seulement si non configuré.
-                          const prixJour = (cr.price1day && cr.price1day > 0)
-                            ? cr.price1day
-                            : Math.round((prixComplet / Math.max(1, totalJoursStage)) * 100) / 100;
-                          // Prix = prix jour × nb de jours ; si tous les jours pris,
-                          // on retombe sur le prix semaine complet. AUCUNE remise.
-                          const prixBase = (totalDaysNow >= totalJoursStage)
-                            ? prixComplet
-                            : Math.round(prixJour * totalDaysNow * 100) / 100;
-
-                          const crRef = showAddDays.creneauRef as any;
-                          const updatedItems = oldItems.map((item: any) => {
-                            if (item.activityType !== "stage" && item.activityType !== "stage_journee") return item;
-                            // Prix jour brut, sans réduction ni plancher.
-                            const newPriceTTC = Math.max(0, Math.round(prixBase * 100) / 100);
-                            // Mettre à jour le libellé pour refléter le nb de jours réel.
-                            let newTitle = item.activityTitle || "";
-                            if (/\(\d+j\)/.test(newTitle)) {
-                              newTitle = newTitle.replace(/\(\d+j\)/, `(${totalDaysNow}j)`);
-                            }
-                            // Ajouter la date du jour ajouté au détail (stageDates),
-                            // en évitant les doublons, et trier par date.
-                            const existingDates = Array.isArray(item.stageDates) ? [...item.stageDates] : [];
-                            if (!existingDates.some((d: any) => d.date === j.date)) {
-                              existingDates.push({ date: j.date, startTime: crRef?.startTime || "", endTime: crRef?.endTime || "" });
-                            }
-                            existingDates.sort((a: any, b: any) => (a.date || "").localeCompare(b.date || ""));
-                            // Recomposer un libellé de planning lisible (du X au Y).
-                            let newSchedule = item.stageSchedule || "";
-                            if (existingDates.length > 1) {
-                              const fmt = (d: string) => new Date(d).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
-                              newSchedule = `du ${fmt(existingDates[0].date)} au ${fmt(existingDates[existingDates.length - 1].date)} · ${crRef?.startTime || ""}–${crRef?.endTime || ""}`;
-                            }
-                            const existingCreneauIds = Array.isArray(item.creneauIds) ? [...item.creneauIds] : (item.creneauId ? [item.creneauId] : []);
-                            if (!existingCreneauIds.includes(j.id)) existingCreneauIds.push(j.id);
-                            return {
-                              ...item,
-                              activityTitle: newTitle,
-                              priceTTC: newPriceTTC,
-                              priceHT: Math.round(newPriceTTC / 1.055 * 100) / 100,
-                              stageDates: existingDates,
-                              stageSchedule: newSchedule,
-                              creneauIds: existingCreneauIds,
-                            };
-                          });
-                          const newTotal = Math.round(updatedItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0) * 100) / 100;
-                          await updateDoc(doc(db, "payments", stagePayment.id), {
-                            items: updatedItems, totalTTC: newTotal, updatedAt: serverTimestamp(),
-                          });
-                        }
-                      } catch (e) { console.error("Erreur mise à jour tarif stage:", e); }
-                      setJustEnrolled(`${showAddDays.enfants.map(e => e.childName).join(", ")} ajouté(s) le ${j.label}`);
-                      const remaining = showAddDays.joursRestants.filter(jr => jr.id !== j.id);
-                      if (remaining.length > 0) {
-                        setShowAddDays({ ...showAddDays, joursRestants: remaining, joursInscrits: showAddDays.joursInscrits + 1 });
-                      } else {
-                        setShowAddDays(null);
-                      }
-                    } catch (e) { console.error(e); }
-                    setEnrolling(false);
-                    setTimeout(() => setJustEnrolled(""), 4000);
-                  }}
-                    className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-green-200 bg-white font-body text-sm cursor-pointer hover:bg-green-50 text-left">
-                    <span className="text-blue-800 font-medium">{j.label}</span>
-                    <span className="text-green-600 text-xs font-semibold">+ Ajouter</span>
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => setShowAddDays(null)}
-                className="w-full py-2 rounded-lg font-body text-xs text-slate-600 bg-gray-100 border-none cursor-pointer">
-                Terminé
-              </button>
-            </div>
-          )}
+          <PanneauJoursSupplementaires showAddDays={showAddDays} setShowAddDays={setShowAddDays} families={families}
+            onEnroll={onEnroll} panelToast={panelToast} setEnrolling={setEnrolling} setJustEnrolled={setJustEnrolled} />
         </div>
         </div>
         {/* ── Bandeau impayés sticky ── */}
