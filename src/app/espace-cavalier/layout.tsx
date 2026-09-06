@@ -61,7 +61,6 @@ const HELP_NAV: NavItem[] = [
  * directe pour un compte de test créé à la volée.
  */
 const COMPTES_TESTEURS = [
-  "ceagon@orange.fr",
   "ceagon50@gmail.com",
   "laserbayagon@gmail.com", // compte famille de recette
 ];

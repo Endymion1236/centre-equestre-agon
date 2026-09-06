@@ -22,7 +22,6 @@
  */
 
 export const ADMIN_EMAILS = [
-  "ceagon@orange.fr",
   "ceagon50@gmail.com",
   "emmelinelagy@gmail.com",
 ] as const;
