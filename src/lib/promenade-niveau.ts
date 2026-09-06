@@ -129,6 +129,43 @@ export function niveauxAdmissibles(cavalier: { birthDate?: any; galopLevel?: any
   return NIVEAUX_PROMENADE.filter((n) => compatibiliteCavalier(n, cavalier).ok);
 }
 
+/**
+ * Niveaux atteignables d'après ce qu'on SAIT d'un cavalier : l'âge et/ou
+ * le galop, l'un ou l'autre pouvant manquer (mail d'une famille inconnue).
+ * Ce qui est inconnu ne ferme rien ; ce qui est connu et insuffisant ferme
+ * le niveau. Pour « débrouillés », un galop insuffisant ne ferme pas : la
+ * règle admet aussi le trot enlevé maîtrisé, qui se vérifie à l'évaluation.
+ * `null` si on ne sait rien du tout.
+ */
+export function niveauxAtteignables(c: { age?: number | null; birthDate?: any; galopLevel?: any }): NiveauPromenade[] | null {
+  const age = typeof c.age === "number" ? c.age : ageFromBirth(c.birthDate);
+  const galop = galopToNumber(c.galopLevel);
+  if (age === null && galop === null) return null;
+  return NIVEAUX_PROMENADE.filter((n) => {
+    const regle = REGLES_PROMENADE[n];
+    if (age !== null && age < regle.ageMin) return false;
+    if (n === "confirme" && galop !== null && regle.galopMin !== null && galop < regle.galopMin) return false;
+    return true;
+  });
+}
+
+/**
+ * Union des niveaux atteignables par AU MOINS UN des cavaliers concernés.
+ * Sert à filtrer la liste des promenades avant de la donner à l'assistant :
+ * une promenade d'un niveau qu'aucun d'eux ne peut atteindre n'a rien à y
+ * faire. `null` = aucune information exploitable, on ne filtre pas.
+ */
+export function niveauxAtteignablesParAuMoinsUn(cavaliers: { age?: number | null; birthDate?: any; galopLevel?: any }[]): NiveauPromenade[] | null {
+  let union: Set<NiveauPromenade> | null = null;
+  for (const c of cavaliers) {
+    const n = niveauxAtteignables(c);
+    if (!n) continue;
+    if (!union) union = new Set();
+    n.forEach((x) => union!.add(x));
+  }
+  return union ? NIVEAUX_PROMENADE.filter((n) => union!.has(n)) : null;
+}
+
 /** Le niveau à conseiller : le plus exigeant que la fiche autorise. */
 export function niveauConseille(cavalier: { birthDate?: any; galopLevel?: any }): NiveauPromenade | null {
   const admissibles = niveauxAdmissibles(cavalier);

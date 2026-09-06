@@ -13,6 +13,8 @@ import {
   libelleNiveauCreneau, niveauDuCreneau, compatibiliteCavalier,
   niveauxAdmissibles,
   niveauConseille,
+  niveauxAtteignables,
+  niveauxAtteignablesParAuMoinsUn,
 } from "../../src/lib/promenade-niveau";
 
 let passes = 0;
@@ -137,6 +139,27 @@ test("galop inconnu : l'âge seul décide, le doute se lève par l'évaluation",
 test("sans date de naissance : on ne tranche pas", () => {
   assert.equal(niveauxAdmissibles({ galopLevel: "2" }), null);
   assert.equal(niveauConseille({ galopLevel: "2" }), null);
+});
+
+console.log("\n── Niveaux atteignables d'après un mail (âge et/ou galop, parfois manquants) ──");
+
+test("13 ans, Galop 2 écrit dans le mail : confirmés retiré, débutants et débrouillés restent", () => {
+  assert.deepEqual(niveauxAtteignables({ age: 13, galopLevel: "Galop 2" }), ["debutant", "debrouille"]);
+});
+test("galop seul (âge inconnu) : Galop 1 ferme confirmés, pas débrouillés (trot enlevé possible)", () => {
+  assert.deepEqual(niveauxAtteignables({ galopLevel: "galop d'argent" }), ["debutant", "debrouille"]);
+});
+test("âge seul : 12 ans ferme confirmés, 11 ans ferme tout", () => {
+  assert.deepEqual(niveauxAtteignables({ age: 12 }), ["debutant", "debrouille"]);
+  assert.deepEqual(niveauxAtteignables({ age: 11 }), []);
+});
+test("rien de connu : null, on ne filtre pas", () => {
+  assert.equal(niveauxAtteignables({}), null);
+  assert.equal(niveauxAtteignablesParAuMoinsUn([{}, { galopLevel: "—" }]), null);
+});
+test("plusieurs cavaliers : union — un Galop 4 de 14 ans rouvre confirmés pour la liste", () => {
+  assert.deepEqual(niveauxAtteignablesParAuMoinsUn([{ age: 13, galopLevel: "2" }, { age: 14, galopLevel: "4" }]), ["debutant", "debrouille", "confirme"]);
+  assert.deepEqual(niveauxAtteignablesParAuMoinsUn([{ age: 13, galopLevel: "2" }, {}]), ["debutant", "debrouille"]);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
