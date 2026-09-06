@@ -104,6 +104,8 @@ export interface ContexteInscriptionPanneau {
   weekCreneaux: any[];
   setAnnualPayMode: any;
   setConfirmationEnAttente: any;
+  /** Pré-notification SEPA à vérifier avant envoi ({ paymentId, familyName }). */
+  setPrenotificationEnAttente: any;
   setEditRemise: any;
   setEnrolling: any;
   setEnvoiConfirmation: any;
@@ -194,6 +196,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
     weekCreneaux,
     setAnnualPayMode,
     setConfirmationEnAttente,
+    setPrenotificationEnAttente,
     setEditRemise,
     setEnrolling,
     setEnvoiConfirmation,
@@ -974,18 +977,19 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
             echeancesTotal: nbEcheances,
             echeanceDate: fmtDate(new Date()),
             forfaitRef: slotKey,
+            // Pré-notification SEPA à VÉRIFIER avant envoi : elle ne part plus
+            // toute seule, l'admin relit l'échéancier et confirme (panneau,
+            // ou écran Prélèvements SEPA si le panneau est fermé avant).
+            prenotificationSepa: "a_verifier",
             date: serverTimestamp(),
           });
           createdPaymentIds.push(docRef.id);
 
           // Pré-notification : montant, dates et mandat. La famille doit
           // savoir ce qui sera prélevé et quand — les règles SEPA l'imposent
-          // au créancier avant le premier prélèvement.
-          authFetch("/api/admin/sepa-prenotification", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paymentId: docRef.id }),
-          }).catch(e => console.warn("Pré-notification SEPA:", e));
+          // au créancier avant le premier prélèvement. Elle partait ici sans
+          // relecture ; elle est maintenant proposée à la vérification.
+          setPrenotificationEnAttente({ paymentId: docRef.id, familyName: fam.parentName || "" });
         } else {
           for (let i = 0; i < nbEcheances; i++) {
             const echeanceDate = new Date();

@@ -34,6 +34,7 @@ import FormulaireNouvelleFamille from "./FormulaireNouvelleFamille";
 import { inscrireDepuisPanneau } from "./inscrire-depuis-panneau";
 import { nomDeduitDuParent } from "@/lib/nom-foyer";
 import { SepaWarning } from "./SepaWarning";
+import { BandeauPrenotificationSepa } from "@/components/admin/BandeauPrenotificationSepa";
 import { FormulaireAjoutCavalier } from "./FormulaireAjoutCavalier";
 import { PanneauJoursSupplementaires } from "./PanneauJoursSupplementaires";
 import * as actions from "./enroll-panel-actions";
@@ -64,6 +65,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     familyId: string; familyName: string; nbStages: number; envoiPrevuA: string;
   } | null>(null);
   const [envoiConfirmation, setEnvoiConfirmation] = useState<"" | "envoi" | "envoye" | "annule">("");
+  // Pré-notification SEPA d'un forfait annuel : à vérifier avant envoi.
+  const [prenotificationEnAttente, setPrenotificationEnAttente] = useState<{ paymentId: string; familyName: string } | null>(null);
   const envoyerConfirmationMaintenant = () => actions.envoyerConfirmationMaintenant(ctxActions(), rappelsActions());
   const annulerConfirmationEnAttente = () => actions.annulerConfirmationEnAttente(ctxActions(), rappelsActions());
 
@@ -788,7 +791,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       selectedChildren, semainePaire, sessionsRestantes, showAcompte, showPay,
       stageAcompte, stageLines, stageMode, stageSolde, stageTotalTTC,
       status, totalAnnuel, totalSessionsSaison, useRattrapage, weekCreneaux,
-      setAnnualPayMode, setConfirmationEnAttente, setEditRemise, setEnrolling, setEnvoiConfirmation,
+      setAnnualPayMode, setConfirmationEnAttente, setPrenotificationEnAttente, setEditRemise, setEnrolling, setEnvoiConfirmation,
       setExtraSlotSearch, setExtraSlots, setFreeEnroll, setFreeReason, setInscriptionFaite,
       setInscriptionMode, setJustEnrolled, setPreinscription, setRemiseMotif, setRemisePctManuel,
       setSearch, setSelChild, setSelFam, setSelectedChildren, setShowAddDays,
@@ -918,6 +921,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 </div>
               )}
             </div>
+          )}
+          {prenotificationEnAttente && (
+            <BandeauPrenotificationSepa paymentId={prenotificationEnAttente.paymentId} familyName={prenotificationEnAttente.familyName}
+              toast={panelToast} onPlusTard={() => setPrenotificationEnAttente(null)} />
           )}
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-body text-sm font-semibold text-blue-800"><Users size={16} className="inline mr-1"/>Inscrits ({enrolled.length})</h3>
