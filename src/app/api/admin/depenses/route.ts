@@ -126,16 +126,18 @@ export async function POST(req: NextRequest) {
         const normaliser = (v: unknown) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
         const resultat = await adminDb.runTransaction(async tx => {
           const existantes = await tx.getAll(...refs);
+          const archives = await tx.getAll(...refs.map((r: { id: string }) => adminDb.collection("depenses-doublons-archives").doc(r.id)));
           const anciens = [];
           for (const mois of [...new Set(lignes.map((l: any) => l.mois))]) {
             const snap = await tx.get(adminDb.collection("depenses").where("mois", "==", mois));
-            anciens.push(...snap.docs.map(d => d.data()).filter(d => d.source === "releve-bancaire" && !d.sourceOperation));
+            anciens.push(...snap.docs.map(d => d.data()).filter(d => d.source === "releve-bancaire"));
           }
           // Tous les contrôles avant la première écriture.
           for (let i = 0; i < lignes.length; i++) {
             const l = lignes[i], e = existantes[i].data() as { montant?: number; dateOperation?: string; fournisseur?: string } | undefined;
+            if (archives[i].exists) return { erreur: "Une opération de ce lot a été écartée comme doublon. Utilisez le contrôle des doublons pour la restaurer si nécessaire ; aucune ligne ajoutée." };
             if (e && (e.montant !== nbMontant(l.montant) || e.dateOperation !== l.date || normaliser(e.fournisseur) !== normaliser(l.fournisseur))) return { erreur: "La relecture diffère d'une opération déjà importée. Vérifiez la dépense existante ; aucune ligne de ce lot n'a été ajoutée." };
-            if (!e && anciens.some(a => a.mois === l.mois && (!a.compte || a.compte === compte) && a.montant === nbMontant(l.montant) && normaliser(a.fournisseur) === normaliser(l.fournisseur) && (!a.dateOperation || a.dateOperation === l.date))) return { erreur: "Ce relevé correspond à des dépenses d'un ancien import. Utilisez Compléter les dates existantes, puis vérifiez les dépenses ; aucune ligne de ce lot n'a été ajoutée." };
+            if (!e && anciens.some(a => (!a.sourceOperation || String(a.sourceOperation).split(":")[0] !== l.sourceOperation.split(":")[0]) && a.mois === l.mois && (!a.compte || a.compte === compte) && a.montant === nbMontant(l.montant) && normaliser(a.fournisseur) === normaliser(l.fournisseur) && (!a.dateOperation || a.dateOperation === l.date))) return { erreur: "Ce relevé correspond à des dépenses d'un autre import. Vérifiez les doublons ou utilisez Compléter les dates existantes ; aucune ligne de ce lot n'a été ajoutée." };
           }
           let ajoutees = 0, doublons = 0;
           const vus = new Set<string>();
@@ -150,23 +152,7 @@ export async function POST(req: NextRequest) {
         if ("erreur" in resultat) return NextResponse.json({ error: resultat.erreur }, { status: 409 });
         return NextResponse.json({ ok: true, ...resultat, invalides: 0 });
       }
-      let ajoutees = 0, invalides = 0;
-      for (const l of lignes) {
-        const poste = String(l?.poste || "").trim().slice(0, 80);
-        const mois = String(l?.mois || "");
-        const montant = nbMontant(l?.montant);
-        if (!MOIS_RE.test(mois) || !poste || montant === null) { invalides++; continue; }
-        await adminDb.collection("depenses").add({
-          mois, poste, montant,
-          fournisseur: String(l?.fournisseur || "").trim().slice(0, 80),
-          note: String(l?.note || "").slice(0, 500),
-          source: "releve-bancaire",
-          dateOperation: dateValide(l?.date),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-        ajoutees++;
-      }
-      return NextResponse.json({ ok: true, ajoutees, invalides });
+      return NextResponse.json({ error: "Ancien écran d’import : actualisez la page puis relisez le PDF. Un compte et des identifiants d’opération sont obligatoires pour éviter les doublons." }, { status: 409 });
     }
 
     if (body.action === "modifier") {

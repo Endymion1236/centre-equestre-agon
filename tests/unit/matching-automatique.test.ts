@@ -22,6 +22,7 @@ test("score élevé insuffisant : nom partiel, date absente/lointaine, vente, in
 });
 test("ambiguïtés dans les deux sens et copies PDF/photo exclues", () => {
   assert.equal(plan([p], [d, { ...d, id: "d2" }]).length, 0);
+  assert.equal(plan([p], [d, { ...d, id: "ancien", dateOperation: "" }]).length, 0);
   assert.equal(plan([p, { ...p, id: "p2" }]).length, 0);
   assert.equal(plan([p, { id: "p2", extraction: { ...extraction, numero: "autre", date: "" } }]).length, 0);
   assert.equal(plan([p, { ...p, id: "p2", depenseId: "ancien" }]).length, 0);

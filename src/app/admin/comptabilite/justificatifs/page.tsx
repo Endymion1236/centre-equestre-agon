@@ -103,6 +103,7 @@ export default function JustificatifsPage() {
   return <main className="mx-auto max-w-5xl p-6 space-y-6">
     <Link href="/admin/comptabilite/depenses" className="underline">← Dépenses</Link>
     <h1 className="text-2xl font-bold">Justificatifs · rapprochement assisté</h1>
+    <Link className="block underline" href="/admin/comptabilite/depenses/doublons">Contrôler les doublons de dépenses</Link>
     <p>Déposez une facture ou un ticket par fichier. Les propositions utilisent les dépenses importées des relevés, pas un journal bancaire exhaustif. Aucune écriture ni aucun paiement ne sont créés.</p>
     <div className="rounded border bg-blue-50 p-4 text-sm space-y-2">
       <p>1. Dans <Link className="underline" href="/admin/comptabilite/tresorerie">Trésorerie</Link>, déposez le relevé et enregistrez ses dépenses. 2. Déposez ici les factures fournisseurs : le lot est analysé puis rapproché. 3. Contrôlez les cas restants.</p>

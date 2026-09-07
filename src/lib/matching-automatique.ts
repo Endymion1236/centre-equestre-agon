@@ -27,6 +27,10 @@ export function planifierMatching(pieces: PieceMatching[], depenses: DepenseCand
     const candidats = candidatsAutomatiques(e, depenses);
     if (candidats.length !== 1 || depensesLiees.has(candidats[0].id)) continue;
     const d = candidats[0];
+    // Un ancien import sans date peut être le même paiement : ne pas le masquer.
+    if (depenses.some(autre => autre.id !== d.id && !dateValide(autre.dateOperation)
+      && (!autre.mois || autre.mois === d.mois || autre.mois === d.dateOperation?.slice(0, 7))
+      && proposerAssociations(e, [autre]).some(c => c.raisons.includes("Fournisseur concordant")))) continue;
     // Toute autre pièce non liée compatible par fournisseur/montant, même à date inconnue,
     // empêche une validation automatique. Elle reste proposée au contrôle humain.
     const concurrente = actives.some(q => q.id !== p.id && !q.depenseId && q.extraction &&
