@@ -31,14 +31,18 @@ Journal;N compte;N piece;Date ope;Debit;Credit;Libele ecriture;Libele compte
 - Montants en euros, virgule ou point décimal, deux décimales maximum. Calculs internes en centimes entiers.
 - Comptes des classes 1 à 7, de 2 à 15 caractères alphanumériques, y compris les fournisseurs auxiliaires tels que `401ARVAL`. Pas de remplacement silencieux du plan de comptes du cabinet.
 - Équilibre obligatoire pour chaque combinaison journal/pièce/date. Une ligne ne porte qu’un débit ou un crédit. Les montants négatifs sont contrepassés sur le côté opposé.
-- Maximum 4 Mo et 5 000 lignes ; période limitée à 550 jours. Limite dépassée : refus explicite, jamais un document tronqué.
+- Fichier alternatif limité à 4 Mo ; jusqu’à 200 000 lignes pour un même jeu (historique Céleris ou fichier), sur une période de 550 jours maximum. Limite dépassée : refus explicite, jamais un document tronqué. La taille du fichier importé reste une limite distincte du nombre de lignes de l’historique.
 - Le fichier fourni sert à la génération, sans être enregistré dans Firestore.
 
 ## Garanties et vérification
 
 Route administrateur, lecture seule, réponses privées sans cache. Le téléchargement vérifie l’empreinte de l’aperçu pour refuser un jeu modifié entre vérification et export. Une même pièce présente dans plusieurs sources est bloquée. Les vraies lignes répétées d’une même pièce ne sont pas supprimées automatiquement.
 
-Tests : concordance des totaux, facturation/règlement sans doublage, à-nouveaux absents, bilan avec amortissement et découvert, avoirs, dates invalides, centimes, pièces tronquées, sources doublonnées, dépassement de limites, parsing CSV. Les cinq PDF sont générés avec des données fictives et inspectés visuellement, dont la pagination du grand livre et du journal.
+Les PDF sont composés page par page avec PDFKit, sans arbre de mise en page proportionnel au journal complet. Le grand livre indexe les comptes une seule fois et conserve les soldes lors des changements de page. Les polices sont incluses explicitement dans la fonction déployée. Le PDF ou le ZIP complet est préparé avant envoi, puis transmis par morceaux de 64 Kio ; une erreur de génération reste donc une réponse JSON, sans fichier partiel. Le ZIP ne recompresse pas les PDF déjà compressés.
+
+Tests : période juillet-septembre de 9 000 lignes, cinq PDF avec empreinte commune, absence de pages vides dues aux pieds de page, transmission intégrale d’un flux de plus de 6 Mo, concordance des totaux, facturation/règlement sans doublage, à-nouveaux absents, bilan avec amortissement et découvert, avoirs, dates invalides, centimes, pièces tronquées, sources doublonnées, dépassement de limites, parsing CSV. Les cinq PDF sont générés avec des données fictives et inspectés visuellement, dont la pagination du grand livre et du journal.
+
+Essai de volume local : 72 000 lignes fictives réparties sur 12 mois ; les cinq PDF et le ZIP de 17,4 Mo ont été générés en environ 38 secondes. Le contenu reçu par le flux est identique au ZIP produit. Ce temps dépend de l’hébergement et ne constitue pas une garantie en production.
 
 L’écran Dépenses utilise désormais des fiches adaptatives : catégorie/compte et justificatif sur deux colonnes quand l’espace le permet, puis une seule colonne. TVA et rapprochement sont dépliables dans chaque fiche. Les champs et noms de fichiers restent bornés à la largeur disponible. Le rendu dans la session administrateur réelle reste à vérifier : le navigateur de contrôle ne peut pas joindre le serveur local de cette session.
 

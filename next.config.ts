@@ -128,6 +128,7 @@ const nextConfig: NextConfig = {
     "/api/compta-export-pdf": ["./node_modules/pdfkit/js/**/*"],
     "/api/admin/sepa-mandate-pdf": ["./node_modules/pdfkit/js/**/*"],
     "/api/admin/facturx-pdf": ["./node_modules/pdfkit/js/**/*"],
+    "/api/admin/comptabilite/documents": ["./node_modules/pdfkit/js/**/*"],
   },
 
   // ─── Build — enlever les headers 'powered-by' inutiles ─────────────
@@ -172,4 +173,3 @@ export default withSentryConfig(nextConfig, {
   // de saturer le quota Sentry — on garde l'upload aux deploys prod
   widenClientFileUpload: false,
 });
-

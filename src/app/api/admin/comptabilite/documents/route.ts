@@ -5,6 +5,7 @@ import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 import { getClubInfo } from "@/lib/club-info";
 import { ErreurDocumentsComptables, construireDocuments, lireJournalComptable, verifierPeriode, DOCUMENTS_COMPTABLES, type SourceComptable, type TypeDocumentComptable } from "@/lib/documents-comptables";
+import { fluxExportComptable } from "@/lib/flux-export-comptable";
 import { genererDocumentComptable } from "@/lib/documents-comptables-pdf";
 
 export const runtime = "nodejs";
@@ -52,10 +53,10 @@ export async function POST(req: NextRequest) {
       const fichiers: Record<string, Uint8Array> = {};
       for (const type of Object.keys(DOCUMENTS_COMPTABLES) as TypeDocumentComptable[]) fichiers[`${type}_${suffixe}.pdf`] = new Uint8Array(await genererDocumentComptable(dossier, type, identite, empreinte));
       fichiers["PERIMETRE_ET_CONTROLES.txt"] = strToU8([`Période : ${periode.debut} à ${periode.fin}`, `Sources : ${dossier.sources.join(" ; ")}`, `Empreinte : ${empreinte}`, ...dossier.avertissements].join("\n\n"));
-      return new NextResponse(Buffer.from(zipSync(fichiers, { level: 6 })), { headers: { ...headers, "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="documents_comptables_${suffixe}.zip"` } });
+      return new NextResponse(fluxExportComptable(zipSync(fichiers, { level: 0 })), { headers: { ...headers, "Content-Type": "application/zip", "Content-Disposition": `attachment; filename="documents_comptables_${suffixe}.zip"` } });
     }
     const pdf = await genererDocumentComptable(dossier, format as TypeDocumentComptable, identite, empreinte);
-    return new NextResponse(new Uint8Array(pdf), { headers: { ...headers, "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${format}_${suffixe}.pdf"` } });
+    return new NextResponse(fluxExportComptable(pdf), { headers: { ...headers, "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${format}_${suffixe}.pdf"` } });
   } catch (e) {
     // Erreurs de validation explicites ; aucun détail d’infrastructure ou de données privées exposé.
     const validation = e instanceof ErreurDocumentsComptables;

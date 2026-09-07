@@ -11,7 +11,7 @@ export const DOCUMENTS_COMPTABLES = {
   centralisateur: "Centralisateur par mois", bilan: "Bilan préparatoire",
 } as const;
 export type TypeDocumentComptable = keyof typeof DOCUMENTS_COMPTABLES;
-export const MAX_LIGNES_DOCUMENTS = 5000;
+export const MAX_LIGNES_DOCUMENTS = 200_000;
 export const ENTETE_JOURNAL = "Journal;N compte;N piece;Date ope;Debit;Credit;Libele ecriture;Libele compte";
 
 function dateValide(date: string) {
@@ -53,7 +53,7 @@ export function lireJournalComptable(texte: string): Ecriture[] {
     else if (c === '"' && !cell && !closed) quoted = true;
     else if (c === '"' || closed && c.trim()) throw new ErreurDocumentsComptables("Guillemets CSV invalides.");
     else if (!closed) cell += c;
-    if (rows.length > MAX_LIGNES_DOCUMENTS + 1) throw new ErreurDocumentsComptables(`Maximum ${MAX_LIGNES_DOCUMENTS} lignes : réduisez la période.`);
+    if (rows.length > MAX_LIGNES_DOCUMENTS + 1) throw new ErreurDocumentsComptables(`Maximum ${MAX_LIGNES_DOCUMENTS} lignes par export. Aucun export partiel n’est produit.`);
   }
   if (quoted) throw new ErreurDocumentsComptables("Guillemets CSV non fermés.");
   pushRow();
@@ -92,7 +92,7 @@ export function construireDocuments(sources: SourceComptable[], periode: Periode
       if (precedente && precedente !== source.nom) throw new ErreurDocumentsComptables(`Pièce ${l.piece} présente dans plusieurs sources : sélectionnez un seul export complet.`);
       piecesSources.set(cle, source.nom);
       lignes.push(l);
-      if (lignes.length > MAX_LIGNES_DOCUMENTS) throw new ErreurDocumentsComptables(`Plus de ${MAX_LIGNES_DOCUMENTS} lignes : réduisez la période. Aucun export partiel n’est produit.`);
+      if (lignes.length > MAX_LIGNES_DOCUMENTS) throw new ErreurDocumentsComptables(`Plus de ${MAX_LIGNES_DOCUMENTS} lignes : le volume maximal est dépassé. Aucun export partiel n’est produit.`);
     }
     for (const [cle, ecart] of groupes) if (ecart) throw new ErreurDocumentsComptables(`Écriture déséquilibrée dans ${source.nom} : ${JSON.parse(cle).join(" / ")} (écart ${ecart} centimes).`);
   }

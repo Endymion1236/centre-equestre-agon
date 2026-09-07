@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
-import { DOCUMENTS_COMPTABLES, ENTETE_JOURNAL, type TypeDocumentComptable } from "@/lib/documents-comptables";
+import { DOCUMENTS_COMPTABLES, ENTETE_JOURNAL, MAX_LIGNES_DOCUMENTS, type TypeDocumentComptable } from "@/lib/documents-comptables";
 
 type Apercu = { nombre: number; comptes: number; totalDebit: number; totalCredit: number; resultat: number; empreinte: string; sources: string[]; avertissements: string[]; moisPresents: string[] };
 const descriptions: Record<TypeDocumentComptable, string> = {
@@ -25,7 +25,7 @@ export default function DocumentsComptablesPage() {
   const [apercu, setApercu] = useState<Apercu | null>(null), [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   function invalider() { setApercu(null); setMessage(""); }
   async function generer(format: "apercu" | "zip" | TypeDocumentComptable) {
-    setBusy(true); setMessage("");
+    setBusy(true); setMessage(format === "apercu" ? "Vérification de toutes les écritures de la période…" : format === "zip" ? "Génération des cinq documents complets. Les journaux volumineux peuvent prendre un peu de temps…" : "Génération du document complet…");
     if (format === "apercu") setApercu(null);
     try {
       const form = new FormData();
@@ -34,7 +34,7 @@ export default function DocumentsComptablesPage() {
       if (apercu && format !== "apercu") form.append("empreinte", apercu.empreinte);
       const r = await authFetch("/api/admin/comptabilite/documents", { method: "POST", body: form });
       if (!r.ok) { if (r.status === 409) setApercu(null); const d = await r.json(); throw new Error(d.error || "Génération impossible."); }
-      if (format === "apercu") setApercu(await r.json());
+      if (format === "apercu") { setApercu(await r.json()); setMessage("Vérification terminée. Vous pouvez télécharger les documents ci-dessous."); }
       else {
         sauver(await r.blob(), `${format === "zip" ? "documents_comptables" : format}_${debut}_${fin}_preparatoire.${format === "zip" ? "zip" : "pdf"}`);
         setMessage("Téléchargement prêt.");
@@ -61,12 +61,12 @@ export default function DocumentsComptablesPage() {
       <label className="block min-w-0">Source des écritures<select className="block w-full min-w-0 max-w-full rounded border p-2" value={source} disabled={busy} onChange={e => { setSource(e.target.value); invalider(); }}><option value="celeris">Historique Céleris déjà importé</option><option value="fichier">Fichier d’écritures de la comptable</option></select></label>
       {source === "celeris" ? <p className="text-sm">Les mois de la période seront réunis. <Link href="/admin/comptabilite/celeris" className="underline">Consulter ou importer l’historique Céleris</Link>.</p> : <div className="space-y-2 min-w-0">
         <label className="block">Journal TXT ou CSV (4 Mo maximum)<input className="block w-full min-w-0 max-w-full" type="file" accept=".txt,.csv,text/plain,text/csv" disabled={busy} onChange={e => { setFichier(e.target.files?.[0] || null); invalider(); }} /></label>
-        <p className="text-sm">Un seul fichier complet, limité à 5 000 lignes, avec les débits et crédits de chaque pièce. Dates AAAA-MM-JJ ou JJ-MM-AAAA ; montants en euros. Le fichier sert à cette génération et n’est pas enregistré dans l’historique.</p>
+        <p className="text-sm">Un seul fichier complet, jusqu’à {MAX_LIGNES_DOCUMENTS.toLocaleString("fr-FR")} lignes, avec les débits et crédits de chaque pièce. Dates AAAA-MM-JJ ou JJ-MM-AAAA ; montants en euros. Le fichier sert à cette génération et n’est pas enregistré dans l’historique.</p>
         <button className="underline text-sm" disabled={busy} onClick={() => sauver(new Blob(["\uFEFF" + ENTETE_JOURNAL + "\r\n"], { type: "text/csv;charset=utf-8" }), "modele_journal_comptable.csv")}>Télécharger les colonnes du modèle CSV</button>
       </div>}
       <button className="rounded bg-blue-900 text-white px-4 py-3 disabled:opacity-50" disabled={busy || !debut || !fin || source === "fichier" && !fichier} onClick={() => void generer("apercu")}>Vérifier les écritures</button>
     </section>
-    <p role="status" className="break-words whitespace-pre-line">{busy ? "Préparation en cours… " : ""}{message}</p>
+    <p role="status" className="break-words whitespace-pre-line rounded-lg bg-blue-50 p-4">{busy ? "Préparation en cours… " : ""}{message}</p>
     {apercu && <section className="space-y-4 min-w-0" aria-labelledby="telecharger-documents">
       <h2 id="telecharger-documents" className="font-bold text-lg">2. Télécharger les documents préparatoires</h2>
       <div className="rounded-xl border bg-white p-4 space-y-2 break-words">
