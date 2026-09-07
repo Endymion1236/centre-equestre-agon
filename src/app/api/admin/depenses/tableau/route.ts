@@ -5,12 +5,12 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
-import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION, justifiableParReleve } from "@/lib/tableau-depenses";
+import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, justifiableParReleve } from "@/lib/tableau-depenses";
 import { chargerLignesMois } from "@/lib/lignes-mois";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 const idValide = (s: unknown): s is string => typeof s === "string" && /^[\w-]{1,150}$/.test(s);
-const categories = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
+const categories = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true }); if (auth instanceof NextResponse) return auth;
   const mois = req.nextUrl.searchParams.get("mois") || "";
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
           });
           tx.update(mov, { poste: b.poste, promueVers: b.id, updatedAt: FieldValue.serverTimestamp() });
         } else {
-          tx.update(ref, { poste: b.poste, depensePersonnelle: b.poste === CATEGORIE_PERSONNELLE, immobilisation: b.poste === CATEGORIE_IMMOBILISATION });
+          tx.update(ref, { poste: b.poste, depensePersonnelle: b.poste === CATEGORIE_PERSONNELLE, immobilisation: b.poste === CATEGORIE_IMMOBILISATION, avanceFfe: b.poste === CATEGORIE_COMPTE_FFE });
         }
       } else if (b.action === "exclure" || b.action === "tva") {
         if (b.action === "exclure" && typeof b.exclue !== "boolean") throw new Error("Choix invalide");
@@ -94,14 +94,16 @@ export async function POST(req: NextRequest) {
         const anciens = (p.paiementsAssocies || []) as { id: string; montant: number; dateOperation: string; fournisseur: string }[];
         let suivants = anciens.filter(a => a.id !== b.id);
         if (b.action === "rattacher") {
-          if (b.confirme !== true || !["echeance", "per"].includes(b.mode) || p.retire || d.data()!.rapprochementExclu || d.data()!.source !== "releve-bancaire") throw new Error("Confirmation et ligne bancaire active requises");
+          if (b.confirme !== true || !["echeance", "per", "ffe"].includes(b.mode) || p.retire || d.data()!.rapprochementExclu || d.data()!.source !== "releve-bancaire") throw new Error("Confirmation et ligne bancaire active requises");
           if (p.depenseId && !anciens.length || p.modeRattachement && p.modeRattachement !== b.mode || lien.exists && lien.data()?.pieceId !== b.pieceId) throw new Error("Pièce ou paiement déjà associé autrement");
           if (b.montantEUR !== d.data()!.montant || !Number.isFinite(b.montantEUR) || b.montantEUR <= 0) throw new Error("Montant modifié ou invalide");
           if (anciens.length >= 100 && !anciens.some(a => a.id === b.id)) throw new Error("Maximum de 100 paiements par pièce atteint");
           if (b.mode === "echeance") {
             if (b.montantPiece !== p.extraction?.ttc || b.devise !== p.extraction?.devise) throw new Error("Facture modifiée : actualisez");
             verifierEcheance(p.extraction || {}, b.montantEUR, suivants.reduce((s, a) => s + a.montant, 0));
-          } else if (d.data()!.poste !== "Retraite / PER — à vérifier") throw new Error("Choisissez d’abord la catégorie Retraite / PER — à vérifier");
+          } else if (b.mode === "per") {
+            if (d.data()!.poste !== "Retraite / PER — à vérifier") throw new Error("Choisissez d’abord la catégorie Retraite / PER — à vérifier");
+          } else if (d.data()!.poste !== CATEGORIE_COMPTE_FFE) throw new Error(`Choisissez d’abord la catégorie ${CATEGORIE_COMPTE_FFE} sur la ligne`);
           suivants = [...suivants, { id: b.id, montant: b.montantEUR, dateOperation: d.data()!.dateOperation || "", fournisseur: d.data()!.fournisseur || "" }];
           tx.set(lr, { pieceId: b.pieceId });
         } else {

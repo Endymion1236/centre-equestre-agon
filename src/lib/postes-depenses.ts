@@ -49,3 +49,9 @@ export function posteCommissionCarte(libelle: unknown): string | null {
     || /^(commission|commissions) s(ur)? emprunt/.test(texte);
   return commission ? "Frais bancaires & commissions (CB, Stripe)" : null;
 }
+
+/** Versement au compte FFE (licences, engagements) : « Carte FFE Lamotte-Beuvron », « FFE », « Fédération Française d'Équitation ». */
+export function estVersementCompteFfe(libelle: unknown): boolean {
+  const texte = String(libelle ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return /\bffe\b/.test(texte) || /federation francaise d ?equitation/.test(texte);
+}

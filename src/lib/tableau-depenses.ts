@@ -18,6 +18,13 @@ export const SEUIL_ALERTE_IMMOBILISATION_TTC = 600;
  * financière) : c'est la comptable qui ventile, d'après le tableau.
  */
 export const CATEGORIE_EMPRUNTS = "Emprunts";
+/**
+ * Versement sur le compte FFE du club : une AVANCE, pas une charge. Les
+ * licences et engagements sont ensuite débités de ce compte, et le détail
+ * n'existe que sur ffe.com. La pièce est donc le relevé du compte FFE, et la
+ * charge réelle (engagements) se saisit d'après ce relevé.
+ */
+export const CATEGORIE_COMPTE_FFE = "Compte FFE (avance licences & engagements)";
 export const justifiableParReleve = (poste: unknown, fournisseur: unknown, estCommission: (l: unknown) => string | null) =>
   !!estCommission(fournisseur) || poste === CATEGORIE_EMPRUNTS;
 export const estPosteCharge = (poste: unknown, postesCharges: string[]) => typeof poste === "string" && postesCharges.includes(poste);
@@ -46,7 +53,9 @@ export function decisionCategorie(params: {
   const charge = postesCharges.includes(poste);
   const immobilisation = poste === CATEGORIE_IMMOBILISATION;
   if (estDepense) {
-    if (poste !== CATEGORIE_PERSONNELLE && !charge && !immobilisation) return { decision: "refuser", motif: "Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable." };
+    // Sortir des charges vers Personnel, Immobilisation ou Compte FFE est une
+    // requalification légitime ; vers salaires ou virements internes, non.
+    if (poste !== CATEGORIE_PERSONNELLE && poste !== CATEGORIE_COMPTE_FFE && !charge && !immobilisation) return { decision: "refuser", motif: "Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable." };
     return { decision: "mettre-a-jour" };
   }
   // Une immobilisation est une vraie dépense à exporter, même hors charges.

@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
         compte: r.compte || "",
         // Personnel et immobilisations : dépenses réelles, mais pas des
         // charges — la synthèse par poste ne doit pas les additionner.
-        horsCharges: !!(r.depensePersonnelle || r.immobilisation),
+        horsCharges: !!(r.depensePersonnelle || r.immobilisation || r.avanceFfe),
       };
     }).filter((l) => MOIS_RE.test(l.mois) && l.poste && !l.horsCharges);
     return NextResponse.json({ depenses: depenses.map(({ horsCharges: _h, ...l }) => l) });

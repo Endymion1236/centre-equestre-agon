@@ -20,7 +20,7 @@ export interface ExtractionMin {
 export interface LigneMois {
   id: string;
   dateOperation?: string; mois?: string; fournisseur?: string; poste?: string; montant: number; source?: string; compte?: string;
-  suivie?: boolean; rapprochementExclu?: boolean; depensePersonnelle?: boolean; immobilisation?: boolean;
+  suivie?: boolean; rapprochementExclu?: boolean; depensePersonnelle?: boolean; immobilisation?: boolean; avanceFfe?: boolean;
   statutTVA?: string; justificatifReleve?: boolean; referenceJustificatifReleve?: string | null;
   /** Justifiée par un autre écran (Masse salariale) : { type, detail }. */
   justifieeVia?: { type: string; detail: string } | null;
@@ -32,7 +32,7 @@ export interface LigneMois {
 const c = (n: number) => Math.round(n * 100) / 100;
 export const dansPerimetre = (l: LigneMois) => l.suivie !== false && !l.rapprochementExclu && !l.depensePersonnelle;
 export const estJustifiee = (l: LigneMois) => !!(l.piece || l.justificatifReleve || l.justifieeVia);
-export const natureLigne = (l: LigneMois) => l.depensePersonnelle ? "personnel" : l.immobilisation ? "immobilisation" : l.suivie === false ? "hors charges" : "charge";
+export const natureLigne = (l: LigneMois) => l.depensePersonnelle ? "personnel" : l.immobilisation ? "immobilisation" : l.avanceFfe ? "avance compte FFE" : l.suivie === false ? "hors charges" : "charge";
 
 export function completudeJustificatifs(lignes: LigneMois[]) {
   const base = lignes.filter(dansPerimetre);
@@ -62,7 +62,7 @@ export function bilanTvaMois(lignes: LigneMois[]) {
     const tva = tvaJustifiee(l);
     if (tva !== null) { r.deductibleJustifiee += tva; r.nbJustifiees++; continue; }
     // Salaires, cotisations : justifiés par la Masse salariale, et sans TVA par nature.
-    if (l.justifieeVia && (l.statutTVA || "a-verifier") === "a-verifier") { r.sansTva.nb++; r.sansTva.ttc += l.montant || 0; continue; }
+    if ((l.justifieeVia || l.avanceFfe) && (l.statutTVA || "a-verifier") === "a-verifier") { r.sansTva.nb++; r.sansTva.ttc += l.montant || 0; continue; }
     const statut = l.statutTVA || "a-verifier";
     const cible = statut === "sans-tva" ? r.sansTva : statut === "non-recuperee" ? r.nonRecuperee : l.piece ? r.pieceSansTva : r.aVerifier;
     cible.nb++; cible.ttc += l.montant || 0;

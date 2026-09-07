@@ -30,7 +30,8 @@ import { lireJsonPageReleve } from "@/lib/lecture-json-releve";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { separerVirementsPlateforme } from "@/lib/import-releve-pages";
-import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
+import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte, estVersementCompteFfe } from "@/lib/postes-depenses";
+import { CATEGORIE_COMPTE_FFE } from "@/lib/tableau-depenses";
 import { dateValide } from "@/lib/justificatifs";
 
 export const dynamic = "force-dynamic";
@@ -239,7 +240,9 @@ export async function POST(req: NextRequest) {
           .map((o: any) => {
             const montant = nb(o?.montant);
             const date = DATE_RE.test(String(o?.date)) ? String(o.date) : "";
-            const poste = posteCommissionCarte(o?.libelle) ?? (nomsPostes.includes(String(o?.poste)) ? String(o.poste) : POSTE_HORS_DEPENSES);
+            // Un versement au compte FFE est une avance, pas une charge : il ne
+            // doit pas finir en « Engagements » ou « Maréchalerie » au hasard.
+            const poste = posteCommissionCarte(o?.libelle) ?? (estVersementCompteFfe(o?.libelle) ? CATEGORIE_COMPTE_FFE : nomsPostes.includes(String(o?.poste)) ? String(o.poste) : POSTE_HORS_DEPENSES);
             return montant !== null && montant > 0
               ? { date, mois: date.slice(0, 7), libelle: String(o?.libelle || "").trim().slice(0, 80), montant, poste }
               : null;
