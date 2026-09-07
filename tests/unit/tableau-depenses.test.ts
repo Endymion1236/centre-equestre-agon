@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { verifierEcheance, verifierAssociationTableau } from "../../src/lib/tableau-depenses";
+import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE } from "../../src/lib/tableau-depenses";
 const debit = { id: "d", fournisseur: "Virement", source: "releve-bancaire", montant: 240 };
 const facture = { typeDocument: "achat", devise: "EUR", fournisseur: "Les Pieux", numero: "2026000729", date: "2026-06-22", ht: 227.51, tva: 12.49, ttc: 240 };
 test("association manuelle depuis une ligne : fournisseur bancaire différent permis, montant exact", () => {
@@ -40,4 +40,28 @@ test("les blocages donnent une action précise au lieu d’un conflit opaque", (
   assert.throws(() => verifierAssociationTableau({ ...facture, devise: "" }, debit), /Devise.*non renseignée/);
   assert.throws(() => verifierAssociationTableau(facture, { ...debit, montant: 90 }), /Échéance d’une facture/);
   assert.throws(() => verifierAssociationTableau({ ...facture, ttc: null }, debit), /TTC absent/);
+});
+
+const categories = ["Vétérinaire", "Frais bancaires", "Salaires", "Virements internes", CATEGORIE_PERSONNELLE, "hors-depenses"];
+const postesCharges = ["Vétérinaire", "Frais bancaires"];
+const mouvement = { id: "m1", fournisseur: "CLINIQUE VET DES POMMIERS", montant: 420.66, source: "releve-bancaire", mois: "2026-08", dateOperation: "2026-08-05" };
+const decider = (patch: Partial<Parameters<typeof decisionCategorie>[0]> = {}) => decisionCategorie({ estDepense: false, poste: "Vétérinaire", categories, postesCharges, ligne: mouvement, depensesDuMois: [], ...patch });
+test("un débit hors dépenses classé en charge devient une dépense, sans exiger de justificatif", () => {
+  assert.deepEqual(decider(), { decision: "promouvoir" });
+});
+test("classé hors charges (salaires, virement interne, personnel), le débit reste un simple mouvement", () => {
+  for (const poste of ["Salaires", "Virements internes", CATEGORIE_PERSONNELLE, "hors-depenses"]) assert.deepEqual(decider({ poste }), { decision: "mettre-a-jour" });
+});
+test("le même débit déjà présent dans les dépenses n'est pas compté deux fois", () => {
+  const r = decider({ depensesDuMois: [{ id: "d9", fournisseur: "Clinique Vet des Pommiers", montant: 420.66, source: "releve-bancaire", mois: "2026-08", dateOperation: "2026-08-05" }] });
+  assert.equal(r.decision, "refuser");
+  assert.match((r as { motif: string }).motif, /déjà/);
+  // Autre date, autre opération : pas un doublon.
+  assert.deepEqual(decider({ depensesDuMois: [{ id: "d9", fournisseur: "Clinique Vet des Pommiers", montant: 420.66, source: "releve-bancaire", mois: "2026-08", dateOperation: "2026-08-19" }] }), { decision: "promouvoir" });
+});
+test("une dépense déjà en charges ne sort du périmètre que vers Personnel", () => {
+  assert.equal(decider({ estDepense: true, poste: "Virements internes" }).decision, "refuser");
+  assert.deepEqual(decider({ estDepense: true, poste: CATEGORIE_PERSONNELLE }), { decision: "mettre-a-jour" });
+  assert.deepEqual(decider({ estDepense: true, poste: "Frais bancaires" }), { decision: "mettre-a-jour" });
+  assert.equal(decider({ poste: "Inconnue" }).decision, "refuser");
 });

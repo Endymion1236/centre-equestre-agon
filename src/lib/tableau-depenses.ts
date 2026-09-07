@@ -1,4 +1,42 @@
 import { nettoyerPiece, proposerAssociations, validerLienDevise, deviseEtrangere, type DepenseCandidate } from "./justificatifs";
+import { doublonPossible } from "./doublons-depenses";
+
+export const CATEGORIE_PERSONNELLE = "Personnel — hors charges";
+
+/**
+ * Que fait un changement de catégorie sur une ligne du tableau ?
+ *
+ * Règle du gérant : une charge s'enregistre sur la base du débit, le
+ * justificatif ne conditionne que la TVA et la défense en cas de contrôle.
+ * Un débit bancaire conservé « hors dépenses » qui reçoit une catégorie de
+ * charge devient donc une dépense, pièce ou pas ; la pièce manquante reste
+ * signalée à part. L'inverse (sortir une dépense des charges) reste bloqué,
+ * sauf vers « Personnel », comme avant.
+ */
+export function decisionCategorie(params: {
+  estDepense: boolean;
+  poste: unknown;
+  categories: string[];
+  postesCharges: string[];
+  ligne: DepenseCandidate;
+  /** Dépenses déjà suivies le même mois, pour ne pas compter deux fois le même débit. */
+  depensesDuMois: DepenseCandidate[];
+}): { decision: "mettre-a-jour" | "promouvoir"; } | { decision: "refuser"; motif: string } {
+  const { estDepense, poste, categories, postesCharges, ligne, depensesDuMois } = params;
+  if (typeof poste !== "string" || !categories.includes(poste)) return { decision: "refuser", motif: "Catégorie invalide" };
+  const charge = postesCharges.includes(poste);
+  if (estDepense) {
+    if (poste !== CATEGORIE_PERSONNELLE && !charge) return { decision: "refuser", motif: "Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable." };
+    return { decision: "mettre-a-jour" };
+  }
+  if (!charge) return { decision: "mettre-a-jour" };
+  const doublon = depensesDuMois.find(d => doublonPossible(ligne, d));
+  if (doublon) {
+    return { decision: "refuser", motif: `Une dépense identique existe déjà ce mois-ci (${doublon.fournisseur || "sans libellé"}, ${doublon.montant.toFixed(2)} €${doublon.dateOperation ? `, ${doublon.dateOperation}` : ""}). Catégorisez cette dépense-là, ou traitez le doublon avant de continuer.` };
+  }
+  return { decision: "promouvoir" };
+}
+
 export function verifierAssociationTableau(extraction: Record<string, unknown>, depense: DepenseCandidate) {
   if (depense.source !== "releve-bancaire" || !Number.isFinite(depense.montant) || depense.montant <= 0) throw new Error("Un débit bancaire positif est requis.");
   const p = nettoyerPiece(extraction);

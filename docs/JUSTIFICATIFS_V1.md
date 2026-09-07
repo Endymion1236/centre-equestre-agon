@@ -46,3 +46,17 @@ Limites : PDF d'origine 20 Mo / 150 pages ; extrait envoyé 4 millions de caract
 8. Formats interdits et fichiers >4 Mo : rejetés. Vérifier refus d'accès direct Firestore/Storage avec règles déployées.
 
 Prérequis serveur : Firebase Admin avec accès Storage et Firestore ; ANTHROPIC_API_KEY pour l'analyse. Collections nouvelles couvertes par le refus par défaut des règles existantes ; ne pas ouvrir de lecture publique. Ne pas tester avec les données de production.
+
+## Charges sans justificatif
+
+Règle du gérant (7 septembre 2026) : une charge s'enregistre sur la base du
+débit bancaire, le justificatif ne conditionne que la TVA et la défense en cas
+de contrôle. Dans le tableau des opérations, un débit conservé « hors dépenses »
+qui reçoit une catégorie de charge devient donc une dépense (même identifiant,
+les pièces et liens déjà posés restent valables), avec ou sans pièce ; la pièce
+manquante reste signalée à part et le statut TVA reste « à vérifier ». Le mouvement
+d'origine garde une trace (`promueVers`). Garde-fous : un débit identique déjà
+présent dans les dépenses du mois (même fournisseur normalisé, même montant, même
+date ou date absente) est refusé avec renvoi vers le contrôle des doublons ; une
+dépense déjà en charges ne sort du périmètre que vers « Personnel — hors charges ».
+Salaires, cotisations, virements internes et emprunts restent hors synthèse.

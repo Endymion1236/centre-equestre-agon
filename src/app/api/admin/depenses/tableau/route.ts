@@ -5,7 +5,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
-import { verifierEcheance, verifierAssociationTableau } from "@/lib/tableau-depenses";
+import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE } from "@/lib/tableau-depenses";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 const idValide = (s: unknown): s is string => typeof s === "string" && /^[\w-]{1,150}$/.test(s);
@@ -57,13 +57,37 @@ export async function POST(req: NextRequest) {
         if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
         if (b.confirme && (d.data()!.source !== "releve-bancaire" || !posteCommissionCarte(d.data()!.fournisseur) || !d.data()!.note)) throw new Error("Une commission carte avec relevé source identifié est requise");
         tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur), referenceJustificatifReleve: d.data()!.note } : { referenceJustificatifReleve: null }) });
-      } else if (b.action === "categorie" || b.action === "exclure" || b.action === "tva") {
-        if (b.action === "categorie" && !categories.includes(b.poste)) throw new Error("Catégorie invalide");
-        // Les salaires nets ne deviennent pas des charges dans la synthèse de fonctionnement.
-        if (b.action === "categorie" && ds.exists && b.poste !== "Personnel — hors charges" && !POSTES_DEPENSES.some(p => p.nom === b.poste)) throw new Error("Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable.");
+      } else if (b.action === "categorie") {
+        // Un débit « hors dépenses » qui reçoit une catégorie de charge devient
+        // une dépense, avec ou sans justificatif (règle du gérant : la charge
+        // s'enregistre sur le débit, la pièce ne conditionne que la TVA).
+        // Les salaires nets, virements internes et emprunts restent hors charges.
+        const donnees = d.data()!;
+        const ligne = { ...donnees, id: b.id } as DepenseCandidate;
+        const memesMontants = ds.exists ? [] : (await tx.get(adminDb.collection("depenses").where("mois", "==", String(donnees.mois || "")).where("montant", "==", donnees.montant))).docs.map(x => ({ ...x.data(), id: x.id }) as DepenseCandidate);
+        const decision = decisionCategorie({ estDepense: ds.exists, poste: b.poste, categories, postesCharges: POSTES_DEPENSES.map(p => p.nom), ligne, depensesDuMois: memesMontants });
+        if (decision.decision === "refuser") throw new Error(decision.motif);
+        if (decision.decision === "promouvoir") {
+          // Même identifiant : les pièces et liens posés sur le mouvement
+          // restent valables, et le tableau affiche la dépense à sa place.
+          tx.create(dep, {
+            mois: donnees.mois, dateOperation: donnees.dateOperation || "", montant: donnees.montant,
+            fournisseur: donnees.fournisseur || "", compte: donnees.compte || "", note: donnees.note || "",
+            source: "releve-bancaire", sourceOperation: donnees.sourceOperation || null,
+            poste: b.poste, depensePersonnelle: false,
+            ...(donnees.statutTVA ? { statutTVA: donnees.statutTVA } : {}),
+            ...(donnees.rapprochementExclu ? { rapprochementExclu: true } : {}),
+            ...(donnees.justificatifReleve ? { justificatifReleve: true, referenceJustificatifReleve: donnees.referenceJustificatifReleve || null } : {}),
+            promueDepuisMouvement: true, updatedAt: FieldValue.serverTimestamp(),
+          });
+          tx.update(mov, { poste: b.poste, promueVers: b.id, updatedAt: FieldValue.serverTimestamp() });
+        } else {
+          tx.update(ref, { poste: b.poste, depensePersonnelle: b.poste === CATEGORIE_PERSONNELLE });
+        }
+      } else if (b.action === "exclure" || b.action === "tva") {
         if (b.action === "exclure" && typeof b.exclue !== "boolean") throw new Error("Choix invalide");
         if (b.action === "tva" && !["a-verifier", "sans-tva", "non-recuperee"].includes(b.statutTVA)) throw new Error("Statut TVA invalide");
-        tx.update(ref, b.action === "categorie" ? { poste: b.poste, depensePersonnelle: b.poste === "Personnel — hors charges" } : b.action === "tva" ? { statutTVA: b.statutTVA } : { rapprochementExclu: b.exclue });
+        tx.update(ref, b.action === "tva" ? { statutTVA: b.statutTVA } : { rapprochementExclu: b.exclue });
       } else if (["rattacher", "detacher"].includes(b.action)) {
         if (!idValide(b.pieceId)) throw new Error("Pièce invalide");
         const pr = adminDb.collection("justificatifs").doc(b.pieceId), lr = adminDb.collection("justificatifs-liens").doc(b.id);
@@ -109,7 +133,7 @@ export async function POST(req: NextRequest) {
           associationDevise: association.nature === "devise" ? { deviseFacture: association.devisePiece, montantFacture: association.montantPiece, montantDebiteEUR: association.montantEUR } : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
-      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && POSTES_DEPENSES.some(p => p.nom === b.poste), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
