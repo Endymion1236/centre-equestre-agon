@@ -91,6 +91,7 @@ export default function TresoreriePage() {
   const [cellReports, setCellReports] = useState<Set<string>>(new Set());
   // Relevés PDF déposés, en cours de lecture / de validation.
   const [lectureReleve, setLectureReleve] = useState(0);
+  const [soldeUniquement, setSoldeUniquement] = useState(false);
   const [propositions, setPropositions] = useState<PropositionReleve[]>([]);
 
   const api = useCallback(async (init?: RequestInit) => {
@@ -235,7 +236,7 @@ export default function TresoreriePage() {
       try {
         const b64 = btoa(new Uint8Array(await f.arrayBuffer()).reduce((s, o) => s + String.fromCharCode(o), ""));
         // 1. Le solde et les encaissements clients : court, c'est l'essentiel.
-        const d = await api({ method: "POST", body: JSON.stringify({ action: "extraire", pdfBase64: b64, filename: f.name }) });
+        const d = await api({ method: "POST", body: JSON.stringify({ action: soldeUniquement ? "extraire-solde" : "extraire", pdfBase64: b64, filename: f.name }) });
         const p = d.propositionReleve;
         // Pré-choix du compte : celui dont le nom recoupe le libellé lu, sinon le premier.
         const libelle = `${p.banque} ${p.compte}`.toLowerCase();
@@ -245,11 +246,12 @@ export default function TresoreriePage() {
           ...p,
           id,
           operations: [],
-          operationsEtat: "lecture",
+          operationsEtat: soldeUniquement ? "ok" : "lecture",
           compteChoisi,
           soldeEdit: p.soldeFin != null ? String(p.soldeFin) : "",
           soldeEnregistre: false,
         }]);
+        if (soldeUniquement) continue;
         // 2. Les débits catégorisés : long, et facultatif — s'il échoue (délai
         //    dépassé sur un mois chargé), le solde est déjà à l'écran.
         try {
@@ -372,8 +374,12 @@ export default function TresoreriePage() {
             title="Le solde de fin de mois est lu sur le relevé et proposé ; les débits sont catégorisés en dépenses. Le PDF n'est pas conservé.">
             {lectureReleve > 0 ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
             {lectureReleve > 0 ? `Lecture (${lectureReleve})…` : "Déposer le relevé (PDF)"}
-            <input type="file" accept=".pdf,application/pdf" multiple className="hidden"
+            <input type="file" accept=".pdf,application/pdf" multiple className="hidden" disabled={lectureReleve > 0}
               onChange={e => { if (e.target.files?.length) lireReleve(e.target.files); e.target.value = ""; }} />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-slate-700">
+            <input type="checkbox" checked={soldeUniquement} disabled={lectureReleve > 0} onChange={e => setSoldeUniquement(e.target.checked)} />
+            Solde uniquement (épargne / Excédent Pro)
           </label>
           <button type="button" onClick={() => setComptesEdit(comptesEdit === null ? comptes.map(c => ({ nom: c, compte: !horsTotal.includes(c) })) : null)}
             title="Régler la liste des comptes bancaires suivis"
@@ -415,8 +421,7 @@ export default function TresoreriePage() {
           {p.lectureIncomplete && (
             <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-body text-[11px] text-amber-800">
               ⚠ Relevé long : la lecture s&apos;est arrêtée avant la fin — les derniers débits du mois
-              peuvent manquer dans la liste ci-dessous. Le solde, lui, est fiable. Vérifie la fin du
-              relevé et ajoute à la main ce qui manque.
+              peuvent manquer dans la liste ci-dessous. Vérifie également le solde sur le PDF avant de l’enregistrer.
             </div>
           )}
 
