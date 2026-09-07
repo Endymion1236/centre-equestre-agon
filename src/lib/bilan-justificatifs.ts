@@ -21,7 +21,7 @@ export interface ExtractionMin {
 }
 export interface LigneMois {
   id: string;
-  dateOperation?: string; mois?: string; fournisseur?: string; poste?: string; montant: number; source?: string; compte?: string;
+  dateOperation?: string; mois?: string; fournisseur?: string; poste?: string; montant: number; source?: string; compte?: string; note?: string; compteBanqueConfirme?: string | null;
   suivie?: boolean; rapprochementExclu?: boolean; depensePersonnelle?: boolean; immobilisation?: boolean; avanceFfe?: boolean;
   statutTVA?: string; justificatifReleve?: boolean; referenceJustificatifReleve?: string | null;
   /** Justifiée par un autre écran (Masse salariale) : { type, detail }. */

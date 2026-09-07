@@ -6,6 +6,7 @@ import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
 import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, justifiableParReleve } from "@/lib/tableau-depenses";
+import { verifierChoixBanque } from "@/lib/banque-depense";
 import { chargerLignesMois } from "@/lib/lignes-mois";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
@@ -48,7 +49,12 @@ export async function POST(req: NextRequest) {
       const dep = adminDb.collection("depenses").doc(b.id), mov = mouvements().doc(b.id);
       const [ds, ms] = await tx.getAll(dep, mov); const d = ds.exists ? ds : ms; const ref = ds.exists ? dep : mov;
       if (!d.exists) throw new Error("Ligne absente : actualisez le tableau");
-      if (b.action === "justifier-releve") {
+      if (b.action === "compte-banque") {
+        const compteBanqueConfirme = verifierChoixBanque(d.data()!, b.compteBanqueConfirme, b.avantCompteBanque);
+        tx.update(ref, { compteBanqueConfirme, compteBanqueConfirmePar: auth.uid, compteBanqueConfirmeLe: FieldValue.serverTimestamp() });
+        // Une dépense promue conserve aussi le choix sur son mouvement source.
+        if (ds.exists && ms.exists) tx.update(mov, { compteBanqueConfirme });
+      } else if (b.action === "justifier-releve") {
         if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
         if (b.confirme && (d.data()!.source !== "releve-bancaire" || !justifiableParReleve(d.data()!.poste, d.data()!.fournisseur, posteCommissionCarte))) throw new Error("Seuls une commission ou des frais prélevés par la banque, ou une échéance d'emprunt, peuvent être justifiés par le relevé.");
         // Référence du relevé : son nom de fichier quand l'import l'a gardé,
@@ -76,6 +82,7 @@ export async function POST(req: NextRequest) {
             ...(donnees.statutTVA ? { statutTVA: donnees.statutTVA } : {}),
             ...(donnees.rapprochementExclu ? { rapprochementExclu: true } : {}),
             ...(donnees.justificatifReleve ? { justificatifReleve: true, referenceJustificatifReleve: donnees.referenceJustificatifReleve || null } : {}),
+            ...(donnees.compteBanqueConfirme ? { compteBanqueConfirme: donnees.compteBanqueConfirme } : {}),
             promueDepuisMouvement: true, updatedAt: FieldValue.serverTimestamp(),
           });
           tx.update(mov, { poste: b.poste, promueVers: b.id, updatedAt: FieldValue.serverTimestamp() });
@@ -134,7 +141,7 @@ export async function POST(req: NextRequest) {
           associationEcart: association.nature === "escompte" && "ecart" in association ? association.ecart : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
-      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && (POSTES_DEPENSES.some(p => p.nom === b.poste) || b.poste === CATEGORIE_IMMOBILISATION), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, ...(b.action === "compte-banque" ? { avantCompteBanque: d.data()!.compteBanqueConfirme || null, apresCompteBanque: b.compteBanqueConfirme } : {}), avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && (POSTES_DEPENSES.some(p => p.nom === b.poste) || b.poste === CATEGORIE_IMMOBILISATION), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

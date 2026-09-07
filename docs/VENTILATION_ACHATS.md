@@ -73,3 +73,23 @@ résultat complets, il faudra aussi les soldes d'ouverture et les opérations de
 clôture : immobilisations/amortissements, stocks, emprunts et régularisations.
 La production des documents restera distincte de leur validation et signature.
 Cette étape n'ajoute pas de journal d'achats ni de bilan officiel.
+
+## Banque du prélèvement
+
+La fiche distingue le compte d'imputation (par exemple `62710000`, commissions CB)
+du compte de trésorerie qui a payé la dépense. Les anciens imports peuvent avoir
+perdu le compte source ; le libellé générique « Compte courant » ne prouve pas
+à lui seul qu'il s'agit du Crédit Agricole.
+
+Le compte est proposé d'après le libellé du relevé ou, pour les anciens imports,
+d'après son numéro exact présent dans la référence du PDF. Aucun numéro partiel
+ni simple nom de fichier « CA…pdf » ne suffit. Une autre banque nommée ne sera
+pas remplacée sur la seule base d'une note.
+
+Le sélecteur « Compte de prélèvement » permet un choix explicite parmi les comptes
+du plan du cabinet (Crédit Agricole, Excédent Pro, FFE club, FFE compétition).
+Le choix est enregistré dans `compteBanqueConfirme`, avec historique avant/après
+et contrôle des modifications concurrentes. Le montant, le compte source et
+l'identifiant d'import ne changent pas. Revenir à l'identification du relevé
+retire la confirmation. Le choix suit une éventuelle promotion du mouvement
+en dépense et alimente les CSV et le colis comptable via le même calcul.
