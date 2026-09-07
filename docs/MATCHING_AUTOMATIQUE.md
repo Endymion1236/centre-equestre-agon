@@ -1,5 +1,9 @@
 # Rapprochement des justificatifs fournisseurs
 
+Ce parcours par lot est désormais désactivé à la demande de l'utilisateur.
+Voir JUSTIFICATIFS_UN_PAR_UN.md pour le parcours courant. Cette page documente
+le fonctionnement précédent ; l'endpoint matching renvoie maintenant 410.
+
 Dans Justificatifs, le dépôt envoie d’abord tous les fichiers puis analyse toutes
 les pièces actives en attente (pagination complète, une requête IA par pièce).
 Le bouton « Analyser toutes les pièces en attente » reprend les échecs. Garder
