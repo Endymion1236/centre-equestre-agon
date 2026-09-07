@@ -115,7 +115,7 @@ export function Navbar() {
               <button type="button" onClick={signOut} className="border-none bg-transparent font-body text-xs text-slate-400 cursor-pointer hover:text-red-500">Quitter</button>
             </div>
           ) : (
-            <button type="button" onClick={signInWithGoogle} className={`border-none bg-transparent p-1 cursor-pointer transition-colors ${light ? "text-slate-300 hover:text-slate-500" : "text-white/18 hover:text-white/45"}`} title="Connexion admin" aria-label="Connexion admin">
+            <button type="button" onClick={() => signInWithGoogle().catch((e) => console.warn("Connexion admin :", e?.message || e))} className={`border-none bg-transparent p-1 cursor-pointer transition-colors ${light ? "text-slate-300 hover:text-slate-500" : "text-white/18 hover:text-white/45"}`} title="Connexion admin" aria-label="Connexion admin">
               <UserRound size={15} />
             </button>
           )}

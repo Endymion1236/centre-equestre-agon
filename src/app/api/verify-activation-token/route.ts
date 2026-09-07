@@ -5,11 +5,14 @@
  * stocke dans Firestore) contre un Firebase custom token, que le client
  * utilise ensuite avec signInWithCustomToken pour se connecter.
  *
+ * Le lien valide prouve l'adresse : le compte est marque emailVerified avant
+ * l'emission du custom token (cf. lib/activation-token.ts).
+ *
  * Body : { token: string }
  *
  * Reponse :
  *   - 200 { ok: true, customToken }    -> succes
- *   - 200 { ok: false, error: 'expired'|'used'|'not_found'|'internal' }
+ *   - 200 { ok: false, error: 'expired'|'used'|'not_found'|'disabled'|'internal' }
  *     (on renvoie 200 meme en cas d'echec metier pour que le client gere
  *      proprement l'affichage ; le code 'error' precise la cause)
  */

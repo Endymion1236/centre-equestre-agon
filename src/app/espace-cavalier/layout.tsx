@@ -23,7 +23,8 @@ import {
 import { collection, getDocs, query, where } from "firebase/firestore";
 import VoiceAssistant from "@/components/VoiceAssistant";
 import { ToastProvider } from "@/components/ui/Toast";
-import { useAuth } from "@/lib/auth-context";
+import { useAuth, type EtatConfirmation, type ResultatConfirmationAdresse } from "@/lib/auth-context";
+import { secondesAvantRenvoi, type ResultatEnvoiConfirmation } from "@/lib/auth-erreurs";
 import { addDaysLocal, toLocalDateString } from "@/lib/date-local";
 import { db } from "@/lib/firebase";
 
@@ -113,6 +114,24 @@ function LoginScreen() {
   const changeMode = (next: typeof mode) => {
     reset();
     setMode(next);
+  };
+
+  /**
+   * Google / Facebook : l'erreur remonte désormais du contexte (popup
+   * bloquée, annulation, domaine non autorisé, réseau…) au lieu d'un
+   * console.error muet qui laissait l'écran figé sans explication. Aucun
+   * rattachement n'est tenté après un échec : c'est l'observateur
+   * d'authentification qui s'en charge, seulement après une vraie connexion.
+   */
+  const social = async (connexion: () => Promise<void>) => {
+    setError("");
+    setLoading(true);
+    try {
+      await connexion();
+    } catch (err: any) {
+      setError(err?.message || "Connexion impossible pour le moment. Réessayez, ou utilisez le lien de connexion par email.");
+    }
+    setLoading(false);
   };
 
   const login = async () => {
@@ -225,14 +244,15 @@ function LoginScreen() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 sm:p-8">
           {mode === "social" && (
             <div className="flex flex-col gap-3">
-              <button type="button" onClick={signInWithGoogle} className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-xl border border-gray-200 bg-white font-body text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-50">
+              <button type="button" disabled={loading} onClick={() => social(signInWithGoogle)} className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-xl border border-gray-200 bg-white font-body text-sm font-semibold text-gray-700 cursor-pointer hover:bg-gray-50 disabled:opacity-50">
                 <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
                 Continuer avec Google
               </button>
-              <button type="button" onClick={signInWithFacebook} className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-xl bg-[#1877F2] font-body text-sm font-semibold text-white border-none cursor-pointer">
+              <button type="button" disabled={loading} onClick={() => social(signInWithFacebook)} className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-xl bg-[#1877F2] font-body text-sm font-semibold text-white border-none cursor-pointer disabled:opacity-50">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
                 Continuer avec Facebook
               </button>
+              {error && <p role="alert" className="font-body text-xs text-red-600 text-center">{error}</p>}
 
               <div className="flex items-center gap-3 my-1"><div className="flex-1 h-px bg-gray-200"/><span className="font-body text-xs text-gray-400">ou</span><div className="flex-1 h-px bg-gray-200"/></div>
 
@@ -299,6 +319,86 @@ function LoginScreen() {
           En utilisant cet espace, vous acceptez les <Link href="/cgv" className="text-blue-600">conditions générales</Link> et la <Link href="/confidentialite" className="text-blue-600">politique de confidentialité</Link>.
         </p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Fiche trouvée mais adresse non confirmée : sans ce bandeau, la famille
+ * voit un espace vide sans comprendre pourquoi.
+ *
+ * Trois règles, tirées du blocage du 07/09/2026 :
+ *   - on n'affiche « lien envoyé » qu'une fois l'envoi réellement résolu,
+ *     et l'échec dit sa cause (trop de demandes, réseau, session expirée…) ;
+ *   - une temporisation d'une minute entre deux renvois, visible ;
+ *   - « J'ai confirmé mon adresse » recharge le compte et retente le
+ *     rattachement sans obliger à se déconnecter.
+ */
+function BandeauConfirmation({ email, etat, renvoyer, confirmer }: {
+  email: string;
+  etat: EtatConfirmation;
+  renvoyer: () => Promise<ResultatEnvoiConfirmation>;
+  confirmer: () => Promise<ResultatConfirmationAdresse>;
+}) {
+  const [action, setAction] = useState<"" | "renvoi" | "verification">("");
+  const [messageVerification, setMessageVerification] = useState("");
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+
+  const attente = secondesAvantRenvoi(etat.dernierEnvoi, maintenant);
+  // Le compte à rebours ne tourne que tant qu'il reste quelque chose à attendre.
+  useEffect(() => {
+    if (attente <= 0) return;
+    const t = setInterval(() => setMaintenant(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [attente]);
+
+  const onRenvoyer = async () => {
+    setAction("renvoi");
+    setMessageVerification("");
+    await renvoyer(); // le résultat arrive par `etat`
+    setMaintenant(Date.now());
+    setAction("");
+  };
+
+  const onConfirmer = async () => {
+    setAction("verification");
+    setMessageVerification("");
+    const r = await confirmer();
+    if (!r.ok) setMessageVerification(r.message);
+    setAction("");
+  };
+
+  const occupe = action !== "";
+  const envoye = etat.dernierEnvoi !== null && !etat.erreur;
+
+  return (
+    <div className="mx-4 md:mx-8 mt-4 p-4 rounded-xl bg-orange-50 border border-orange-200" role="status">
+      <div className="font-body text-sm text-orange-900 font-bold mb-1">Confirmez votre adresse e-mail</div>
+      <div className="font-body text-xs text-orange-800 leading-relaxed">
+        Vos informations existent bien au club, mais nous ne pouvons pas les afficher
+        tant que votre adresse n’est pas confirmée.{" "}
+        {envoye ? (
+          <>Un lien vient d’être envoyé à <strong>{email}</strong> (pensez aux indésirables). Ouvrez-le, puis revenez cliquer sur « J’ai confirmé mon adresse ».</>
+        ) : (
+          <>Ouvrez le lien de confirmation reçu à <strong>{email}</strong> (pensez aux indésirables), puis cliquez sur « J’ai confirmé mon adresse ». Si vous n’avez rien reçu, demandez un nouveau lien.</>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button type="button" disabled={occupe} onClick={onConfirmer}
+          className="px-3 py-1.5 rounded-lg bg-orange-600 font-body text-xs font-bold text-white border-none cursor-pointer disabled:opacity-50">
+          {action === "verification" ? "Vérification..." : "J’ai confirmé mon adresse"}
+        </button>
+        <button type="button" disabled={occupe || attente > 0} onClick={onRenvoyer}
+          className="px-3 py-1.5 rounded-lg bg-white border border-orange-300 font-body text-xs font-bold text-orange-800 cursor-pointer disabled:opacity-50">
+          {action === "renvoi" ? "Envoi..." : attente > 0 ? `Renvoyer le lien (${attente} s)` : envoye ? "Renvoyer le lien" : "Recevoir le lien"}
+        </button>
+      </div>
+      {etat.erreur && (
+        <div className="font-body text-xs text-red-600 mt-2" role="alert">{etat.erreur.message}</div>
+      )}
+      {messageVerification && (
+        <div className="font-body text-xs text-red-600 mt-2" role="alert">{messageVerification}</div>
+      )}
     </div>
   );
 }
@@ -374,8 +474,7 @@ function CavalierSidebar({ pathname }: { pathname: string }) {
 }
 
 function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) {
-  const { user, loading, signOut, isAdmin, isMoniteur, emailAConfirmer, renvoyerConfirmation } = useAuth();
-  const [renvoi, setRenvoi] = useState<"" | "envoi" | "ok" | "err">("");
+  const { user, loading, signOut, isAdmin, isMoniteur, emailAConfirmer, etatConfirmation, renvoyerConfirmation, confirmerAdresse } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -514,25 +613,12 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
         {/* Fiche trouvée mais adresse non confirmée : sans ce bandeau, la
             famille voit un espace vide sans comprendre pourquoi. */}
         {emailAConfirmer && (
-          <div className="mx-4 md:mx-8 mt-4 p-4 rounded-xl bg-orange-50 border border-orange-200">
-            <div className="font-body text-sm text-orange-900 font-bold mb-1">Confirmez votre adresse e-mail</div>
-            <div className="font-body text-xs text-orange-800 leading-relaxed">
-              Vos informations existent bien au club, mais nous ne pouvons pas les afficher
-              tant que votre adresse n’est pas confirmée. Ouvrez le lien envoyé à{" "}
-              <strong>{user.email}</strong> (pensez aux indésirables), puis reconnectez-vous.
-            </div>
-            <button type="button" disabled={renvoi === "envoi"}
-              onClick={async () => {
-                setRenvoi("envoi");
-                try { await renvoyerConfirmation(); setRenvoi("ok"); } catch { setRenvoi("err"); }
-              }}
-              className="mt-2 px-3 py-1.5 rounded-lg bg-orange-600 font-body text-xs font-bold text-white border-none cursor-pointer disabled:opacity-50">
-              {renvoi === "envoi" ? "Envoi..." : renvoi === "ok" ? "Lien renvoyé" : "Renvoyer le lien"}
-            </button>
-            {renvoi === "err" && (
-              <div className="font-body text-xs text-red-600 mt-1">Envoi impossible pour le moment — réessayez dans quelques minutes.</div>
-            )}
-          </div>
+          <BandeauConfirmation
+            email={user.email || ""}
+            etat={etatConfirmation}
+            renvoyer={renvoyerConfirmation}
+            confirmer={confirmerAdresse}
+          />
         )}
 
         {/* min-w-0 + overflow-x-hidden : un bloc trop large (ligne

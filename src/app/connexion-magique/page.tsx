@@ -97,6 +97,10 @@ function ConnexionMagiqueContent() {
           setErrorMsg("Ce lien a expiré (il était valable 7 jours). Demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
         } else if (data.error === "used") {
           setErrorMsg("Ce lien a déjà été utilisé. Si tu as besoin de te reconnecter, demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
+        } else if (data.error === "disabled") {
+          setErrorMsg("Ce compte a été désactivé. Contacte l'équipe du centre équestre pour le réactiver.");
+        } else if (data.error === "internal") {
+          setErrorMsg("Le serveur n'a pas pu finaliser la connexion. Le lien reste valable : réessaie dans quelques instants, puis contacte le club si le problème persiste.");
         } else {
           setErrorMsg("Ce lien n'est pas valide. Demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
         }
