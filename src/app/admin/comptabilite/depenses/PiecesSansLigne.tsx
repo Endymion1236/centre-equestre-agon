@@ -67,6 +67,33 @@ export default function JustificatifsPage() {
       const url = URL.createObjectURL(await r.blob()); const a = document.createElement("a"); a.href = url; a.download = p.nom; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) { setMessage(e instanceof Error ? e.message : "Erreur"); }
   }
+  const [drive, setDrive] = useState<{ dossier: string; googleConnecte: boolean } | null>(null);
+  useEffect(() => { if (user && isAdmin) void authFetch(`${endpoint}/import-drive`).then(r => r.json()).then(d => setDrive({ dossier: d.dossier || "", googleConnecte: !!d.googleConnecte })).catch(() => setDrive({ dossier: "", googleConnecte: false })); }, [user, isAdmin]);
+  async function importerDrive() {
+    if (!drive?.dossier.trim()) { setMessage("Collez le lien du dossier Drive à importer."); return; }
+    setBusy(true); setEdition(false);
+    const nouveaux: string[] = []; let doublons = 0, ignores: string[] = [], total = 0, tours = 0;
+    try {
+      let restants = 1;
+      while (restants > 0 && tours < 40) {
+        tours++;
+        setMessage(`Import depuis Drive… ${nouveaux.length} pièce(s) importée(s)${restants > 1 ? `, ${restants} restante(s)` : ""}`);
+        const r = await authFetch(`${endpoint}/import-drive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dossier: drive.dossier }) });
+        const d = await r.json(); if (!r.ok) throw new Error(d.error);
+        nouveaux.push(...d.importes); doublons += d.doublons.length; ignores = [...ignores, ...d.ignores]; total = d.total; restants = d.restants;
+      }
+      await load();
+      let lues = 0, echecs = 0;
+      for (const id of nouveaux) {
+        setMessage(`${nouveaux.length} pièce(s) importée(s) sur ${total} fichier(s) du dossier. Lecture ${lues + echecs + 1} / ${nouveaux.length}…`);
+        try { await envoyer({ action: "analyser", id }); lues++; } catch { echecs++; }
+      }
+      await load();
+      setMessage([`Dossier Drive : ${total} fichier(s) PDF/JPEG/PNG.`, `${nouveaux.length} nouvelle(s) pièce(s) importée(s), ${doublons} déjà connue(s).`,
+        nouveaux.length ? `${lues} lue(s) par l'IA${echecs ? `, ${echecs} à relire à la main` : ""}.` : "", ...ignores.map(i => `Ignoré : ${i}`)].filter(Boolean).join("\n"));
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Import Drive impossible"); }
+    finally { setBusy(false); }
+  }
   const p = pieces.find(x => x.id === selection);
   const e = p?.extraction;
   const liste = pieces.filter(x => (filtre === "exclues" ? x.retire : !x.retire && (filtre !== "paie" || x.extraction?.typeDocument === "paie")) && x.nom.toLowerCase().includes(recherche.toLowerCase()));
@@ -79,6 +106,14 @@ export default function JustificatifsPage() {
       <label htmlFor="piece" className="block font-semibold">Importer une facture, un ticket ou un bulletin de paie</label>
       <input id="piece" type="file" accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={ev => { const f = ev.target.files?.[0]; ev.target.value = ""; if (f) void depot(f); }} />
       <p className="text-sm">Un document par fichier, PDF ou photo, 4 Mo maximum. Plusieurs pages sont possibles pour une même pièce. La lecture IA concerne uniquement le document choisi. Les pièces restent privées.</p>
+    </section>
+    <section className="rounded-xl border bg-white p-5 space-y-2">
+      <label htmlFor="drive" className="block font-semibold">Importer un dossier Google Drive</label>
+      <div className="flex flex-wrap gap-2">
+        <input id="drive" className="flex-1 min-w-64 border rounded p-2" placeholder="Lien du dossier Drive (…/folders/…) ou identifiant" value={drive?.dossier || ""} disabled={busy || !drive} onChange={e => setDrive(d => ({ dossier: e.target.value, googleConnecte: d?.googleConnecte ?? false }))} />
+        <button disabled={busy || !drive} className="rounded bg-slate-900 text-white px-4 py-2 disabled:opacity-50" onClick={() => void importerDrive()}>Importer les nouveaux fichiers</button>
+      </div>
+      <p className="text-sm">Seuls les fichiers pas encore importés sont récupérés (PDF, JPEG, PNG, 10 Mo maximum), puis lus par l’IA. Le dossier Drive n’est ni modifié ni vidé : les pièces sont copiées dans le coffre privé de l’application, qui reste la référence.{drive && !drive.googleConnecte ? " Compte Google non connecté : connectez-le d’abord dans l’Assistant boîte mail." : ""}</p>
     </section>
     <p role="status" className="whitespace-pre-line rounded bg-slate-50 p-3">{message || "Choisissez un fichier ou ouvrez une pièce déjà importée."}</p>
     {p && <article className="rounded-xl border p-5 space-y-4">

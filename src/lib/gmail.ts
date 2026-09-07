@@ -335,6 +335,38 @@ export async function driveGetFile(
   };
 }
 
+/** Identifiant d'un dossier Drive depuis une URL collée (…/folders/ID) ou l'identifiant nu. */
+export function driveFolderId(saisie: string): string {
+  const t = String(saisie || "").trim();
+  const m = t.match(/\/folders\/([A-Za-z0-9_-]{10,})/) || t.match(/[?&]id=([A-Za-z0-9_-]{10,})/);
+  const id = m ? m[1] : t;
+  return /^[A-Za-z0-9_-]{10,}$/.test(id) ? id : "";
+}
+
+export interface DriveFichier { id: string; name: string; mimeType: string; size: number; modifiedTime: string; md5Checksum?: string }
+
+/** Les fichiers d'un dossier Drive (non supprimés), toutes pages confondues, 1 000 au plus. */
+export async function driveListFolder(folderId: string): Promise<DriveFichier[]> {
+  const token = await getAccessToken();
+  const fichiers: DriveFichier[] = [];
+  let pageToken = "";
+  do {
+    const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+    const url = `${DRIVE_API}/files?q=${q}&fields=nextPageToken,files(id,name,mimeType,size,modifiedTime,md5Checksum)&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) {
+      const txt = await res.text();
+      if (res.status === 403 && /insufficient|scope/i.test(txt)) throw new Error("DRIVE_SCOPE_MANQUANT");
+      if (res.status === 404) throw new Error("Dossier Drive introuvable ou non partagé avec le compte Google connecté.");
+      throw new Error(`drive list ${res.status}: ${txt}`);
+    }
+    const data = await res.json();
+    for (const f of data.files || []) fichiers.push({ id: String(f.id), name: String(f.name || "fichier"), mimeType: String(f.mimeType || ""), size: Number(f.size || 0), modifiedTime: String(f.modifiedTime || ""), md5Checksum: f.md5Checksum });
+    pageToken = String(data.nextPageToken || "");
+  } while (pageToken && fichiers.length < 1000);
+  return fichiers;
+}
+
 /**
  * Filtre de la boîte de traitement.
  *

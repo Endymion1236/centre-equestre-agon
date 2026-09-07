@@ -7,6 +7,7 @@ export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandida
   const nom = normaliser(p.fournisseur);
   if (nom.length < 4) return [];
   return proposerAssociations(p, depenses).filter(d => {
+    if (d.ecart) return false; // un escompte se confirme à la main, jamais tout seul
     const date = dateValide(d.dateOperation);
     const jours = date ? (Date.parse(date) - Date.parse(p.date)) / 86400000 : -1;
     return normaliser(d.fournisseur) === nom && jours >= 0 && jours <= 7;

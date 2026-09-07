@@ -66,18 +66,56 @@ export function alertesPiece(p: PieceExtraite): string[] {
   return alerts;
 }
 const normaliser = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-export function proposerAssociations(p: PieceExtraite, depenses: DepenseCandidate[]) {
+/** Escompte pour paiement à l'échéance : débit inférieur au TTC de 0,5 % à 3 %, même fournisseur. */
+export const ESCOMPTE_MIN = 0.005, ESCOMPTE_MAX = 0.03;
+export interface EcartAssociation { type: "escompte"; taux: number; montant: number }
+export type Proposition = DepenseCandidate & { score: number; raisons: string[]; ecart?: EcartAssociation };
+
+const MOTS_VIDES = new Set(["sarl", "sas", "sasu", "eurl", "earl", "scea", "gaec", "societe", "cabinet", "clinique", "centre", "france", "paris", "des", "les", "the"]);
+const mots = (s: string) => s.split(" ").filter(m => m.length >= 3 && !MOTS_VIDES.has(m) && !/^\d+$/.test(m));
+/**
+ * Fournisseur « proche » : les libellés bancaires abrègent (« CLINIQUE VET
+ * DES POMMIERS » pour « Clinique Vétérinaire des Pommiers »). Deux mots
+ * significatifs en commun, ou le premier mot significatif identique, suffisent
+ * à ouvrir la règle d'escompte — qui reste à confirmer à la main.
+ */
+export function fournisseurProche(a: string, b: string): boolean {
+  const ma = mots(normaliser(a)), mb = mots(normaliser(b));
+  if (!ma.length || !mb.length) return false;
+  // « vet » abrège « veterinaire » : un mot de 3 lettres au moins, préfixe d'un mot de 6 lettres au moins.
+  const communs = ma.filter(m => mb.some(n => n === m || (Math.max(m.length, n.length) >= 6 && (m.startsWith(n) || n.startsWith(m)))));
+  return communs.length >= 2 || (communs.length === 1 && communs[0].length >= 6);
+}
+
+export function proposerAssociations(p: PieceExtraite, depenses: DepenseCandidate[]): Proposition[] {
   if (["paie", "autre", "vente"].includes(p.typeDocument || "") || p.devise !== "EUR" || p.ttc === null || p.ttc <= 0) return [];
   const nom = normaliser(p.fournisseur);
-  return depenses.filter(d => d.source === "releve-bancaire" && Math.round(d.montant * 100) === Math.round(p.ttc! * 100)).map(d => {
+  const ttc = Math.round(p.ttc * 100);
+  const props: Proposition[] = [];
+  for (const d of depenses) {
+    if (d.source !== "releve-bancaire" || !Number.isFinite(d.montant)) continue;
+    const debit = Math.round(d.montant * 100);
     const autre = normaliser(d.fournisseur);
     const fournisseur = nom.length >= 4 && autre.length >= 4 && (nom === autre || nom.includes(autre) || autre.includes(nom));
+    const exact = debit === ttc;
+    // L'escompte n'est proposé que sur un fournisseur concordant : un autre
+    // débit à 2 % près n'est qu'une coïncidence.
+    const manque = ttc - debit;
+    const proche = !fournisseur && fournisseurProche(p.fournisseur, d.fournisseur);
+    const escompte = !exact && (fournisseur || proche) && manque > 0 && manque >= ttc * ESCOMPTE_MIN && manque <= ttc * ESCOMPTE_MAX;
+    if (!exact && !escompte) continue;
     const date = dateValide(d.dateOperation);
     const jours = p.date && date ? (Date.parse(date) - Date.parse(p.date)) / 86400000 : null;
-    const proche = jours !== null && jours >= 0 && jours <= 90;
-    return { ...d, score: 40 + (fournisseur ? 40 : 0) + (proche ? 20 : 0),
-      raisons: ["TTC identique", ...(fournisseur ? ["Fournisseur concordant"] : []), ...(proche ? ["Paiement dans les 90 jours suivants"] : [])] };
-  }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+    const dansLesDelais = jours !== null && jours >= 0 && jours <= 90;
+    const taux = Math.round((manque / ttc) * 10000) / 100;
+    props.push({ ...d,
+      // Le TTC identique passe toujours devant un escompte, à fournisseur égal.
+      score: (exact ? 40 : 30) + (fournisseur ? 40 : proche ? 30 : 0) + (dansLesDelais ? 20 : 0),
+      raisons: [exact ? "TTC identique" : `Escompte ${taux.toFixed(2).replace(".", ",")} % (${p.ttc.toFixed(2)} € facturés, ${d.montant.toFixed(2)} € débités)`,
+        ...(fournisseur ? ["Fournisseur concordant"] : proche ? ["Fournisseur proche"] : []), ...(dansLesDelais ? ["Paiement dans les 90 jours suivants"] : [])],
+      ...(escompte ? { ecart: { type: "escompte" as const, taux, montant: Math.round(manque) / 100 } } : {}) });
+  }
+  return props.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
 }
 /** Association manuelle explicite : conserve les montants, aucune conversion comptable. */
 export function validerLienDevise(p: PieceExtraite, d: DepenseCandidate, confirme: unknown) {

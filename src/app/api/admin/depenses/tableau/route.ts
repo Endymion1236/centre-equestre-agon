@@ -128,7 +128,8 @@ export async function POST(req: NextRequest) {
         tx.set(lr, { pieceId: b.pieceId });
         tx.update(pr, { depenseId: b.id, associationMode: "manuel", autoBloque: true,
           operationAssociee: { id: b.id, fournisseur: d.data()!.fournisseur || "", montant: d.data()!.montant, dateOperation: d.data()!.dateOperation || "", compte: d.data()!.compte || "" },
-          associationDevise: association.nature === "devise" ? { deviseFacture: association.devisePiece, montantFacture: association.montantPiece, montantDebiteEUR: association.montantEUR } : null });
+          associationDevise: association.nature === "devise" ? { deviseFacture: association.devisePiece, montantFacture: association.montantPiece, montantDebiteEUR: association.montantEUR } : null,
+          associationEcart: association.nature === "escompte" && "ecart" in association ? association.ecart : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
       tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && (POSTES_DEPENSES.some(p => p.nom === b.poste) || b.poste === CATEGORIE_IMMOBILISATION), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
