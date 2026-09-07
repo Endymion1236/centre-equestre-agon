@@ -11,6 +11,8 @@ import { zipSync } from "fflate";
 import type { LigneMois } from "@/lib/bilan-justificatifs";
 import { justifierParMasseSalariale, justifierCommissionsBancaires, moisMoins, type LigneMasseSalariale } from "@/lib/justification-paie";
 import { posteCommissionCarte } from "@/lib/postes-depenses";
+import { groupesDoublons } from "@/lib/doublons-depenses";
+import type { DepenseCandidate } from "@/lib/justificatifs";
 
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 
@@ -51,6 +53,10 @@ export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneM
   // Commissions et frais bancaires : le relevé fait foi, d'office.
   const banque = justifierCommissionsBancaires(avecPiece, posteCommissionCarte, "Frais bancaires & commissions (CB, Stripe)");
   for (const l of avecPiece) l.justifieeVia = ailleurs.get(l.id) || banque.get(l.id) || null;
+  // Même débit importé deux fois (relevé relu, libellé « Prlv … » vs « … ») :
+  // signalé sur la ligne, tranché dans le contrôle des doublons.
+  const enDoublon = new Set(groupesDoublons(avecPiece as unknown as DepenseCandidate[]).flat().map(d => d.id));
+  for (const l of avecPiece) l.doublonProbable = enDoublon.has(l.id);
   return { lignes: avecPiece, pieces, limite: [ds, ms, ps, ars].some(s => s.size > 2000) };
 }
 

@@ -1,9 +1,14 @@
 import type { DepenseCandidate } from "./justificatifs";
 import { dateValide } from "./justificatifs";
 const nom = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-// « Carte » décrit le moyen de paiement, pas le fournisseur. Les astérisques
-// des libellés bancaires deviennent des espaces, sans rapprochement approximatif.
-const fournisseur = (s: string) => nom(s).replace(/^carte\s+/, "");
+// « Carte », « Prlv », « Vir »… décrivent le moyen de paiement, pas le
+// fournisseur : la même échéance Groupama arrive une fois « Groupama Centre
+// Manche » et une fois « Prlv Groupama Centre Manche » selon la lecture. On
+// retire ces préfixes, autant de fois qu'ils se répètent, sans rapprochement
+// approximatif sur le reste.
+const PREFIXES = /^(?:(?:prlv|prelevement|prelvt|vir|virement|sepa|cb|carte|paiement|fact|facture|echeance|ech|chq|cheque)\s+)+/;
+export const fournisseurNormalise = (s: string) => nom(s).replace(PREFIXES, "");
+const fournisseur = fournisseurNormalise;
 export function doublonPossible(a: DepenseCandidate, b: DepenseCandidate): boolean {
   return a.id !== b.id && a.source === "releve-bancaire" && b.source === a.source && !!a.mois && a.mois === b.mois
     && Number.isFinite(a.montant) && Number.isFinite(b.montant) && Math.round(a.montant * 100) === Math.round(b.montant * 100)

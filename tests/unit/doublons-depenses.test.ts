@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { doublonPossible, groupesDoublons, preparerLotDoublons } from "../../src/lib/doublons-depenses";
+import { doublonPossible, groupesDoublons, preparerLotDoublons, fournisseurNormalise } from "../../src/lib/doublons-depenses";
 const a = { id: "datee", fournisseur: "Arrosage Distrib Ste", montant: 77.49, mois: "2026-07", dateOperation: "2026-07-09", source: "releve-bancaire" };
 const b = { ...a, id: "ancienne", dateOperation: "" };
 test("deux imports Mol Fulfiller avec préfixe Carte et astérisque : proposés ensemble", () => {
@@ -43,4 +43,14 @@ test("paiements distincts par date, compte, montant, mois ou fournisseur non fus
 test("aucune identité déduite du seul montant ; accents normalisés", () => {
   assert.equal(doublonPossible({ ...a, fournisseur: "" }, { ...b, fournisseur: "" }), false);
   assert.ok(doublonPossible({ ...a, fournisseur: "Vétérinaire" }, { ...b, fournisseur: "VETERINAIRE" }));
+});
+
+test("les préfixes bancaires (Prlv, Vir, Carte…) ne distinguent pas deux fois le même débit", () => {
+  const a = { id: "g1", fournisseur: "Groupama Centre Manche", montant: 676.81, source: "releve-bancaire", mois: "2026-07", dateOperation: "2026-07-15" };
+  const b = { ...a, id: "g2", fournisseur: "Prlv Groupama Centre Manche" };
+  assert.ok(doublonPossible(a, b));
+  assert.equal(groupesDoublons([a, b]).length, 1);
+  assert.equal(fournisseurNormalise("PRLV SEPA Groupama Centre Manche"), "groupama centre manche");
+  assert.equal(fournisseurNormalise("CARTE Point.P"), "point p");
+  assert.equal(doublonPossible(a, { ...b, fournisseur: "Prlv Groupama Sud" }), false, "le reste du libellé doit être identique");
 });

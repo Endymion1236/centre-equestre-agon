@@ -24,6 +24,8 @@ export interface LigneMois {
   statutTVA?: string; justificatifReleve?: boolean; referenceJustificatifReleve?: string | null;
   /** Justifiée par un autre écran (Masse salariale) : { type, detail }. */
   justifieeVia?: { type: string; detail: string } | null;
+  /** Même débit présent deux fois ce mois (calculé, jamais stocké). */
+  doublonProbable?: boolean;
   piece?: { id?: string; nom?: string; extraction?: ExtractionMin | null; associationDevise?: { deviseFacture: string; montantFacture: number; montantDebiteEUR: number } | null; associationEcart?: { type: string; taux: number; montant: number } | null } | null;
 }
 
