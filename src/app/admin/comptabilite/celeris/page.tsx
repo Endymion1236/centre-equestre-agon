@@ -62,6 +62,7 @@ export default function CelerisPage() {
   return <main className="mx-auto max-w-6xl p-6 space-y-6">
     <Link href="/admin/comptabilite" className="underline">← Comptabilité</Link>
     <h1 className="text-2xl font-bold">Historique comptable Céleris</h1>
+    <Link href="/admin/comptabilite/documents" className="inline-block underline">Préparer le journal, le grand livre, la balance, le centralisateur et le bilan →</Link>
     <p>Importez un export TXT mensuel complet. Les écritures restent identifiées comme historique Céleris, sans créer de factures, de réservations ou d’encaissements dans la caisse.</p>
     <p className="rounded border bg-blue-50 p-4">Les totaux de ventes suivent les dates d’écriture. Les prestations facturées avant juillet et réalisées pendant l’été nécessitent un examen complémentaire. Cet historique n’est pas encore intégré au résultat ni au rapprochement de « Boucler le mois ».</p>
     <label className="block">Export Céleris (.txt)
