@@ -20,8 +20,8 @@
 // La famille n'a JAMAIS de mot de passe a retenir avec ce flow. On peut
 // renvoyer un autre lien plus tard si elle perd l'acces.
 
-import { useEffect, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { signInWithEmailLink, isSignInWithEmailLink, signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
@@ -40,8 +40,8 @@ export default function ConnexionMagiquePage() {
 }
 
 function ConnexionMagiqueContent() {
-  const router = useRouter();
   const params = useSearchParams();
+  const attemptedUrl = useRef<string | null>(null);
 
   const [status, setStatus] = useState<"verifying" | "needEmail" | "connecting" | "success" | "error">("verifying");
   const [email, setEmail] = useState("");
@@ -53,6 +53,10 @@ function ConnexionMagiqueContent() {
   // d'eventuels liens deja envoyes.
   useEffect(() => {
     const url = window.location.href;
+    // React StrictMode ou un nouveau rendu ne doivent pas consommer deux
+    // fois le même lien pendant qu'une connexion est déjà en cours.
+    if (attemptedUrl.current === url) return;
+    attemptedUrl.current = url;
     const homemadeToken = params.get("token");
 
     // ── Nouveau systeme : token maison ──
@@ -97,6 +101,10 @@ function ConnexionMagiqueContent() {
           setErrorMsg("Ce lien a expiré (il était valable 7 jours). Demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
         } else if (data.error === "used") {
           setErrorMsg("Ce lien a déjà été utilisé. Si tu as besoin de te reconnecter, demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
+        } else if (data.error === "disabled") {
+          setErrorMsg("Ce compte est désactivé. Contacte le centre équestre pour rétablir ton accès.");
+        } else if (data.error === "internal") {
+          setErrorMsg("La connexion est momentanément indisponible. Réessaie ce lien dans quelques instants.");
         } else {
           setErrorMsg("Ce lien n'est pas valide. Demande un nouveau lien depuis la page de connexion (bouton « Recevoir un lien par email »).");
         }
@@ -104,9 +112,14 @@ function ConnexionMagiqueContent() {
       }
 
       // Connexion Firebase via le custom token
-      await signInWithCustomToken(auth, data.customToken);
+      const credential = await signInWithCustomToken(auth, data.customToken);
+      await credential.user.reload();
+      await credential.user.getIdToken(true);
       setStatus("success");
-      setTimeout(() => router.push("/espace-cavalier"), 1500);
+      // Une connexion au même UID ne relance pas forcément l'observateur du
+      // provider. Repartir du document recharge la fiche avec l'adresse validée
+      // et retire l'URL contenant le secret de l'historique courant.
+      setTimeout(() => window.location.replace("/espace-cavalier"), 1500);
     } catch (err: any) {
       console.error("connectWithHomemadeToken:", err);
       setStatus("error");
@@ -117,13 +130,14 @@ function ConnexionMagiqueContent() {
   const connectWithEmail = async (emailToUse: string, url: string) => {
     setStatus("connecting");
     try {
-      await signInWithEmailLink(auth, emailToUse, url);
+      const credential = await signInWithEmailLink(auth, emailToUse, url);
+      await credential.user.getIdToken(true);
       // Nettoyer le localStorage
       window.localStorage.removeItem("emailForSignIn");
       setStatus("success");
       // Redirection vers espace cavalier apres 1.5s
       setTimeout(() => {
-        router.push("/espace-cavalier");
+        window.location.replace("/espace-cavalier");
       }, 1500);
     } catch (err: any) {
       console.error("Erreur signInWithEmailLink:", err);

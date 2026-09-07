@@ -38,7 +38,7 @@ interface AuthContextType {
   /** Une fiche existe à cette adresse, mais elle n'est pas encore confirmée. */
   emailAConfirmer: boolean;
   /** Renvoie le lien de confirmation à l'adresse du compte connecté. */
-  renvoyerConfirmation: () => Promise<void>;
+  renvoyerConfirmation: () => Promise<"confirmation" | "connexion">;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -54,7 +54,7 @@ const AuthContext = createContext<AuthContextType>({
   isMoniteur: false,
   userRole: "cavalier",
   emailAConfirmer: false,
-  renvoyerConfirmation: async () => {},
+  renvoyerConfirmation: async () => "confirmation",
 });
 
 
@@ -104,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setFamily(null);
           setEmailAConfirmer(false);
         } else if (familySnap.exists()) {
+          setEmailAConfirmer(false);
           const data = familySnap.data() as any;
           let resolved = false;
           // Compte fusionné : on bascule sur le compte conservé.
@@ -151,7 +152,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const data = await res.json().catch(() => null);
               if (data?.error === "EMAIL_NON_VERIFIE") {
                 aConfirmer = true;
-                try { await sendEmailVerification(firebaseUser); } catch { /* déjà envoyé */ }
+                try { await sendEmailVerification(firebaseUser); }
+                catch (e) {
+                  console.warn("Confirmation automatique impossible:", (e as { code?: string })?.code || "unknown");
+                }
               }
             }
           } catch (e) {
@@ -215,8 +219,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const renvoyerConfirmation = async () => {
-    if (auth.currentUser) await sendEmailVerification(auth.currentUser);
+  const renvoyerConfirmation = async (): Promise<"confirmation" | "connexion"> => {
+    const currentUser = auth.currentUser;
+    if (!currentUser?.email) throw new Error("Session absente. Reconnectez-vous.");
+    try {
+      await sendEmailVerification(currentUser);
+      return "confirmation";
+    } catch (e) {
+      console.warn("Renvoi de confirmation impossible:", (e as { code?: string })?.code || "unknown");
+      // Le lien de connexion maison vérifie désormais lui aussi l'adresse.
+      // Il permet de sortir du blocage si l'envoi Firebase est indisponible.
+      // La route conserve ses limites et sa réponse anti-énumération : un 200
+      // confirme seulement la DEMANDE, jamais la livraison effective du mail.
+      const response = await fetch("/api/request-magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: currentUser.email }),
+      });
+      if (!response.ok) throw new Error("Demande de lien impossible.");
+      return "connexion";
+    }
   };
 
   const signOut = async () => {

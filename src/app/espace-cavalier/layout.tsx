@@ -375,13 +375,21 @@ function CavalierSidebar({ pathname }: { pathname: string }) {
 
 function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) {
   const { user, loading, signOut, isAdmin, isMoniteur, emailAConfirmer, renvoyerConfirmation } = useAuth();
-  const [renvoi, setRenvoi] = useState<"" | "envoi" | "ok" | "err">("");
+  const [renvoi, setRenvoi] = useState<"" | "envoi" | "ok" | "connexion" | "err">("");
   const pathname = usePathname();
   const router = useRouter();
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showVoice, setShowVoice] = useState(false);
   const [showAssistantHint, setShowAssistantHint] = useState(false);
   const [voiceContext, setVoiceContext] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (renvoi !== "ok" && renvoi !== "connexion") return;
+    const timeout = setTimeout(() => setRenvoi(""), 60_000);
+    return () => clearTimeout(timeout);
+  }, [renvoi]);
+
+  useEffect(() => { setRenvoi(""); }, [user?.uid, emailAConfirmer]);
 
   useEffect(() => {
     try {
@@ -521,14 +529,25 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
               tant que votre adresse n’est pas confirmée. Ouvrez le lien envoyé à{" "}
               <strong>{user.email}</strong> (pensez aux indésirables), puis reconnectez-vous.
             </div>
-            <button type="button" disabled={renvoi === "envoi"}
+            <button type="button" disabled={renvoi === "envoi" || renvoi === "ok" || renvoi === "connexion"}
               onClick={async () => {
                 setRenvoi("envoi");
-                try { await renvoyerConfirmation(); setRenvoi("ok"); } catch { setRenvoi("err"); }
+                try {
+                  const resultat = await renvoyerConfirmation();
+                  setRenvoi(resultat === "connexion" ? "connexion" : "ok");
+                } catch { setRenvoi("err"); }
               }}
               className="mt-2 px-3 py-1.5 rounded-lg bg-orange-600 font-body text-xs font-bold text-white border-none cursor-pointer disabled:opacity-50">
-              {renvoi === "envoi" ? "Envoi..." : renvoi === "ok" ? "Lien renvoyé" : "Renvoyer le lien"}
+              {renvoi === "envoi" ? "Envoi..." : renvoi === "ok" ? "Lien renvoyé" : renvoi === "connexion" ? "Lien de connexion demandé" : "Renvoyer le lien"}
             </button>
+            {renvoi === "connexion" && (
+              <div className="font-body text-xs text-orange-800 mt-2" role="status">
+                L’envoi du lien de confirmation est indisponible. Un lien de connexion a été demandé
+                pour la même adresse : son ouverture confirmera aussi votre email.
+                Vérifiez votre boîte et les indésirables. Après plusieurs demandes rapprochées,
+                patientez une heure avant de réessayer.
+              </div>
+            )}
             {renvoi === "err" && (
               <div className="font-body text-xs text-red-600 mt-1">Envoi impossible pour le moment — réessayez dans quelques minutes.</div>
             )}
