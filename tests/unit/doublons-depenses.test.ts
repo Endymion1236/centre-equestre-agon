@@ -1,12 +1,31 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { doublonPossible, groupesDoublons } from "../../src/lib/doublons-depenses";
+import { doublonPossible, groupesDoublons, preparerLotDoublons } from "../../src/lib/doublons-depenses";
 const a = { id: "datee", fournisseur: "Arrosage Distrib Ste", montant: 77.49, mois: "2026-07", dateOperation: "2026-07-09", source: "releve-bancaire" };
 const b = { ...a, id: "ancienne", dateOperation: "" };
 test("ancien import sans date + relecture datée : à examiner, pas supprimé", () => {
   assert.ok(doublonPossible(a, b));
   assert.equal(groupesDoublons([a, b]).length, 1);
   assert.equal(groupesDoublons([a, b])[0].length, 2);
+});
+test("lot : conserver la copie datée, sans toucher aux autres champs", () => {
+  const lignes = [{ ...a, note: "Relevé juillet CCOU 001.pdf" }, { ...b, note: "Relevé juillet CCOU 001 (2).pdf" }];
+  const original = JSON.stringify(lignes);
+  const plan = preparerLotDoublons(lignes, new Set());
+  assert.equal(plan.propositions.length, 1);
+  assert.equal(plan.propositions[0].conserver.id, a.id);
+  assert.equal(plan.propositions[0].ecarter.id, b.id);
+  assert.equal(plan.groupesManuels, 0);
+  assert.equal(JSON.stringify(lignes), original);
+});
+test("lot : copies identiques, dates doubles, trois occurrences, autre relevé, liens et perte de compte exclus", () => {
+  const x = { ...a, note: "Releve juillet.pdf" }, y = { ...b, note: "Releve juillet (2).pdf" };
+  for (const lignes of [[x, { ...y, note: x.note }], [x, { ...y, dateOperation: x.dateOperation }], [x, y, { ...y, id: "troisieme" }],
+    [x, { ...y, note: "Autre compte.pdf" }], [x, { ...y, compte: "Compte à préserver" }]]) {
+    assert.equal(preparerLotDoublons(lignes, new Set()).propositions.length, 0);
+  }
+  assert.equal(preparerLotDoublons([x, y], new Set([y.id])).propositions.length, 0);
+  assert.equal(preparerLotDoublons([x, y], new Set([x.id])).propositions.length, 1);
 });
 test("paiements distincts par date, compte, montant, mois ou fournisseur non fusionnés", () => {
   for (const patch of [{ dateOperation: "2026-07-10" }, { montant: 77.50 }, { mois: "2026-08" }, { fournisseur: "Autre" }, { source: "saisie" }]) assert.equal(doublonPossible(a, { ...b, ...patch }), false);

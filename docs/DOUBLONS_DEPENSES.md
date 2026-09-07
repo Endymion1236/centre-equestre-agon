@@ -1,5 +1,23 @@
 # Doublons après réimport de relevés
 
+## Nettoyage par lot
+
+L'écran propose désormais un aperçu avec paires conserver/écarter et montant
+en centimes retiré des totaux. Seuls les groupes de deux lignes compatibles,
+deux noms de copies du même PDF (suffixe de téléchargement `(2)` ignoré), dont
+une seule est datée, sont proposés. Une association sur la ligne sans date ou
+un compte connu qui serait perdu exclut la paire. Aucun choix sur les groupes
+de trois occurrences ou plus ; les cas ambigus restent individuels.
+
+Une seule validation pour jusqu'à 150 paires : lecture transactionnelle de toutes
+les dépenses du mois et des liens/pièces, comparaison de l'empreinte de l'aperçu,
+puis archivage/retrait atomique. Si l'état a changé, aucun retrait. Un journal de
+lot sert aussi de reçu idempotent en cas de nouvelle tentative réseau. Les lignes
+écartées restent restaurables individuellement depuis le même écran. Au-delà de
+2 000 dépenses mensuelles ou de 2 000 pièces/liens, lot indisponible explicitement.
+Les tests couvrent le cas réel daté/non daté, les noms de relevés et l'exclusion
+des paiements répétés, associations et comptes qui seraient perdus.
+
 L'ancien chemin ajouter-lot sans sourceOperation créait un identifiant aléatoire
 à chaque import. Il est maintenant refusé : actualiser l'écran et utiliser
 l'import avec compte/date/identité fichier-page-rang. Un autre PDF présentant
