@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { completerDates } from "../../src/lib/depenses-dates";
+const ancienne = { id: "a", mois: "2026-08", fournisseur: "Orange SA", montant: 66 };
+const releve = { ...ancienne, date: "2026-08-20" };
+assert.deepEqual(completerDates([ancienne], [releve]).modifications, [{ id: "a", dateOperation: "2026-08-20" }]);
+assert.equal(completerDates([{ ...ancienne, dateOperation: "2026-08-21" }], [releve]).dejaDatees, 1);
+assert.equal(completerDates([ancienne, { ...ancienne, id: "b" }], [releve]).ambigues, 1);
+assert.equal(completerDates([ancienne], [releve, { ...releve, date: "2026-08-22" }]).modifications.length, 0);
+assert.equal(completerDates([], [releve]).absentes, 1);
+assert.equal(completerDates([ancienne], [{ ...releve, date: "2026-02-30" }]).invalides, 1);
+assert.equal(completerDates([ancienne], [{ ...releve, date: "2026-09-01" }]).invalides, 1);
+assert.equal(completerDates([ancienne, { ...ancienne, mois: "2026-07", id: "b" }], [releve]).modifications.length, 1);
+assert.equal(completerDates([ancienne], [{ ...releve, montant: 67 }]).absentes, 1);
+assert.equal(completerDates([{ ...ancienne, dateOperation: "2026-08-20" }], [releve]).modifications.length, 0);
+console.log("Dates : 10 contrôles réussis (ambiguïtés, idempotence, aucune création)");

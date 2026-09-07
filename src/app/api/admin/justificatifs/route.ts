@@ -26,11 +26,19 @@ export async function GET(req: NextRequest) {
       return new NextResponse(new Uint8Array(bytes), { headers: { "Content-Type": doc.data()!.mime,
         "Content-Disposition": "attachment; filename=justificatif", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
     }
-    const [ps, ds] = await Promise.all([pieces().orderBy("createdAt", "desc").limit(100).get(), adminDb.collection("depenses").where("source", "==", "releve-bancaire").limit(2001).get()]);
+    let query = pieces().orderBy("createdAt", "desc").limit(100);
+    const apres = req.nextUrl.searchParams.get("apres");
+    if (apres) {
+      if (!valideId(apres)) return NextResponse.json({ error: "Curseur invalide" }, { status: 400 });
+      const cursor = await pieces().doc(apres).get();
+      if (!cursor.exists) return NextResponse.json({ error: "Actualisez la liste" }, { status: 400 });
+      query = query.startAfter(cursor);
+    }
+    const [ps, ds] = await Promise.all([query.get(), adminDb.collection("depenses").where("source", "==", "releve-bancaire").limit(2001).get()]);
     const depenses = ds.docs.slice(0, 2000).map(d => ({ ...d.data(), id: d.id })) as DepenseCandidate[];
-    return NextResponse.json({ limiteDepenses: ds.size > 2000, limitePieces: ps.size === 100, pieces: ps.docs.map(d => {
+    return NextResponse.json({ limiteDepenses: ds.size > 2000, suivant: ps.size === 100 ? ps.docs[ps.size - 1].id : null, pieces: ps.docs.map(d => {
       const p = d.data();
-      return { id: d.id, nom: p.nom, extraction: p.extraction || null, depenseId: p.depenseId || null,
+      return { id: d.id, nom: p.nom, retire: p.retire === true, extraction: p.extraction || null, depenseId: p.depenseId || null,
         propositions: p.extraction ? proposerAssociations(nettoyerPiece(p.extraction), depenses).slice(0, 10) : [] };
     }) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
@@ -54,7 +62,8 @@ export async function POST(req: NextRequest) {
       if (!mime) return NextResponse.json({ error: "Format non reconnu : PDF, JPEG ou PNG uniquement" }, { status: 400 });
       const id = createHash("sha256").update(bytes).digest("hex");
       const ref = pieces().doc(id);
-      if ((await ref.get()).exists) return NextResponse.json({ ok: true, doublon: true, id });
+      const existant = await ref.get();
+      if (existant.exists) return NextResponse.json({ ok: true, doublon: true, retire: existant.data()?.retire === true, id });
       // Aucun jeton public : lecture uniquement via cette route authentifiée.
       await adminStorage.bucket().file(chemin(id)).save(bytes, { resumable: false, contentType: mime, metadata: { cacheControl: "private, no-store" } });
       const doublon = await adminDb.runTransaction(async tx => {
@@ -70,6 +79,16 @@ export async function POST(req: NextRequest) {
     const ref = pieces().doc(body.id);
     const doc = await ref.get();
     if (!doc.exists) return NextResponse.json({ error: "Pièce absente" }, { status: 404 });
+    if (body.action === "retirer" || body.action === "restaurer") {
+      await adminDb.runTransaction(async tx => {
+        const current = await tx.get(ref);
+        if (current.data()?.depenseId) throw new Error("Dissocier avant de retirer");
+        tx.update(ref, { retire: body.action === "retirer", updatedAt: FieldValue.serverTimestamp() });
+        tx.create(ref.collection("historique").doc(), { action: body.action, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      });
+      return NextResponse.json({ ok: true });
+    }
+    if (doc.data()?.retire) return NextResponse.json({ error: "Restaurez le document avant de le traiter." }, { status: 409 });
     if (body.action === "analyser") {
       if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Analyse non configurée ; la pièce est conservée." }, { status: 503 });
       const [bytes] = await adminStorage.bucket().file(chemin(body.id)).download();
@@ -88,7 +107,7 @@ export async function POST(req: NextRequest) {
       // Ne pas écraser une correction humaine arrivée pendant l'analyse.
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
-        if (current.data()?.extraction) throw new Error("Extraction déjà disponible");
+        if (current.data()?.extraction || current.data()?.retire) throw new Error("Pièce déjà traitée ou retirée");
         tx.update(ref, { extraction, analysedAt: FieldValue.serverTimestamp() });
       });
       return NextResponse.json({ ok: true });
@@ -97,7 +116,7 @@ export async function POST(req: NextRequest) {
       if (!body.extraction || typeof body.extraction !== "object") return NextResponse.json({ error: "Données absentes" }, { status: 400 });
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
-        if (current.data()?.depenseId) throw new Error("Dissocier avant de corriger");
+        if (current.data()?.depenseId || current.data()?.retire) throw new Error("Dissocier ou restaurer avant de corriger");
         const extraction = nettoyerPiece(body.extraction);
         tx.update(ref, { extraction, reviewedBy: auth.uid, reviewedAt: FieldValue.serverTimestamp() });
         tx.create(ref.collection("historique").doc(), { action: "corriger", avant: current.data()?.extraction || null, apres: extraction, uid: auth.uid, at: FieldValue.serverTimestamp() });
@@ -109,6 +128,7 @@ export async function POST(req: NextRequest) {
       if (body.action === "associer" && (typeof id !== "string" || !/^[\w-]{1,150}$/.test(id))) return NextResponse.json({ error: "Dépense invalide" }, { status: 400 });
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
+        if (current.data()?.retire) throw new Error("Pièce retirée");
         const ancien = current.data()?.depenseId;
         const lock = id ? adminDb.collection("justificatifs-liens").doc(id) : null;
         if (body.action === "associer") {
@@ -120,7 +140,6 @@ export async function POST(req: NextRequest) {
         }
         if (ancien && ancien !== id) tx.delete(adminDb.collection("justificatifs-liens").doc(ancien));
         if (body.action === "associer") tx.set(lock!, { pieceId: body.id });
-        else if (ancien) tx.delete(adminDb.collection("justificatifs-liens").doc(ancien));
         tx.update(ref, { depenseId: body.action === "associer" ? id : null });
         tx.create(ref.collection("historique").doc(), { action: body.action, avant: ancien || null, apres: body.action === "associer" ? id : null, uid: auth.uid, at: FieldValue.serverTimestamp() });
       });

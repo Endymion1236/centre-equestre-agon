@@ -283,7 +283,7 @@ export default function TresoreriePage() {
     finally { setSaving(false); }
   };
 
-  const ajouterDepensesReleve = async (idx: number) => {
+  const ajouterDepensesReleve = async (idx: number, datesSeulement = false) => {
     const p = propositions[idx];
     const gardees = (p?.operations || []).filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES && /^\d{4}-\d{2}$/.test(o.mois));
     if (!p || saving || gardees.length === 0) return;
@@ -294,13 +294,15 @@ export default function TresoreriePage() {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          action: "ajouter-lot",
-          factures: gardees.map(o => ({ mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, note: `Relevé ${p.fichier}` })),
+          action: datesSeulement ? "completer-dates" : "ajouter-lot",
+          factures: gardees.map(o => ({ date: o.date, mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, note: `Relevé ${p.fichier}` })),
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d?.error || "Erreur");
-      setInfo(`${d.ajoutees} dépense(s) ajoutée(s) à l'écran Dépenses par poste.`);
+      setInfo(datesSeulement
+        ? `${d.completees} date(s) complétée(s), ${d.dejaDatees} déjà datée(s), ${d.ambigues} ambiguë(s), ${d.absentes} sans dépense correspondante, ${d.invalides} invalide(s). Aucune dépense créée. Les lignes ambiguës restent à vérifier.`
+        : `${d.ajoutees} dépense(s) ajoutée(s) à l'écran Dépenses par poste.`);
       setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: [] } : x));
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }
@@ -503,6 +505,11 @@ export default function TresoreriePage() {
                     className="font-body text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     Ajouter {gardees.length} dépense(s)
                   </button>
+                  <button type="button" onClick={() => ajouterDepensesReleve(idx, true)} disabled={saving || gardees.length === 0}
+                    className="font-body text-xs font-semibold text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer disabled:opacity-50">
+                    Compléter les dates existantes
+                  </button>
+                  <p className="w-full text-xs text-slate-600">Relevé déjà importé ? Utilisez « Compléter les dates existantes ». Cette action ne crée aucune dépense et laisse les correspondances ambiguës inchangées.</p>
                 </div>
               </div>
             );

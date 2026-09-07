@@ -25,6 +25,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { dateValide } from "@/lib/justificatifs";
+import { completerDates, type LigneDate } from "@/lib/depenses-dates";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -46,6 +48,8 @@ export async function GET(req: NextRequest) {
         fournisseur: r.fournisseur || "",
         montant: Number(r.montant || 0),
         note: r.note || "",
+        dateOperation: r.dateOperation || "",
+        source: r.source || "",
       };
     }).filter((l) => MOIS_RE.test(l.mois) && l.poste);
     return NextResponse.json({ depenses });
@@ -66,6 +70,26 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+
+    // Relecture d'un ancien relevé : enrichir uniquement, jamais ajouter de dépenses.
+    if (body.action === "completer-dates") {
+      if (!Array.isArray(body.factures) || !body.factures.length || body.factures.length > 200) return NextResponse.json({ error: "Entre 1 et 200 lignes" }, { status: 400 });
+      const lignes: LigneDate[] = body.factures.map((l: any) => ({ mois: String(l?.mois || ""), fournisseur: String(l?.fournisseur || "").slice(0, 80), montant: nbMontant(l?.montant) ?? NaN, date: dateValide(l?.date) }));
+      if (lignes.some(l => !MOIS_RE.test(l.mois) || !Number.isFinite(l.montant))) return NextResponse.json({ error: "Mois ou montant invalide" }, { status: 400 });
+      const bilan = { completees: 0, ambigues: 0, absentes: 0, dejaDatees: 0, invalides: 0 };
+      for (const mois of [...new Set(lignes.map(l => l.mois))]) {
+        const resultat = await adminDb.runTransaction(async tx => {
+          const snap = await tx.get(adminDb.collection("depenses").where("mois", "==", mois));
+          const existantes = snap.docs.filter(d => d.data().source === "releve-bancaire").map(d => ({ ...d.data(), id: d.id })) as LigneDate[];
+          const r = completerDates(existantes, lignes.filter(l => l.mois === mois));
+          for (const m of r.modifications) tx.update(adminDb.collection("depenses").doc(m.id), { dateOperation: m.dateOperation, dateCompleteePar: auth.uid, dateCompleteeLe: FieldValue.serverTimestamp() });
+          return r;
+        });
+        bilan.completees += resultat.modifications.length;
+        for (const k of ["ambigues", "absentes", "dejaDatees", "invalides"] as const) bilan[k] += resultat[k];
+      }
+      return NextResponse.json({ ok: true, ...bilan });
+    }
 
     if (body.action === "ajouter") {
       const poste = String(body.poste || "").trim().slice(0, 80);
@@ -102,6 +126,7 @@ export async function POST(req: NextRequest) {
           fournisseur: String(l?.fournisseur || "").trim().slice(0, 80),
           note: String(l?.note || "").slice(0, 500),
           source: "releve-bancaire",
+          dateOperation: dateValide(l?.date),
           updatedAt: FieldValue.serverTimestamp(),
         });
         ajoutees++;

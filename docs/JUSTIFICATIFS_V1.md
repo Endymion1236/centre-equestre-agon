@@ -2,7 +2,8 @@
 
 Route admin : `/admin/comptabilite/justificatifs`. Accessible depuis le menu.
 
-- Dépôt privé PDF/JPEG/PNG, 4 Mo, 20 fichiers par lot, SHA-256 pour doublons binaires.
+- Dépôt privé PDF/JPEG/PNG, 4 Mo par fichier. Toute la sélection est envoyée séquentiellement avec progression ; erreurs par fichier, sans interrompre les suivants. SHA-256 pour doublons binaires.
+- Retrait récupérable : bouton Retirer puis vue Documents retirés / Restaurer. Une pièce associée doit être dissociée d'abord. Historique conservé, aucune suppression de l'original.
 - Stockage Firebase Storage `justificatifs-prives/`, aucun token public ; téléchargement via route admin.
 - Lecture IA à la demande (Anthropic déjà configuré). Une facture par fichier. Données incertaines laissées vides. Correction humaine possible après dissociation.
 - Propositions sur `depenses` de source `releve-bancaire` uniquement, montant exact en centimes ; fournisseur et dates pour classement. Tous les candidats restent à confirmer.
@@ -11,7 +12,11 @@ Route admin : `/admin/comptabilite/justificatifs`. Accessible depuis le menu.
 
 ## Limites explicites
 
-Ce n'est pas encore un journal bancaire complet. Vue limitée aux 100 dernières pièces et 2000 dépenses (avertissement visible). Paiements fractionnés/groupés, avoirs et commissions non traités. Doublons de facture photographiée deux fois non détectés (seul le fichier identique l'est). Pas encore de rapprochement sans confirmation, de liste exhaustive des pièces manquantes ni de clôture comptable. La suppression/modification d'une dépense depuis le module historique peut rendre le lien obsolète : recontrôler avant usage comptable.
+Ce n'est pas encore un journal bancaire complet. Pièces paginées par 100 avec bouton Charger les documents suivants ; rapprochement limité à 2000 dépenses (avertissement visible). Paiements fractionnés/groupés, avoirs et commissions non traités. Doublons de facture photographiée deux fois non détectés (seul le fichier identique l'est). Pas encore de rapprochement sans confirmation, de liste exhaustive des pièces manquantes ni de clôture comptable. La suppression/modification d'une dépense depuis le module historique peut rendre le lien obsolète : recontrôler avant usage comptable.
+
+## Dates des anciens relevés
+
+La branche test omettait la date lors de la transmission ET du stockage de l'import des dépenses. Les nouveaux imports conservent dateOperation. Pour réparer l'historique : relire le PDF dans Trésorerie, vérifier les lignes puis utiliser Compléter les dates existantes (et non Ajouter). Comparaison mois/fournisseur normalisé/montant exact ; seuls les couples uniques sans date sont enrichis, dans une transaction. Aucun montant modifié ni aucune dépense créée ; correspondances absentes ou ambiguës signalées. Les dates existantes ne sont jamais écrasées. Mois et nom du relevé sont affichés dans les propositions lorsque présents.
 
 ## Vérification sur environnement de test avant fusion
 
