@@ -22,7 +22,26 @@ export interface LigneMasseSalariale {
   decaissement?: number | null;
   montant?: number | null;
 }
-export type JustificationAilleurs = { type: "masse-salariale"; detail: string };
+export type JustificationAilleurs = { type: "masse-salariale" | "releve-bancaire"; detail: string };
+export const LIBELLE_JUSTIFICATION: Record<JustificationAilleurs["type"], string> = { "masse-salariale": "Justifiée par Masse salariale", "releve-bancaire": "Justifiée par le relevé bancaire" };
+
+/**
+ * Commissions et frais prélevés par la banque : aucune facture n'existera
+ * jamais, le relevé est la pièce. Plutôt qu'un clic par ligne, l'état est
+ * posé d'office (règle du gérant), recalculé à chaque lecture. Une pièce ou
+ * une déclaration manuelle garde la priorité ; « Importer une pièce » reste
+ * possible.
+ */
+export function justifierCommissionsBancaires(lignes: LigneMois[], estCommission: (libelle: unknown) => string | null, posteFraisBancaires: string): Map<string, JustificationAilleurs> {
+  const resultat = new Map<string, JustificationAilleurs>();
+  for (const l of lignes) {
+    if (l.source !== "releve-bancaire" || l.piece || l.justificatifReleve || l.rapprochementExclu || l.depensePersonnelle) continue;
+    if (estCommission(l.fournisseur) || l.poste === posteFraisBancaires) {
+      resultat.set(l.id, { type: "releve-bancaire", detail: `Commission ou frais bancaires : le relevé ${l.compte ? `du compte ${l.compte} ` : ""}fait foi` });
+    }
+  }
+  return resultat;
+}
 
 const NOMS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 export const moisLong = (m: string) => /^\d{4}-\d{2}$/.test(m) ? `${NOMS[Number(m.slice(5)) - 1]} ${m.slice(0, 4)}` : m;

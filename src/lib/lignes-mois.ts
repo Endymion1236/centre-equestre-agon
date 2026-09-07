@@ -9,7 +9,8 @@
 import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { zipSync } from "fflate";
 import type { LigneMois } from "@/lib/bilan-justificatifs";
-import { justifierParMasseSalariale, moisMoins, type LigneMasseSalariale } from "@/lib/justification-paie";
+import { justifierParMasseSalariale, justifierCommissionsBancaires, moisMoins, type LigneMasseSalariale } from "@/lib/justification-paie";
+import { posteCommissionCarte } from "@/lib/postes-depenses";
 
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 
@@ -47,7 +48,9 @@ export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneM
   })) as (LigneMois & Record<string, unknown>)[];
   // Salaires et cotisations : justifiés par l'écran Masse salariale, sans rien écrire.
   const ailleurs = justifierParMasseSalariale(avecPiece, masse);
-  for (const l of avecPiece) l.justifieeVia = ailleurs.get(l.id) || null;
+  // Commissions et frais bancaires : le relevé fait foi, d'office.
+  const banque = justifierCommissionsBancaires(avecPiece, posteCommissionCarte, "Frais bancaires & commissions (CB, Stripe)");
+  for (const l of avecPiece) l.justifieeVia = ailleurs.get(l.id) || banque.get(l.id) || null;
   return { lignes: avecPiece, pieces, limite: [ds, ms, ps, ars].some(s => s.size > 2000) };
 }
 

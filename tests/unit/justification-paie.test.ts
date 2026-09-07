@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { justifierParMasseSalariale, moisMoins, type LigneMasseSalariale } from "../../src/lib/justification-paie";
+import { justifierParMasseSalariale, justifierCommissionsBancaires, moisMoins, type LigneMasseSalariale } from "../../src/lib/justification-paie";
+import { posteCommissionCarte } from "../../src/lib/postes-depenses";
 import type { LigneMois } from "../../src/lib/bilan-justificatifs";
 
 const masse: LigneMasseSalariale[] = [
@@ -39,3 +40,18 @@ test("une ligne déjà justifiée, exclue ou personnelle n'est pas touchée", ()
   assert.equal(justifierParMasseSalariale([ligne("k", "VIR LAGY", 2302.57, "2026-08", { rapprochementExclu: true })], masse).has("k"), false);
 });
 test("moisMoins passe l'année", () => { assert.equal(moisMoins("2026-01", 1), "2025-12"); assert.equal(moisMoins("2026-03", 3), "2025-12"); });
+
+test("commissions et frais bancaires : le relevé fait foi d'office ; pas pour un fournisseur, ni si une pièce existe déjà", () => {
+  const FRAIS = "Frais bancaires & commissions (CB, Stripe)";
+  const r = justifierCommissionsBancaires([
+    ligne("c1", "Com Carte", 2.31, "2026-07", { compte: "CA courant" }),
+    ligne("c2", "Commission vente distance", 12.5, "2026-07"),
+    ligne("c3", "COTISATION CARTE PRO", 45, "2026-07", { poste: FRAIS }),
+    ligne("c4", "ORANGE", 66, "2026-07"),
+    ligne("c5", "Com Carte", 2.31, "2026-07", { piece: { id: "p", nom: "x.pdf" } }),
+    ligne("c6", "Com Carte", 2.31, "2026-07", { rapprochementExclu: true }),
+  ], posteCommissionCarte, FRAIS);
+  assert.equal(r.get("c1")?.type, "releve-bancaire"); assert.match(r.get("c1")!.detail, /compte CA courant/);
+  assert.ok(r.has("c2")); assert.ok(r.has("c3"));
+  assert.equal(r.has("c4"), false); assert.equal(r.has("c5"), false); assert.equal(r.has("c6"), false);
+});
