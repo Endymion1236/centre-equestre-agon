@@ -21,6 +21,7 @@ import {
   construireExportFactures,
 } from "@/app/admin/comptabilite/exports-csv-utils";
 import { construireFecVentes } from "@/app/admin/comptabilite/fec-utils";
+import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
 
 export interface PieceJointe {
   filename: string;
@@ -36,6 +37,10 @@ export interface ResumeColis {
   totalEncaisse: number;
   nbDepenses: number;
   totalDepenses: number;
+  /** Présents quand les lignes du tableau des opérations ont été fournies. */
+  completude?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number; pourcent: number };
+  tvaDeductibleJustifiee?: number;
+  tvaAVerifier?: { nb: number; ttc: number };
 }
 
 export interface ColisComptable {
@@ -72,8 +77,10 @@ export function construireColisComptable(params: {
   encaissements: any[];
   depenses: any[];
   maintenant?: Date;
+  /** Lignes du tableau des opérations du mois (avec pièces) : ajoute le CSV des justificatifs et celui de la TVA. */
+  lignesJustificatifs?: LigneMois[];
 }): ColisComptable {
-  const { mois, maintenant = new Date() } = params;
+  const { mois, maintenant = new Date(), lignesJustificatifs } = params;
   const factures = facturesDuMois(params.payments, mois)
     .sort((a, b) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
   const encaissements = encaissementsDuMois(params.encaissements, mois)
@@ -89,6 +96,12 @@ export function construireColisComptable(params: {
     nbDepenses: depenses.length,
     totalDepenses: arrondi(depenses.reduce((s, d) => s + (d.montant || 0), 0)),
   };
+  if (lignesJustificatifs) {
+    const tva = bilanTvaMois(lignesJustificatifs);
+    resume.completude = completudeJustificatifs(lignesJustificatifs);
+    resume.tvaDeductibleJustifiee = tva.deductibleJustifiee;
+    resume.tvaAVerifier = tva.aVerifier;
+  }
 
   const csv = "text/csv; charset=utf-8";
   const bom = "\uFEFF";
@@ -98,6 +111,10 @@ export function construireColisComptable(params: {
     { filename: `encaissements_${mois}.csv`, contenu: bom + construireExportEncaissements(encaissements), contentType: csv },
     { filename: `depenses_${mois}.csv`, contenu: bom + construireExportDepenses(depenses), contentType: csv },
     { filename: `FEC_${mois.replace("-", "")}.txt`, contenu: construireFecVentes(factures, maintenant), contentType: "text/tab-separated-values; charset=utf-8" },
+    ...(lignesJustificatifs ? [
+      { filename: `justificatifs_${mois}.csv`, contenu: bom + construireExportJustificatifs(lignesJustificatifs), contentType: csv },
+      { filename: `tva_${mois}.csv`, contenu: bom + construireExportTva(lignesJustificatifs), contentType: csv },
+    ] : []),
   ];
 
   return { mois, factures, encaissements, depenses, pieces, resume };
@@ -115,8 +132,10 @@ export function corpsEmailComptable(params: {
   pieces: string[];
   nomCentre: string;
   message?: string;
+  /** Archive des pièces : combien jointes, combien laissées de côté (taille). */
+  archive?: { nb: number; nonJointes: number };
 }) {
-  const { mois, resume, pieces, nomCentre, message } = params;
+  const { mois, resume, pieces, nomCentre, message, archive } = params;
   const eur = (v: number) => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
   const nom = nomMoisLong(mois);
   return `<div style="font-family:sans-serif;max-width:600px;color:#1f2937;">
@@ -128,7 +147,10 @@ export function corpsEmailComptable(params: {
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Factures émises</td><td style="padding:4px 0;"><b>${resume.nbFactures}</b> — ${eur(resume.totalTTC)} TTC (${eur(resume.totalHT)} HT)</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Encaissements au journal</td><td style="padding:4px 0;"><b>${resume.nbEncaissements}</b> — ${eur(resume.totalEncaisse)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Dépenses saisies</td><td style="padding:4px 0;"><b>${resume.nbDepenses}</b> — ${eur(resume.totalDepenses)}</td></tr>
+      ${resume.completude ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Justificatifs</td><td style="padding:4px 0;"><b>${resume.completude.justifies}/${resume.completude.total}</b> dépenses justifiées${resume.completude.sansPiece ? ` — <span style="color:#b45309;">${eur(resume.completude.montantSansPiece)} sans pièce sur ${resume.completude.sansPiece} ligne(s)</span>` : ""}</td></tr>` : ""}
+      ${resume.tvaDeductibleJustifiee != null ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">TVA déductible justifiée</td><td style="padding:4px 0;"><b>${eur(resume.tvaDeductibleJustifiee)}</b>${resume.tvaAVerifier?.nb ? ` — ${resume.tvaAVerifier.nb} ligne(s) à vérifier (${eur(resume.tvaAVerifier.ttc)} TTC)` : ""}</td></tr>` : ""}
     </table>
+    ${archive ? `<p style="font-size:13px;color:#374151;">L'archive des pièces contient <b>${archive.nb}</b> justificatif(s), nommés « date - fournisseur - montant ».${archive.nonJointes ? ` <span style="color:#b45309;">${archive.nonJointes} pièce(s) n'ont pas pu être jointes (taille) : elles restent consultables dans l'application.</span>` : ""}</p>` : ""}
     <p style="font-size:13px;color:#374151;"><b>Pièces jointes :</b><br/>${pieces.map((p) => `• ${p}`).join("<br/>")}</p>
     <p style="font-size:12px;color:#6b7280;">Le journal des encaissements est celui du logiciel de caisse (écritures inaltérables, chaînées). Les CSV sont en point-virgule, encodés UTF-8. Le FEC couvre les ventes du mois.</p>
     <p>Bien cordialement,<br/>${nomCentre}</p>

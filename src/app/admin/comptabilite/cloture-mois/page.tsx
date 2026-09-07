@@ -16,6 +16,7 @@ import {
   type MoisResultatCloture as MoisResultat,
   type ReleveClotureMois as Releve,
 } from "./cloture-mois-utils";
+import { completudeJustificatifs, type LigneMois } from "@/lib/bilan-justificatifs";
 
 /**
  * Boucler le mois — la checklist qui réunit les rituels de fin de mois.
@@ -28,6 +29,7 @@ export default function ClotureMoisPage() {
   const [comptes, setComptes] = useState<string[]>([]);
   const [horsTotal, setHorsTotal] = useState<string[]>([]);
   const [lignesMS, setLignesMS] = useState<LigneMS[]>([]);
+  const [lignesTableau, setLignesTableau] = useState<LigneMois[] | null>(null);
   const [resultat, setResultat] = useState<MoisResultat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -79,23 +81,25 @@ export default function ClotureMoisPage() {
     try {
       const token = await user.getIdToken();
       const h = { Authorization: `Bearer ${token}` };
-      const [tre, ms, res] = await Promise.all([
+      const [tre, ms, res, tab] = await Promise.all([
         fetch("/api/admin/tresorerie", { headers: h }).then(r => r.json()),
         fetch("/api/admin/masse-salariale", { headers: h }).then(r => r.json()),
         fetch("/api/admin/resultat", { headers: h }).then(r => r.json()),
+        fetch(`/api/admin/depenses/tableau?mois=${mois}`, { headers: h }).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
       setReleves(tre.releves || []); setComptes(tre.comptes || []); setHorsTotal(tre.horsTotal || []);
       setLignesMS(ms.lignes || []);
       setResultat(res.mois || []);
+      setLignesTableau(tab?.lignes || null);
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setLoading(false); }
-  }, [user]);
+  }, [user, mois]);
 
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
   const points = useMemo(
-    () => construirePointsCloture({ mois, releves, comptes, horsTotal, lignesMS, resultat }),
-    [mois, releves, comptes, horsTotal, lignesMS, resultat],
+    () => construirePointsCloture({ mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs: lignesTableau ? completudeJustificatifs(lignesTableau) : undefined }),
+    [mois, releves, comptes, horsTotal, lignesMS, resultat, lignesTableau],
   );
   const { bloquants, boucle } = useMemo(() => resumerCloture(points), [points]);
 
@@ -137,7 +141,7 @@ export default function ClotureMoisPage() {
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">{error}</div>}
       <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 font-body text-sm">
         <Link href="/admin/comptabilite/depenses" className="underline font-semibold">Ouvrir Dépenses et justificatifs</Link>
-        <p>Vérifiez les factures et bulletins de paie une pièce à la fois. Ce contrôle complémentaire n’est pas encore inclus dans les indicateurs de clôture ci-dessous.</p>
+        <p>Chaque dépense du mois doit avoir sa pièce, son relevé ou sa fiche de paie. L’état des justificatifs figure dans les points ci-dessous, et le colis envoyé à la comptable contient désormais le CSV des justificatifs, celui de la TVA et l’archive des pièces.</p>
       </div>
 
       <div className="flex items-center justify-center gap-3 mb-4">
@@ -191,7 +195,7 @@ export default function ClotureMoisPage() {
               <div className="flex-1 min-w-0">
                 <div className="font-body text-sm font-semibold text-slate-800">Envoyer les écritures de {NOMS_MOIS[mois.slice(5)].toLowerCase()} à la comptable</div>
                 <p className="font-body text-xs text-slate-500 mt-0.5">
-                  Factures, ventes détaillées, journal des encaissements, dépenses, FEC et PDF de synthèse, en pièces jointes d&apos;un seul email.
+                  Factures, ventes détaillées, journal des encaissements, dépenses, justificatifs, TVA, FEC, PDF de synthèse et archive des pièces, en pièces jointes d&apos;un seul email.
                 </p>
                 {envoi === null ? (
                   <p className="font-body text-xs text-slate-400 mt-2">État de l&apos;envoi indisponible.</p>

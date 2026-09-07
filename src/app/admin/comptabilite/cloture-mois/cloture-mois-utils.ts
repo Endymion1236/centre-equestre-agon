@@ -54,8 +54,10 @@ export function construirePointsCloture(params: {
   horsTotal: string[];
   lignesMS: LigneMasseSalarialeCloture[];
   resultat: MoisResultatCloture[];
+  /** Complétude des justificatifs du tableau des opérations (lib/bilan-justificatifs). Absent : point non affiché. */
+  justificatifs?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number };
 }): PointCloture[] {
-  const { mois, releves, comptes, horsTotal, lignesMS, resultat } = params;
+  const { mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs } = params;
   const ligneResultat = resultat.find((ligne) => ligne.mois === mois);
   const comptesComptes = comptes.filter((compte) => !horsTotal.includes(compte));
   const relevesMois = releves.filter((releve) => releve.mois === mois);
@@ -142,6 +144,21 @@ export function construirePointsCloture(params: {
     });
   }
 
+  if (justificatifs) {
+    // Prévient sans bloquer : c'est au gérant de décider d'envoyer un mois
+    // incomplet à la comptable, en connaissance de cause.
+    points.push({
+      etat: justificatifs.total === 0 ? "neutre" : justificatifs.sansPiece === 0 ? "ok" : "info",
+      titre: "Justificatifs des dépenses",
+      detail: justificatifs.total === 0
+        ? "Aucune dépense dans le tableau des opérations pour ce mois."
+        : justificatifs.sansPiece === 0
+          ? `${justificatifs.total}/${justificatifs.total} dépenses justifiées (pièce, relevé ou masse salariale).`
+          : `${justificatifs.justifies}/${justificatifs.total} dépenses justifiées — ${formaterEurosCloture(justificatifs.montantSansPiece)} sans pièce sur ${justificatifs.sansPiece} ligne(s). L'envoi reste possible, la comptable le verra.`,
+      href: "/admin/comptabilite/depenses",
+      lien: "Ouvrir le tableau des opérations",
+    });
+  }
   return points;
 }
 

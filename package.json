@@ -41,6 +41,7 @@
     "@sentry/nextjs": "^10.54.0",
     "driver.js": "^1.4.0",
     "elevenlabs": "^1.59.0",
+    "fflate": "^0.8.3",
     "firebase": "^11.10.0",
     "firebase-admin": "^13.7.0",
     "html2canvas": "^1.4.1",

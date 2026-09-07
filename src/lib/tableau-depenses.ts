@@ -11,6 +11,15 @@ export const CATEGORIE_PERSONNELLE = "Personnel — hors charges";
 export const CATEGORIE_IMMOBILISATION = "Immobilisation — à amortir";
 /** Au-dessus de ce TTC (≈ 500 € HT), l'écran suggère de vérifier s'il s'agit d'une immobilisation. */
 export const SEUIL_ALERTE_IMMOBILISATION_TTC = 600;
+/**
+ * Lignes pour lesquelles la banque n'émet pas de facture : le relevé (et,
+ * pour un prêt, le tableau d'amortissement conservé) est le justificatif.
+ * L'échéance d'un prêt mêle capital (pas une charge) et intérêts (charge
+ * financière) : c'est la comptable qui ventile, d'après le tableau.
+ */
+export const CATEGORIE_EMPRUNTS = "Emprunts";
+export const justifiableParReleve = (poste: unknown, fournisseur: unknown, estCommission: (l: unknown) => string | null) =>
+  !!estCommission(fournisseur) || poste === CATEGORIE_EMPRUNTS;
 export const estPosteCharge = (poste: unknown, postesCharges: string[]) => typeof poste === "string" && postesCharges.includes(poste);
 
 /**

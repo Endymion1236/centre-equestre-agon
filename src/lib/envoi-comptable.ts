@@ -20,6 +20,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { genererPdfSyntheseCompta } from "@/lib/compta-synthese-pdf";
 import { construireColisComptable, corpsEmailComptable, nomMoisLong } from "@/lib/envoi-comptable-utils";
+import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -88,25 +89,29 @@ export async function envoyerEcrituresComptable(params: {
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, code: "resend", error: "Clé d'envoi d'email absente (RESEND_API_KEY)." };
 
-  const [paySnap, encSnap, depSnap, club] = await Promise.all([
+  const [paySnap, encSnap, depSnap, club, tableau] = await Promise.all([
     adminDb.collection("payments").get(),
     adminDb.collection("encaissements").get(),
     adminDb.collection("depenses").where("mois", "==", mois).get(),
     getClubInfo(),
+    chargerLignesMois(mois).catch((e) => { console.error("[envoi-comptable] lignes du mois illisibles", e); return null; }),
   ]);
   const payments = paySnap.docs.map(normaliserDoc);
   const encaissements = encSnap.docs.map(normaliserDoc);
   const depenses = depSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
-  const colis = construireColisComptable({ mois, payments, encaissements, depenses });
+  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes });
   if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
   }
 
   const pdf = await genererPdfSyntheseCompta({ period: mois, payments: colis.factures, encaissements: colis.encaissements });
+  // Les pièces elles-mêmes, en archive : la comptable n'a plus rien à réclamer.
+  const archive = tableau ? await archiverPiecesDuMois(tableau.lignes) : null;
   const attachments = [
     ...colis.pieces.map((p) => ({ filename: p.filename, content: Buffer.from(p.contenu, "utf-8"), contentType: p.contentType })),
     { filename: `synthese-compta-${mois}.pdf`, content: pdf, contentType: "application/pdf" },
+    ...(archive?.zip ? [{ filename: `pieces_${mois}.zip`, content: Buffer.from(archive.zip), contentType: "application/zip" }] : []),
   ];
   const nomsPieces = attachments.map((a) => a.filename);
 
@@ -116,7 +121,7 @@ export async function envoyerEcrituresComptable(params: {
     replyTo: REPLY_TO,
     to,
     subject: `${club.nom} — écritures comptables ${nomMoisLong(mois)}`,
-    html: corpsEmailComptable({ mois, resume: colis.resume, pieces: nomsPieces, nomCentre: club.nom, message: params.message }),
+    html: corpsEmailComptable({ mois, resume: colis.resume, pieces: nomsPieces, nomCentre: club.nom, message: params.message, archive: archive ? { nb: archive.nb, nonJointes: archive.nonJointes } : undefined }),
     attachments,
   });
   if (envoi.error) {

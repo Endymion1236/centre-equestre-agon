@@ -5,7 +5,8 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
-import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION } from "@/lib/tableau-depenses";
+import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION, justifiableParReleve } from "@/lib/tableau-depenses";
+import { chargerLignesMois } from "@/lib/lignes-mois";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 const idValide = (s: unknown): s is string => typeof s === "string" && /^[\w-]{1,150}$/.test(s);
@@ -15,14 +16,8 @@ export async function GET(req: NextRequest) {
   const mois = req.nextUrl.searchParams.get("mois") || "";
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) return NextResponse.json({ error: "Mois invalide" }, { status: 400 });
   try {
-    const [ds, ms, ps, ars] = await Promise.all([adminDb.collection("depenses").where("mois", "==", mois).limit(2001).get(), mouvements().where("mois", "==", mois).limit(2001).get(), adminDb.collection("justificatifs").limit(2001).get(), adminDb.collection("depenses-doublons-archives").where("mois", "==", mois).limit(2001).get()]);
-    const pieces = ps.docs.map(d => ({ id: d.id, nom: d.data().nom, retire: !!d.data().retire, extraction: d.data().extraction || null, depenseId: d.data().depenseId || null, paieValidee: !!d.data().paieValidee, modeRattachement: d.data().modeRattachement || null, paiementsAssocies: d.data().paiementsAssocies || [] }));
-    const archives = new Set(ars.docs.map(d => d.id));
-    const lignes = new Map<string, Record<string, unknown>>();
-    for (const d of ms.docs) if (!archives.has(d.id)) lignes.set(d.id, { ...d.data(), id: d.id, suivie: false });
-    for (const d of ds.docs) if (!archives.has(d.id)) lignes.set(d.id, { ...d.data(), id: d.id, suivie: true });
-    return NextResponse.json({ lignes: [...lignes.values()].map(l => ({ ...l, piece: pieces.find(p => p.depenseId === l.id || p.paiementsAssocies.some((a: { id: string }) => a.id === l.id)) || null })), pieces, categories,
-      limite: [ds, ms, ps, ars].some(s => s.size > 2000) }, { headers: { "Cache-Control": "private, no-store" } });
+    const { lignes, pieces, limite } = await chargerLignesMois(mois);
+    return NextResponse.json({ lignes, pieces, categories, limite }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "Tableau indisponible" }, { status: 500 }); }
 }
 export async function POST(req: NextRequest) {
@@ -55,11 +50,11 @@ export async function POST(req: NextRequest) {
       if (!d.exists) throw new Error("Ligne absente : actualisez le tableau");
       if (b.action === "justifier-releve") {
         if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
-        if (b.confirme && (d.data()!.source !== "releve-bancaire" || !posteCommissionCarte(d.data()!.fournisseur))) throw new Error("Seule une commission ou des frais prélevés par la banque peuvent être justifiés par le relevé.");
+        if (b.confirme && (d.data()!.source !== "releve-bancaire" || !justifiableParReleve(d.data()!.poste, d.data()!.fournisseur, posteCommissionCarte))) throw new Error("Seuls une commission ou des frais prélevés par la banque, ou une échéance d'emprunt, peuvent être justifiés par le relevé.");
         // Référence du relevé : son nom de fichier quand l'import l'a gardé,
         // sinon le compte et le mois — le relevé du mois reste retrouvable.
         const reference = d.data()!.note || `Relevé ${d.data()!.compte || "bancaire"} ${d.data()!.mois || ""}`.trim();
-        tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur), referenceJustificatifReleve: reference } : { referenceJustificatifReleve: null }) });
+        tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur) || d.data()!.poste, referenceJustificatifReleve: reference } : { referenceJustificatifReleve: null }) });
       } else if (b.action === "categorie") {
         // Un débit « hors dépenses » qui reçoit une catégorie de charge devient
         // une dépense, avec ou sans justificatif (règle du gérant : la charge
