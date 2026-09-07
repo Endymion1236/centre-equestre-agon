@@ -42,6 +42,8 @@ interface PropositionReleve {
   creditsClients: number | null;
   operations: OperationProposee[];
   lectureIncomplete?: boolean;
+  /** Virements reçus de plateformes (Stripe…) lus comme débits puis écartés : des encaissements, pas des dépenses. */
+  ecartees?: { date: string; libelle: string; montant: number; pageReleve?: number }[];
   fichier: string;
   compteChoisi: string; soldeEdit: string; soldeEnregistre: boolean;
   /** Identifiant local : les débits arrivent dans un second temps. */
@@ -250,7 +252,7 @@ export default function TresoreriePage() {
     setPropositions(prev => prev.map(p => p.id === id ? {
       ...p, operationsEtat: total.manquantes.length ? "echec" : "ok", lectureIncomplete: total.manquantes.length > 0,
       progressionPages: `${session.pdf.nombrePages - total.manquantes.length} / ${session.pdf.nombrePages} pages lues`,
-      pagesManquantes: total.manquantes, operationsErreur: erreurs.join(" · "), creditsClients: total.creditsClients,
+      pagesManquantes: total.manquantes, operationsErreur: erreurs.join(" · "), creditsClients: total.creditsClients, ecartees: total.ecartees,
       soldeEnregistre: false,
       operations: total.operations.map(o => {
         const existante = p.operations.find(x => x.sourceOperation === o.sourceOperation);
@@ -463,6 +465,15 @@ export default function TresoreriePage() {
             <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-body text-[11px] text-amber-800">
               ⚠ Lecture incomplète : certaines pages n’ont pas été validées. Des opérations
               peuvent manquer dans la liste ci-dessous. L’import des dépenses reste bloqué jusqu’à la lecture complète. Vérifie également le solde sur le PDF avant de l’enregistrer.
+            </div>
+          )}
+
+          {!!p.ecartees?.length && (
+            <div className="mb-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 font-body text-[11px] text-blue-900">
+              ↩ {p.ecartees.length} virement{p.ecartees.length > 1 ? "s" : ""} reçu{p.ecartees.length > 1 ? "s" : ""} de plateforme d’encaissement
+              (Stripe, CAWL, SumUp…) écarté{p.ecartees.length > 1 ? "s" : ""} des débits, total {p.ecartees.reduce((s, o) => s + o.montant, 0).toLocaleString("fr-FR", { style: "currency", currency: "EUR" })} :
+              c’est de l’argent qui arrive, net des commissions, à retrouver dans les encaissements clients, pas dans les dépenses.
+              {" "}{p.ecartees.slice(0, 6).map(o => `${o.date.slice(8, 10)}/${o.date.slice(5, 7)} ${o.libelle} ${o.montant.toFixed(2)} €`).join(" · ")}{p.ecartees.length > 6 ? " · …" : ""}
             </div>
           )}
 

@@ -29,6 +29,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { lireJsonPageReleve } from "@/lib/lecture-json-releve";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { separerVirementsPlateforme } from "@/lib/import-releve-pages";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
 import { dateValide } from "@/lib/justificatifs";
 
@@ -167,7 +168,8 @@ export async function POST(req: NextRequest) {
         "operations = UNIQUEMENT les DÉBITS (sorties d'argent), un objet par opération, dans l'ordre du relevé. \"libelle\" : le nom du fournisseur/bénéficiaire en 2 à 5 mots, sans les codes ni numéros. Réponds en JSON COMPACT (une opération par ligne, pas d'indentation). Pour chaque débit, choisis \"poste\" EXACTEMENT dans cette liste :\n" +
         nomsPostes.map((n) => `- "${n}"`).join("\n") + "\n" +
         `- "${POSTE_HORS_DEPENSES}" pour tout débit qui n'est PAS une dépense de fonctionnement à suivre : échéance ou remboursement d'emprunt, salaire ou virement à un salarié, cotisations MSA/URSSAF/DGFiP/TESA, TVA et impôts, virement interne entre comptes du centre, retrait d'espèces, remboursement à un client, ÉPARGNE et placements (assurance-vie, retraite, prévoyance type Swisslife), dépense PERSONNELLE de l'exploitant (courses alimentaires type Hellofresh, abonnements privés).\n` +
-        "Cas fréquents : « Commission vente à distance », « Com Carte », frais et factures Crédit Agricole, commissions Stripe → \"Frais bancaires & commissions (CB, Stripe)\".\n" +
+        "Cas fréquents : « Commission vente à distance », « Com Carte », frais et factures Crédit Agricole → \"Frais bancaires & commissions (CB, Stripe)\".\n" +
+        "ATTENTION : les virements reçus de Stripe, CAWL/Worldline, SumUp ou HelloAsso sont des CRÉDITS (encaissements clients, nets de commissions) : ne les mets JAMAIS dans operations. Les commissions de ces plateformes ne figurent pas sur le relevé bancaire.\n" +
         "Montants en euros, point décimal, sans séparateur de milliers. Si ce n'est pas un relevé de compte, réponds {\"erreur\": \"document non reconnu\"}.";
 
       const rep = await anthropic.messages.create({
@@ -243,7 +245,10 @@ export async function POST(req: NextRequest) {
               : null;
           })
           .filter(Boolean);
-        return NextResponse.json({ operations, lectureIncomplete, ...(parPage ? { creditsClients: nb(data.creditsClients) } : {}) });
+        // Un virement Stripe/CAWL/SumUp lu comme un débit est une erreur de
+        // sens : c'est un encaissement. On l'écarte et on le montre à l'écran.
+        const tri = separerVirementsPlateforme(operations as { libelle: string }[]);
+        return NextResponse.json({ operations: tri.operations, ecartees: tri.ecartees, lectureIncomplete, ...(parPage ? { creditsClients: nb(data.creditsClients) } : {}) });
       }
 
       // Proposition seulement — c'est l'admin qui valide, aucune écriture ici.
