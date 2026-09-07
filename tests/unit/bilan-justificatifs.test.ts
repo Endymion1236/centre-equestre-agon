@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { completudeJustificatifs, bilanTvaMois, construireExportTva, construireExportJustificatifs, type LigneMois } from "../../src/lib/bilan-justificatifs";
 
-const piece = (tva: number | null, extra: Partial<NonNullable<LigneMois["piece"]>["extraction"]> = {}) => ({ id: "p", nom: "Facture.pdf", extraction: { typeDocument: "achat", devise: "EUR", ht: 100, tva, ttc: 120, numero: "F1", date: "2026-08-02", ...extra } });
+const piece = (tva: number | null, extra: Partial<NonNullable<LigneMois["piece"]>["extraction"]> = {}) => ({ id: `p-${tva}`, nom: "Facture.pdf", extraction: { typeDocument: "achat", devise: "EUR", ht: 100, tva, ttc: 120, numero: "F1", date: "2026-08-02", ...extra } });
 const lignes: LigneMois[] = [
   { id: "a", dateOperation: "2026-08-05", fournisseur: "VETO", poste: "Vétérinaire", montant: 120, suivie: true, piece: piece(20) },
   { id: "b", dateOperation: "2026-08-06", fournisseur: "ORANGE", poste: "Téléphone", montant: 66, suivie: true, statutTVA: "a-verifier" },

@@ -14,7 +14,7 @@ test("le colis gagne deux CSV et un résumé de complétude/TVA quand les lignes
   const sans = construireColisComptable({ mois: "2026-08", payments: [], encaissements: [], depenses: [] });
   assert.equal(sans.pieces.length, 5); assert.equal(sans.resume.completude, undefined);
   const avec = construireColisComptable({ mois: "2026-08", payments: [], encaissements: [], depenses: [], lignesJustificatifs: lignes });
-  assert.deepEqual(avec.pieces.slice(5).map(p => p.filename), ["justificatifs_2026-08.csv", "tva_2026-08.csv"]);
+  assert.deepEqual(avec.pieces.slice(5).map(p => p.filename), ["justificatifs_2026-08.csv", "tva_2026-08.csv", "ventilation_achats_2026-08.csv"]);
   assert.ok(avec.pieces[5].contenu.startsWith("\uFEFF"));
   assert.deepEqual(avec.resume.completude, { total: 2, justifies: 1, sansPiece: 1, montantSansPiece: 66, pourcent: 50 });
   assert.equal(avec.resume.tvaDeductibleJustifiee, 20);

@@ -85,26 +85,28 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Eau & électricité": [[/(saur|eau\b|veolia)/, "60610000"], [/(edf|engie|electr|energie|enercoop)/, "60630000"], [/(gaz|antargaz|butane|propane)/, "60630000"]],
   "Fournitures & petit équipement (dont sellerie)": [[/(seller|padd|horze|equi ?clic|devoucoux|forestier|equithe|licol|tapis|filet|mors)/, "60660100"], [/(papet|bureau|toner|cartouche|imprim|tampon)/, "60662000"]],
   "Entretien (bâtiments, matériel, véhicules)": [[/(garage|pneu|controle technique|carross|vidange|motin|jb ?mega|vehicule|camion|skoda)/, "61553000"], [/(batiment|toiture|platrerie|peinture|macon|couverture)/, "61530000"], [/(maintenance|sage|logiciel|contrat d entretien)/, "61562000"], [/(terrain|carriere|sable|clotur)/, "61510000"]],
-  "Locations & loyers": [[/(association|asso ce|ce d agon|loyer)/, "61310000"], [/(arval|skoda|vehicule|lld)/, "61320000"], [/(rex rotary|imprimante|copieur)/, "61322000"], [/(tpe|leasing solutions|cm cic|leasecom|terminal)/, "61323000"], [/(cafe)/, "61321000"], [/(equilocation|cheval|poney|animal)/, "61340000"]],
+  "Locations & loyers": [[/(arval|skoda|vehicule|lld)/, "61320000"], [/(rex rotary|imprimante|copieur)/, "61322000"], [/(tpe|leasing solutions|cm cic|leasecom|terminal)/, "61323000"], [/(cafe)/, "61321000"], [/(equilocation|cheval|poney|animal)/, "61340000"], [/(association|asso ce|ce d agon|loyer)/, "61310000"]],
   "Assurances": [[/(vehicule|auto|camion|flotte)/, "61610000"], [/(agricole|materiel|tracteur|groupama.*mat)/, "61680000"]],
   "Honoraires & gestion (compta, juridique, GHN)": [[/(ghn|groupement hippique)/, "62261000"], [/(notaire|avocat|juridique|infogreffe)/, "62260000"], [/(huissier|acte|contentieux)/, "62270000"], [/(pignolet|comptable|expert|api expertises)/, "62262000"]],
-  "Frais bancaires & commissions (CB, Stripe)": [[/(com carte|commission cb|commission carte|vente distance|vad|stripe|sumup|cawl|worldline|tpe)/, "62710000"], [/(emprunt|dossier)/, "62720000"], [/(ancv)/, "62840000"]],
+  "Frais bancaires & commissions (CB, Stripe)": [[/(com carte|commission cb|commission carte|vente( a)? distance|vad|stripe|sumup|cawl|worldline|tpe)/, "62710000"], [/(emprunt|dossier)/, "62720000"], [/(ancv)/, "62840000"]],
   "Publicité & communication": [[/(imprim|print|flyer|catalogue|affiche|banderole|copinew)/, "62360000"], [/(cadeau|coupe|medaille|trophee)/, "62340000"]],
-  "Autres dépenses": [[/(restaurant|resto|la cale|kin saya|equinoxe|reception|traiteur|pizza|burger|mcdo)/, "62570000"], [/(hotel|mission|airbnb|gite)/, "62560000"], [/(peage|sncf|train|parking|deplacement|chargemap|carburant)/, "62510000"], [/(la poste|colissimo|chronopost|ups\b|timbre)/, "62610000"], [/(orange|free|bouygues|sfr|internet|box|fibre)/, "62640000"], [/(mobile|portable)/, "62630000"], [/(openai|anthropic|google|resend|adobe|elevenlabs|midjourney|o2switch|standardfacile|hosteur|abonnement|logiciel|saas|deezer|canva|microsoft|apple)/, "61800000"], [/(formation|ocapiat|stage form)/, "63330000"], [/(ifce|sire|cotisation cheval)/, "62830000"], [/(cotisation|adhesion|filiation|licence dirigeant)/, "62810000"], [/(amende|penalite|majoration)/, "67120000"], [/(medecine du travail|mutualite|pharmacie)/, "64750000"], [/(ticket resto|edenred|tickets restaurants)/, "64700000"], [/(mco nuisibles|derat|desinsect|nettoyage)/, "61550000"]],
+  "Autres dépenses": [[/(tickets? (resto|restaurants?)|edenred)/, "64700000"], [/(mobile|portable)/, "62630000"], [/(restaurant|resto|la cale|kin saya|equinoxe|reception|traiteur|pizza|burger|mcdo)/, "62570000"], [/(hotel|mission|airbnb|gite)/, "62560000"], [/(peage|sncf|train|parking|deplacement|chargemap|carburant)/, "62510000"], [/(la poste|colissimo|chronopost|ups\b|timbre)/, "62610000"], [/(orange|free|bouygues|sfr|internet|box|fibre)/, "62640000"], [/(openai|anthropic|google|resend|adobe|elevenlabs|midjourney|o2switch|standardfacile|hosteur|abonnement|logiciel|saas|deezer|canva|microsoft|apple)/, "61800000"], [/(formation|ocapiat|stage form)/, "63330000"], [/(ifce|sire|cotisation cheval)/, "62830000"], [/(cotisation|adhesion|filiation|licence dirigeant)/, "62810000"], [/(amende|penalite|majoration)/, "67120000"], [/(medecine du travail|mutualite|pharmacie)/, "64750000"], [/(mco nuisibles|derat|desinsect|nettoyage)/, "61550000"]],
   "Cotisations sociales": [[/(msa richard|richard|exploitant)/, "43110000"], [/(salari|dsn)/, "43700000"]],
-  "Immobilisation — à amortir": [[/(cheval|poney|jument|hongre|pouliche|manege)/, "24314000"], [/(sport|competition)/, "24313000"], [/(tracteur|remorque|van|epandeur|tondeuse|quad|materiel agri|broyeur)/, "21540000"], [/(camion|vehicule|voiture|utilitaire|fourgon)/, "21820000"], [/(ordinateur|pc\b|mac\b|tablette|imprimante|informatique|ecran|serveur)/, "21830000"], [/(carriere|cloture|barriere|box|abri|hangar|agencement|amenagement|obstacle)/, "21210000"]],
+  "Immobilisation — à amortir": [[/(?=.*(cheval|chevaux|poney|jument|hongre|pouliche))(?=.*\b(sport|competition)\b)/, "24313000"], [/(cheval|chevaux|poney|jument|hongre|pouliche|manege)/, "24314000"], [/(tracteur|remorque|van|epandeur|tondeuse|quad|materiel agri|broyeur)/, "21540000"], [/(camion|vehicule|voiture|utilitaire|fourgon)/, "21820000"], [/(ordinateur|pc\b|mac\b|tablette|imprimante|informatique|ecran|serveur)/, "21830000"], [/(carriere|cloture|barriere|box|abri|hangar|agencement|amenagement|obstacle)/, "21210000"]],
 };
 
 /** Compte de charge (ou assimilé) d'une ligne du tableau. */
 export function ventilerDepense(l: { poste?: string; fournisseur?: string; immobilisation?: boolean; depensePersonnelle?: boolean; avanceFfe?: boolean }): Ventilation {
   const poste = l.poste || "";
+  // Un choix de nature explicite prime toujours sur un libellé de fournisseur.
+  if (l.depensePersonnelle || poste === "Personnel — hors charges") return { compte: "45511000", libelle: COMPTES["45511000"], source: "nature" };
+  if (l.avanceFfe || poste === "Compte FFE (avance licences & engagements)") return { compte: "51730000", libelle: COMPTES["51730000"], source: "nature" };
+  const immobilisation = l.immobilisation || poste === "Immobilisation — à amortir";
   const texte = norm(l.fournisseur);
-  const regles = MOTS_CLES[l.immobilisation ? "Immobilisation — à amortir" : poste] || [];
+  const regles = MOTS_CLES[immobilisation ? "Immobilisation — à amortir" : poste] || [];
   for (const [re, compte] of regles) if (re.test(texte)) return { compte, libelle: COMPTES[compte] || "", source: "mot-cle" };
-  if (l.immobilisation) return { compte: "", libelle: "Immobilisation (classe 2)", source: "a-ventiler", note: "Bien durable : préciser le compte 21/24 (matériel agricole, transport, informatique, cheval)." };
-  if (l.avanceFfe) return { compte: "51730000", libelle: COMPTES["51730000"], source: "categorie" };
-  if (l.depensePersonnelle) return { compte: "45511000", libelle: COMPTES["45511000"], source: "categorie" };
-  if (poste === "Emprunts") return { compte: "16420000", libelle: COMPTES["16420000"], source: "a-ventiler", note: "Échéance : capital en 1642xxxx, intérêts en 6612xxxx selon le tableau d'amortissement." };
+  if (immobilisation) return { compte: "", libelle: "Immobilisation (classe 2)", source: "a-ventiler", note: "Bien durable : préciser le compte 21/24 (matériel agricole, transport, informatique, cheval)." };
+  if (poste === "Emprunts") return { compte: "", libelle: "Échéance d’emprunt à ventiler", source: "a-ventiler", note: "Échéance : capital en 1642xxxx, intérêts en 6612xxxx selon le tableau d'amortissement." };
   if (poste === "Retraite / PER — à vérifier") return { compte: "", libelle: "PER de l'exploitant", source: "a-ventiler", note: "Traitement fiscal à décider par la comptable (pas une charge d'exploitation par défaut)." };
   const compte = PAR_CATEGORIE[poste];
   if (compte) return { compte, libelle: COMPTES[compte] || "", source: "categorie" };
@@ -134,13 +136,16 @@ const FOURNISSEURS: [RegExp, string, string][] = [
 export function compteFournisseur(fournisseur: unknown): CompteAchat {
   const t = norm(fournisseur);
   for (const [re, compte, libelle] of FOURNISSEURS) if (re.test(t)) return { compte, libelle };
-  return { compte: "401DIVERS", libelle: "Fournisseurs divers" };
+  return { compte: "", libelle: "Fournisseur à identifier" };
 }
 
 /** Compte de banque : celui du relevé importé quand on le connaît. */
 export function compteBanque(compte: unknown): CompteAchat {
   const t = norm(compte);
+  if (["51200000", "51220000", "51730000", "51740000"].includes(t)) return { compte: t, libelle: COMPTES[t] };
   if (/excedent/.test(t)) return { compte: "51220000", libelle: COMPTES["51220000"] };
-  if (/ffe/.test(t)) return { compte: "51730000", libelle: COMPTES["51730000"] };
-  return { compte: "51200000", libelle: COMPTES["51200000"] };
+  if (/\bffe\b.*\bcompet|\bcompet\w*.*\bffe\b/.test(t)) return { compte: "51740000", libelle: COMPTES["51740000"] };
+  if (/\bffe\b|federation francaise d equitation/.test(t)) return { compte: "51730000", libelle: COMPTES["51730000"] };
+  if (/credit agricole|\bca\b/.test(t)) return { compte: "51200000", libelle: COMPTES["51200000"] };
+  return { compte: "", libelle: "Compte bancaire à identifier" };
 }

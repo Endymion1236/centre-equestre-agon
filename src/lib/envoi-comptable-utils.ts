@@ -23,6 +23,8 @@ import {
 import { construireFecVentes } from "@/app/admin/comptabilite/fec-utils";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
 
+import { bilanVentilationAchats, construireExportVentilationAchats } from "@/lib/ventilation-achats";
+
 export interface PieceJointe {
   filename: string;
   contenu: string;
@@ -41,6 +43,7 @@ export interface ResumeColis {
   completude?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number; pourcent: number };
   tvaDeductibleJustifiee?: number;
   tvaAVerifier?: { nb: number; ttc: number };
+  ventilationAchats?: { total: number; aVentiler: number; montantAVentiler: number };
 }
 
 export interface ColisComptable {
@@ -80,7 +83,8 @@ export function construireColisComptable(params: {
   /** Lignes du tableau des opérations du mois (avec pièces) : ajoute le CSV des justificatifs et celui de la TVA. */
   lignesJustificatifs?: LigneMois[];
 }): ColisComptable {
-  const { mois, maintenant = new Date(), lignesJustificatifs } = params;
+  const { mois, maintenant = new Date() } = params;
+  const lignesJustificatifs = params.lignesJustificatifs?.filter(l => (l.mois || l.dateOperation?.slice(0, 7)) === mois);
   const factures = facturesDuMois(params.payments, mois)
     .sort((a, b) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
   const encaissements = encaissementsDuMois(params.encaissements, mois)
@@ -101,6 +105,7 @@ export function construireColisComptable(params: {
     resume.completude = completudeJustificatifs(lignesJustificatifs);
     resume.tvaDeductibleJustifiee = tva.deductibleJustifiee;
     resume.tvaAVerifier = tva.aVerifier;
+    resume.ventilationAchats = bilanVentilationAchats(lignesJustificatifs);
   }
 
   const csv = "text/csv; charset=utf-8";
@@ -114,6 +119,7 @@ export function construireColisComptable(params: {
     ...(lignesJustificatifs ? [
       { filename: `justificatifs_${mois}.csv`, contenu: bom + construireExportJustificatifs(lignesJustificatifs), contentType: csv },
       { filename: `tva_${mois}.csv`, contenu: bom + construireExportTva(lignesJustificatifs), contentType: csv },
+      { filename: `ventilation_achats_${mois}.csv`, contenu: bom + construireExportVentilationAchats(lignesJustificatifs), contentType: csv },
     ] : []),
   ];
 
@@ -148,8 +154,10 @@ export function corpsEmailComptable(params: {
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Encaissements au journal</td><td style="padding:4px 0;"><b>${resume.nbEncaissements}</b> — ${eur(resume.totalEncaisse)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Dépenses saisies</td><td style="padding:4px 0;"><b>${resume.nbDepenses}</b> — ${eur(resume.totalDepenses)}</td></tr>
       ${resume.completude ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Justificatifs</td><td style="padding:4px 0;"><b>${resume.completude.justifies}/${resume.completude.total}</b> dépenses justifiées${resume.completude.sansPiece ? ` — <span style="color:#b45309;">${eur(resume.completude.montantSansPiece)} sans pièce sur ${resume.completude.sansPiece} ligne(s)</span>` : ""}</td></tr>` : ""}
-      ${resume.tvaDeductibleJustifiee != null ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">TVA déductible justifiée</td><td style="padding:4px 0;"><b>${eur(resume.tvaDeductibleJustifiee)}</b>${resume.tvaAVerifier?.nb ? ` — ${resume.tvaAVerifier.nb} ligne(s) à vérifier (${eur(resume.tvaAVerifier.ttc)} TTC)` : ""}</td></tr>` : ""}
+      ${resume.tvaDeductibleJustifiee != null ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">TVA documentée — paiements uniques</td><td style="padding:4px 0;"><b>${eur(resume.tvaDeductibleJustifiee)}</b>${resume.tvaAVerifier?.nb ? ` — ${resume.tvaAVerifier.nb} ligne(s) à vérifier (${eur(resume.tvaAVerifier.ttc)} TTC)` : ""}</td></tr>` : ""}
+      ${resume.ventilationAchats ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventilation des achats</td><td>${resume.ventilationAchats.total} opérations, <b>${resume.ventilationAchats.aVentiler} à ventiler</b> (${eur(resume.ventilationAchats.montantAVentiler)}). Comptes proposés à valider.</td></tr>` : ""}
     </table>
+    ${resume.tvaDeductibleJustifiee != null ? "<p>Les paiements fractionnés et les factures partagées restent à vérifier, hors total TVA automatique. La TVA totale de la facture ne doit pas être cumulée entre paiements.</p>" : ""}
     ${archive ? `<p style="font-size:13px;color:#374151;">L'archive des pièces contient <b>${archive.nb}</b> justificatif(s), nommés « date - fournisseur - montant ».${archive.nonJointes ? ` <span style="color:#b45309;">${archive.nonJointes} pièce(s) n'ont pas pu être jointes (taille) : elles restent consultables dans l'application.</span>` : ""}</p>` : ""}
     <p style="font-size:13px;color:#374151;"><b>Pièces jointes :</b><br/>${pieces.map((p) => `• ${p}`).join("<br/>")}</p>
     <p style="font-size:12px;color:#6b7280;">Le journal des encaissements est celui du logiciel de caisse (écritures inaltérables, chaînées). Les CSV sont en point-virgule, encodés UTF-8. Le FEC couvre les ventes du mois.</p>

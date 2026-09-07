@@ -74,7 +74,7 @@ export async function envoyerEcrituresComptable(params: {
   /** Adresse imposée (test) ; sinon celle des paramètres. */
   destinataire?: string;
   message?: string;
-}): Promise<{ ok: true; to: string; pieces: string[]; resume: any } | { ok: false; error: string; code: "adresse" | "restreint" | "resend" | "vide" }> {
+}): Promise<{ ok: true; to: string; pieces: string[]; resume: any } | { ok: false; error: string; code: "adresse" | "restreint" | "resend" | "vide" | "donnees" }> {
   const { mois, declenche } = params;
   const reglages = await reglagesEnvoiComptable();
   const to = (params.destinataire || reglages.emailComptable).trim();
@@ -96,12 +96,13 @@ export async function envoyerEcrituresComptable(params: {
     getClubInfo(),
     chargerLignesMois(mois).catch((e) => { console.error("[envoi-comptable] lignes du mois illisibles", e); return null; }),
   ]);
+  if (!tableau || tableau.limite) return { ok: false, code: "donnees", error: "Le tableau des opérations ou des justificatifs est incomplet. Actualisez-le et vérifiez les limites avant l’envoi comptable." };
   const payments = paySnap.docs.map(normaliserDoc);
   const encaissements = encSnap.docs.map(normaliserDoc);
   const depenses = depSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
 
   const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes });
-  if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0) {
+  if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0 && !colis.resume.ventilationAchats?.total) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
   }
 
