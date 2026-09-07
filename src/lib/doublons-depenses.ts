@@ -10,6 +10,7 @@ const PREFIXES = /^(?:(?:prlv|prelevement|prelvt|vir|virement|sepa|cb|carte|paie
 export const fournisseurNormalise = (s: string) => nom(s).replace(PREFIXES, "");
 const fournisseur = fournisseurNormalise;
 export function doublonPossible(a: DepenseCandidate, b: DepenseCandidate): boolean {
+  if (a.operationsDistinctesDe?.includes(b.id) || b.operationsDistinctesDe?.includes(a.id)) return false;
   return a.id !== b.id && a.source === "releve-bancaire" && b.source === a.source && !!a.mois && a.mois === b.mois
     && Number.isFinite(a.montant) && Number.isFinite(b.montant) && Math.round(a.montant * 100) === Math.round(b.montant * 100)
     && !!fournisseur(a.fournisseur || "") && fournisseur(a.fournisseur || "") === fournisseur(b.fournisseur || "")

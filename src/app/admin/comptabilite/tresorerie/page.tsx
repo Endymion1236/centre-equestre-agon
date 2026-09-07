@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil, Settings2, FileText } from "lucide-react";
+import ImportMouvementsBancaires from "../depenses/ImportMouvementsBancaires";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
 import { remplacerPage, regrouperPages, type PageLue, type ResultatPage } from "@/lib/import-releve-pages";
 import type { preparerRelevePdf } from "@/lib/releve-pdf-pages";
@@ -312,42 +313,21 @@ export default function TresoreriePage() {
     finally { setSaving(false); }
   };
 
-  const ajouterDepensesReleve = async (idx: number, datesSeulement = false) => {
+  const completerDatesReleve = async (idx: number) => {
     const p = propositions[idx];
-    const gardees = (p?.operations || []).filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES && /^\d{4}-\d{2}$/.test(o.mois));
-    const autres = (p?.operations || []).filter(o => o.poste === POSTE_HORS_DEPENSES);
-    if (!p || saving || !p.compteChoisi || p.operationsEtat !== "ok" || (datesSeulement ? gardees.length === 0 : gardees.length + autres.length === 0)) return;
-    if (datesSeulement && gardees.length > 200) { setError("Pour compléter les anciennes dates, sélectionnez au maximum 200 lignes par tentative."); return; }
+    const lignes = (p?.operations || []).filter(o => o.poste !== POSTE_HORS_DEPENSES);
+    if (!p || saving || !p.compteChoisi || p.operationsEtat !== "ok" || !lignes.length) return;
+    if (lignes.length > 200) { setError("La reprise des anciennes dates accepte au maximum 200 lignes à la fois. Utilisez le rapprochement du relevé pour les autres opérations."); return; }
     setSaving(true); setError(""); setInfo("");
     try {
       const token = await user!.getIdToken();
-      const d: Record<string, number> = {};
-      for (let debut = 0; debut < gardees.length; debut += 200) {
-      const res = await fetch("/api/admin/depenses", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          action: datesSeulement ? "completer-dates" : "ajouter-lot",
-          compte: p.compteChoisi,
-          factures: gardees.slice(debut, debut + 200).map(o => ({ date: o.date, mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, sourceOperation: o.sourceOperation, pageReleve: o.pageReleve, note: `Relevé ${p.fichier}` })),
-        }),
-      });
-      const resultat = await res.json();
-      if (!res.ok) throw new Error(`${resultat?.error || "Erreur"} ${debut > 0 ? "Les lots précédents ont été traités ; les lignes déjà importées sont protégées lors d'une nouvelle tentative." : ""}`);
-      for (const cle of ["ajoutees", "doublons", "invalides", "completees", "dejaDatees", "ambigues", "absentes"]) d[cle] = (d[cle] || 0) + Number(resultat[cle] || 0);
-      }
-      if (!datesSeulement) for (let debut = 0; debut < autres.length; debut += 200) {
-        const res = await fetch("/api/admin/depenses/tableau", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ action: "importer-autres", compte: p.compteChoisi, note: `Relevé ${p.fichier}`, lignes: autres.slice(debut, debut + 200) }) });
-        const resultat = await res.json();
-        if (!res.ok) throw new Error(`${resultat.error || "Import des autres débits impossible"}. Les dépenses déjà enregistrées restent conservées ; vous pouvez relancer.`);
-      }
-      setInfo(datesSeulement
-        ? `${d.completees} date(s) complétée(s), ${d.dejaDatees} déjà datée(s), ${d.ambigues} ambiguë(s), ${d.absentes} sans dépense correspondante, ${d.invalides} invalide(s). Aucune dépense créée. Les lignes ambiguës restent à vérifier.`
-        : `${d.ajoutees || 0} dépense(s) ajoutée(s), ${d.doublons || 0} déjà présente(s). ${autres.length} autre(s) débit(s) conservé(s) pour le rapprochement, sans ajout aux charges.`);
-      setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: [] } : x));
-    } catch (e: any) { setError(e?.message || String(e)); }
-    finally { setSaving(false); }
+      const res = await fetch("/api/admin/depenses", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({
+        action: "completer-dates", compte: p.compteChoisi,
+        factures: lignes.map(o => ({ date: o.date, mois: o.date.slice(0, 7), poste: o.poste, fournisseur: o.libelle, montant: o.montant, sourceOperation: o.sourceOperation, pageReleve: o.pageReleve, note: `Relevé ${p.fichier}` })),
+      }) });
+      const d = await res.json(); if (!res.ok) throw new Error(d.error || "Reprise des dates impossible");
+      setInfo(`${d.completees} date(s) complétée(s), ${d.dejaDatees} déjà datée(s), ${d.ambigues} ambiguë(s), ${d.absentes} sans correspondance. Aucune dépense créée. Actualisez le rapprochement du relevé.`);
+    } catch (e: any) { setError(e?.message || String(e)); } finally { setSaving(false); }
   };
 
   const importer = async (fichier: File) => {
@@ -522,62 +502,28 @@ export default function TresoreriePage() {
           {p.operationsEtat === "ok" && p.operations.length === 0 && (
             <div className="font-body text-[11px] text-slate-500 px-1 py-1">Aucun débit lu sur ce relevé.</div>
           )}
-          {p.operations.length > 0 && (() => {
-            const gardees = p.operations.filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES);
-            return (
-              <div className="rounded-lg border border-orange-200 bg-orange-50/40 px-3 py-2">
-                <div className="font-body text-xs font-semibold text-orange-900 mb-1.5">
-                  Débits lus sur le relevé — coche ceux à ajouter aux Dépenses par poste
-                  <span className="font-normal text-slate-500"> (décoche ce que tu as déjà saisi à la main : sinon il compterait deux fois)</span>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse font-body text-xs">
-                    <tbody>
-                      {p.operations.map((o, oi) => (
-                        <tr key={oi} className={`border-b border-orange-100/60 ${o.poste === POSTE_HORS_DEPENSES ? "opacity-50" : ""}`}>
-                          <td className="py-1 pr-2 w-6">
-                            <input type="checkbox" checked={o.garder && o.poste !== POSTE_HORS_DEPENSES}
-                              disabled={o.poste === POSTE_HORS_DEPENSES}
-                              onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: x.operations.map((y, yi) => yi === oi ? { ...y, garder: e.target.checked } : y) } : x))}
-                              className="accent-orange-600 w-3.5 h-3.5" />
-                          </td>
-                          <td className="py-1 pr-2 text-slate-400 whitespace-nowrap">{o.date ? o.date.slice(8, 10) + "/" + o.date.slice(5, 7) : "?"}</td>
-                          <td className="py-1 pr-2">
-                            <input value={o.libelle}
-                              onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: x.operations.map((y, yi) => yi === oi ? { ...y, libelle: e.target.value } : y) } : x))}
-                              className="w-full min-w-40 border border-transparent hover:border-gray-200 focus:border-orange-300 rounded px-1 py-0.5 bg-transparent" />
-                          </td>
-                          <td className="py-1 pr-2 text-right font-semibold text-slate-700 whitespace-nowrap">{eur(o.montant)}</td>
-                          <td className="py-1">
-                            <select value={o.poste}
-                              onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: x.operations.map((y, yi) => yi === oi ? { ...y, poste: e.target.value, garder: e.target.value !== POSTE_HORS_DEPENSES ? y.garder || true : y.garder } : y) } : x))}
-                              className="border border-gray-200 rounded px-1.5 py-0.5 bg-white max-w-56">
-                              {POSTES_DEPENSES.map(ps => <option key={ps.nom} value={ps.nom}>{ps.nom}</option>)}
-                              <option value={POSTE_HORS_DEPENSES}>Hors dépenses (emprunt, MSA, salaire, TVA…)</option>
-                            </select>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className="flex items-center justify-between flex-wrap gap-2 mt-2">
-                  <span className="font-body text-[11px] text-slate-500">
-                    {gardees.length} cochée(s) — {eur(gardees.reduce((s, o) => s + o.montant, 0))} · montants TTC du relevé
-                  </span>
-                  <button type="button" onClick={() => ajouterDepensesReleve(idx)} disabled={saving || !p.compteChoisi || p.operationsEtat !== "ok" || (gardees.length === 0 && !p.operations.some(o => o.poste === POSTE_HORS_DEPENSES))}
-                    className="font-body text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                    Enregistrer les dépenses et autres débits
-                  </button>
-                  <button type="button" onClick={() => ajouterDepensesReleve(idx, true)} disabled={saving || !p.compteChoisi || p.operationsEtat !== "ok" || gardees.length === 0}
-                    className="font-body text-xs font-semibold text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer disabled:opacity-50">
-                    Compléter les dates existantes
-                  </button>
-                  <p className="w-full text-xs text-slate-600">Relevé déjà importé ? Utilisez « Compléter les dates existantes ». Cette action ne crée aucune dépense et laisse les correspondances ambiguës inchangées.</p>
-                </div>
-              </div>
-            );
-          })()}
+          {p.operations.length > 0 && p.operationsEtat === "ok" && <div className="space-y-3">
+            <details className="rounded-lg border bg-white p-3">
+              <summary className="cursor-pointer font-semibold text-sm">Vérifier ou corriger les débits lus ({p.operations.length})</summary>
+              <p className="text-xs text-slate-600 my-2">Contrôlez la lecture avant de rapprocher. Pour une opération déjà saisie, choisissez sa correspondance dans l’aperçu ci-dessous.</p>
+              <div className="space-y-2">{p.operations.map((o, oi) => {
+                const corriger = (patch: Partial<OperationProposee>) => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: x.operations.map((y, yi) => yi === oi ? { ...y, ...patch } : y) } : x));
+                return <div key={o.sourceOperation || oi} className="grid min-w-0 gap-2 rounded border p-2 sm:grid-cols-2">
+                  <label className="text-xs">Date<input type="date" className="block min-w-0 w-full rounded border p-2" value={o.date} onChange={e => corriger({ date: e.target.value, mois: e.target.value.slice(0, 7) })} /></label>
+                  <label className="text-xs">Montant débité (€)<input type="number" min="0.01" step="0.01" className="block min-w-0 w-full rounded border p-2" value={o.montant} onChange={e => corriger({ montant: Number(e.target.value) })} /></label>
+                  <label className="text-xs">Libellé<input className="block min-w-0 w-full rounded border p-2" value={o.libelle} maxLength={500} onChange={e => corriger({ libelle: e.target.value })} /></label>
+                  <label className="text-xs">Catégorie<select className="block min-w-0 w-full rounded border p-2" value={o.poste} onChange={e => corriger({ poste: e.target.value })}>
+                    {POSTES_DEPENSES.map(ps => <option key={ps.nom} value={ps.nom}>{ps.nom}</option>)}<option value={POSTE_HORS_DEPENSES}>À classer / hors dépenses</option>
+                  </select></label>
+                </div>;
+              })}</div>
+              <button type="button" onClick={() => void completerDatesReleve(idx)} disabled={saving || !p.compteChoisi} className="underline mt-3 text-sm">Compléter les anciennes dates sans créer de dépenses</button>
+            </details>
+            <ImportMouvementsBancaires pdf={{ empreinte: lectures.current.get(p.id)?.pdf.empreinte || "", nom: p.fichier, compte: p.compteChoisi, mois: p.mois,
+              operations: p.operations.map(o => ({ ref: o.sourceOperation || "", date: o.date, libelle: o.libelle, centimes: Math.round(o.montant * 100), poste: o.poste }))
+            }} onImported={() => setInfo("Rapprochement enregistré. Les dépenses et leurs justificatifs restent accessibles dans Dépenses et justificatifs.")} />
+          </div>}
+
         </Card>
       ))}
 

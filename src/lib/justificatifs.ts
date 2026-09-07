@@ -28,6 +28,7 @@ export interface DepenseCandidate {
   mois?: string;
   note?: string;
   compte?: string;
+  operationsDistinctesDe?: string[];
 }
 const texte = (v: unknown) => typeof v === "string" ? v.trim().slice(0, 180) : "";
 export function dateValide(v: unknown): string {

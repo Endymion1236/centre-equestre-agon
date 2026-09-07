@@ -56,10 +56,11 @@ export async function POST(req: NextRequest) {
         if (ds.exists && ms.exists) tx.update(mov, { compteBanqueConfirme });
       } else if (b.action === "justifier-releve") {
         if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
+        if (b.confirme && d.data()!.origineBancaire === "csv" && !d.data()!.dernierReleveBancaire) throw new Error("Rapprochez d’abord le relevé PDF de ce mouvement CSV dans Trésorerie.");
         if (b.confirme && (d.data()!.source !== "releve-bancaire" || !justifiableParReleve(d.data()!.poste, d.data()!.fournisseur, posteCommissionCarte))) throw new Error("Seuls une commission ou des frais prélevés par la banque, ou une échéance d'emprunt, peuvent être justifiés par le relevé.");
         // Référence du relevé : son nom de fichier quand l'import l'a gardé,
         // sinon le compte et le mois — le relevé du mois reste retrouvable.
-        const reference = d.data()!.note || `Relevé ${d.data()!.compte || "bancaire"} ${d.data()!.mois || ""}`.trim();
+        const reference = d.data()!.dernierReleveBancaire?.nom || d.data()!.note || `Relevé ${d.data()!.compte || "bancaire"} ${d.data()!.mois || ""}`.trim();
         tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur) || d.data()!.poste, referenceJustificatifReleve: reference } : { referenceJustificatifReleve: null }) });
       } else if (b.action === "categorie") {
         // Un débit « hors dépenses » qui reçoit une catégorie de charge devient
@@ -83,6 +84,10 @@ export async function POST(req: NextRequest) {
             ...(donnees.rapprochementExclu ? { rapprochementExclu: true } : {}),
             ...(donnees.justificatifReleve ? { justificatifReleve: true, referenceJustificatifReleve: donnees.referenceJustificatifReleve || null } : {}),
             ...(donnees.compteBanqueConfirme ? { compteBanqueConfirme: donnees.compteBanqueConfirme } : {}),
+            ...(donnees.origineBancaire ? { origineBancaire: donnees.origineBancaire } : {}),
+            ...(donnees.dernierImportCSV ? { dernierImportCSV: donnees.dernierImportCSV } : {}),
+            ...(donnees.dernierReleveBancaire ? { dernierReleveBancaire: donnees.dernierReleveBancaire } : {}),
+            ...(donnees.operationsDistinctesDe ? { operationsDistinctesDe: donnees.operationsDistinctesDe } : {}),
             promueDepuisMouvement: true, updatedAt: FieldValue.serverTimestamp(),
           });
           tx.update(mov, { poste: b.poste, promueVers: b.id, updatedAt: FieldValue.serverTimestamp() });

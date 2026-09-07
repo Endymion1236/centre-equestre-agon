@@ -24,6 +24,7 @@ export interface LigneMois {
   dateOperation?: string; mois?: string; fournisseur?: string; poste?: string; montant: number; source?: string; compte?: string; note?: string; compteBanqueConfirme?: string | null;
   suivie?: boolean; rapprochementExclu?: boolean; depensePersonnelle?: boolean; immobilisation?: boolean; avanceFfe?: boolean;
   statutTVA?: string; justificatifReleve?: boolean; referenceJustificatifReleve?: string | null;
+  origineBancaire?: string; dernierReleveBancaire?: { nom: string };
   /** Justifiée par un autre écran (Masse salariale) : { type, detail }. */
   justifieeVia?: { type: string; detail: string } | null;
   /** Même débit présent deux fois ce mois (calculé, jamais stocké). */

@@ -36,6 +36,7 @@ export function justifierCommissionsBancaires(lignes: LigneMois[], estCommission
   const resultat = new Map<string, JustificationAilleurs>();
   for (const l of lignes) {
     if (l.source !== "releve-bancaire" || l.piece || l.justificatifReleve || l.rapprochementExclu || l.depensePersonnelle) continue;
+    if (l.origineBancaire === "csv" && !l.dernierReleveBancaire) continue;
     if (estCommission(l.fournisseur) || l.poste === posteFraisBancaires) {
       resultat.set(l.id, { type: "releve-bancaire", detail: `Commission ou frais bancaires : le relevé ${l.compte ? `du compte ${l.compte} ` : ""}fait foi` });
     }
