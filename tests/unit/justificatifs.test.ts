@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { nettoyerPiece, dateValide, proposerAssociations, alertesPiece } from "../../src/lib/justificatifs";
-const p = nettoyerPiece({ fournisseur: "Vétérinaire Agon", numero: "F1", date: "2026-06-12", ht: 100, tva: 20, ttc: 120 });
+const p = nettoyerPiece({ devise: "EUR", fournisseur: "Vétérinaire Agon", numero: "F1", date: "2026-06-12", ht: 100, tva: 20, ttc: 120 });
 const d = { id: "a", fournisseur: "VETERINAIRE AGON", montant: 120, source: "releve-bancaire", dateOperation: "2026-07-02" };
 assert.equal(proposerAssociations(p, [d])[0].score, 100);
 assert.equal(proposerAssociations(p, [{ ...d, fournisseur: "Autre entreprise" }])[0].score, 60);

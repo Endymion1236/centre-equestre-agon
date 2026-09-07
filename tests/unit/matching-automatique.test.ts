@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { nettoyerPiece, proposerAssociations } from "../../src/lib/justificatifs";
 import { planifierMatching, type PieceMatching } from "../../src/lib/matching-automatique";
-const extraction = nettoyerPiece({ typeDocument: "achat", fournisseur: "Vétérinaire Agon", numero: "F-12", date: "2026-07-01", ht: 100, tva: 20, ttc: 120 });
+const extraction = nettoyerPiece({ devise: "EUR", typeDocument: "achat", fournisseur: "Vétérinaire Agon", numero: "F-12", date: "2026-07-01", ht: 100, tva: 20, ttc: 120 });
 const p: PieceMatching = { id: "p", extraction };
 const d = { id: "d", fournisseur: "Veterinaire Agon", montant: 120, dateOperation: "2026-07-03", source: "releve-bancaire" };
 const plan = (pieces = [p], depenses = [d], lies = new Set<string>()) => planifierMatching(pieces, depenses, lies).associations;

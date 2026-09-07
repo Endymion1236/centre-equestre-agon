@@ -3,11 +3,13 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
-import { alertesPiece, type PieceExtraite, type DepenseCandidate } from "@/lib/justificatifs";
+import { alertesPiece, deviseEtrangere, DEVISES_PIECES, type PieceExtraite, type DepenseCandidate } from "@/lib/justificatifs";
+import ChoixDebitDevise from "./ChoixDebitDevise";
 import { traiterSelection } from "@/lib/import-justificatifs";
 
 type Piece = { id: string; nom: string; retire: boolean; extraction: PieceExtraite | null; depenseId: string | null;
   autoBloque: boolean; associationMode: string; depenseAssociee: DepenseCandidate | null;
+  associationDevise?: { deviseFacture: string; montantFacture: number; montantDebiteEUR: number } | null;
   propositions: (DepenseCandidate & { score: number; raisons: string[]; dejaAssociee?: boolean })[] };
 const endpoint = "/api/admin/justificatifs";
 export default function JustificatifsPage() {
@@ -140,24 +142,26 @@ export default function JustificatifsPage() {
       <button className="underline" onClick={() => void telecharger(p.id)}>Télécharger l’original</button>
       <div><button className="underline text-red-800 disabled:opacity-50" disabled={busy || !!p.depenseId} title={p.depenseId ? "Annulez d’abord l’association" : ""} onClick={() => void action({ action: p.retire ? "restaurer" : "retirer", id: p.id })}>{p.retire ? "Restaurer le document" : "Retirer le document"}</button>{p.depenseId && <p className="text-sm">Annulez l’association avant de retirer ce document.</p>}</div>
       {p.retire ? <p>Document retiré de la liste de travail. Son original reste récupérable.</p> : !p.extraction ? <div><button disabled={busy} className="rounded bg-slate-900 text-white px-4 py-2 disabled:opacity-50" onClick={() => void action({ action: "analyser", id: p.id })}>Analyser la pièce</button></div> : <>
-        <p>{p.extraction.fournisseur || "Fournisseur à vérifier"} · facture {p.extraction.numero || "sans numéro lu"} · {p.extraction.date || "date inconnue"} · TTC {p.extraction.ttc === null ? "inconnu" : `${p.extraction.ttc.toFixed(2)} €`}</p>
+        <p>{p.extraction.fournisseur || "Fournisseur à vérifier"} · facture {p.extraction.numero || "sans numéro lu"} · {p.extraction.date || "date inconnue"} · TTC {p.extraction.ttc === null ? "inconnu" : `${p.extraction.ttc.toFixed(2)} ${p.extraction.devise || "(devise à vérifier)"}`}</p>
         <p className="text-sm">HT : {p.extraction.ht ?? "non lu"} · TVA : {p.extraction.tva ?? "non lue"} · Période : {p.extraction.debutPeriode || "non précisée"} → {p.extraction.finPeriode || "non précisée"}</p>
         {alertesPiece(p.extraction).map(a => <p key={a} className="text-amber-800">{a}</p>)}
         {p.extraction.typeDocument !== "achat" && <p className="text-amber-800">{p.extraction.typeDocument === "vente" ? "Facture client : exclue du rapprochement automatique des dépenses." : "Nature du document à vérifier : validation automatique désactivée pour cette pièce."}</p>}
         {!p.depenseId && <p>{p.autoBloque ? "Contrôle manuel demandé : aucune association automatique." : <button disabled={busy} className="underline" onClick={() => void action({ action: "manuel", id: p.id })}>J’ai un doute : garder en contrôle manuel</button>}</p>}
         {!p.depenseId && <button disabled={busy} className="underline" onClick={() => { setEdition(p.id); setChamps(Object.fromEntries(Object.entries(p.extraction!).map(([k,v]) => [k, v === null ? "" : String(v)]))); }}>Vérifier / corriger les informations</button>}
         {edition === p.id && <form className="grid gap-3 sm:grid-cols-2" onSubmit={e => { e.preventDefault(); const extraction = { ...champs } as Record<string, unknown>; for (const k of ["ht", "tva", "ttc"]) extraction[k] = champs[k]?.trim() ? Number(champs[k].replace(",", ".")) : null; void action({ action: "corriger", id: p.id, extraction }); }}>
+          <label>Devise de la facture<select className="block border rounded p-2" value={champs.devise || ""} onChange={e => setChamps({ ...champs, devise: e.target.value })}><option value="">À vérifier sur l’original</option>{DEVISES_PIECES.map(d => <option key={d}>{d}</option>)}</select></label>
           <label>Nature du document<select className="block border rounded p-2" value={champs.typeDocument || "inconnu"} onChange={e => setChamps({ ...champs, typeDocument: e.target.value })}><option value="inconnu">À vérifier</option><option value="achat">Facture fournisseur (achat du centre)</option><option value="vente">Facture client (vente du centre)</option></select></label>
-          {Object.entries({ fournisseur: "Fournisseur", numero: "Numéro facture", date: "Date facture", debutPeriode: "Début prestation", finPeriode: "Fin prestation", ht: "HT (€)", tva: "TVA (€)", ttc: "TTC (€)" }).map(([k,label]) => <label key={k}>{label}<input className="block w-full border rounded p-2" value={champs[k] || ""} type={["date","debutPeriode","finPeriode"].includes(k) ? "date" : ["ht","tva","ttc"].includes(k) ? "number" : "text"} step="0.01" onChange={e => setChamps({ ...champs, [k]: e.target.value })} /></label>)}
+          {Object.entries({ fournisseur: "Fournisseur", numero: "Numéro facture", date: "Date facture", debutPeriode: "Début prestation", finPeriode: "Fin prestation", ht: "HT (devise de la facture)", tva: "TVA (devise de la facture)", ttc: "TTC (devise de la facture)" }).map(([k,label]) => <label key={k}>{label}<input className="block w-full border rounded p-2" value={champs[k] || ""} type={["date","debutPeriode","finPeriode"].includes(k) ? "date" : ["ht","tva","ttc"].includes(k) ? "number" : "text"} step="0.01" onChange={e => setChamps({ ...champs, [k]: e.target.value })} /></label>)}
           <button disabled={busy} className="rounded border p-2">Enregistrer les corrections</button>
         </form>}
         {p.depenseId ? <div className="rounded bg-green-50 p-3">{p.associationMode === "automatique" ? "Validé automatiquement" : "Confirmé manuellement"} · dépense {p.depenseId}. <button className="underline" disabled={busy} onClick={() => void action({ action: "dissocier", id: p.id })}>Annuler l’association</button></div>
-          : <div className="space-y-2"><h3 className="font-semibold">Propositions à confirmer</h3>
+          : deviseEtrangere(p.extraction) ? <ChoixDebitDevise pieceId={p.id} piece={p.extraction} busy={busy || edition === p.id} confirmer={action} /> : <div className="space-y-2"><h3 className="font-semibold">Propositions à confirmer</h3>
             {p.propositions.length > 1 && <p>Plusieurs correspondances : comparez les dates et le fournisseur.</p>}
             {p.propositions.map(d => <div key={d.id} className="border rounded p-3"><p>{d.fournisseur} · {d.dateOperation || `date inconnue${d.mois ? ` (mois ${d.mois})` : ""}`} · {d.montant.toFixed(2)} €</p><p className="text-sm">Compte : {d.compte || "non renseigné (ancien import)"}</p>{d.note && <p className="text-sm">{d.note}</p>}<p className="text-sm">{d.raisons.join(" · ")}</p>{d.dejaAssociee ? <p className="text-amber-800">Paiement déjà associé à un autre justificatif : vérifiez les pièces associées.</p> : <button disabled={busy || edition === p.id} className="underline" onClick={() => { if (window.confirm("Confirmer que cette dépense correspond bien à ce justificatif ?")) void action({ action: "associer", id: p.id, depenseId: d.id }); }}>Confirmer l’association</button>}</div>)}
             {!p.propositions.length && <p>Aucune correspondance de montant trouvée. Pièce conservée en attente : paiement futur, fractionné, groupé ou opération non importée à vérifier.</p>}
           </div>}
         {p.depenseAssociee && <p className="text-sm">Paiement associé : {p.depenseAssociee.fournisseur} · {p.depenseAssociee.dateOperation || "date inconnue"} · {p.depenseAssociee.montant.toFixed(2)} € · compte {p.depenseAssociee.compte || "non renseigné"}</p>}
+        {p.associationDevise && <p>Association manuelle en devise : {p.associationDevise.montantFacture.toFixed(2)} {p.associationDevise.deviseFacture} sur la facture · {p.associationDevise.montantDebiteEUR.toFixed(2)} EUR débités.</p>}
       </>}
     </article>)}
     {suivant && <button disabled={busy} className="rounded border p-3" onClick={async () => { setBusy(true); try { await load(suivant); } catch { setMessage("Chargement impossible."); } finally { setBusy(false); } }}>Charger les documents suivants</button>}

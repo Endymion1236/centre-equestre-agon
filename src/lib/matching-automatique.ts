@@ -3,7 +3,7 @@ import { alertesPiece, dateValide, proposerAssociations, type PieceExtraite, typ
 export type PieceMatching = { id: string; extraction?: PieceExtraite | null; retire?: boolean; depenseId?: string | null; autoBloque?: boolean };
 const normaliser = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandidate[]) {
-  if (p.typeDocument !== "achat" || !p.numero || p.ht === null || p.tva === null || alertesPiece(p).length) return [];
+  if (p.devise !== "EUR" || p.typeDocument !== "achat" || !p.numero || p.ht === null || p.tva === null || alertesPiece(p).length) return [];
   const nom = normaliser(p.fournisseur);
   if (nom.length < 4) return [];
   return proposerAssociations(p, depenses).filter(d => {

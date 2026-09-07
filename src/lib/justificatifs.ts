@@ -1,5 +1,6 @@
 /** Matching indicatif : aucune décision comptable ni écriture de paiement. */
 export interface PieceExtraite {
+  devise?: string;
   typeDocument?: "achat" | "vente" | "inconnu";
   fournisseur: string;
   numero: string;
@@ -28,13 +29,16 @@ export function dateValide(v: unknown): string {
   return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === s ? s : "";
 }
 const montant = (v: unknown) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) < 1e9 ? Math.round(v * 100) / 100 : null;
+export const DEVISES_PIECES = ["EUR", "USD", "GBP", "CHF", "CAD", "AUD"] as const;
+export const deviseEtrangere = (p: PieceExtraite) => !!p.devise && p.devise !== "EUR" && (DEVISES_PIECES as readonly string[]).includes(p.devise);
 export function nettoyerPiece(v: Record<string, unknown>): PieceExtraite {
-  return { typeDocument: v.typeDocument === "achat" || v.typeDocument === "vente" ? v.typeDocument : "inconnu", fournisseur: texte(v.fournisseur), numero: texte(v.numero), date: dateValide(v.date),
+  return { devise: (DEVISES_PIECES as readonly string[]).includes(texte(v.devise).toUpperCase()) ? texte(v.devise).toUpperCase() : "", typeDocument: v.typeDocument === "achat" || v.typeDocument === "vente" ? v.typeDocument : "inconnu", fournisseur: texte(v.fournisseur), numero: texte(v.numero), date: dateValide(v.date),
     debutPeriode: dateValide(v.debutPeriode), finPeriode: dateValide(v.finPeriode),
     ht: montant(v.ht), tva: montant(v.tva), ttc: montant(v.ttc) };
 }
 export function alertesPiece(p: PieceExtraite): string[] {
   const alerts: string[] = [];
+  if (!p.devise) alerts.push("Devise à vérifier sur la facture.");
   if (!p.fournisseur || !p.date || p.ttc === null) alerts.push("Fournisseur, date ou TTC à compléter.");
   if (p.ht !== null && p.tva !== null && p.ttc !== null && Math.abs(Math.round(p.ht * 100) + Math.round(p.tva * 100) - Math.round(p.ttc * 100)) > 1) alerts.push("HT + TVA ne correspond pas au TTC.");
   if (p.debutPeriode && p.finPeriode && p.debutPeriode > p.finPeriode) alerts.push("Période inversée.");
@@ -43,7 +47,7 @@ export function alertesPiece(p: PieceExtraite): string[] {
 }
 const normaliser = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 export function proposerAssociations(p: PieceExtraite, depenses: DepenseCandidate[]) {
-  if (p.ttc === null || p.ttc <= 0) return [];
+  if (p.devise !== "EUR" || p.ttc === null || p.ttc <= 0) return [];
   const nom = normaliser(p.fournisseur);
   return depenses.filter(d => d.source === "releve-bancaire" && Math.round(d.montant * 100) === Math.round(p.ttc! * 100)).map(d => {
     const autre = normaliser(d.fournisseur);
@@ -54,4 +58,10 @@ export function proposerAssociations(p: PieceExtraite, depenses: DepenseCandidat
     return { ...d, score: 40 + (fournisseur ? 40 : 0) + (proche ? 20 : 0),
       raisons: ["TTC identique", ...(fournisseur ? ["Fournisseur concordant"] : []), ...(proche ? ["Paiement dans les 90 jours suivants"] : [])] };
   }).sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
+}
+/** Association manuelle explicite : conserve les montants, aucune conversion comptable. */
+export function validerLienDevise(p: PieceExtraite, d: DepenseCandidate, confirme: unknown) {
+  if (!deviseEtrangere(p) || p.typeDocument === "vente" || !p.date || !p.fournisseur || p.ttc === null || p.ttc <= 0 || d.source !== "releve-bancaire" || !Number.isFinite(d.montant) || d.montant <= 0 || confirme !== true)
+    throw new Error("Vérifiez la devise, les montants et confirmez explicitement le débit en euros.");
+  return { deviseFacture: p.devise!, montantFacture: p.ttc, montantDebiteEUR: d.montant };
 }
