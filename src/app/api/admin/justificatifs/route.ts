@@ -154,14 +154,14 @@ export async function POST(req: NextRequest) {
     }
     if (body.action === "corriger") {
       if (!body.extraction || typeof body.extraction !== "object") return NextResponse.json({ error: "Données absentes" }, { status: 400 });
+      const extraction = nettoyerPiece(body.extraction);
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
         if (current.data()?.depenseId || current.data()?.retire) throw new Error("Dissocier ou restaurer avant de corriger");
-        const extraction = nettoyerPiece(body.extraction);
         tx.update(ref, { extraction, paieValidee: false, reviewedBy: auth.uid, reviewedAt: FieldValue.serverTimestamp() });
         tx.create(ref.collection("historique").doc(), { action: "corriger", avant: current.data()?.extraction || null, apres: extraction, uid: auth.uid, at: FieldValue.serverTimestamp() });
       });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, extraction });
     }
     if (body.action === "associer" || body.action === "associer-devise" || body.action === "dissocier") {
       const associer = body.action !== "dissocier";
