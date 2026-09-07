@@ -53,12 +53,13 @@ export async function POST(req: NextRequest) {
       const dep = adminDb.collection("depenses").doc(b.id), mov = mouvements().doc(b.id);
       const [ds, ms] = await tx.getAll(dep, mov); const d = ds.exists ? ds : ms; const ref = ds.exists ? dep : mov;
       if (!d.exists) throw new Error("Ligne absente : actualisez le tableau");
-      if (b.action === "categorie" || b.action === "exclure") {
+      if (b.action === "categorie" || b.action === "exclure" || b.action === "tva") {
         if (b.action === "categorie" && !categories.includes(b.poste)) throw new Error("Catégorie invalide");
         // Les salaires nets ne deviennent pas des charges dans la synthèse de fonctionnement.
         if (b.action === "categorie" && ds.exists && !POSTES_DEPENSES.some(p => p.nom === b.poste)) throw new Error("Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable.");
         if (b.action === "exclure" && typeof b.exclue !== "boolean") throw new Error("Choix invalide");
-        tx.update(ref, b.action === "categorie" ? { poste: b.poste } : { rapprochementExclu: b.exclue });
+        if (b.action === "tva" && !["a-verifier", "sans-tva", "non-recuperee"].includes(b.statutTVA)) throw new Error("Statut TVA invalide");
+        tx.update(ref, b.action === "categorie" ? { poste: b.poste } : b.action === "tva" ? { statutTVA: b.statutTVA } : { rapprochementExclu: b.exclue });
       } else if (b.action === "associer") {
         if (!idValide(b.pieceId) || b.confirme !== true) throw new Error("Confirmation et pièce requises");
         const pr = adminDb.collection("justificatifs").doc(b.pieceId), lr = adminDb.collection("justificatifs-liens").doc(b.id);
@@ -75,7 +76,7 @@ export async function POST(req: NextRequest) {
           associationDevise: association.nature === "devise" ? { deviseFacture: association.devisePiece, montantFacture: association.montantPiece, montantDebiteEUR: association.montantEUR } : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
-      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
     });
     return NextResponse.json({ ok: true });
   } catch (e) { return NextResponse.json({ error: e instanceof Error && !("code" in e) ? e.message : "Opération non confirmée : actualisez." }, { status: 409 }); }

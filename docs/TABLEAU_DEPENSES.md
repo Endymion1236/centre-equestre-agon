@@ -38,3 +38,11 @@ et saisies manuelles. Test authentifié à effectuer depuis test : importer un
 justificatif sur une ligne, confirmer, dissocier ; changer une catégorie ; exclure
 puis réactiver une ligne ; vérifier un bulletin sur un débit hors charges. Aucune
 donnée réelle modifiée depuis l'environnement de développement.
+
+## Justificatif, TVA et exclusion
+
+Le tableau distingue le justificatif manquant (absence de pièce associée), le statut TVA choisi manuellement et l'exclusion du rapprochement. Une pièce manquante reste signalée même sans TVA ou après exclusion. L'association fait disparaître ce signalement, la dissociation le rétablit.
+
+La colonne TVA propose « à vérifier » par défaut pour les anciennes lignes, « sans TVA » et « TVA non récupérée ». Ces indications sont enregistrées sur la ligne et historisées, sans modifier les montants extraits, les catégories, les totaux ou produire d'écriture/déclaration fiscale. Une TVA positive extraite sur une pièce marquée sans TVA affiche un avertissement. L'exclusion ne change aucun de ces choix.
+
+Vérification en session : choisir chaque statut, actualiser, exclure puis réactiver ; contrôler la conservation de la catégorie et du montant. Associer puis dissocier une pièce et vérifier le signalement du justificatif. Tester également une opération conservée hors synthèse.
