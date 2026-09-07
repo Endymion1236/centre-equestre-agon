@@ -77,6 +77,7 @@ export async function GET(req: NextRequest) {
 
     depSnap.docs.forEach((d) => {
       const r = d.data() as any;
+      if (r.depensePersonnelle) return;
       const mois = String(r.mois || "");
       if (!MOIS_RE.test(mois)) return;
       entree(mois).depenses += Number(r.montant || 0);

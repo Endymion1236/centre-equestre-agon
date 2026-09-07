@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const snap = await adminDb.collection("depenses").get();
-    const depenses = snap.docs.map((d) => {
+    const depenses = snap.docs.filter(d => !d.data().depensePersonnelle).map((d) => {
       const r = d.data() as any;
       return {
         id: d.id,

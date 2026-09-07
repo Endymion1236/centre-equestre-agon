@@ -4,12 +4,12 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
-import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
+import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
 import { verifierEcheance, verifierAssociationTableau } from "@/lib/tableau-depenses";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 const idValide = (s: unknown): s is string => typeof s === "string" && /^[\w-]{1,150}$/.test(s);
-const categories = [...POSTES_DEPENSES.map(p => p.nom), "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", POSTE_HORS_DEPENSES];
+const categories = [...POSTES_DEPENSES.map(p => p.nom), "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", "Personnel — hors charges", POSTE_HORS_DEPENSES];
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true }); if (auth instanceof NextResponse) return auth;
   const mois = req.nextUrl.searchParams.get("mois") || "";
@@ -53,13 +53,17 @@ export async function POST(req: NextRequest) {
       const dep = adminDb.collection("depenses").doc(b.id), mov = mouvements().doc(b.id);
       const [ds, ms] = await tx.getAll(dep, mov); const d = ds.exists ? ds : ms; const ref = ds.exists ? dep : mov;
       if (!d.exists) throw new Error("Ligne absente : actualisez le tableau");
-      if (b.action === "categorie" || b.action === "exclure" || b.action === "tva") {
+      if (b.action === "justifier-releve") {
+        if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
+        if (b.confirme && (d.data()!.source !== "releve-bancaire" || !posteCommissionCarte(d.data()!.fournisseur) || !d.data()!.note)) throw new Error("Une commission carte avec relevé source identifié est requise");
+        tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur), referenceJustificatifReleve: d.data()!.note } : { referenceJustificatifReleve: null }) });
+      } else if (b.action === "categorie" || b.action === "exclure" || b.action === "tva") {
         if (b.action === "categorie" && !categories.includes(b.poste)) throw new Error("Catégorie invalide");
         // Les salaires nets ne deviennent pas des charges dans la synthèse de fonctionnement.
-        if (b.action === "categorie" && ds.exists && !POSTES_DEPENSES.some(p => p.nom === b.poste)) throw new Error("Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable.");
+        if (b.action === "categorie" && ds.exists && b.poste !== "Personnel — hors charges" && !POSTES_DEPENSES.some(p => p.nom === b.poste)) throw new Error("Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable.");
         if (b.action === "exclure" && typeof b.exclue !== "boolean") throw new Error("Choix invalide");
         if (b.action === "tva" && !["a-verifier", "sans-tva", "non-recuperee"].includes(b.statutTVA)) throw new Error("Statut TVA invalide");
-        tx.update(ref, b.action === "categorie" ? { poste: b.poste } : b.action === "tva" ? { statutTVA: b.statutTVA } : { rapprochementExclu: b.exclue });
+        tx.update(ref, b.action === "categorie" ? { poste: b.poste, depensePersonnelle: b.poste === "Personnel — hors charges" } : b.action === "tva" ? { statutTVA: b.statutTVA } : { rapprochementExclu: b.exclue });
       } else if (["rattacher", "detacher"].includes(b.action)) {
         if (!idValide(b.pieceId)) throw new Error("Pièce invalide");
         const pr = adminDb.collection("justificatifs").doc(b.pieceId), lr = adminDb.collection("justificatifs-liens").doc(b.id);
@@ -100,7 +104,7 @@ export async function POST(req: NextRequest) {
           associationDevise: association.nature === "devise" ? { deviseFacture: association.devisePiece, montantFacture: association.montantPiece, montantDebiteEUR: association.montantEUR } : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
-      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
     });
     return NextResponse.json({ ok: true });
   } catch (e) { return NextResponse.json({ error: e instanceof Error && !("code" in e) ? e.message : "Opération non confirmée : actualisez." }, { status: 409 }); }

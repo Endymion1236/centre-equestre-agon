@@ -56,3 +56,15 @@ Le type « Attestation PER — contrôle fiscal » permet de joindre une attesta
 Les liens utilisent un verrou par paiement et une liste sur la pièce, modifiés en transaction. Chaque dissociation ne retire que le paiement sélectionné. Les anciens endpoints refusent de modifier ces liens multiples. La synthèse reste un suivi des montants bancaires, pas une détermination des charges déductibles.
 
 Tests en session requis : rattacher quatre paiements de 90 à une facture de 360, refuser le cinquième, dissocier un seul paiement, vérifier les trois autres, réassocier ; joindre une même attestation PER à deux versements. Aucun rattachement réel n’a été effectué depuis le développement.
+
+## Tableau principal, commissions et remise à zéro
+
+La gestion documentaire est accessible depuis Autres outils → Documents en attente et archives. Les onglets principaux restent le tableau et la synthèse.
+
+Une commission explicitement libellée COM CARTE peut utiliser le relevé comme justificatif, sur confirmation de sa conservation par l'administrateur. La référence du relevé est enregistrée avec le choix et la catégorie frais bancaires. Cela ne stocke pas le PDF du relevé, ne valide pas la TVA et ne s'applique pas aux libellés de prêt ambigus. L'indication est annulable.
+
+La remise à zéro affiche toutes les pièces actives (limite stricte 2 000), tous mois confondus, puis demande confirmation. Chaque pièce est archivée en transaction avec suppression de ses seuls verrous et historisation des associations. Une version modifiée depuis l'aperçu interrompt l'opération. En cas d'arrêt, les pièces déjà archivées le restent et un nouvel aperçu permet de reprendre. Fichiers et extraction restent restaurables, les associations doivent être refaites. Les mouvements, catégories, montants et indications de relevé ne sont pas supprimés.
+
+Validation connectée requise : aperçu et annulation ; archivage d'une pièce avec plusieurs échéances ; restauration ; reprise après interruption ; confirmation puis annulation du justificatif par relevé. Aucun archivage réel effectué depuis le développement.
+
+Le choix manuel Personnel — hors charges conserve le débit dans le tableau bancaire mais le retire des totaux Dépenses et Résultat. La pièce éventuellement associée est conservée. Aucune TVA professionnelle n'est proposée pour ces lignes. Changer de catégorie rétablit leur périmètre précédent ; il ne s'agit pas d'une écriture en compte d'exploitant/associé. Aucun fournisseur n'est automatiquement marqué personnel.
