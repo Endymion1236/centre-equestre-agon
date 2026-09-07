@@ -29,7 +29,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { lireJsonPageReleve } from "@/lib/lecture-json-releve";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
-import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
+import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
 import { dateValide } from "@/lib/justificatifs";
 
 export const dynamic = "force-dynamic";
@@ -237,7 +237,7 @@ export async function POST(req: NextRequest) {
           .map((o: any) => {
             const montant = nb(o?.montant);
             const date = DATE_RE.test(String(o?.date)) ? String(o.date) : "";
-            const poste = nomsPostes.includes(String(o?.poste)) ? String(o.poste) : POSTE_HORS_DEPENSES;
+            const poste = posteCommissionCarte(o?.libelle) ?? (nomsPostes.includes(String(o?.poste)) ? String(o.poste) : POSTE_HORS_DEPENSES);
             return montant !== null && montant > 0
               ? { date, mois: date.slice(0, 7), libelle: String(o?.libelle || "").trim().slice(0, 80), montant, poste }
               : null;

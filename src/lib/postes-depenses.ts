@@ -26,8 +26,16 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
   // « Com Carte », factures Crédit Agricole et commissions Stripe vont ici.
   { nom: "Frais bancaires & commissions (CB, Stripe)", ref: 2574 },
   { nom: "Publicité & communication", ref: 2024 },
+  { nom: "Engagements de concours", ref: null },
   { nom: "Autres dépenses", ref: null },
 ];
 
 /** Valeur sentinelle pour un débit qui n'est PAS une dépense à suivre. */
 export const POSTE_HORS_DEPENSES = "hors-depenses";
+
+/** Règle sur un libellé explicite de commission, jamais sur « Carte » seul. */
+export function posteCommissionCarte(libelle: unknown): string | null {
+  const texte = String(libelle ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return /^(com|comm|commission|commissions) (carte|cartes|cb)\b/.test(texte)
+    ? "Frais bancaires & commissions (CB, Stripe)" : null;
+}
