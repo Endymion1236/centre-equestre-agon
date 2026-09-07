@@ -454,7 +454,7 @@ export default function TresoreriePage() {
           {p.progressionPages && <p role="status" className="mb-2 text-sm text-blue-800">{p.progressionPages}</p>}
           {p.lectureIncomplete && (
             <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-body text-[11px] text-amber-800">
-              ⚠ Relevé long : la lecture s&apos;est arrêtée avant la fin — les derniers débits du mois
+              ⚠ Lecture incomplète : certaines pages n’ont pas été validées. Des opérations
               peuvent manquer dans la liste ci-dessous. L’import des dépenses reste bloqué jusqu’à la lecture complète. Vérifie également le solde sur le PDF avant de l’enregistrer.
             </div>
           )}

@@ -26,6 +26,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import Anthropic from "@anthropic-ai/sdk";
+import { lireJsonPageReleve } from "@/lib/lecture-json-releve";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
@@ -204,7 +205,10 @@ export async function POST(req: NextRequest) {
       const brut = texte.slice(debut);
       let data: any = null;
       let lectureIncomplete = false;
-      try { data = JSON.parse(brut); } catch {
+      if (parPage) {
+        try { data = lireJsonPageReleve(texte, rep.stop_reason); }
+        catch (e) { return NextResponse.json({ error: e instanceof Error ? e.message : "Lecture de page impossible" }, { status: 422 }); }
+      } else try { data = JSON.parse(brut); } catch {
         data = reparerJsonTronque(brut);
         lectureIncomplete = data != null;
       }
