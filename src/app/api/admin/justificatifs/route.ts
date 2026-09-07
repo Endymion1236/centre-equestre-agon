@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       const p = d.data();
       return { id: d.id, nom: p.nom, retire: p.retire === true, extraction: p.extraction || null, depenseId: p.depenseId || null, autoBloque: p.autoBloque === true, associationMode: p.associationMode || "manuel",
         depenseAssociee: p.depenseId ? depenses.find(d => d.id === p.depenseId) || p.operationAssociee || null : null,
-        associationDevise: p.associationDevise || null,
+        associationDevise: p.associationDevise || null, modeRattachement: p.modeRattachement || null, paiementsAssocies: p.paiementsAssocies || [],
         paieValidee: p.paieValidee === true,
         propositions: p.extraction ? proposerAssociations(nettoyerPiece(p.extraction), depenses).slice(0, 10).map(c => ({ ...c, dejaAssociee: liens.has(c.id) && liens.get(c.id) !== d.id })) : [] };
     }) }, { headers: { "Cache-Control": "private, no-store" } });
@@ -157,7 +157,8 @@ export async function POST(req: NextRequest) {
       const extraction = nettoyerPiece(body.extraction);
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
-        if (current.data()?.depenseId || current.data()?.retire) throw new Error("Dissocier ou restaurer avant de corriger");
+        if (current.data()?.retire) throw new Error("Cette pièce est archivée : restaurez-la avant de corriger.");
+        if (current.data()?.depenseId || current.data()?.paiementsAssocies?.length) throw new Error("Cette pièce est déjà liée à un paiement. Utilisez Dissocier pour corriger dans le panneau de la pièce.");
         tx.update(ref, { extraction, paieValidee: false, reviewedBy: auth.uid, reviewedAt: FieldValue.serverTimestamp() });
         tx.create(ref.collection("historique").doc(), { action: "corriger", avant: current.data()?.extraction || null, apres: extraction, uid: auth.uid, at: FieldValue.serverTimestamp() });
       });
@@ -173,6 +174,7 @@ export async function POST(req: NextRequest) {
         if (current.data()?.retire) throw new Error("Pièce retirée");
         if (current.data()?.paiementsAssocies?.length) throw new Error("Gérez les paiements de cette pièce depuis le tableau des opérations.");
         const ancien = current.data()?.depenseId;
+        if (!associer && body.depenseIdAttendue !== undefined && ancien !== body.depenseIdAttendue) throw new Error("L’association a changé : actualisez avant de dissocier.");
         if (associer && ancien && ancien !== id) throw new Error("Cette pièce a déjà été associée. Actualisez avant de modifier son association.");
         const lock = id ? adminDb.collection("justificatifs-liens").doc(id) : null;
         let associationDevise = null;
