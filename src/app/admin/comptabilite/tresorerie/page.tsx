@@ -313,7 +313,8 @@ export default function TresoreriePage() {
   const ajouterDepensesReleve = async (idx: number, datesSeulement = false) => {
     const p = propositions[idx];
     const gardees = (p?.operations || []).filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES && /^\d{4}-\d{2}$/.test(o.mois));
-    if (!p || saving || !p.compteChoisi || p.operationsEtat !== "ok" || gardees.length === 0) return;
+    const autres = (p?.operations || []).filter(o => o.poste === POSTE_HORS_DEPENSES);
+    if (!p || saving || !p.compteChoisi || p.operationsEtat !== "ok" || (datesSeulement ? gardees.length === 0 : gardees.length + autres.length === 0)) return;
     if (datesSeulement && gardees.length > 200) { setError("Pour compléter les anciennes dates, sélectionnez au maximum 200 lignes par tentative."); return; }
     setSaving(true); setError(""); setInfo("");
     try {
@@ -333,9 +334,15 @@ export default function TresoreriePage() {
       if (!res.ok) throw new Error(`${resultat?.error || "Erreur"} ${debut > 0 ? "Les lots précédents ont été traités ; les lignes déjà importées sont protégées lors d'une nouvelle tentative." : ""}`);
       for (const cle of ["ajoutees", "doublons", "invalides", "completees", "dejaDatees", "ambigues", "absentes"]) d[cle] = (d[cle] || 0) + Number(resultat[cle] || 0);
       }
+      if (!datesSeulement) for (let debut = 0; debut < autres.length; debut += 200) {
+        const res = await fetch("/api/admin/depenses/tableau", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ action: "importer-autres", compte: p.compteChoisi, note: `Relevé ${p.fichier}`, lignes: autres.slice(debut, debut + 200) }) });
+        const resultat = await res.json();
+        if (!res.ok) throw new Error(`${resultat.error || "Import des autres débits impossible"}. Les dépenses déjà enregistrées restent conservées ; vous pouvez relancer.`);
+      }
       setInfo(datesSeulement
         ? `${d.completees} date(s) complétée(s), ${d.dejaDatees} déjà datée(s), ${d.ambigues} ambiguë(s), ${d.absentes} sans dépense correspondante, ${d.invalides} invalide(s). Aucune dépense créée. Les lignes ambiguës restent à vérifier.`
-        : `${d.ajoutees} dépense(s) ajoutée(s), ${d.doublons || 0} déjà présente(s), ${d.invalides || 0} invalide(s).`);
+        : `${d.ajoutees || 0} dépense(s) ajoutée(s), ${d.doublons || 0} déjà présente(s). ${autres.length} autre(s) débit(s) conservé(s) pour le rapprochement, sans ajout aux charges.`);
       setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: [] } : x));
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }
@@ -547,9 +554,9 @@ export default function TresoreriePage() {
                   <span className="font-body text-[11px] text-slate-500">
                     {gardees.length} cochée(s) — {eur(gardees.reduce((s, o) => s + o.montant, 0))} · montants TTC du relevé
                   </span>
-                  <button type="button" onClick={() => ajouterDepensesReleve(idx)} disabled={saving || !p.compteChoisi || p.operationsEtat !== "ok" || gardees.length === 0}
+                  <button type="button" onClick={() => ajouterDepensesReleve(idx)} disabled={saving || !p.compteChoisi || p.operationsEtat !== "ok" || (gardees.length === 0 && !p.operations.some(o => o.poste === POSTE_HORS_DEPENSES))}
                     className="font-body text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                    Ajouter {gardees.length} dépense(s)
+                    Enregistrer les dépenses et autres débits
                   </button>
                   <button type="button" onClick={() => ajouterDepensesReleve(idx, true)} disabled={saving || !p.compteChoisi || p.operationsEtat !== "ok" || gardees.length === 0}
                     className="font-body text-xs font-semibold text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer disabled:opacity-50">

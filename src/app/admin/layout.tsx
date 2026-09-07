@@ -141,7 +141,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
       { href: "/admin/comptabilite/export-ca", icon: FileSpreadsheet, label: "Export CA (comptable)" },
-      { href: "/admin/comptabilite/justificatifs", icon: FileSpreadsheet, label: "Justificatifs" },
+      { href: "/admin/comptabilite/depenses", icon: FileSpreadsheet, label: "Dépenses et justificatifs" },
       { href: "/admin/comptabilite/celeris", icon: FileSpreadsheet, label: "Historique Céleris" },
       { href: "/admin/statistiques", icon: TrendingUp, label: "Statistiques" },
       { href: "/admin/reinscriptions", icon: UserMinus, label: "Réinscriptions" },

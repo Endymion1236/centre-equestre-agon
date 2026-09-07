@@ -136,7 +136,7 @@ export default function ClotureMoisPage() {
 
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">{error}</div>}
       <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 font-body text-sm">
-        <Link href="/admin/comptabilite/justificatifs" className="underline font-semibold">Analyser et rapprocher les justificatifs de dépenses</Link>
+        <Link href="/admin/comptabilite/depenses" className="underline font-semibold">Ouvrir Dépenses et justificatifs</Link>
         <p>Vérifiez les factures et bulletins de paie une pièce à la fois. Ce contrôle complémentaire n’est pas encore inclus dans les indicateurs de clôture ci-dessous.</p>
       </div>
 

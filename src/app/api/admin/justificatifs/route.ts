@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ limiteDepenses: ds.size > 2000, suivant: ps.size === 100 ? ps.docs[ps.size - 1].id : null, pieces: ps.docs.map(d => {
       const p = d.data();
       return { id: d.id, nom: p.nom, retire: p.retire === true, extraction: p.extraction || null, depenseId: p.depenseId || null, autoBloque: p.autoBloque === true, associationMode: p.associationMode || "manuel",
-        depenseAssociee: p.depenseId ? depenses.find(d => d.id === p.depenseId) || null : null,
+        depenseAssociee: p.depenseId ? depenses.find(d => d.id === p.depenseId) || p.operationAssociee || null : null,
         associationDevise: p.associationDevise || null,
         paieValidee: p.paieValidee === true,
         propositions: p.extraction ? proposerAssociations(nettoyerPiece(p.extraction), depenses).slice(0, 10).map(c => ({ ...c, dejaAssociee: liens.has(c.id) && liens.get(c.id) !== d.id })) : [] };
@@ -193,7 +193,7 @@ export async function POST(req: NextRequest) {
         }
         if (ancien && ancien !== id) tx.delete(adminDb.collection("justificatifs-liens").doc(ancien));
         if (associer) tx.set(lock!, { pieceId: body.id });
-        tx.update(ref, { depenseId: associer ? id : null, associationMode: "manuel", autoBloque: true, associationDevise });
+        tx.update(ref, { depenseId: associer ? id : null, associationMode: "manuel", autoBloque: true, associationDevise, operationAssociee: null });
         tx.create(ref.collection("historique").doc(), { action: body.action, avant: ancien || null, apres: associer ? id : null, associationDevise, uid: auth.uid, at: FieldValue.serverTimestamp() });
       });
       return NextResponse.json({ ok: true });
