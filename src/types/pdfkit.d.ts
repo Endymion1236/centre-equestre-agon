@@ -4,6 +4,7 @@ declare module "pdfkit" {
   type OptionsTexte = { width?: number; height?: number; align?: "left" | "right" | "center"; lineGap?: number; lineBreak?: boolean; paragraphGap?: number };
   export default class PDFDocument extends Readable {
     constructor(options?: { autoFirstPage?: boolean; size?: string; layout?: string; margin?: number; compress?: boolean; bufferPages?: boolean; info?: Record<string, string> });
+    y: number;
     page: { width: number; height: number };
     addPage(options?: { size?: string; layout?: string; margin?: number }): this;
     font(name: string): this;

@@ -14,6 +14,7 @@ type Table = { headers: string[]; widths: number[]; numeriques: number; rows: It
  * sur toute la période, y compris lors des changements de page. */
 function tableDocument(d: DossierComptable, type: TypeDocumentComptable): Table {
   const money = eurosComptables;
+  const partiel = d.perimetrePartiel;
   const valeur = (n: number) => n ? money(n) : "";
   const enteteSection = (titre: string, nouvellePage = false): Row => ({ cells: [], section: titre, nouvellePage });
   if (type === "journal") return {
@@ -51,7 +52,7 @@ function tableDocument(d: DossierComptable, type: TypeDocumentComptable): Table 
         yield { cells: [classe.classe, `TOTAL CLASSE ${classe.classe}`, valeur(t.debit), valeur(t.credit), valeur(Math.max(0, t.solde)), valeur(Math.max(0, -t.solde))], total: true };
       }
       yield { cells: ["TOTAL", "Total général", money(d.totalDebit), money(d.totalCredit), money(debiteurs), money(crediteurs)], total: true };
-      yield { cells: ["RÉSULTAT", "Produits - charges", "", "", "", money(d.resultat)], total: true };
+      yield { cells: [partiel ? "SOLDE PARTIEL" : "RÉSULTAT", "Produits - charges", "", "", "", money(d.resultat)], total: true };
     })(),
   };
   if (type === "centralisateur") return {
@@ -138,7 +139,7 @@ export async function genererDocumentComptable(d: DossierComptable, type: TypeDo
     doc.font("Helvetica").fontSize(8).text(`Période : ${dateFr(d.periode.debut)} au ${dateFr(d.periode.fin)}`, 30 + largeur * 0.6, 29, { width: largeur * 0.4 - 6, align: "right" });
     doc.fontSize(7).text(`${club.siret ? `SIRET ${club.siret} | ` : ""}Montants en EUR | ${d.lignes.length} écritures`, 36, 52, { width: largeur - 12 });
     doc.font("Times-Bold").fontSize(16).text(titre.toUpperCase(), 30, 77, { width: largeur, align: "center" });
-    doc.font("Helvetica").fontSize(7).fillColor("#8b4500").text("PRÉPARATOIRE - Périmètre et contrôles en fin de document", 30, 97, { width: largeur, align: "center" });
+    doc.font("Helvetica").fontSize(7).fillColor("#8b4500").text(!d.balance.some(c => c.compte.startsWith("6")) ? "SOURCE PARTIELLE - AUCUN COMPTE DE CHARGE - LE SOLDE N’EST PAS LE BÉNÉFICE" : d.perimetrePartiel ? "SOURCE PARTIELLE - ACHATS RÉGLÉS AJOUTÉS - SOLDE PROVISOIRE" : "PRÉPARATOIRE - Périmètre et contrôles en fin de document", 30, 97, { width: largeur, align: "center" });
     y = 114;
     if (colonnes) {
       doc.rect(30, y, largeur, 26).fill("#e5f0fc");

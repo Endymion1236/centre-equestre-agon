@@ -131,11 +131,13 @@ export function construireDocuments(sources: SourceComptable[], periode: Periode
     "Les dépenses, justificatifs, propositions de comptes et encaissements de l’application ne sont pas ajoutés automatiquement à ce journal.",
     "Faire vérifier les à-nouveaux, amortissements, stocks, TVA, factures non réglées et écritures de clôture avant validation des comptes annuels.",
   ];
+  if (!balance.some(c => c.compte.startsWith("6"))) avertissements.unshift("SOURCE PARTIELLE : aucun compte de charge (classe 6). Le solde produits moins charges ne représente pas le bénéfice de l’exploitation. Importer un journal complet comprenant les achats et les autres charges.");
+  else if (!balance.some(c => c.compte.startsWith("60"))) avertissements.unshift("Aucun compte d’achats 60 dans la source : vérifier que le journal d’achats a été inclus.");
   if (!lignes.some(l => ["AN", "ANO", "RAN"].includes(l.journal))) avertissements.push("Aucun journal d’à-nouveaux AN / ANO / RAN repéré : les soldes de départ ne sont pas attestés.");
   if (moisAbsents.length) avertissements.push(`Mois sans écriture dans la sélection : ${moisAbsents.join(", ")}.`);
   if (horsPeriode) avertissements.push(`${horsPeriode} ligne(s) de la source hors période, non reprises dans ces états.`);
   if (!balance.some(c => /^[256]/.test(c.compte))) avertissements.push("Aucune immobilisation, trésorerie ou charge repérée : cet export peut ne contenir que des ventes.");
   return { periode, sources: [...noms], lignes, balance, centralisateur: [...central.values()], totalDebit, totalCredit,
-    charges, produits, resultat, actif, passif, totalActif, totalPassif, moisPresents, moisAbsents, horsPeriode, avertissements };
+    charges, produits, resultat, actif, passif, totalActif, totalPassif, moisPresents, moisAbsents, horsPeriode, avertissements, perimetrePartiel: !balance.some(c => c.compte.startsWith("6")) };
 }
 export type DossierComptable = ReturnType<typeof construireDocuments>;
