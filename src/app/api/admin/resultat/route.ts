@@ -77,7 +77,9 @@ export async function GET(req: NextRequest) {
 
     depSnap.docs.forEach((d) => {
       const r = d.data() as any;
-      if (r.depensePersonnelle) return;
+      // Dépense personnelle : hors charges. Immobilisation : amortie par la
+      // comptable sur plusieurs exercices, pas une charge du mois.
+      if (r.depensePersonnelle || r.immobilisation) return;
       const mois = String(r.mois || "");
       if (!MOIS_RE.test(mois)) return;
       entree(mois).depenses += Number(r.montant || 0);

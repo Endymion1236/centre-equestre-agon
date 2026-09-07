@@ -5,11 +5,11 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
-import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE } from "@/lib/tableau-depenses";
+import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION } from "@/lib/tableau-depenses";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 const idValide = (s: unknown): s is string => typeof s === "string" && /^[\w-]{1,150}$/.test(s);
-const categories = [...POSTES_DEPENSES.map(p => p.nom), "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", "Personnel — hors charges", POSTE_HORS_DEPENSES];
+const categories = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true }); if (auth instanceof NextResponse) return auth;
   const mois = req.nextUrl.searchParams.get("mois") || "";
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
             mois: donnees.mois, dateOperation: donnees.dateOperation || "", montant: donnees.montant,
             fournisseur: donnees.fournisseur || "", compte: donnees.compte || "", note: donnees.note || "",
             source: "releve-bancaire", sourceOperation: donnees.sourceOperation || null,
-            poste: b.poste, depensePersonnelle: false,
+            poste: b.poste, depensePersonnelle: false, immobilisation: b.poste === CATEGORIE_IMMOBILISATION,
             ...(donnees.statutTVA ? { statutTVA: donnees.statutTVA } : {}),
             ...(donnees.rapprochementExclu ? { rapprochementExclu: true } : {}),
             ...(donnees.justificatifReleve ? { justificatifReleve: true, referenceJustificatifReleve: donnees.referenceJustificatifReleve || null } : {}),
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
           });
           tx.update(mov, { poste: b.poste, promueVers: b.id, updatedAt: FieldValue.serverTimestamp() });
         } else {
-          tx.update(ref, { poste: b.poste, depensePersonnelle: b.poste === CATEGORIE_PERSONNELLE });
+          tx.update(ref, { poste: b.poste, depensePersonnelle: b.poste === CATEGORIE_PERSONNELLE, immobilisation: b.poste === CATEGORIE_IMMOBILISATION });
         }
       } else if (b.action === "exclure" || b.action === "tva") {
         if (b.action === "exclure" && typeof b.exclue !== "boolean") throw new Error("Choix invalide");
@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
           associationDevise: association.nature === "devise" ? { deviseFacture: association.devisePiece, montantFacture: association.montantPiece, montantDebiteEUR: association.montantEUR } : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
-      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && POSTES_DEPENSES.some(p => p.nom === b.poste), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && (POSTES_DEPENSES.some(p => p.nom === b.poste) || b.poste === CATEGORIE_IMMOBILISATION), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
     });
     return NextResponse.json({ ok: true });
   } catch (e) {

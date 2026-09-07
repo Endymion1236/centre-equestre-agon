@@ -2,6 +2,16 @@ import { nettoyerPiece, proposerAssociations, validerLienDevise, deviseEtrangere
 import { doublonPossible } from "./doublons-depenses";
 
 export const CATEGORIE_PERSONNELLE = "Personnel — hors charges";
+/**
+ * Bien durable (cheval, tracteur, obstacles, clôture…) : ce n'est pas une
+ * charge de l'exercice, la comptable l'amortit sur plusieurs années. La ligne
+ * reste une dépense (exportée, justifiable) mais sort de la synthèse des
+ * charges et du compte de résultat.
+ */
+export const CATEGORIE_IMMOBILISATION = "Immobilisation — à amortir";
+/** Au-dessus de ce TTC (≈ 500 € HT), l'écran suggère de vérifier s'il s'agit d'une immobilisation. */
+export const SEUIL_ALERTE_IMMOBILISATION_TTC = 600;
+export const estPosteCharge = (poste: unknown, postesCharges: string[]) => typeof poste === "string" && postesCharges.includes(poste);
 
 /**
  * Que fait un changement de catégorie sur une ligne du tableau ?
@@ -25,11 +35,13 @@ export function decisionCategorie(params: {
   const { estDepense, poste, categories, postesCharges, ligne, depensesDuMois } = params;
   if (typeof poste !== "string" || !categories.includes(poste)) return { decision: "refuser", motif: "Catégorie invalide" };
   const charge = postesCharges.includes(poste);
+  const immobilisation = poste === CATEGORIE_IMMOBILISATION;
   if (estDepense) {
-    if (poste !== CATEGORIE_PERSONNELLE && !charge) return { decision: "refuser", motif: "Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable." };
+    if (poste !== CATEGORIE_PERSONNELLE && !charge && !immobilisation) return { decision: "refuser", motif: "Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable." };
     return { decision: "mettre-a-jour" };
   }
-  if (!charge) return { decision: "mettre-a-jour" };
+  // Une immobilisation est une vraie dépense à exporter, même hors charges.
+  if (!charge && !immobilisation) return { decision: "mettre-a-jour" };
   const doublon = depensesDuMois.find(d => doublonPossible(ligne, d));
   if (doublon) {
     return { decision: "refuser", motif: `Une dépense identique existe déjà ce mois-ci (${doublon.fournisseur || "sans libellé"}, ${doublon.montant.toFixed(2)} €${doublon.dateOperation ? `, ${doublon.dateOperation}` : ""}). Catégorisez cette dépense-là, ou traitez le doublon avant de continuer.` };

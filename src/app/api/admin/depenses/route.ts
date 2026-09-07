@@ -52,9 +52,12 @@ export async function GET(req: NextRequest) {
         dateOperation: r.dateOperation || "",
         source: r.source || "",
         compte: r.compte || "",
+        // Personnel et immobilisations : dépenses réelles, mais pas des
+        // charges — la synthèse par poste ne doit pas les additionner.
+        horsCharges: !!(r.depensePersonnelle || r.immobilisation),
       };
-    }).filter((l) => MOIS_RE.test(l.mois) && l.poste);
-    return NextResponse.json({ depenses });
+    }).filter((l) => MOIS_RE.test(l.mois) && l.poste && !l.horsCharges);
+    return NextResponse.json({ depenses: depenses.map(({ horsCharges: _h, ...l }) => l) });
   } catch (e) {
     console.error("[depenses] lecture", e);
     return NextResponse.json({ error: "Erreur de lecture des dépenses" }, { status: 500 });
