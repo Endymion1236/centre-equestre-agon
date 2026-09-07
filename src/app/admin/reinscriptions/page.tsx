@@ -26,6 +26,10 @@ interface Data {
   totalN: number; reinscrits: number; nonReinscritsCount: number; partisCount: number;
   retentionPct: number | null; nonReinscrits: Cavalier[]; partis: Cavalier[];
   reinscritsListe?: Cavalier[];
+  placesReinscrits?: number; placesPreinscrits?: number;
+  placesN?: { fermes: number; preinscrites: number; tenues: number };
+  placesN1?: { fermes: number; preinscrites: number; tenues: number };
+  cavaliersN1?: { fermes: number; preinscrits: number; tenus: number };
   preinscritsCount?: number; preinscrits?: Cavalier[];
   preinscritsNouveauxCount?: number; preinscritsNouveaux?: PreinscritNouveau[];
   diag?: { creneauxSaisonN: number; coursSaisonN: number; inscritsCoursN: number; creneauxSaisonN1: number; coursSaisonN1: number; inscritsCoursN1: number; preinscritsCoursN1?: number; placesTenuesN1?: number; nbForfaits: number };
@@ -207,7 +211,9 @@ export default function ReinscriptionsPage() {
             <div className="bg-white border border-indigo-200 rounded-2xl p-4 text-center">
               <div className="font-body text-xs text-indigo-500 uppercase tracking-wider mb-1">Pré-inscrits</div>
               <div className="font-display text-3xl font-bold text-indigo-600">{data.preinscritsCount ?? 0}</div>
-              <div className="font-body text-[10px] text-indigo-400 mt-1">place retenue, à confirmer</div>
+              <div className="font-body text-[10px] text-indigo-400 mt-1">
+                cavaliers · {data.placesPreinscrits ?? 0} place{(data.placesPreinscrits ?? 0) > 1 ? "s" : ""} de cours retenue{(data.placesPreinscrits ?? 0) > 1 ? "s" : ""}, à confirmer
+              </div>
             </div>
             <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center">
               <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Partis en cours</div>
@@ -216,7 +222,29 @@ export default function ReinscriptionsPage() {
             <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center">
               <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Effectif {data.saison}</div>
               <div className="font-display text-3xl font-bold text-slate-800">{data.totalN}</div>
+              {data.placesN && (
+                <div className="font-body text-[10px] text-slate-400 mt-1">cavaliers · {data.placesN.fermes} place{data.placesN.fermes > 1 ? "s" : ""} de cours</div>
+              )}
             </div>
+            {data.placesN1 && data.cavaliersN1 && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center sm:col-span-2">
+                <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Inscriptions {data.prochaine}–{data.prochaine + 1}</div>
+                <div className="font-display text-3xl font-bold text-slate-800">
+                  {data.placesN1.fermes}
+                  <span className="text-lg text-slate-400"> + </span>
+                  <span className="text-indigo-600">{data.placesN1.preinscrites + data.placesN1.tenues}</span>
+                </div>
+                <div className="font-body text-[10px] text-slate-400 mt-1">
+                  {data.placesN1.fermes} place{data.placesN1.fermes > 1 ? "s" : ""} ferme{data.placesN1.fermes > 1 ? "s" : ""} ({data.cavaliersN1.fermes} cavalier{data.cavaliersN1.fermes > 1 ? "s" : ""})
+                  {" + "}
+                  <span className="text-indigo-500">{data.placesN1.preinscrites + data.placesN1.tenues} pré-inscrite{(data.placesN1.preinscrites + data.placesN1.tenues) > 1 ? "s" : ""} ({data.cavaliersN1.preinscrits + data.cavaliersN1.tenus} cavalier{(data.cavaliersN1.preinscrits + data.cavaliersN1.tenus) > 1 ? "s" : ""})</span>
+                  {" "}· nouveaux cavaliers compris
+                </div>
+                <div className="font-body text-[10px] text-slate-400 mt-0.5">
+                  1 place = 1 cavalier dans 1 cours hebdomadaire ; un cavalier dans 2 cours compte 2.
+                </div>
+              </div>
+            )}
           </div>
 
           {(data.reinscritsListe?.length ?? 0) > 0 && (

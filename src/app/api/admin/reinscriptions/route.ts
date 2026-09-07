@@ -47,6 +47,18 @@ async function coursDeSaison(start: string, end: string) {
   // Séances définitives par cavalier (dates), pour dire POURQUOI un cavalier
   // est compté réinscrit : un forfait, ou seulement quelques séances isolées.
   const seances = new Map<string, string[]>();
+  // Places de cours par cavalier : un « cours » = même activité, même jour
+  // de semaine, même heure. Un cavalier inscrit à l'année sur le mercredi
+  // 14h compte 1 place (pas 35 séances) ; s'il est aussi au samedi 10h, 2.
+  const slotsFermes = new Map<string, Set<string>>();
+  const slotsPreinscrits = new Map<string, Set<string>>();
+  const slotsTenus = new Map<string, Set<string>>();
+  const ajouterSlot = (m: Map<string, Set<string>>, childId: string, c: any) => {
+    const dow = c.date ? new Date(`${c.date}T12:00:00Z`).getUTCDay() : -1;
+    const cle = `${dow}|${c.startTime || ""}|${c.activityTitle || ""}`;
+    if (!m.has(childId)) m.set(childId, new Set());
+    m.get(childId)!.add(cle);
+  };
   const monByChild = new Map<string, Set<string>>();
   let nbCreneaux = 0, nbCours = 0;
   snap.forEach(d => {
@@ -61,10 +73,13 @@ async function coursDeSaison(start: string, end: string) {
       const porteur = { ...meta, creneauDate: c.date || "", creneauTitre: c.activityTitle || "", creneauHeure: c.startTime || "" };
       if (e.preinscription) {
         if (!preinscrits.has(e.childId)) preinscrits.set(e.childId, porteur);
+        ajouterSlot(slotsPreinscrits, e.childId, c);
       } else if (e.pending) {
         if (!placesTenues.has(e.childId)) placesTenues.set(e.childId, porteur);
+        ajouterSlot(slotsTenus, e.childId, c);
       } else {
         if (!enrolled.has(e.childId)) enrolled.set(e.childId, meta);
+        ajouterSlot(slotsFermes, e.childId, c);
         if (!seances.has(e.childId)) seances.set(e.childId, []);
         seances.get(e.childId)!.push(`${c.date || ""}|${c.activityTitle || ""}|${c.startTime || ""}`);
       }
@@ -72,7 +87,9 @@ async function coursDeSaison(start: string, end: string) {
     }
   });
   for (const l of seances.values()) l.sort();
-  return { enrolled, preinscrits, placesTenues, seances, monByChild, nbCreneaux, nbCours };
+  const total = (m: Map<string, Set<string>>) => [...m.values()].reduce((n, set) => n + set.size, 0);
+  const places = { fermes: total(slotsFermes), preinscrites: total(slotsPreinscrits), tenues: total(slotsTenus) };
+  return { enrolled, preinscrits, placesTenues, seances, slotsFermes, slotsPreinscrits, slotsTenus, places, monByChild, nbCreneaux, nbCours };
 }
 
 async function handle(req: NextRequest) {
@@ -212,6 +229,12 @@ async function handle(req: NextRequest) {
       nonReinscrits.push(enrich(childId, meta, apresRentree ? "a_risque" : "pas_encore"));
     }
     reinscritsListe.sort((a, b) => (a.childName || "").localeCompare(b.childName || ""));
+    // Places de cours des cavaliers comptés dans chaque carte (1 cavalier
+    // dans 2 cours = 2), pour lire les cartes en « places » et non en têtes.
+    const placesDe = (liste: any[], ...maps: Map<string, Set<string>>[]) =>
+      liste.reduce((n, c) => n + maps.reduce((k, m) => k + (m.get(c.childId)?.size || 0), 0), 0);
+    const placesPreinscrits = placesDe(preinscritsListe, sN1.slotsPreinscrits, sN1.slotsTenus);
+    const placesReinscrits = placesDe(reinscritsListe, sN1.slotsFermes);
 
     // Pré-inscrits de N+1 qui ne faisaient PAS partie de l'effectif N (nouveaux
     // cavaliers, ou cavaliers de N inscrits ailleurs qu'en cours). Ils ne sont
@@ -239,8 +262,11 @@ async function handle(req: NextRequest) {
     return NextResponse.json({
       saison: N, prochaine: N + 1, rentree, today, apresRentree,
       totalN, reinscrits, nonReinscritsCount: nonReinscrits.length, partisCount: partis.length,
-      reinscritsListe,
-      preinscritsCount: preinscritsListe.length, preinscrits: preinscritsListe,
+      reinscritsListe, placesReinscrits,
+      preinscritsCount: preinscritsListe.length, preinscrits: preinscritsListe, placesPreinscrits,
+      // Vue « places » des deux saisons, tous cavaliers confondus (nouveaux compris).
+      placesN: sN.places, placesN1: sN1.places,
+      cavaliersN1: { fermes: sN1.enrolled.size, preinscrits: sN1.preinscrits.size, tenus: sN1.placesTenues.size },
       preinscritsNouveauxCount: preinscritsNouveaux.length, preinscritsNouveaux,
       retentionPct: totalN ? Math.round((reinscrits / totalN) * 100) : null,
       nonReinscrits, partis,
