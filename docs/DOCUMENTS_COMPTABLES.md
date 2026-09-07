@@ -15,9 +15,21 @@ Les fichiers de vérification locaux sont fictifs. Aucun fichier comptable réel
 
 Le moteur lit des écritures en partie double existantes. Les ventes du site, ses encaissements, les dépenses bancaires, les justificatifs et les suggestions de comptes ne sont **pas encore transformés automatiquement en écritures**. Cela évite de doubler les ventes Céleris, de traiter un remboursement d’emprunt comme une charge ou de reprendre plusieurs fois la TVA d’une facture à échéances.
 
-Les cinq états sont calculés à partir du même jeu d’écritures. Le bilan est une situation nette détaillée des comptes 1 à 5, avec le résultat des comptes 6 et 7. Il ne reproduit pas les formulaires du cabinet : pas de comparatif N-1, de ventilation brut/amortissements normalisée, d’annexe, de liasse fiscale ou de signature. Les amortissements créditeurs de classe 2 diminuent l’actif ; un solde créditeur de trésorerie figure au passif.
+Les cinq états sont calculés à partir du même jeu d’écritures. Le bilan présente séparément l’actif et le passif en valeurs nettes, puis le détail des produits (comptes 7) et des charges (comptes 6). Il ne reproduit pas les formulaires du cabinet : pas de comparatif N-1, de ventilation brut/amortissements normalisée, d’annexe, de liasse fiscale ou de signature. Les amortissements créditeurs de classe 2 diminuent l’actif ; un solde créditeur de trésorerie figure au passif.
 
 Une sélection de ventes seule demeure partielle, même si les écritures sont équilibrées. Chaque PDF porte la mention préparatoire, une empreinte commune et une page de périmètre. Les mois sans écriture et l’absence de journal AN/ANO/RAN sont signalés ; leur présence ne prouve pas l’exhaustivité des à-nouveaux ni de la clôture.
+
+## Présentation des états
+
+La présentation s’appuie sur les modèles PDF fournis par l’utilisateur, avec un en-tête d’identité/période, des titres centrés et des sous-totaux distincts. Les cinq états sont au format A4 portrait. La mention préparatoire et les contrôles de périmètre restent visibles ; aucune attestation ni signature du cabinet n’est reproduite.
+
+- Journal : regroupement par code journal, total de chaque journal puis total général. Les pages suivantes rappellent le journal et le cumul antérieur.
+- Grand livre : regroupement par compte, rappel du compte et du cumul antérieur après un saut de page, solde débiteur/créditeur conservé et total du compte.
+- Balance : sous-totaux par préfixe de deux caractères, totaux par classe et résultat. Les soldes des sous-totaux sont nets ; le total général des colonnes de soldes additionne les soldes débiteurs et créditeurs des comptes individuels, sans recompter les sous-totaux.
+- Centralisateur : sections mensuelles, cumul de chaque mois et total de la période.
+- Bilan préparatoire : sections séparées actif, passif et détail du résultat. La présentation par rubriques du cabinet, les valeurs brutes/amortissements, le comparatif N-1, les SIG et les tableaux fiscaux nécessitent encore une correspondance validée et les données appropriées.
+
+Les PDF d’un dossier annuel peuvent déjà contenir les tableaux d’immobilisations, d’amortissements et d’emprunts. Leur présence comme documents de référence ne vaut pas import de ces données dans l’application. L’extraction d’un journal PDF peut tronquer des références ou omettre des numéros de pièces : un export structuré reste nécessaire pour une reprise automatique fiable. Les documents privés de référence et leurs extractions ne sont pas conservés dans le dépôt.
 
 ## Format du fichier alternatif
 

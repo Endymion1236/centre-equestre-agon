@@ -38,9 +38,9 @@ test("les cinq PDF acceptent le même dossier supérieur à 5 000 lignes", async
     assert.equal(pdf.getSubject(), `9000 lignes | ${empreinte}`);
     assert.equal(pdf.getTitle(), `${DOCUMENTS_COMPTABLES[type]} - préparatoire`);
     if (type === "journal" || type === "grand-livre") assert.ok(pdf.getPageCount() > 100, type);
-    // Un petit état tient sur une page de données + une page de contrôles.
+    // Balance et centralisateur : données + contrôles. Bilan : actif, passif, résultat + contrôles.
     // Régression : un pied placé dans la marge créait une page vide à chaque fois.
-    else assert.equal(pdf.getPageCount(), 2, type);
+    else assert.equal(pdf.getPageCount(), type === "bilan" ? 4 : 2, type);
   }
 });
 

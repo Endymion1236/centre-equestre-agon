@@ -11,7 +11,7 @@ const descriptions: Record<TypeDocumentComptable, string> = {
   "grand-livre": "Le détail de chaque compte avec son solde progressif.",
   balance: "Les débits, crédits et soldes de tous les comptes.",
   centralisateur: "Les totaux de chaque journal, mois par mois.",
-  bilan: "La situation nette des comptes et le résultat de la période, à compléter pour la clôture.",
+  bilan: "Actif, passif et détail des produits et charges sur la période, à compléter pour la clôture.",
 };
 const euros = (n: number) => (n / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
 function sauver(blob: Blob, nom: string) {
