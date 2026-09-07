@@ -34,13 +34,14 @@ export async function GET(req: NextRequest) {
       if (!cursor.exists) return NextResponse.json({ error: "Actualisez la liste" }, { status: 400 });
       query = query.startAfter(cursor);
     }
-    const [ps, ds] = await Promise.all([query.get(), adminDb.collection("depenses").where("source", "==", "releve-bancaire").limit(2001).get()]);
+    const [ps, ds, ls] = await Promise.all([query.get(), adminDb.collection("depenses").where("source", "==", "releve-bancaire").limit(2001).get(), adminDb.collection("justificatifs-liens").limit(2001).get()]);
+    const liens = new Map(ls.docs.map(d => [d.id, d.data().pieceId]));
     const depenses = ds.docs.slice(0, 2000).map(d => ({ ...d.data(), id: d.id })) as DepenseCandidate[];
     return NextResponse.json({ limiteDepenses: ds.size > 2000, suivant: ps.size === 100 ? ps.docs[ps.size - 1].id : null, pieces: ps.docs.map(d => {
       const p = d.data();
       return { id: d.id, nom: p.nom, retire: p.retire === true, extraction: p.extraction || null, depenseId: p.depenseId || null, autoBloque: p.autoBloque === true, associationMode: p.associationMode || "manuel",
         depenseAssociee: p.depenseId ? depenses.find(d => d.id === p.depenseId) || null : null,
-        propositions: p.extraction ? proposerAssociations(nettoyerPiece(p.extraction), depenses).slice(0, 10) : [] };
+        propositions: p.extraction ? proposerAssociations(nettoyerPiece(p.extraction), depenses).slice(0, 10).map(c => ({ ...c, dejaAssociee: liens.has(c.id) && liens.get(c.id) !== d.id })) : [] };
     }) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Lecture des justificatifs impossible" }, { status: 500 });
@@ -138,15 +139,19 @@ export async function POST(req: NextRequest) {
       if (body.action === "associer" && (typeof id !== "string" || !/^[\w-]{1,150}$/.test(id))) return NextResponse.json({ error: "Dépense invalide" }, { status: 400 });
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
+        if (!current.exists) throw new Error("Pièce absente");
         if (current.data()?.retire) throw new Error("Pièce retirée");
         const ancien = current.data()?.depenseId;
+        if (body.action === "associer" && ancien && ancien !== id) throw new Error("Cette pièce a déjà été associée. Actualisez avant de modifier son association.");
         const lock = id ? adminDb.collection("justificatifs-liens").doc(id) : null;
         if (body.action === "associer") {
           const depense = await tx.get(adminDb.collection("depenses").doc(id));
           const lien = await tx.get(lock!);
-          if (!depense.exists || depense.data()?.source !== "releve-bancaire" || (lien.exists && lien.data()?.pieceId !== body.id)) throw new Error("Dépense absente ou déjà associée");
+          if (!depense.exists) throw new Error("Cette dépense n’existe plus ou a été écartée comme doublon. Actualisez les propositions.");
+          if (depense.data()?.source !== "releve-bancaire") throw new Error("Cette dépense ne provient pas d’un relevé bancaire.");
+          if (lien.exists && lien.data()?.pieceId !== body.id) throw new Error("Ce paiement est déjà associé à un autre justificatif. Vérifiez les pièces associées avant de le réutiliser.");
           const candidats = proposerAssociations(nettoyerPiece(current.data()?.extraction || {}), [{ ...depense.data(), id } as DepenseCandidate]);
-          if (!candidats.length) throw new Error("Montants différents : traitement fractionné non disponible");
+          if (!candidats.length) throw new Error("Le montant de la facture diffère du débit bancaire. Les devises, paiements fractionnés et paiements groupés ne sont pas encore pris en charge. Ne modifiez pas le montant pour forcer l’association.");
         }
         if (ancien && ancien !== id) tx.delete(adminDb.collection("justificatifs-liens").doc(ancien));
         if (body.action === "associer") tx.set(lock!, { pieceId: body.id });
@@ -156,7 +161,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     return NextResponse.json({ error: "Action inconnue" }, { status: 400 });
-  } catch {
-    return NextResponse.json({ error: "Opération impossible. Actualisez : pièce déjà analysée, dépense déjà liée, montant différent ou service indisponible. Le justificatif déposé reste conservé." }, { status: 409 });
+  } catch (e) {
+    const motifs = new Set([
+      "Pièce absente", "Pièce retirée", "Dissocier avant de retirer", "Pièce déjà traitée ou retirée", "Dissocier ou restaurer avant de corriger",
+      "Cette pièce a déjà été associée. Actualisez avant de modifier son association.",
+      "Cette dépense n’existe plus ou a été écartée comme doublon. Actualisez les propositions.",
+      "Cette dépense ne provient pas d’un relevé bancaire.",
+      "Ce paiement est déjà associé à un autre justificatif. Vérifiez les pièces associées avant de le réutiliser.",
+      "Le montant de la facture diffère du débit bancaire. Les devises, paiements fractionnés et paiements groupés ne sont pas encore pris en charge. Ne modifiez pas le montant pour forcer l’association.",
+    ]);
+    if (e instanceof Error && motifs.has(e.message)) return NextResponse.json({ error: e.message }, { status: 409 });
+    return NextResponse.json({ error: "Le service n’a pas pu terminer l’opération. Actualisez pour vérifier son état avant de réessayer. Le justificatif déposé reste conservé." }, { status: 500 });
   }
 }

@@ -8,13 +8,14 @@ import { traiterSelection } from "@/lib/import-justificatifs";
 
 type Piece = { id: string; nom: string; retire: boolean; extraction: PieceExtraite | null; depenseId: string | null;
   autoBloque: boolean; associationMode: string; depenseAssociee: DepenseCandidate | null;
-  propositions: (DepenseCandidate & { score: number; raisons: string[] })[] };
+  propositions: (DepenseCandidate & { score: number; raisons: string[]; dejaAssociee?: boolean })[] };
 const endpoint = "/api/admin/justificatifs";
 export default function JustificatifsPage() {
   const { user, isAdmin } = useAuth();
   const [pieces, setPieces] = useState<Piece[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [erreurPiece, setErreurPiece] = useState<{ id: string; message: string } | null>(null);
   const [limite, setLimite] = useState(false);
   const [suivant, setSuivant] = useState<string | null>(null);
   const [voirRetires, setVoirRetires] = useState(false);
@@ -69,13 +70,19 @@ export default function JustificatifsPage() {
     finally { setBusy(false); setProgression(""); }
   }
   async function action(body: object) {
+    setErreurPiece(null);
     setBusy(true); setMessage("");
     try {
       const r = await authFetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await r.json(); if (!r.ok) throw new Error(d.error);
       const suite = automatique && ["analyser", "corriger", "retirer"].includes((body as { action: string }).action) ? await rapprocher() : "";
       setEdition(null); await load(); setMessage(`Enregistré. ${suite}`);
-    } catch (e) { setMessage(e instanceof Error ? e.message : "Erreur"); }
+    } catch (e) {
+      const erreur = e instanceof Error ? e.message : "Erreur";
+      setMessage(erreur);
+      const id = (body as { id?: string }).id;
+      if (id) setErreurPiece({ id, message: erreur });
+    }
     finally { setBusy(false); }
   }
   async function depot(files: File[]) {
@@ -129,6 +136,7 @@ export default function JustificatifsPage() {
     {!pieces.length && <p>Aucun justificatif affiché. Déposez votre première pièce.</p>}
     {pieces.filter(p => p.retire === voirRetires && (!aVerifier || !p.depenseId)).map(p => <article key={p.id} className="rounded-xl border bg-white p-5 space-y-3">
       <h2 className="font-semibold break-all">{p.nom}</h2>
+      {erreurPiece?.id === p.id && <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-red-800">{erreurPiece.message}</p>}
       <button className="underline" onClick={() => void telecharger(p.id)}>Télécharger l’original</button>
       <div><button className="underline text-red-800 disabled:opacity-50" disabled={busy || !!p.depenseId} title={p.depenseId ? "Annulez d’abord l’association" : ""} onClick={() => void action({ action: p.retire ? "restaurer" : "retirer", id: p.id })}>{p.retire ? "Restaurer le document" : "Retirer le document"}</button>{p.depenseId && <p className="text-sm">Annulez l’association avant de retirer ce document.</p>}</div>
       {p.retire ? <p>Document retiré de la liste de travail. Son original reste récupérable.</p> : !p.extraction ? <div><button disabled={busy} className="rounded bg-slate-900 text-white px-4 py-2 disabled:opacity-50" onClick={() => void action({ action: "analyser", id: p.id })}>Analyser la pièce</button></div> : <>
@@ -146,7 +154,7 @@ export default function JustificatifsPage() {
         {p.depenseId ? <div className="rounded bg-green-50 p-3">{p.associationMode === "automatique" ? "Validé automatiquement" : "Confirmé manuellement"} · dépense {p.depenseId}. <button className="underline" disabled={busy} onClick={() => void action({ action: "dissocier", id: p.id })}>Annuler l’association</button></div>
           : <div className="space-y-2"><h3 className="font-semibold">Propositions à confirmer</h3>
             {p.propositions.length > 1 && <p>Plusieurs correspondances : comparez les dates et le fournisseur.</p>}
-            {p.propositions.map(d => <div key={d.id} className="border rounded p-3"><p>{d.fournisseur} · {d.dateOperation || `date inconnue${d.mois ? ` (mois ${d.mois})` : ""}`} · {d.montant.toFixed(2)} €</p><p className="text-sm">Compte : {d.compte || "non renseigné (ancien import)"}</p>{d.note && <p className="text-sm">{d.note}</p>}<p className="text-sm">{d.raisons.join(" · ")}</p><button disabled={busy || edition === p.id} className="underline" onClick={() => { if (window.confirm("Confirmer que cette dépense correspond bien à ce justificatif ?")) void action({ action: "associer", id: p.id, depenseId: d.id }); }}>Confirmer l’association</button></div>)}
+            {p.propositions.map(d => <div key={d.id} className="border rounded p-3"><p>{d.fournisseur} · {d.dateOperation || `date inconnue${d.mois ? ` (mois ${d.mois})` : ""}`} · {d.montant.toFixed(2)} €</p><p className="text-sm">Compte : {d.compte || "non renseigné (ancien import)"}</p>{d.note && <p className="text-sm">{d.note}</p>}<p className="text-sm">{d.raisons.join(" · ")}</p>{d.dejaAssociee ? <p className="text-amber-800">Paiement déjà associé à un autre justificatif : vérifiez les pièces associées.</p> : <button disabled={busy || edition === p.id} className="underline" onClick={() => { if (window.confirm("Confirmer que cette dépense correspond bien à ce justificatif ?")) void action({ action: "associer", id: p.id, depenseId: d.id }); }}>Confirmer l’association</button>}</div>)}
             {!p.propositions.length && <p>Aucune correspondance de montant trouvée. Pièce conservée en attente : paiement futur, fractionné, groupé ou opération non importée à vérifier.</p>}
           </div>}
         {p.depenseAssociee && <p className="text-sm">Paiement associé : {p.depenseAssociee.fournisseur} · {p.depenseAssociee.dateOperation || "date inconnue"} · {p.depenseAssociee.montant.toFixed(2)} € · compte {p.depenseAssociee.compte || "non renseigné"}</p>}

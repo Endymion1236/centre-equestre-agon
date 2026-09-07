@@ -3,6 +3,14 @@ import { test } from "node:test";
 import { doublonPossible, groupesDoublons, preparerLotDoublons } from "../../src/lib/doublons-depenses";
 const a = { id: "datee", fournisseur: "Arrosage Distrib Ste", montant: 77.49, mois: "2026-07", dateOperation: "2026-07-09", source: "releve-bancaire" };
 const b = { ...a, id: "ancienne", dateOperation: "" };
+test("deux imports Mol Fulfiller avec préfixe Carte et astérisque : proposés ensemble", () => {
+  const datee = { ...a, fournisseur: "Carte Mol*fulfiller", montant: 118.8, note: "Relevé juillet.pdf" };
+  const ancienne = { ...b, fournisseur: "Mol Fulfiller", montant: 118.8, note: "Relevé juillet (2).pdf" };
+  assert.ok(doublonPossible(datee, ancienne));
+  assert.equal(preparerLotDoublons([datee, ancienne], new Set()).propositions.length, 1);
+  assert.equal(preparerLotDoublons([datee, ancienne, { ...ancienne, id: "autre-paiement" }], new Set()).propositions.length, 0);
+  assert.equal(doublonPossible(datee, { ...ancienne, fournisseur: "Mol Autre" }), false);
+});
 test("ancien import sans date + relecture datée : à examiner, pas supprimé", () => {
   assert.ok(doublonPossible(a, b));
   assert.equal(groupesDoublons([a, b]).length, 1);
