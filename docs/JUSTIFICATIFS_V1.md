@@ -18,6 +18,16 @@ Ce n'est pas encore un journal bancaire complet. Pièces paginées par 100 avec 
 
 La branche test omettait la date lors de la transmission ET du stockage de l'import des dépenses. Les nouveaux imports conservent dateOperation. Pour réparer l'historique : relire le PDF dans Trésorerie, vérifier les lignes puis utiliser Compléter les dates existantes (et non Ajouter). Comparaison mois/fournisseur normalisé/montant exact ; seuls les couples uniques sans date sont enrichis, dans une transaction. Aucun montant modifié ni aucune dépense créée ; correspondances absentes ou ambiguës signalées. Les dates existantes ne sont jamais écrasées. Mois et nom du relevé sont affichés dans les propositions lorsque présents.
 
+## Lecture des mouvements par pages
+
+La lecture complète copie chaque page du PDF dans le navigateur (pdf-lib, contenu conservé) et appelle l'IA séparément par page, avec un délai de 40 s sans retries. Le résumé première/dernière page sert uniquement à proposer le solde ; son échec n'empêche pas la lecture des mouvements, le mois et le solde restant alors à saisir. Un PDF doit concerner un seul compte. Les dates manquantes, pages tronquées ou erreurs empêchent l'import des dépenses jusqu'à une relance réussie. Une page qui échoue reste signalée ; seules ces pages sont relancées, tant que l'écran reste ouvert.
+
+Les crédits clients sont additionnés uniquement si toutes les pages sont complètes et chaque montant est connu. Reports, intérêts et virements internes sont exclus par la consigne ; ce classement IA reste à vérifier sur le relevé. Les virements internes sont proposés hors dépenses, sans création d'une charge. Il ne s'agit pas encore d'un rapprochement automatique des deux côtés d'un virement interne.
+
+Le compte destinataire doit être choisi avant l'import. Une identité fichier SHA-256/page/rang + compte protège les nouveaux imports identiques, en transaction (200 lignes par lot). Les modifications de lecture d'une ligne déjà importée sont refusées pour vérification. Un ancien import sans identité qui correspond au montant/fournisseur/mois bloque l'ajout du lot et oriente vers Compléter les dates. Un PDF réencodé possède une autre empreinte : ce garde-fou n'est pas une déduplication universelle de relevés recouvrants. Pour les anciens imports, la complétion de dates conserve sa limite de 200 lignes sélectionnées et ne réattribue pas de compte inconnu.
+
+Limites : PDF d'origine 20 Mo / 150 pages ; extrait envoyé 4 millions de caractères base64. Une page individuelle peut encore dépasser le délai ou être illisible ; aucune garantie de lecture d'un PDF non testé. Le résumé peut ne pas contenir le solde de clôture s'il figure ailleurs : toujours contrôler sur l'original. Les pages doivent rester dans le navigateur jusqu'à validation (pas de file de travail persistante).
+
 ## Vérification sur environnement de test avant fusion
 
 1. Sans authentification / rôle non admin : GET, upload, analyse, correction, liaison et téléchargement refusés.

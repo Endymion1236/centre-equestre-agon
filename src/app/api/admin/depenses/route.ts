@@ -27,6 +27,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide } from "@/lib/justificatifs";
 import { completerDates, type LigneDate } from "@/lib/depenses-dates";
+import { createHash } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest) {
         note: r.note || "",
         dateOperation: r.dateOperation || "",
         source: r.source || "",
+        compte: r.compte || "",
       };
     }).filter((l) => MOIS_RE.test(l.mois) && l.poste);
     return NextResponse.json({ depenses });
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
       for (const mois of [...new Set(lignes.map(l => l.mois))]) {
         const resultat = await adminDb.runTransaction(async tx => {
           const snap = await tx.get(adminDb.collection("depenses").where("mois", "==", mois));
-          const existantes = snap.docs.filter(d => d.data().source === "releve-bancaire").map(d => ({ ...d.data(), id: d.id })) as LigneDate[];
+          const existantes = snap.docs.filter(d => d.data().source === "releve-bancaire" && (!d.data().compte || d.data().compte === body.compte)).map(d => ({ ...d.data(), id: d.id })) as LigneDate[];
           const r = completerDates(existantes, lignes.filter(l => l.mois === mois));
           for (const m of r.modifications) tx.update(adminDb.collection("depenses").doc(m.id), { dateOperation: m.dateOperation, dateCompleteePar: auth.uid, dateCompleteeLe: FieldValue.serverTimestamp() });
           return r;
@@ -114,6 +116,39 @@ export async function POST(req: NextRequest) {
       const lignes = Array.isArray(body.factures) ? body.factures : [];
       if (lignes.length === 0 || lignes.length > 200) {
         return NextResponse.json({ error: "Entre 1 et 200 factures" }, { status: 400 });
+      }
+      if (lignes.some((l: any) => l?.sourceOperation)) {
+        const compte = String(body.compte || "").trim().slice(0, 120);
+        if (!compte || lignes.some((l: any) => !/^[a-f0-9]{64}:\d+:\d+$/.test(String(l?.sourceOperation)) || !MOIS_RE.test(String(l?.mois)) || !dateValide(l?.date) || dateValide(l.date).slice(0, 7) !== l.mois || nbMontant(l?.montant) === null || !String(l?.poste || "").trim())) {
+          return NextResponse.json({ error: "Compte, date ou identifiant d'opération absent/invalide." }, { status: 400 });
+        }
+        const refs = lignes.map((l: any) => adminDb.collection("depenses").doc("pdf_" + createHash("sha256").update(JSON.stringify([compte, l.sourceOperation])).digest("hex")));
+        const normaliser = (v: unknown) => String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const resultat = await adminDb.runTransaction(async tx => {
+          const existantes = await tx.getAll(...refs);
+          const anciens = [];
+          for (const mois of [...new Set(lignes.map((l: any) => l.mois))]) {
+            const snap = await tx.get(adminDb.collection("depenses").where("mois", "==", mois));
+            anciens.push(...snap.docs.map(d => d.data()).filter(d => d.source === "releve-bancaire" && !d.sourceOperation));
+          }
+          // Tous les contrôles avant la première écriture.
+          for (let i = 0; i < lignes.length; i++) {
+            const l = lignes[i], e = existantes[i].data() as { montant?: number; dateOperation?: string; fournisseur?: string } | undefined;
+            if (e && (e.montant !== nbMontant(l.montant) || e.dateOperation !== l.date || normaliser(e.fournisseur) !== normaliser(l.fournisseur))) return { erreur: "La relecture diffère d'une opération déjà importée. Vérifiez la dépense existante ; aucune ligne de ce lot n'a été ajoutée." };
+            if (!e && anciens.some(a => a.mois === l.mois && (!a.compte || a.compte === compte) && a.montant === nbMontant(l.montant) && normaliser(a.fournisseur) === normaliser(l.fournisseur) && (!a.dateOperation || a.dateOperation === l.date))) return { erreur: "Ce relevé correspond à des dépenses d'un ancien import. Utilisez Compléter les dates existantes, puis vérifiez les dépenses ; aucune ligne de ce lot n'a été ajoutée." };
+          }
+          let ajoutees = 0, doublons = 0;
+          const vus = new Set<string>();
+          for (let i = 0; i < lignes.length; i++) {
+            if (existantes[i].exists || vus.has(refs[i].id)) { doublons++; continue; }
+            const l = lignes[i]; vus.add(refs[i].id);
+            tx.create(refs[i], { mois: l.mois, poste: String(l.poste).trim().slice(0, 80), montant: nbMontant(l.montant), fournisseur: String(l.fournisseur || "").trim().slice(0, 80), note: String(l.note || "").slice(0, 500), source: "releve-bancaire", compte, sourceOperation: l.sourceOperation, pageReleve: Number(l.sourceOperation.split(":")[1]) + 1, dateOperation: l.date, updatedAt: FieldValue.serverTimestamp() });
+            ajoutees++;
+          }
+          return { ajoutees, doublons };
+        });
+        if ("erreur" in resultat) return NextResponse.json({ error: resultat.erreur }, { status: 409 });
+        return NextResponse.json({ ok: true, ...resultat, invalides: 0 });
       }
       let ajoutees = 0, invalides = 0;
       for (const l of lignes) {

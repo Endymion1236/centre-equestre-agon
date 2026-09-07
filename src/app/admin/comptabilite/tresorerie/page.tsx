@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { Card } from "@/components/ui";
 import { Landmark, Loader2, RefreshCw, FileUp, Check, Pencil, Settings2, FileText } from "lucide-react";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
+import { remplacerPage, regrouperPages, type PageLue, type ResultatPage } from "@/lib/import-releve-pages";
+import type { preparerRelevePdf } from "@/lib/releve-pdf-pages";
 import {
   MOIS_SAISON,
   NOMS_MOIS_TRESORERIE as NOMS_MOIS,
@@ -33,7 +35,7 @@ import {
 interface Releve { id: string; mois: string; compte: string; montant: number; creditsClients?: number | null; note: string; source: string; }
 
 // Un débit lu sur le relevé PDF, avec le poste de dépense proposé.
-interface OperationProposee { date: string; mois: string; libelle: string; montant: number; poste: string; garder: boolean; }
+interface OperationProposee { date: string; mois: string; libelle: string; montant: number; poste: string; garder: boolean; sourceOperation?: string; pageReleve?: number; }
 interface PropositionReleve {
   banque: string; compte: string; mois: string;
   soldeFin: number | null; soldeDebut: number | null; dateSoldeFin: string;
@@ -47,6 +49,9 @@ interface PropositionReleve {
   /** Lecture des débits : en cours, faite, ou échouée (le solde reste utilisable). */
   operationsEtat: "lecture" | "ok" | "echec";
   operationsErreur?: string;
+  progressionPages?: string;
+  pagesManquantes?: number[];
+  erreurSolde?: string;
 }
 
 const eur = (v: number) =>
@@ -93,6 +98,7 @@ export default function TresoreriePage() {
   const [lectureReleve, setLectureReleve] = useState(0);
   const [soldeUniquement, setSoldeUniquement] = useState(false);
   const [propositions, setPropositions] = useState<PropositionReleve[]>([]);
+  const lectures = useRef(new Map<string, { pdf: Awaited<ReturnType<typeof preparerRelevePdf>>; pages: PageLue[]; mois: string }>());
 
   const api = useCallback(async (init?: RequestInit) => {
     const token = await user!.getIdToken();
@@ -228,23 +234,54 @@ export default function TresoreriePage() {
     finally { setSaving(false); }
   };
 
-  // ── Dépôt d'un relevé de compte PDF ──
+  const lirePages = async (id: string, indices: number[]) => {
+    const session = lectures.current.get(id);
+    if (!session) return;
+    const erreurs: string[] = [];
+    setPropositions(prev => prev.map(p => p.id === id ? { ...p, operationsEtat: "lecture", operationsErreur: "" } : p));
+    for (const index of indices) {
+      setPropositions(prev => prev.map(p => p.id === id ? { ...p, progressionPages: `Lecture de la page ${index + 1} / ${session.pdf.nombrePages}` } : p));
+      try {
+        const resultat = await api({ method: "POST", body: JSON.stringify({ action: "extraire-page", pdfBase64: await session.pdf.page(index), moisContexte: session.mois }) }) as ResultatPage;
+        session.pages = remplacerPage(session.pages, index, resultat);
+      } catch (e: any) { erreurs.push(`Page ${index + 1} : ${e?.message || "lecture impossible"}`); }
+    }
+    const total = regrouperPages(session.pages, session.pdf.nombrePages, session.pdf.empreinte);
+    setPropositions(prev => prev.map(p => p.id === id ? {
+      ...p, operationsEtat: total.manquantes.length ? "echec" : "ok", lectureIncomplete: total.manquantes.length > 0,
+      progressionPages: `${session.pdf.nombrePages - total.manquantes.length} / ${session.pdf.nombrePages} pages lues`,
+      pagesManquantes: total.manquantes, operationsErreur: erreurs.join(" · "), creditsClients: total.creditsClients,
+      soldeEnregistre: false,
+      operations: total.operations.map(o => {
+        const existante = p.operations.find(x => x.sourceOperation === o.sourceOperation);
+        return existante || { ...o, garder: o.poste !== POSTE_HORS_DEPENSES };
+      }),
+    } : p));
+  };
+
+  // ── Dépôt d'un relevé : copie sans recouvrement, une page par requête ──
   const lireReleve = async (fichiers: FileList) => {
     setError("");
     for (const f of Array.from(fichiers)) {
       setLectureReleve(n => n + 1);
       try {
-        const b64 = btoa(new Uint8Array(await f.arrayBuffer()).reduce((s, o) => s + String.fromCharCode(o), ""));
-        // 1. Le solde et les encaissements clients : court, c'est l'essentiel.
-        const d = await api({ method: "POST", body: JSON.stringify({ action: soldeUniquement ? "extraire-solde" : "extraire", pdfBase64: b64, filename: f.name }) });
-        const p = d.propositionReleve;
-        // Pré-choix du compte : celui dont le nom recoupe le libellé lu, sinon le premier.
-        const libelle = `${p.banque} ${p.compte}`.toLowerCase();
-        const compteChoisi = comptes.find(c => c.toLowerCase().split(/\s+/).some((mot: string) => mot.length > 3 && libelle.includes(mot))) || comptes[0] || "Compte courant";
-        const id = `${Date.now()}-${f.name}`;
+        const { preparerRelevePdf } = await import("@/lib/releve-pdf-pages");
+        const pdf = await preparerRelevePdf(new Uint8Array(await f.arrayBuffer()));
+        let p: any = { banque: "", compte: "", mois: "", soldeFin: null, soldeDebut: null, dateSoldeFin: "", creditsClients: null, fichier: f.name };
+        let erreurSolde = "";
+        try {
+          const d = await api({ method: "POST", body: JSON.stringify({ action: "extraire-solde", pdfBase64: await pdf.resume(), filename: f.name }) });
+          p = d.propositionReleve;
+        } catch (e: any) {
+          if (/s[ée]parer.*comptes?/i.test(String(e?.message))) throw e;
+          erreurSolde = `Solde non lu : ${e?.message || "erreur"}. Renseignez le mois et le solde depuis le PDF. Les mouvements peuvent être lus indépendamment.`;
+        }
+        const compteChoisi = comptes.find(c => c.toLowerCase() === String(p.compte).toLowerCase()) || "";
+        const id = crypto.randomUUID();
+        lectures.current.set(id, { pdf, pages: [], mois: p.mois });
         setPropositions(prev => [...prev, {
           ...p,
-          id,
+          id, erreurSolde,
           operations: [],
           operationsEtat: soldeUniquement ? "ok" : "lecture",
           compteChoisi,
@@ -252,19 +289,7 @@ export default function TresoreriePage() {
           soldeEnregistre: false,
         }]);
         if (soldeUniquement) continue;
-        // 2. Les débits catégorisés : long, et facultatif — s'il échoue (délai
-        //    dépassé sur un mois chargé), le solde est déjà à l'écran.
-        try {
-          const ops = await api({ method: "POST", body: JSON.stringify({ action: "extraire-operations", pdfBase64: b64, filename: f.name }) });
-          setPropositions(prev => prev.map(x => x.id === id ? {
-            ...x,
-            operations: (ops.operations || []).map((o: any) => ({ ...o, garder: o.poste !== POSTE_HORS_DEPENSES })),
-            lectureIncomplete: Boolean(ops.lectureIncomplete),
-            operationsEtat: "ok",
-          } : x));
-        } catch (e: any) {
-          setPropositions(prev => prev.map(x => x.id === id ? { ...x, operationsEtat: "echec", operationsErreur: e?.message || String(e) } : x));
-        }
+        await lirePages(id, Array.from({ length: pdf.nombrePages }, (_, i) => i));
       } catch (e: any) {
         setError(`${f.name} : ${e?.message || String(e)}`);
       } finally {
@@ -275,7 +300,7 @@ export default function TresoreriePage() {
 
   const enregistrerSoldeReleve = async (idx: number) => {
     const p = propositions[idx];
-    if (!p || saving || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)) return;
+    if (!p || saving || !p.compteChoisi || p.operationsEtat === "lecture" || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)) return;
     setSaving(true); setError("");
     try {
       await api({ method: "POST", body: JSON.stringify({ action: "saisir", compte: p.compteChoisi, mois: p.mois, montant: p.soldeEdit, ...(p.creditsClients != null ? { creditsClients: p.creditsClients } : {}) }) });
@@ -288,23 +313,29 @@ export default function TresoreriePage() {
   const ajouterDepensesReleve = async (idx: number, datesSeulement = false) => {
     const p = propositions[idx];
     const gardees = (p?.operations || []).filter(o => o.garder && o.poste !== POSTE_HORS_DEPENSES && /^\d{4}-\d{2}$/.test(o.mois));
-    if (!p || saving || gardees.length === 0) return;
+    if (!p || saving || !p.compteChoisi || p.operationsEtat !== "ok" || gardees.length === 0) return;
+    if (datesSeulement && gardees.length > 200) { setError("Pour compléter les anciennes dates, sélectionnez au maximum 200 lignes par tentative."); return; }
     setSaving(true); setError(""); setInfo("");
     try {
       const token = await user!.getIdToken();
+      const d: Record<string, number> = {};
+      for (let debut = 0; debut < gardees.length; debut += 200) {
       const res = await fetch("/api/admin/depenses", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           action: datesSeulement ? "completer-dates" : "ajouter-lot",
-          factures: gardees.map(o => ({ date: o.date, mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, note: `Relevé ${p.fichier}` })),
+          compte: p.compteChoisi,
+          factures: gardees.slice(debut, debut + 200).map(o => ({ date: o.date, mois: o.mois, poste: o.poste, fournisseur: o.libelle, montant: o.montant, sourceOperation: o.sourceOperation, pageReleve: o.pageReleve, note: `Relevé ${p.fichier}` })),
         }),
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d?.error || "Erreur");
+      const resultat = await res.json();
+      if (!res.ok) throw new Error(`${resultat?.error || "Erreur"} ${debut > 0 ? "Les lots précédents ont été traités ; les lignes déjà importées sont protégées lors d'une nouvelle tentative." : ""}`);
+      for (const cle of ["ajoutees", "doublons", "invalides", "completees", "dejaDatees", "ambigues", "absentes"]) d[cle] = (d[cle] || 0) + Number(resultat[cle] || 0);
+      }
       setInfo(datesSeulement
         ? `${d.completees} date(s) complétée(s), ${d.dejaDatees} déjà datée(s), ${d.ambigues} ambiguë(s), ${d.absentes} sans dépense correspondante, ${d.invalides} invalide(s). Aucune dépense créée. Les lignes ambiguës restent à vérifier.`
-        : `${d.ajoutees} dépense(s) ajoutée(s) à l'écran Dépenses par poste.`);
+        : `${d.ajoutees} dépense(s) ajoutée(s), ${d.doublons || 0} déjà présente(s), ${d.invalides || 0} invalide(s).`);
       setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, operations: [] } : x));
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setSaving(false); }
@@ -377,9 +408,10 @@ export default function TresoreriePage() {
             <input type="file" accept=".pdf,application/pdf" multiple className="hidden" disabled={lectureReleve > 0}
               onChange={e => { if (e.target.files?.length) lireReleve(e.target.files); e.target.value = ""; }} />
           </label>
+          <p className="w-full text-xs text-slate-600">Lecture des mouvements page par page. Gardez cette page ouverte ; les pages en échec peuvent être relancées. Un PDF doit concerner un seul compte.</p>
           <label className="flex items-center gap-2 text-xs text-slate-700">
             <input type="checkbox" checked={soldeUniquement} disabled={lectureReleve > 0} onChange={e => setSoldeUniquement(e.target.checked)} />
-            Solde uniquement (épargne / Excédent Pro)
+            Solde uniquement (sans mouvements)
           </label>
           <button type="button" onClick={() => setComptesEdit(comptesEdit === null ? comptes.map(c => ({ nom: c, compte: !horsTotal.includes(c) })) : null)}
             title="Régler la liste des comptes bancaires suivis"
@@ -415,21 +447,24 @@ export default function TresoreriePage() {
                 {p.creditsClients != null ? ` · encaissements clients lus : ${eur(p.creditsClients)} (enregistrés avec le solde, pour le rapprochement)` : ""}
               </span>
             </div>
-            <button type="button" onClick={() => setPropositions(prev => prev.filter((_, i) => i !== idx))}
+            <button type="button" disabled={p.operationsEtat === "lecture"} onClick={() => { lectures.current.delete(p.id); setPropositions(prev => prev.filter((_, i) => i !== idx)); }}
               className="font-body text-xs text-slate-500 bg-white border border-gray-200 px-2 py-1 rounded-lg cursor-pointer">✕ retirer</button>
           </div>
+          {p.erreurSolde && <p className="mb-2 text-sm text-amber-800">{p.erreurSolde}</p>}
+          {p.progressionPages && <p role="status" className="mb-2 text-sm text-blue-800">{p.progressionPages}</p>}
           {p.lectureIncomplete && (
             <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-body text-[11px] text-amber-800">
               ⚠ Relevé long : la lecture s&apos;est arrêtée avant la fin — les derniers débits du mois
-              peuvent manquer dans la liste ci-dessous. Vérifie également le solde sur le PDF avant de l’enregistrer.
+              peuvent manquer dans la liste ci-dessous. L’import des dépenses reste bloqué jusqu’à la lecture complète. Vérifie également le solde sur le PDF avant de l’enregistrer.
             </div>
           )}
 
           {/* Le solde de fin de mois → trésorerie */}
           <div className="flex flex-wrap items-center gap-2 font-body text-xs rounded-lg border border-blue-200 bg-blue-50/50 px-3 py-2 mb-2">
             <span className="font-semibold text-blue-900">Solde de fin de mois</span>
-            <select value={p.compteChoisi} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, compteChoisi: e.target.value } : x))}
+            <select value={p.compteChoisi} disabled={saving} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, compteChoisi: e.target.value, soldeEnregistre: false } : x))}
               className="border border-gray-200 rounded px-2 py-1 bg-white">
+              <option value="">Choisir le compte destinataire</option>
               {(comptes.length ? comptes : ["Compte courant"]).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             <input value={p.mois} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, mois: e.target.value } : x))}
@@ -441,7 +476,7 @@ export default function TresoreriePage() {
               <span className="flex items-center gap-1 text-green-700 font-semibold"><Check size={13} /> enregistré</span>
             ) : (
               <button type="button" onClick={() => enregistrerSoldeReleve(idx)}
-                disabled={saving || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)}
+                disabled={saving || !p.compteChoisi || p.operationsEtat === "lecture" || p.soldeEdit.trim() === "" || !/^\d{4}-\d{2}$/.test(p.mois)}
                 className="font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                 Enregistrer le solde
               </button>
@@ -451,13 +486,19 @@ export default function TresoreriePage() {
           {/* Les débits catégorisés → dépenses par poste */}
           {p.operationsEtat === "lecture" && (
             <div className="flex items-center gap-2 font-body text-[11px] text-slate-500 px-1 py-1">
-              <Loader2 size={12} className="animate-spin" /> Lecture des débits du relevé en cours… le solde ci-dessus est déjà utilisable.
+              <Loader2 size={12} className="animate-spin" /> Lecture des débits page par page… attendez la fin avant d’enregistrer.
             </div>
           )}
           {p.operationsEtat === "echec" && (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 font-body text-[11px] text-amber-800">
-              ⚠ Les débits n&apos;ont pas pu être lus ({p.operationsErreur || "erreur"}). Le solde, lui, est bien lu :
-              enregistre-le, et saisis les dépenses de ce mois à la main dans Dépenses par poste.
+              ⚠ Certaines pages n&apos;ont pas pu être lues : {p.operationsErreur || "erreur"}. Les pages déjà lues sont conservées.
+              <button type="button" disabled={lectureReleve > 0 || saving} className="block underline mt-2" onClick={async () => {
+                const session = lectures.current.get(p.id);
+                if (!session) return;
+                session.mois = p.mois;
+                setLectureReleve(n => n + 1);
+                try { await lirePages(p.id, p.pagesManquantes || []); } finally { setLectureReleve(n => n - 1); }
+              }}>Relancer les pages manquantes{p.pagesManquantes?.length ? ` (${p.pagesManquantes.map(i => i + 1).join(", ")})` : ""}</button>
             </div>
           )}
           {p.operationsEtat === "ok" && p.operations.length === 0 && (
@@ -506,11 +547,11 @@ export default function TresoreriePage() {
                   <span className="font-body text-[11px] text-slate-500">
                     {gardees.length} cochée(s) — {eur(gardees.reduce((s, o) => s + o.montant, 0))} · montants TTC du relevé
                   </span>
-                  <button type="button" onClick={() => ajouterDepensesReleve(idx)} disabled={saving || gardees.length === 0}
+                  <button type="button" onClick={() => ajouterDepensesReleve(idx)} disabled={saving || !p.compteChoisi || p.operationsEtat !== "ok" || gardees.length === 0}
                     className="font-body text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
                     Ajouter {gardees.length} dépense(s)
                   </button>
-                  <button type="button" onClick={() => ajouterDepensesReleve(idx, true)} disabled={saving || gardees.length === 0}
+                  <button type="button" onClick={() => ajouterDepensesReleve(idx, true)} disabled={saving || !p.compteChoisi || p.operationsEtat !== "ok" || gardees.length === 0}
                     className="font-body text-xs font-semibold text-blue-800 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 cursor-pointer disabled:opacity-50">
                     Compléter les dates existantes
                   </button>
