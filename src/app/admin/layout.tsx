@@ -141,6 +141,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
       { href: "/admin/comptabilite/export-ca", icon: FileSpreadsheet, label: "Export CA (comptable)" },
+      { href: "/admin/comptabilite/justificatifs", icon: FileSpreadsheet, label: "Justificatifs" },
       { href: "/admin/statistiques", icon: TrendingUp, label: "Statistiques" },
       { href: "/admin/reinscriptions", icon: UserMinus, label: "Réinscriptions" },
       { href: "/admin/satisfaction", icon: MessageSquare, label: "Satisfaction" },
