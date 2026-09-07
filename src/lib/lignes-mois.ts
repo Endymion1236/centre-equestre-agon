@@ -9,6 +9,7 @@
 import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { zipSync } from "fflate";
 import type { LigneMois } from "@/lib/bilan-justificatifs";
+import { justifierParMasseSalariale, moisMoins, type LigneMasseSalariale } from "@/lib/justification-paie";
 
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 
@@ -21,12 +22,15 @@ export interface PieceMois {
 }
 
 export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneMois & Record<string, unknown>)[]; pieces: PieceMois[]; limite: boolean }> {
-  const [ds, ms, ps, ars] = await Promise.all([
+  const moisPaie = [0, 1, 2, 3].map(n => moisMoins(mois, n));
+  const [ds, ms, ps, ars, mss] = await Promise.all([
     adminDb.collection("depenses").where("mois", "==", mois).limit(2001).get(),
     mouvements().where("mois", "==", mois).limit(2001).get(),
     adminDb.collection("justificatifs").limit(2001).get(),
     adminDb.collection("depenses-doublons-archives").where("mois", "==", mois).limit(2001).get(),
+    adminDb.collection("masse-salariale").where("mois", "in", moisPaie).get().catch(e => { console.warn("[lignes-mois] masse salariale illisible", e); return null; }),
   ]);
+  const masse: LigneMasseSalariale[] = (mss?.docs || []).map(d => { const r = d.data(); return { type: r.type === "charge" ? "charge" : "salaire", mois: r.mois || "", salarie: r.salarie || "", libelle: r.libelle || "", net: r.net ?? null, decaissement: r.decaissement ?? null, montant: r.montant ?? null }; });
   const pieces: PieceMois[] = ps.docs.map(d => {
     const p = d.data();
     return { id: d.id, nom: p.nom, retire: !!p.retire, extraction: p.extraction || null, depenseId: p.depenseId || null, paieValidee: !!p.paieValidee,
@@ -41,6 +45,9 @@ export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneM
     ...l,
     piece: pieces.find(p => p.depenseId === l.id || p.paiementsAssocies.some(a => a.id === l.id)) || null,
   })) as (LigneMois & Record<string, unknown>)[];
+  // Salaires et cotisations : justifiés par l'écran Masse salariale, sans rien écrire.
+  const ailleurs = justifierParMasseSalariale(avecPiece, masse);
+  for (const l of avecPiece) l.justifieeVia = ailleurs.get(l.id) || null;
   return { lignes: avecPiece, pieces, limite: [ds, ms, ps, ars].some(s => s.size > 2000) };
 }
 
