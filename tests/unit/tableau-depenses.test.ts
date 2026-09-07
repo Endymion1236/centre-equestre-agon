@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { verifierAssociationTableau } from "../../src/lib/tableau-depenses";
+import { verifierEcheance, verifierAssociationTableau } from "../../src/lib/tableau-depenses";
 const debit = { id: "d", fournisseur: "Virement", source: "releve-bancaire", montant: 240 };
 const facture = { typeDocument: "achat", devise: "EUR", fournisseur: "Les Pieux", numero: "2026000729", date: "2026-06-22", ht: 227.51, tva: 12.49, ttc: 240 };
 test("association manuelle depuis une ligne : fournisseur bancaire différent permis, montant exact", () => {
@@ -23,4 +23,15 @@ test("refuser les ventes, les documents étrangers au parcours et les saisies sa
   for (const typeDocument of ["vente", "autre"]) assert.throws(() => verifierAssociationTableau({ ...facture, typeDocument }, debit));
   assert.throws(() => verifierAssociationTableau(facture, { ...debit, source: "saisie" }));
   assert.throws(() => verifierAssociationTableau(facture, { ...debit, montant: -240 }));
+});
+
+test("échéances : quatrième paiement, dépassement, devise et total inconnu", () => {
+  const p = { ...facture, ttc: 360, date: "2026-05-01" };
+  assert.doesNotThrow(() => verifierEcheance(p, 90, 270));
+  assert.doesNotThrow(() => verifierEcheance(p, 90, 0));
+  assert.throws(() => verifierEcheance(p, 90, 360));
+  assert.throws(() => verifierEcheance({ ...p, devise: "USD" }, 90, 0));
+  assert.throws(() => verifierEcheance({ ...p, typeDocument: "paie" }, 90, 0));
+  assert.throws(() => verifierEcheance({ ...p, ttc: null }, 90, 0));
+  assert.throws(() => verifierEcheance(p, -90, 0));
 });

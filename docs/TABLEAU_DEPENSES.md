@@ -46,3 +46,13 @@ Le tableau distingue le justificatif manquant (absence de pièce associée), le 
 La colonne TVA propose « à vérifier » par défaut pour les anciennes lignes, « sans TVA » et « TVA non récupérée ». Ces indications sont enregistrées sur la ligne et historisées, sans modifier les montants extraits, les catégories, les totaux ou produire d'écriture/déclaration fiscale. Une TVA positive extraite sur une pièce marquée sans TVA affiche un avertissement. L'exclusion ne change aucun de ces choix.
 
 Vérification en session : choisir chaque statut, actualiser, exclure puis réactiver ; contrôler la conservation de la catégorie et du montant. Associer puis dissocier une pièce et vérifier le signalement du justificatif. Tester également une opération conservée hors synthèse.
+
+## Échéances et PER
+
+Dans le choix de pièce, le type « Échéance d’une facture » rattache plusieurs débits positifs à une facture d’achat EUR. Le cumul documenté ne peut dépasser son TTC. Les paiements non importés ne sont pas présumés réglés. Le lien ne génère pas de charge ni de correction d’exercice. Les anciennes associations uniques doivent être dissociées avant conversion.
+
+Le type « Attestation PER — contrôle fiscal » permet de joindre une attestation à plusieurs versements classés Retraite / PER — à vérifier. Ce rattachement documentaire ne valide ni le contrat, ni les plafonds, ni une déduction fiscale. La pièce peut être jointe sans extraction automatique.
+
+Les liens utilisent un verrou par paiement et une liste sur la pièce, modifiés en transaction. Chaque dissociation ne retire que le paiement sélectionné. Les anciens endpoints refusent de modifier ces liens multiples. La synthèse reste un suivi des montants bancaires, pas une détermination des charges déductibles.
+
+Tests en session requis : rattacher quatre paiements de 90 à une facture de 360, refuser le cinquième, dissocier un seul paiement, vérifier les trois autres, réassocier ; joindre une même attestation PER à deux versements. Aucun rattachement réel n’a été effectué depuis le développement.

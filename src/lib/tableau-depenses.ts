@@ -13,3 +13,10 @@ export function verifierAssociationTableau(extraction: Record<string, unknown>, 
   if (!proposerAssociations(p, [depense]).length) throw new Error("La devise ou le montant ne correspond pas. Corrigez la pièce ; les paiements groupés ou fractionnés restent à vérifier.");
   return { nature: "facture", montantPiece: p.ttc!, devisePiece: "EUR", montantEUR: depense.montant };
 }
+
+export function verifierEcheance(extraction: Record<string, unknown>, montant: number, dejaAssocie: number) {
+  const p = nettoyerPiece(extraction);
+  if (p.typeDocument !== "achat" || p.devise !== "EUR" || !p.date || !p.fournisseur || !p.ttc || p.ttc <= 0 || !Number.isFinite(montant) || montant <= 0 || !Number.isFinite(dejaAssocie) || dejaAssocie < 0)
+    throw new Error("Une facture d’achat en euros et une échéance positive sont requises.");
+  if (Math.round(dejaAssocie * 100) + Math.round(montant * 100) > Math.round(p.ttc * 100)) throw new Error("Les paiements associés dépasseraient le total de la facture.");
+}

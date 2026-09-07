@@ -5,7 +5,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
 import { POSTES_DEPENSES, POSTE_HORS_DEPENSES } from "@/lib/postes-depenses";
-import { verifierAssociationTableau } from "@/lib/tableau-depenses";
+import { verifierEcheance, verifierAssociationTableau } from "@/lib/tableau-depenses";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 const idValide = (s: unknown): s is string => typeof s === "string" && /^[\w-]{1,150}$/.test(s);
@@ -16,12 +16,12 @@ export async function GET(req: NextRequest) {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) return NextResponse.json({ error: "Mois invalide" }, { status: 400 });
   try {
     const [ds, ms, ps, ars] = await Promise.all([adminDb.collection("depenses").where("mois", "==", mois).limit(2001).get(), mouvements().where("mois", "==", mois).limit(2001).get(), adminDb.collection("justificatifs").limit(2001).get(), adminDb.collection("depenses-doublons-archives").where("mois", "==", mois).limit(2001).get()]);
-    const pieces = ps.docs.map(d => ({ id: d.id, nom: d.data().nom, retire: !!d.data().retire, extraction: d.data().extraction || null, depenseId: d.data().depenseId || null, paieValidee: !!d.data().paieValidee }));
+    const pieces = ps.docs.map(d => ({ id: d.id, nom: d.data().nom, retire: !!d.data().retire, extraction: d.data().extraction || null, depenseId: d.data().depenseId || null, paieValidee: !!d.data().paieValidee, modeRattachement: d.data().modeRattachement || null, paiementsAssocies: d.data().paiementsAssocies || [] }));
     const archives = new Set(ars.docs.map(d => d.id));
     const lignes = new Map<string, Record<string, unknown>>();
     for (const d of ms.docs) if (!archives.has(d.id)) lignes.set(d.id, { ...d.data(), id: d.id, suivie: false });
     for (const d of ds.docs) if (!archives.has(d.id)) lignes.set(d.id, { ...d.data(), id: d.id, suivie: true });
-    return NextResponse.json({ lignes: [...lignes.values()].map(l => ({ ...l, piece: pieces.find(p => p.depenseId === l.id) || null })), pieces, categories,
+    return NextResponse.json({ lignes: [...lignes.values()].map(l => ({ ...l, piece: pieces.find(p => p.depenseId === l.id || p.paiementsAssocies.some((a: { id: string }) => a.id === l.id)) || null })), pieces, categories,
       limite: [ds, ms, ps, ars].some(s => s.size > 2000) }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "Tableau indisponible" }, { status: 500 }); }
 }
@@ -60,12 +60,36 @@ export async function POST(req: NextRequest) {
         if (b.action === "exclure" && typeof b.exclue !== "boolean") throw new Error("Choix invalide");
         if (b.action === "tva" && !["a-verifier", "sans-tva", "non-recuperee"].includes(b.statutTVA)) throw new Error("Statut TVA invalide");
         tx.update(ref, b.action === "categorie" ? { poste: b.poste } : b.action === "tva" ? { statutTVA: b.statutTVA } : { rapprochementExclu: b.exclue });
+      } else if (["rattacher", "detacher"].includes(b.action)) {
+        if (!idValide(b.pieceId)) throw new Error("Pièce invalide");
+        const pr = adminDb.collection("justificatifs").doc(b.pieceId), lr = adminDb.collection("justificatifs-liens").doc(b.id);
+        const [piece, lien] = await tx.getAll(pr, lr); const p = piece.data();
+        if (!piece.exists || !p) throw new Error("Pièce absente");
+        const anciens = (p.paiementsAssocies || []) as { id: string; montant: number; dateOperation: string; fournisseur: string }[];
+        let suivants = anciens.filter(a => a.id !== b.id);
+        if (b.action === "rattacher") {
+          if (b.confirme !== true || !["echeance", "per"].includes(b.mode) || p.retire || d.data()!.rapprochementExclu || d.data()!.source !== "releve-bancaire") throw new Error("Confirmation et ligne bancaire active requises");
+          if (p.depenseId && !anciens.length || p.modeRattachement && p.modeRattachement !== b.mode || lien.exists && lien.data()?.pieceId !== b.pieceId) throw new Error("Pièce ou paiement déjà associé autrement");
+          if (b.montantEUR !== d.data()!.montant || !Number.isFinite(b.montantEUR) || b.montantEUR <= 0) throw new Error("Montant modifié ou invalide");
+          if (anciens.length >= 100 && !anciens.some(a => a.id === b.id)) throw new Error("Maximum de 100 paiements par pièce atteint");
+          if (b.mode === "echeance") {
+            if (b.montantPiece !== p.extraction?.ttc || b.devise !== p.extraction?.devise) throw new Error("Facture modifiée : actualisez");
+            verifierEcheance(p.extraction || {}, b.montantEUR, suivants.reduce((s, a) => s + a.montant, 0));
+          } else if (d.data()!.poste !== "Retraite / PER — à vérifier") throw new Error("Choisissez d’abord la catégorie Retraite / PER — à vérifier");
+          suivants = [...suivants, { id: b.id, montant: b.montantEUR, dateOperation: d.data()!.dateOperation || "", fournisseur: d.data()!.fournisseur || "" }];
+          tx.set(lr, { pieceId: b.pieceId });
+        } else {
+          if (!anciens.some(a => a.id === b.id) || !lien.exists || lien.data()?.pieceId !== b.pieceId) throw new Error("Association absente ou modifiée : actualisez");
+          tx.delete(lr);
+        }
+        tx.update(pr, { paiementsAssocies: suivants, modeRattachement: suivants.length ? (p.modeRattachement || b.mode) : null, depenseId: suivants[0]?.id || null, operationAssociee: suivants[0] || null, associationMode: "manuel", autoBloque: true });
+        tx.create(pr.collection("historique").doc(), { action: b.action, avant: anciens, apres: suivants, mode: p.modeRattachement || b.mode, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else if (b.action === "associer") {
         if (!idValide(b.pieceId) || b.confirme !== true) throw new Error("Confirmation et pièce requises");
         const pr = adminDb.collection("justificatifs").doc(b.pieceId), lr = adminDb.collection("justificatifs-liens").doc(b.id);
         const [piece, lien] = await tx.getAll(pr, lr); const p = piece.data();
         if (!piece.exists || p?.retire || !p?.extraction || d.data()?.rapprochementExclu) throw new Error("Restaurez la pièce et la ligne avant association");
-        if (p.depenseId && p.depenseId !== b.id || lien.exists && lien.data()?.pieceId !== b.pieceId) throw new Error("Paiement ou pièce déjà associé ailleurs");
+        if (p.paiementsAssocies?.length || p.depenseId && p.depenseId !== b.id || lien.exists && lien.data()?.pieceId !== b.pieceId) throw new Error("Paiement ou pièce déjà associé ailleurs");
         const attendu = p.extraction.typeDocument === "paie" ? p.extraction.netAPayer : p.extraction.ttc;
         if (b.montantEUR !== d.data()!.montant || b.montantPiece !== attendu || b.devise !== p.extraction.devise) throw new Error("Montants modifiés : actualisez l’aperçu");
         if (d.data()!.source !== "releve-bancaire") throw new Error("Cette ligne est une saisie manuelle, pas un mouvement bancaire");

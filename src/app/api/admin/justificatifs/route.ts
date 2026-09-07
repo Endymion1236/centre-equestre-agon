@@ -171,6 +171,7 @@ export async function POST(req: NextRequest) {
         const current = await tx.get(ref);
         if (!current.exists) throw new Error("Pièce absente");
         if (current.data()?.retire) throw new Error("Pièce retirée");
+        if (current.data()?.paiementsAssocies?.length) throw new Error("Gérez les paiements de cette pièce depuis le tableau des opérations.");
         const ancien = current.data()?.depenseId;
         if (associer && ancien && ancien !== id) throw new Error("Cette pièce a déjà été associée. Actualisez avant de modifier son association.");
         const lock = id ? adminDb.collection("justificatifs-liens").doc(id) : null;
