@@ -34,9 +34,18 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
 /** Valeur sentinelle pour un débit qui n'est PAS une dépense à suivre. */
 export const POSTE_HORS_DEPENSES = "hors-depenses";
 
-/** Règle sur un libellé explicite de commission, jamais sur « Carte » seul. */
+/**
+ * Commission ou frais prélevés par la banque elle-même : « Com Carte »,
+ * « Commission vente à distance », frais de tenue de compte, cotisation
+ * carte… Pour ces lignes, la banque n'émet pas de facture séparée : le relevé
+ * bancaire est le justificatif, et l'écran permet de le déclarer comme tel.
+ * Règle sur un libellé explicite, jamais sur « Carte » seul (un paiement par
+ * carte n'est pas une commission).
+ */
 export function posteCommissionCarte(libelle: unknown): string | null {
   const texte = String(libelle ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-  return /^(com|comm|commission|commissions) (carte|cartes|cb)\b/.test(texte)
-    ? "Frais bancaires & commissions (CB, Stripe)" : null;
+  const commission = /^(com|comm|commission|commissions) (carte|cartes|cb|vente( a)? distance|vad|paiement|paiements|encaissement|encaissements|interchange|monetique|tpe)\b/.test(texte)
+    || /^(frais|cotisation|cotisations|abonnement) (bancaire|bancaires|de tenue de compte|tenue de compte|carte|cartes|cb|tpe)\b/.test(texte)
+    || /^(commission|commissions) s(ur)? emprunt/.test(texte);
+  return commission ? "Frais bancaires & commissions (CB, Stripe)" : null;
 }

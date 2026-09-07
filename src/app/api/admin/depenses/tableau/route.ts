@@ -55,8 +55,11 @@ export async function POST(req: NextRequest) {
       if (!d.exists) throw new Error("Ligne absente : actualisez le tableau");
       if (b.action === "justifier-releve") {
         if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
-        if (b.confirme && (d.data()!.source !== "releve-bancaire" || !posteCommissionCarte(d.data()!.fournisseur) || !d.data()!.note)) throw new Error("Une commission carte avec relevé source identifié est requise");
-        tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur), referenceJustificatifReleve: d.data()!.note } : { referenceJustificatifReleve: null }) });
+        if (b.confirme && (d.data()!.source !== "releve-bancaire" || !posteCommissionCarte(d.data()!.fournisseur))) throw new Error("Seule une commission ou des frais prélevés par la banque peuvent être justifiés par le relevé.");
+        // Référence du relevé : son nom de fichier quand l'import l'a gardé,
+        // sinon le compte et le mois — le relevé du mois reste retrouvable.
+        const reference = d.data()!.note || `Relevé ${d.data()!.compte || "bancaire"} ${d.data()!.mois || ""}`.trim();
+        tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur), referenceJustificatifReleve: reference } : { referenceJustificatifReleve: null }) });
       } else if (b.action === "categorie") {
         // Un débit « hors dépenses » qui reçoit une catégorie de charge devient
         // une dépense, avec ou sans justificatif (règle du gérant : la charge
