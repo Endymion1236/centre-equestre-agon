@@ -68,3 +68,9 @@ La remise à zéro affiche toutes les pièces actives (limite stricte 2 000), to
 Validation connectée requise : aperçu et annulation ; archivage d'une pièce avec plusieurs échéances ; restauration ; reprise après interruption ; confirmation puis annulation du justificatif par relevé. Aucun archivage réel effectué depuis le développement.
 
 Le choix manuel Personnel — hors charges conserve le débit dans le tableau bancaire mais le retire des totaux Dépenses et Résultat. La pièce éventuellement associée est conservée. Aucune TVA professionnelle n'est proposée pour ces lignes. Changer de catégorie rétablit leur périmètre précédent ; il ne s'agit pas d'une écriture en compte d'exploitant/associé. Aucun fournisseur n'est automatiquement marqué personnel.
+
+## Association au niveau de la ligne
+
+Le panneau de choix et de correction apparaît immédiatement sous l’opération sélectionnée ; le défilement automatique vers le bas de page est supprimé. Les contrôles de devise et montant sont affichés avant envoi, en réutilisant la validation serveur. Les corrections sont relues depuis le serveur avant la confirmation, pour utiliser les valeurs effectivement enregistrées. Les conflits d’archive, de lecture manquante et d’association existante ont des messages distincts. Les erreurs techniques de stockage renvoient 500 plutôt qu’un faux conflit 409.
+
+À vérifier en session : sélectionner une ligne au milieu d’un relevé long, importer/corriger/associer sans déplacement en bas ; tester une devise absente, un paiement fractionné et une pièce déjà liée. La cause du 409 signalé n’a pas pu être confirmée sans sa réponse détaillée ou la session connectée.

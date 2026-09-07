@@ -10,7 +10,10 @@ export function verifierAssociationTableau(extraction: Record<string, unknown>, 
     validerLienDevise(p, depense, true);
     return { nature: "devise", montantPiece: p.ttc!, devisePiece: p.devise!, montantEUR: depense.montant };
   }
-  if (!proposerAssociations(p, [depense]).length) throw new Error("La devise ou le montant ne correspond pas. Corrigez la pièce ; les paiements groupés ou fractionnés restent à vérifier.");
+  if (!p.devise) throw new Error("Devise de la facture non renseignée : ouvrez Corriger la lecture ici et choisissez la devise indiquée sur la facture.");
+  if (["vente", "autre"].includes(p.typeDocument || "")) throw new Error("Ce document n’est pas identifié comme une facture fournisseur. Vérifiez sa nature ; pour une attestation PER, choisissez le rattachement correspondant.");
+  if (p.ttc === null || p.ttc <= 0) throw new Error("Montant TTC absent ou invalide : corrigez la lecture de la facture.");
+  if (!proposerAssociations(p, [depense]).length) throw new Error(`Facture : ${p.ttc.toFixed(2)} ${p.devise} ; paiement : ${depense.montant.toFixed(2)} EUR. Si ce paiement est une échéance, choisissez Échéance d’une facture. Sinon, vérifiez les montants et la pièce sélectionnée.`);
   return { nature: "facture", montantPiece: p.ttc!, devisePiece: "EUR", montantEUR: depense.montant };
 }
 

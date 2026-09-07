@@ -92,8 +92,13 @@ export async function POST(req: NextRequest) {
         if (!idValide(b.pieceId) || b.confirme !== true) throw new Error("Confirmation et pièce requises");
         const pr = adminDb.collection("justificatifs").doc(b.pieceId), lr = adminDb.collection("justificatifs-liens").doc(b.id);
         const [piece, lien] = await tx.getAll(pr, lr); const p = piece.data();
-        if (!piece.exists || p?.retire || !p?.extraction || d.data()?.rapprochementExclu) throw new Error("Restaurez la pièce et la ligne avant association");
-        if (p.paiementsAssocies?.length || p.depenseId && p.depenseId !== b.id || lien.exists && lien.data()?.pieceId !== b.pieceId) throw new Error("Paiement ou pièce déjà associé ailleurs");
+        if (!piece.exists || !p) throw new Error("Pièce introuvable : actualisez le tableau.");
+        if (p.retire) throw new Error("Cette pièce est archivée. Restaurez-la avant de l’associer.");
+        if (!p.extraction) throw new Error("Cette pièce n’a pas encore été lue. Cliquez sur Lire cette pièce.");
+        if (d.data()?.rapprochementExclu) throw new Error("Cette dépense est exclue du rapprochement. Réactivez-la avant association.");
+        if (p.paiementsAssocies?.length) throw new Error("Cette pièce utilise des rattachements multiples. Choisissez Échéance d’une facture ou Attestation PER selon le document.");
+        if (p.depenseId && p.depenseId !== b.id) throw new Error("Cette facture est déjà liée à un autre paiement. Pour un paiement fractionné, dissociez l’ancien lien unique puis utilisez Échéance d’une facture.");
+        if (lien.exists && lien.data()?.pieceId !== b.pieceId) throw new Error("Ce paiement possède déjà un autre justificatif. Actualisez puis vérifiez la pièce associée avant de la dissocier.");
         const attendu = p.extraction.typeDocument === "paie" ? p.extraction.netAPayer : p.extraction.ttc;
         if (b.montantEUR !== d.data()!.montant || b.montantPiece !== attendu || b.devise !== p.extraction.devise) throw new Error("Montants modifiés : actualisez l’aperçu");
         if (d.data()!.source !== "releve-bancaire") throw new Error("Cette ligne est une saisie manuelle, pas un mouvement bancaire");
@@ -107,5 +112,9 @@ export async function POST(req: NextRequest) {
       tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
     });
     return NextResponse.json({ ok: true });
-  } catch (e) { return NextResponse.json({ error: e instanceof Error && !("code" in e) ? e.message : "Opération non confirmée : actualisez." }, { status: 409 }); }
+  } catch (e) {
+    if (e instanceof Error && !("code" in e)) return NextResponse.json({ error: e.message }, { status: 409 });
+    console.error("[depenses/tableau] erreur technique", e && typeof e === "object" && "code" in e ? e.code : "inconnue");
+    return NextResponse.json({ error: "Erreur technique pendant l’enregistrement. Actualisez pour vérifier l’état avant de réessayer." }, { status: 500 });
+  }
 }

@@ -35,3 +35,9 @@ test("échéances : quatrième paiement, dépassement, devise et total inconnu",
   assert.throws(() => verifierEcheance({ ...p, ttc: null }, 90, 0));
   assert.throws(() => verifierEcheance(p, -90, 0));
 });
+
+test("les blocages donnent une action précise au lieu d’un conflit opaque", () => {
+  assert.throws(() => verifierAssociationTableau({ ...facture, devise: "" }, debit), /Devise.*non renseignée/);
+  assert.throws(() => verifierAssociationTableau(facture, { ...debit, montant: 90 }), /Échéance d’une facture/);
+  assert.throws(() => verifierAssociationTableau({ ...facture, ttc: null }, debit), /TTC absent/);
+});
