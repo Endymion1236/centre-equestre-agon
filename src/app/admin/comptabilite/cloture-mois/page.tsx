@@ -135,6 +135,10 @@ export default function ClotureMoisPage() {
       </div>
 
       {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-700">{error}</div>}
+      <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 p-4 font-body text-sm">
+        <Link href="/admin/comptabilite/justificatifs" className="underline font-semibold">Analyser et rapprocher les justificatifs de dépenses</Link>
+        <p>Traitez les pièces en attente et contrôlez les associations automatiques. Ce contrôle complémentaire n’est pas encore inclus dans les indicateurs de clôture ci-dessous.</p>
+      </div>
 
       <div className="flex items-center justify-center gap-3 mb-4">
         <button type="button" onClick={() => setMois(m => moisDecale(m, -1))}

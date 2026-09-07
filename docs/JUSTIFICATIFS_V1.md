@@ -1,5 +1,11 @@
 # Justificatifs : V1 assistée (sans comptabilisation)
 
+Évolution : le dépôt lance désormais l’analyse par lot et un rapprochement
+automatique prudent. Les règles et limites actuelles sont décrites dans
+[MATCHING_AUTOMATIQUE.md](MATCHING_AUTOMATIQUE.md). Les mentions ci-dessous
+« à la demande », « tous à confirmer » et « pas de rapprochement sans confirmation »
+décrivent la V1 initiale ; elles sont remplacées par ce nouveau fonctionnement.
+
 Route admin : `/admin/comptabilite/justificatifs`. Accessible depuis le menu.
 
 - Dépôt privé PDF/JPEG/PNG, 4 Mo par fichier. Toute la sélection est envoyée séquentiellement avec progression ; erreurs par fichier, sans interrompre les suivants. SHA-256 pour doublons binaires.

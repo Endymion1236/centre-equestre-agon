@@ -1,5 +1,6 @@
 /** Matching indicatif : aucune décision comptable ni écriture de paiement. */
 export interface PieceExtraite {
+  typeDocument?: "achat" | "vente" | "inconnu";
   fournisseur: string;
   numero: string;
   date: string;
@@ -28,7 +29,7 @@ export function dateValide(v: unknown): string {
 }
 const montant = (v: unknown) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) < 1e9 ? Math.round(v * 100) / 100 : null;
 export function nettoyerPiece(v: Record<string, unknown>): PieceExtraite {
-  return { fournisseur: texte(v.fournisseur), numero: texte(v.numero), date: dateValide(v.date),
+  return { typeDocument: v.typeDocument === "achat" || v.typeDocument === "vente" ? v.typeDocument : "inconnu", fournisseur: texte(v.fournisseur), numero: texte(v.numero), date: dateValide(v.date),
     debutPeriode: dateValide(v.debutPeriode), finPeriode: dateValide(v.finPeriode),
     ht: montant(v.ht), tva: montant(v.tva), ttc: montant(v.ttc) };
 }
