@@ -59,6 +59,9 @@ interface Payment {
   orderId?: string;
   /** Numéro de facture officiel, attribué à l'encaissement (CGI art. 242 nonies A). */
   invoiceNumber?: string;
+  /** Stage : acompte dû maintenant et solde prélevé ~J-7 (posés par le panier). */
+  acompteAmount?: number;
+  soldeAmount?: number;
 }
 
 interface SessionCard {
@@ -141,6 +144,24 @@ function paymentTitle(payment: Payment) {
 
 function remainingAmount(payment: Payment) {
   return Math.max(0, Math.round(((payment.totalTTC || 0) - (payment.paidAmount || 0)) * 100) / 100);
+}
+
+/**
+ * Acompte encore à régler sur une commande de stage, ou 0.
+ *
+ * Le panier de réservation pose `acompteAmount` sur la commande et n'envoie
+ * à la banque QUE l'acompte. Mais si la famille abandonnait la page de
+ * paiement puis revenait ici par « reste à régler », ce bouton relançait le
+ * paiement pour la TOTALITÉ — 350 € encaissés là où le club demandait deux
+ * acomptes de 30 €. Tant que rien n'est encaissé et que l'acompte ne couvre
+ * pas tout, c'est l'acompte qu'on réclame, comme le lien de paiement admin.
+ */
+function acompteARegler(payment: Payment) {
+  const acompte = typeof payment.acompteAmount === "number" ? Math.round(payment.acompteAmount * 100) / 100 : 0;
+  if (acompte <= 0) return 0;
+  if ((payment.paidAmount || 0) >= 0.01) return 0;
+  if ((payment.totalTTC || 0) <= acompte + 0.01) return 0;
+  return acompte;
 }
 
 export default function FacturesPage() {
@@ -394,6 +415,13 @@ export default function FacturesPage() {
     setPayingOnline(payment.id);
     try {
       const remaining = remainingAmount(payment);
+      const acompte = acompteARegler(payment);
+      const montant = acompte > 0 ? acompte : remaining;
+      // Déclaré comme acompte au checkout : CAWL enregistre alors la carte
+      // (empreinte), indispensable au prélèvement automatique du solde à J-7.
+      const depositPercent = acompte > 0
+        ? Math.min(99, Math.max(1, Math.round((acompte / (payment.totalTTC || acompte)) * 100)))
+        : 0;
       const response = await authFetch("/api/cawl/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -402,7 +430,9 @@ export default function FacturesPage() {
           familyEmail: user.email,
           familyName: payment.familyName,
           paymentId: payment.id,
-          items: [{ name: paymentTitle(payment), priceInCents: Math.round(remaining * 100), quantity: 1 }],
+          totalTTC: montant,
+          ...(depositPercent > 0 ? { depositPercent, stageDate: payment.stageDate || "" } : {}),
+          items: [{ name: paymentTitle(payment), priceInCents: Math.round(montant * 100), quantity: 1 }],
         }),
       });
       const data = await response.json();
@@ -583,6 +613,7 @@ export default function FacturesPage() {
   const renderPayment = (payment: Payment, due = false) => {
     const date = paymentDate(payment);
     const remaining = remainingAmount(payment);
+    const acompte = acompteARegler(payment);
     const isSepa = payment.paymentMode === "prelevement_sepa";
 
     return (
@@ -612,6 +643,11 @@ export default function FacturesPage() {
               {due ? `${remaining.toFixed(2)}€` : `${(payment.totalTTC || 0).toFixed(2)}€`}
             </div>
             <div className="font-body text-xs text-gray-500">{due ? "reste à régler" : payment.status === "cancelled" ? "annulé" : "réglé"}</div>
+            {due && acompte > 0 && (
+              <div className="font-body text-xs text-orange-700 mt-1">
+                dont <strong>{acompte.toFixed(2)}€ d&apos;acompte</strong> maintenant
+              </div>
+            )}
           </div>
         </div>
 
@@ -650,7 +686,7 @@ export default function FacturesPage() {
                   className="flex-1 min-w-[110px] flex items-center justify-center gap-2 py-2.5 rounded-xl font-body text-sm font-bold text-white bg-blue-500 border-none cursor-pointer disabled:opacity-50"
                 >
                   {payingOnline === payment.id ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
-                  Payer par CB
+                  {acompte > 0 ? `Payer l'acompte ${acompte.toFixed(2)}€` : "Payer par CB"}
                 </button>
                 <button
                   type="button"

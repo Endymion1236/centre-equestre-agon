@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cawlSdk, CAWL_PSPID } from "@/lib/cawl";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { auditPaymentPricing, logPricingAudit, evaluatePaymentEnforcement } from "@/lib/server-pricing";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 
@@ -15,8 +15,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       items, familyId, familyEmail, familyName,
-      depositPercent, paymentId, stageDate, totalTTC, adminInitiated,
+      depositPercent: depositPercentDemande, paymentId, stageDate, totalTTC, adminInitiated,
     } = body;
+    // Réassignés plus bas si le serveur ramène le montant à l'acompte dû.
+    let depositPercent: number = Number(depositPercentDemande) || 0;
 
     if (!items || items.length === 0) {
       return NextResponse.json({ error: "Panier vide" }, { status: 400 });
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
     // Calcul du montant total en centimes
     // Si totalTTC est fourni, c'est le montant exact à facturer (y compris pour les acomptes)
     // depositPercent sert uniquement pour le libellé et le suivi, pas pour recalculer le montant
-    const isDeposit = depositPercent && depositPercent > 0 && depositPercent < 100;
+    let isDeposit = depositPercent > 0 && depositPercent < 100;
 
     let totalCents: number;
     if (totalTTC && totalTTC > 0) {
@@ -58,6 +60,35 @@ export async function POST(req: NextRequest) {
 
     if (totalCents <= 0) {
       return NextResponse.json({ error: "Montant invalide" }, { status: 400 });
+    }
+
+    // ── Acompte de stage : garde-fou SERVEUR ───────────────────────────────
+    // Le panier pose `acompteAmount` sur la commande et ne réclame que
+    // l'acompte. Mais plusieurs écrans savent relancer un paiement (reste à
+    // régler de l'espace famille, liens, anciens onglets…) et chacun, tour à
+    // tour, a renvoyé la famille payer la TOTALITÉ. Corriger écran par écran
+    // ne tient pas : ici, quel que soit l'appelant, tant que rien n'est
+    // encaissé et que l'acompte ne couvre pas tout, une famille ne peut payer
+    // QUE l'acompte. Seul l'admin (lien de paiement) garde la main sur le
+    // montant.
+    if (paymentId && !isAdminToken(auth)) {
+      try {
+        const pSnap = await adminDb.collection("payments").doc(String(paymentId)).get();
+        const p = pSnap.exists ? (pSnap.data() as any) : null;
+        const acompte = p && typeof p.acompteAmount === "number" ? Math.round(p.acompteAmount * 100) : 0;
+        const dejaPaye = p ? Math.round((p.paidAmount || 0) * 100) : 0;
+        const totalCommande = p ? Math.round((p.totalTTC || 0) * 100) : 0;
+        if (acompte > 0 && dejaPaye < 1 && totalCommande > acompte + 1 && totalCents > acompte + 1) {
+          console.warn(
+            `[checkout] montant ramené à l'acompte — commande ${paymentId} : ${totalCents / 100}€ demandés, acompte ${acompte / 100}€`,
+          );
+          totalCents = acompte;
+          depositPercent = Math.min(99, Math.max(1, Math.round((acompte / totalCommande) * 100)));
+          isDeposit = true;
+        }
+      } catch (e) {
+        console.error("[checkout] lecture de la commande impossible, montant demandé conservé", paymentId, e);
+      }
     }
 
     // Description pour la page de paiement
