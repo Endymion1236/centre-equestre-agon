@@ -88,10 +88,26 @@ export async function GET(req: NextRequest) {
         const estExpiree = expirees.includes(e);
         if (!estExpiree) { conserves.push(e); continue; }
         if (aPaye.get(`${e.familyId}|${e.childId}`)) {
-          // Payé malgré tout → on rend l'inscription définitive.
-          const { pending, holdUntil, ...reste } = e;
+          // Payé malgré tout → on rend l'inscription définitive (et on lève
+          // la pré-inscription éventuelle, comme confirmerPlacesTenues).
+          const { pending, holdUntil, preinscription, preinscriptionMode, ...reste } = e;
           conserves.push(reste);
           placesConfirmees++;
+        } else if (e.preinscription) {
+          // La famille avait repris en ligne une place que l'admin lui avait
+          // pré-réservée, puis n'a pas réglé : on libère la tenue mais on
+          // RESTITUE la pré-inscription, pour ne pas perdre la place retenue.
+          const { pending, holdUntil, paymentMethod, ...reste } = e;
+          conserves.push(reste);
+          placesLiberees++;
+          details.push({
+            creneauId: doc.id,
+            date: c.date,
+            activityTitle: c.activityTitle,
+            childName: e.childName,
+            familyName: e.familyName,
+            holdUntil: e.holdUntil,
+          });
         } else {
           placesLiberees++;
           details.push({

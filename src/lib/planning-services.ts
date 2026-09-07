@@ -323,11 +323,19 @@ export async function enrollChildInCreneau(creneauId: string, child: EnrolledChi
       const snap = await transaction.get(creneauRef);
       if (!snap.exists()) return false;
       const c = snap.data();
-      const enrolled = c.enrolled || [];
-      if (enrolled.some((e: any) => e.childId === child.childId)) return false;
+      const enrolled: any[] = c.enrolled || [];
+      // Déjà inscrit : on ne double pas (et on ne refacture pas). Une simple
+      // pré-inscription n'est pas une inscription : l'inscription définitive
+      // la remplace, sinon le drapeau « pré-inscrit » restait posé sur ce
+      // créneau alors que le cavalier est inscrit (et payé) partout ailleurs.
+      // Une pré-inscription qu'on re-pose par-dessus une pré-inscription reste
+      // un doublon : on n'écrit rien.
+      const existante = enrolled.find((e: any) => e.childId === child.childId);
+      if (existante && (!existante.preinscription || (child as any).preinscription)) return false;
+      const sans = existante ? enrolled.filter((e: any) => e.childId !== child.childId) : enrolled;
       transaction.update(creneauRef, {
-        enrolled: [...enrolled, child],
-        enrolledCount: enrolled.length + 1,
+        enrolled: [...sans, child],
+        enrolledCount: sans.length + 1,
       });
       return true;
     });

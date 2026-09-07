@@ -188,7 +188,12 @@ export async function POST(req: NextRequest) {
             if (!s.exists) return { status: "missing" as const, cid: creneauIds[i] };
             const cr = s.data() as any;
             const list: any[] = cr.enrolled || [];
-            if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit = ok
+            // Déjà inscrit = ok. Une simple pré-inscription (place retenue par
+            // l'admin, rien de réglé) n'est PAS une inscription : elle sera
+            // remplacée ci-dessous par l'inscription réelle, sinon le drapeau
+            // « pré-inscrit » survivait au paiement et la famille était
+            // relancée pour un dossier déjà réglé.
+            if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit (ou pré-inscrit : sa place est déjà comptée) = ok
             const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
             if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
             // La carte doit couvrir CE créneau (type cours/balade, cavalier, validité).
@@ -211,8 +216,12 @@ export async function POST(req: NextRequest) {
           // 2) Tout est bon → inscrire partout
           for (let i = 0; i < snaps.length; i++) {
             const cr = snaps[i].data() as any;
-            const list: any[] = cr.enrolled || [];
-            if (list.some((e: any) => e.childId === item.childId)) continue;
+            const listeBrute: any[] = cr.enrolled || [];
+            const preinscriptionExistante = listeBrute.find((e: any) => e.childId === item.childId && e.preinscription);
+            if (listeBrute.some((e: any) => e.childId === item.childId) && !preinscriptionExistante) continue;
+            // On retire la pré-inscription de l'enfant : l'entrée définitive
+            // prend sa place (même nombre d'inscrits, la place était retenue).
+            const list = listeBrute.filter((e: any) => e.childId !== item.childId);
             const entry: any = {
               childId: item.childId,
               childName,
@@ -248,6 +257,14 @@ export async function POST(req: NextRequest) {
               // ou des espèces que le bureau encaissera plus tard.
               entry.holdUntil = dateExpirationHold(new Date(), item.paymentMethod);
               if (item.paymentMethod) entry.paymentMethod = item.paymentMethod;
+              // La place n'est que tenue : si la famille abandonne, la purge ne
+              // doit pas effacer la pré-inscription posée par l'admin. On la
+              // garde sur l'entrée ; l'encaissement (confirmerPlacesTenues)
+              // la lèvera en même temps que le `pending`.
+              if (preinscriptionExistante) {
+                entry.preinscription = true;
+                if (preinscriptionExistante.preinscriptionMode) entry.preinscriptionMode = preinscriptionExistante.preinscriptionMode;
+              }
             }
             if (item.niveauPromenade && estNiveauPromenade(item.niveauPromenade)) entry.niveauPromenade = item.niveauPromenade;
             const fixer = aFixer.get(i);

@@ -122,7 +122,10 @@ export async function confirmerPlacesTenues(
         const maj = list.map((e) => {
           if (!childIds.has(e.childId) || !e.pending) return e;
           touche = true;
-          const { pending, holdUntil, ...reste } = e;
+          // Payé : la place devient définitive, et une éventuelle pré-inscription
+          // (place retenue par l'admin, reprise par la famille en ligne) est
+          // levée avec — sinon la famille restait « à relancer » après paiement.
+          const { pending, holdUntil, preinscription, preinscriptionMode, ...reste } = e;
           return reste;
         });
         if (touche) confirmees++;

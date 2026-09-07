@@ -25,6 +25,10 @@ const ENROLLED = new Set(["active", "actif", "completed"]);
 const parisDate = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 
 type ChildMeta = { childName: string; familyId: string; familyName: string };
+/** Créneau qui porte la pré-inscription : une pré-inscription annuelle n'est
+ *  posée que sur UN créneau (celui cliqué), c'est lui qu'on montre pour
+ *  permettre de vérifier la liste nom par nom. */
+type PreinscritMeta = ChildMeta & { creneauDate: string; creneauTitre: string; creneauHeure: string };
 
 async function coursDeSaison(start: string, end: string) {
   const snap = await adminDb.collection("creneaux").where("date", ">=", start).where("date", "<=", end).get();
@@ -32,7 +36,11 @@ async function coursDeSaison(start: string, end: string) {
   // Pre-inscrits : places retenues sans inscription definitive. Les compter
   // comme reinscrits gonflerait le taux de retention avec des dossiers qui
   // ne sont ni payes ni confirmes.
-  const preinscrits = new Map<string, ChildMeta>();
+  const preinscrits = new Map<string, PreinscritMeta>();
+  // Places tenues (`pending`) : posées par une famille depuis son espace, en
+  // attente d'encaissement. Pas définitives non plus, mais purgées d'elles-
+  // mêmes si rien n'est réglé — on les distingue pour le diagnostic.
+  const placesTenues = new Set<string>();
   const monByChild = new Map<string, Set<string>>();
   let nbCreneaux = 0, nbCours = 0;
   snap.forEach(d => {
@@ -45,14 +53,17 @@ async function coursDeSaison(start: string, end: string) {
       if (!e?.childId) continue;
       const meta = { childName: e.childName || "", familyId: e.familyId || "", familyName: e.familyName || "" };
       if (e.preinscription) {
-        if (!preinscrits.has(e.childId)) preinscrits.set(e.childId, meta);
-      } else if (!enrolled.has(e.childId)) {
-        enrolled.set(e.childId, meta);
+        if (!preinscrits.has(e.childId)) {
+          preinscrits.set(e.childId, { ...meta, creneauDate: c.date || "", creneauTitre: c.activityTitle || "", creneauHeure: c.startTime || "" });
+        }
+      } else {
+        if (e.pending) placesTenues.add(e.childId);
+        if (!enrolled.has(e.childId)) enrolled.set(e.childId, meta);
       }
       if (mon) { if (!monByChild.has(e.childId)) monByChild.set(e.childId, new Set()); monByChild.get(e.childId)!.add(mon); }
     }
   });
-  return { enrolled, preinscrits, monByChild, nbCreneaux, nbCours };
+  return { enrolled, preinscrits, placesTenues, monByChild, nbCreneaux, nbCours };
 }
 
 async function handle(req: NextRequest) {
@@ -131,7 +142,8 @@ async function handle(req: NextRequest) {
       });
     } catch { /* ignore */ }
 
-    const enrich = (childId: string, meta: ChildMeta, statut: string) => ({
+    const enrich = (childId: string, meta: ChildMeta, statut: string, extra: Record<string, unknown> = {}) => ({
+      ...extra,
       childId,
       childName: meta.childName,
       familyName: meta.familyName,
@@ -155,11 +167,25 @@ async function handle(req: NextRequest) {
       // Entre les deux : la place est retenue, mais rien n'est acquis. Relance
       // assuree par l'ecran Pre-inscrits, pas par celui-ci — pas de doublon.
       if (sN1.preinscrits.has(childId)) {
-        preinscritsListe.push(enrich(childId, meta, "preinscrit"));
+        const p = sN1.preinscrits.get(childId)!;
+        preinscritsListe.push(enrich(childId, meta, "preinscrit", { creneau: { date: p.creneauDate, titre: p.creneauTitre, heure: p.creneauHeure } }));
         continue;
       }
       nonReinscrits.push(enrich(childId, meta, apresRentree ? "a_risque" : "pas_encore"));
     }
+
+    // Pré-inscrits de N+1 qui ne faisaient PAS partie de l'effectif N (nouveaux
+    // cavaliers, ou cavaliers de N inscrits ailleurs qu'en cours). Ils ne sont
+    // pas comptés dans la carte « Pré-inscrits » — c'est l'écran Pré-inscrits
+    // qui les relance — mais les nommer évite de croire le compteur faux quand
+    // on le compare à cet écran.
+    const preinscritsNouveaux: any[] = [];
+    for (const [childId, p] of sN1.preinscrits) {
+      if (sN.enrolled.has(childId) || enrolledN1.has(childId) || forfaitActiveN1.has(childId)) continue;
+      preinscritsNouveaux.push({ childId, childName: p.childName, familyName: p.familyName, creneau: { date: p.creneauDate, titre: p.creneauTitre, heure: p.creneauHeure } });
+    }
+    preinscritsNouveaux.sort((a, b) => (a.childName || "").localeCompare(b.childName || ""));
+    preinscritsListe.sort((a, b) => (a.childName || "").localeCompare(b.childName || ""));
 
     // Partis en cours : forfait annulé en N, et pas présents (ni N ni N+1)
     const partis: any[] = [];
@@ -175,11 +201,13 @@ async function handle(req: NextRequest) {
       saison: N, prochaine: N + 1, rentree, today, apresRentree,
       totalN, reinscrits, nonReinscritsCount: nonReinscrits.length, partisCount: partis.length,
       preinscritsCount: preinscritsListe.length, preinscrits: preinscritsListe,
+      preinscritsNouveauxCount: preinscritsNouveaux.length, preinscritsNouveaux,
       retentionPct: totalN ? Math.round((reinscrits / totalN) * 100) : null,
       nonReinscrits, partis,
       diag: {
         creneauxSaisonN: sN.nbCreneaux, coursSaisonN: sN.nbCours, inscritsCoursN: sN.enrolled.size,
         creneauxSaisonN1: sN1.nbCreneaux, coursSaisonN1: sN1.nbCours, inscritsCoursN1: sN1.enrolled.size,
+        preinscritsCoursN1: sN1.preinscrits.size, placesTenuesN1: sN1.placesTenues.size,
         nbForfaits,
       },
     });

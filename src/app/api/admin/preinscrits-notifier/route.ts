@@ -30,11 +30,24 @@ export const maxDuration = 60;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 const BCC_SUIVI = "ceagon50@gmail.com";
 
-/** Rassemble les pré-inscrits par famille, sur les créneaux à venir. */
+/**
+ * Rassemble les pré-inscrits par famille, sur les créneaux de la saison en
+ * cours (depuis le 1er septembre) et au-delà.
+ *
+ * Pas « depuis aujourd'hui » : une pré-inscription annuelle n'est posée que
+ * sur UN créneau, celui cliqué par l'admin (souvent le premier cours de
+ * septembre). Dès que cette date était passée, la famille disparaissait de
+ * cette liste sans avoir jamais confirmé — alors que l'écran Réinscriptions
+ * la comptait toujours pré-inscrite. Les deux écrans regardent désormais la
+ * même chose.
+ */
 async function collecter() {
-  const aujourdhui = new Date().toISOString().split("T")[0];
+  const maintenant = new Date();
+  const mois = Number(new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", month: "numeric" }).format(maintenant));
+  const annee = Number(new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", year: "numeric" }).format(maintenant));
+  const debutSaison = `${mois >= 9 ? annee : annee - 1}-09-01`;
   const [snap, famSnap] = await Promise.all([
-    adminDb.collection("creneaux").where("date", ">=", aujourdhui).get(),
+    adminDb.collection("creneaux").where("date", ">=", debutSaison).get(),
     adminDb.collection("families").get(),
   ]);
 

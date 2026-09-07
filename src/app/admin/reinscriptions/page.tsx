@@ -4,18 +4,25 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { UserMinus, Mail, Phone, Award, Wallet, Star, AlertTriangle, Clock, Loader2 } from "lucide-react";
 
+/** "2026-09-23" → "23/09" */
+const fmtJour = (d: string) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : d || "");
+
 interface Cavalier {
   childId: string; childName: string; familyId: string; familyName: string;
   statut: string; email: string; phone: string; moniteurs: string[];
   galop: string; anciennete: number; avoirEur: number; fidelite: number;
   avisAnnuel?: { note: number; commentaire: string; recommande?: boolean } | null;
+  /** Créneau qui porte la pré-inscription (statut « preinscrit » uniquement). */
+  creneau?: { date: string; titre: string; heure: string };
 }
+interface PreinscritNouveau { childId: string; childName: string; familyName: string; creneau: { date: string; titre: string; heure: string } }
 interface Data {
   saison: number; prochaine: number; rentree: string; today: string; apresRentree: boolean;
   totalN: number; reinscrits: number; nonReinscritsCount: number; partisCount: number;
   retentionPct: number | null; nonReinscrits: Cavalier[]; partis: Cavalier[];
   preinscritsCount?: number; preinscrits?: Cavalier[];
-  diag?: { creneauxSaisonN: number; coursSaisonN: number; inscritsCoursN: number; creneauxSaisonN1: number; coursSaisonN1: number; inscritsCoursN1: number; nbForfaits: number };
+  preinscritsNouveauxCount?: number; preinscritsNouveaux?: PreinscritNouveau[];
+  diag?: { creneauxSaisonN: number; coursSaisonN: number; inscritsCoursN: number; creneauxSaisonN1: number; coursSaisonN1: number; inscritsCoursN1: number; preinscritsCoursN1?: number; placesTenuesN1?: number; nbForfaits: number };
 }
 
 const STATUT_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
@@ -219,18 +226,39 @@ export default function ReinscriptionsPage() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {data.preinscrits!.map(c => (
                   <span key={c.childId}
+                    title={c.creneau ? `Pré-inscription posée sur : ${c.creneau.titre} — ${fmtJour(c.creneau.date)} ${c.creneau.heure}` : undefined}
                     className="rounded-md bg-white border border-indigo-200 px-2 py-1 font-body text-[11px] text-indigo-800">
                     {c.childName} <span className="text-indigo-400">· {c.familyName}</span>
+                    {c.creneau?.date && (
+                      <span className="text-indigo-400"> · {c.creneau.titre} {fmtJour(c.creneau.date)}</span>
+                    )}
                   </span>
                 ))}
               </div>
+              {(data.preinscritsNouveauxCount ?? 0) > 0 && (
+                <div className="mt-3 font-body text-xs text-indigo-700">
+                  <strong>{data.preinscritsNouveauxCount}</strong> autre(s) pré-inscrit(s) en {data.prochaine}–{data.prochaine + 1}
+                  ne faisaient pas partie de l&apos;effectif {data.saison}–{data.saison + 1} (nouveaux cavaliers) :
+                  ils ne sont pas comptés dans la carte ci-dessus, mais figurent bien sur l&apos;écran Pré-inscrits.
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {data.preinscritsNouveaux!.map(c => (
+                      <span key={c.childId}
+                        className="rounded-md bg-white/70 border border-indigo-100 px-2 py-1 font-body text-[11px] text-indigo-700">
+                        {c.childName} <span className="text-indigo-400">· {c.familyName}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {data.diag && (
             <div className="font-body text-[11px] text-slate-400 mb-4">
               Données : {data.diag.coursSaisonN} cours en {data.saison}–{data.saison + 1} ({data.diag.inscritsCoursN} inscrits) ·
-              {" "}{data.diag.coursSaisonN1} cours en {data.prochaine}–{data.prochaine + 1} ({data.diag.inscritsCoursN1} inscrits) ·
+              {" "}{data.diag.coursSaisonN1} cours en {data.prochaine}–{data.prochaine + 1} ({data.diag.inscritsCoursN1} inscrits
+              {(data.diag.preinscritsCoursN1 ?? 0) > 0 && <>, {data.diag.preinscritsCoursN1} pré-inscrits</>}
+              {(data.diag.placesTenuesN1 ?? 0) > 0 && <>, {data.diag.placesTenuesN1} place{data.diag.placesTenuesN1! > 1 ? "s" : ""} tenue{data.diag.placesTenuesN1! > 1 ? "s" : ""} en attente de règlement</>}) ·
               {" "}{data.diag.nbForfaits} forfait{data.diag.nbForfaits > 1 ? "s" : ""}
             </div>
           )}
