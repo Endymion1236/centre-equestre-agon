@@ -17,6 +17,7 @@ import {
 } from "@/lib/discounts";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, CalendarDays, Briefcase, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
+import { nomActuelInscrit } from "./enroll-panel-utils";
 import { Creneau, EnrolledChild, typeColors, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage, ageCavalier } from "./types";
 import { libellePrixCreneau } from "@/lib/tarif-forfaitaire";
 import EnrollPanel from "./EnrollPanel";
@@ -585,7 +586,7 @@ export default function PlanningPage() {
         const fam = families.find(f => f.firestoreId === e.familyId);
         if (!fam?.parentEmail) continue;
         const entry = byEmail.get(fam.parentEmail) || { parentName: fam.parentName || "", children: [] };
-        entry.children.push(e.childName);
+        entry.children.push(nomActuelInscrit(families, e));
         byEmail.set(fam.parentEmail, entry);
       }
       if (byEmail.size === 0) { toast("Aucun email de famille trouvé pour les inscrits", "error"); setNotifyingEnrolled(false); return; }
@@ -1062,6 +1063,7 @@ export default function PlanningPage() {
           weekDates={weekDates}
           creneaux={creneaux}
           payments={payments}
+          families={families}
           onPrev={() => setWeekOffset(w => w - 1)}
           onNext={() => setWeekOffset(w => w + 1)}
           onToday={() => setWeekOffset(0)}
@@ -1127,11 +1129,12 @@ export default function PlanningPage() {
                 const statusIcon = statut.icone;
                 const statusLabel = statut.label;
                 const age = ageCavalier(e, families).label;
-                return <span key={e.childId} title={`${e.childName} · ${statusLabel} — ${statut.detail}`}
+                const nomAffiche = nomActuelInscrit(families, e);
+                return <span key={e.childId} title={`${nomAffiche} · ${statusLabel} — ${statut.detail}`}
                   className="font-body text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5 border"
                   style={{ background: statusBg, borderColor: statusColor+"33", color: "#0C1A2E" }}>
                   <span className="text-[11px]">{statusIcon}</span>
-                  <span className="font-semibold">{e.childName}</span>
+                  <span className="font-semibold">{nomAffiche}</span>
                   {age && <span style={{ color: "#64748b", fontSize: 10 }}>{age}</span>}
                   <span style={{ color: statusColor, fontSize: 10 }}>{statusLabel}</span>
                 </span>;

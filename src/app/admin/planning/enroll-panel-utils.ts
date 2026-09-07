@@ -8,6 +8,7 @@
  */
 
 import { paymentModes } from "@/app/admin/paiements/types";
+import { nomCompletCavalier } from "@/lib/nom-cavalier";
 import { estQuinzaine, estSemaineAttendue, frequenceEquivalente } from "@/lib/rythme";
 import type { Creneau } from "./types";
 
@@ -23,7 +24,7 @@ export function libelleModeAcompte(mode: string): string {
  * l'enfant n'y est plus.
  */
 export function nomActuelInscrit(families: any[], e: any): string {
-  const fam = families.find((f: any) => f.firestoreId === e.familyId);
+  let fam: any = families.find((f: any) => f.firestoreId === e.familyId || f.id === e.familyId);
   let child: any = (fam?.children || []).find((c: any) => c.id === e.childId);
   if (!child && e.childId) {
     // L'inscription garde le familyId du moment : si l'enfant a depuis
@@ -32,12 +33,12 @@ export function nomActuelInscrit(families: any[], e: any): string {
     // retomber sur la copie figée (souvent le prénom seul).
     for (const f of families) {
       const c = ((f as any).children || []).find((c: any) => c.id === e.childId);
-      if (c) { child = c; break; }
+      if (c) { child = c; fam = f; break; }
     }
   }
   if (!child) return e.childName || "—";
-  const nom = `${child.firstName || ""} ${child.lastName || ""}`.trim();
-  return nom || e.childName || "—";
+  // Nom de l'enfant, sinon nom de la fiche famille (règle du gérant).
+  return nomCompletCavalier(child, fam) || e.childName || "—";
 }
 
 /** Recherche famille : chaque mot tapé doit se retrouver dans le parent, l'email ou un cavalier. */

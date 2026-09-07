@@ -16,6 +16,7 @@
  * Réponse : { ok, enrolled: string[], viaCarte: string[], full: string[], notOwned: string[] }
  */
 import { NextRequest, NextResponse } from "next/server";
+import { nomCompletCavalier } from "@/lib/nom-cavalier";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
@@ -67,8 +68,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Famille introuvable" }, { status: 404 });
     }
     const family = famSnap.data() as any;
+    // « Prénom Nom » : nom de l'enfant, sinon nom de la fiche famille. Le
+    // prénom seul laissait des « Louis » anonymes au planning, et le nom
+    // envoyé par le navigateur n'est pas une source (il pourrait être
+    // n'importe quoi) : on le recompose ici, depuis la fiche.
     const childrenMap = new Map<string, string>();
-    (family.children || []).forEach((c: any) => childrenMap.set(c.id, c.firstName || c.prenom || ""));
+    (family.children || []).forEach((c: any) => childrenMap.set(c.id, nomCompletCavalier(c, family)));
     // Enfants LIÉS : autorisés explicitement par l'admin (fiche famille → « Lier
     // des cavaliers »). Chaque entrée porte le childId + sa sourceFamilyId. C'est
     // la relation enregistrée qui autorise à réserver pour un enfant d'une autre
@@ -104,7 +109,17 @@ export async function POST(req: NextRequest) {
         if (item.sourceFamilyId && item.sourceFamilyId !== link.sourceFamilyId) {
           notOwned.push(item.childId); continue;
         }
+        // Enfant d'une autre fiche : même règle, depuis SA fiche. Le nom
+        // figé dans le lien ne sert que si la fiche source a disparu.
         childName = link.childName;
+        if (link.sourceFamilyId) {
+          try {
+            const srcSnap = await adminDb.collection("families").doc(link.sourceFamilyId).get();
+            const src = srcSnap.exists ? (srcSnap.data() as any) : null;
+            const srcChild = (src?.children || []).find((c: any) => c?.id === item.childId);
+            if (srcChild) childName = nomCompletCavalier(srcChild, src) || link.childName;
+          } catch (e) { console.warn("[enroll] fiche source de l'enfant lié illisible", link.sourceFamilyId, e); }
+        }
       } else {
         notOwned.push(item.childId);
         continue;
