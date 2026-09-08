@@ -63,10 +63,14 @@ export async function POST(req: NextRequest) {
         extraction: v.extraction ? nettoyerPiece(v.extraction) : null,
         retire: v.retire === true,
         depenseId: v.depenseId || null,
-        // `decisionHumaine` marque une correction, un classement ou un
-        // contrôle manuel. L'ancien `autoBloque` était posé aussi par la
-        // simple lecture automatique : s'y fier ici bloquerait tout.
-        decisionHumaine: v.decisionHumaine === true,
+        // Seule une décision d'ASSOCIATION met la pièce hors circuit : le
+        // gérant l'a mise de côté pour la traiter lui-même, ou c'est un
+        // bulletin de paie déjà classé. Une correction de lecture, elle, sert
+        // précisément à rendre le rapprochement possible — s'en servir pour
+        // l'interdire mettait hors jeu toutes les pièces qu'on venait de
+        // corriger. (L'ancien `autoBloque` était posé jusque par la lecture
+        // automatique : s'y fier bloquait tout.)
+        decisionAssociation: v.controleManuel === true || v.paieValidee === true,
         paiementsAssocies: v.paiementsAssocies || [],
       };
     });
@@ -114,7 +118,7 @@ export async function POST(req: NextRequest) {
           if (p.retire) throw new Error("Pièce archivée entre-temps.");
           if (p.depenseId) throw new Error("Pièce déjà associée entre-temps.");
           if (p.paiementsAssocies?.length) throw new Error("Pièce à rattachements multiples.");
-          if (p.decisionHumaine) throw new Error("Pièce reprise à la main entre-temps.");
+          if (p.controleManuel || p.paieValidee) throw new Error("Pièce mise de côté pour un traitement manuel entre-temps.");
           if (!depense.exists) throw new Error("Débit absent.");
           if (depense.data()?.rapprochementExclu) throw new Error("Débit exclu du rapprochement.");
           if (depense.data()?.source !== "releve-bancaire") throw new Error("Débit hors relevé bancaire.");

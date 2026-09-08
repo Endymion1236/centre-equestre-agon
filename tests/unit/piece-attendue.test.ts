@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { etatPiece, justifiableSansFacture, resteAFaire, LIBELLE_ETAT_PIECE } from "../../src/lib/piece-attendue";
+import { etatPiece, justifiableSansFacture, resteAFaire, sansTvaParNature, LIBELLE_ETAT_PIECE } from "../../src/lib/piece-attendue";
 import type { LigneMois } from "../../src/lib/bilan-justificatifs";
 
 const ligne = (extra: Partial<LigneMois> = {}): LigneMois => ({
@@ -60,4 +60,20 @@ test("chaque état a un libellé court et distinct", () => {
   const libelles = Object.values(LIBELLE_ETAT_PIECE);
   assert.equal(new Set(libelles).size, 3);
   assert.ok(libelles.every(l => l.length <= 22));
+});
+
+/**
+ * « TVA à vérifier » s'affichait sur chaque échéance de prêt et chaque
+ * commission bancaire : un geste réclamé là où il n'y a rien à faire.
+ */
+test("ce qui n'a jamais de TVA n'en réclame pas la vérification", () => {
+  assert.ok(sansTvaParNature(ligne({ poste: "Emprunts", fournisseur: "Remboursement de prêt 10003551300 01/09/26 INTERETS", suivie: false })));
+  assert.ok(sansTvaParNature(ligne({ fournisseur: "Com Carte" })));
+  assert.ok(sansTvaParNature(ligne({ poste: "Salaires", suivie: false })));
+  assert.ok(sansTvaParNature(ligne({ poste: "Cotisations sociales" })));
+  assert.ok(sansTvaParNature(ligne({ poste: "Virements internes", suivie: false })));
+  assert.ok(sansTvaParNature(ligne({ depensePersonnelle: true })));
+  // Un achat ordinaire, lui, garde sa vérification de TVA.
+  assert.ok(!sansTvaParNature(ligne()));
+  assert.ok(!sansTvaParNature(ligne({ poste: "Aliments, litières, paille", fournisseur: "AGRIAL" })));
 });

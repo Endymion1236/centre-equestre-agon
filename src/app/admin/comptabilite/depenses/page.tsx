@@ -10,7 +10,7 @@ import { posteCommissionCarte, POSTES_DEPENSES } from "@/lib/postes-depenses";
 import { CATEGORIE_IMMOBILISATION, CATEGORIE_EMPRUNTS, CATEGORIE_COMPTE_FFE, SEUIL_ALERTE_IMMOBILISATION_TTC } from "@/lib/tableau-depenses";
 import { completudeJustificatifs, bilanTvaMois, construireExportTva, construireExportJustificatifs } from "@/lib/bilan-justificatifs";
 import { bilanVentilationAchats, comptesProposes, construireExportVentilationAchats } from "@/lib/ventilation-achats";
-import { etatPiece, resteAFaire } from "@/lib/piece-attendue";
+import { etatPiece, resteAFaire, sansTvaParNature } from "@/lib/piece-attendue";
 import { COMPTES_BANQUE_DEPENSE } from "@/lib/banque-depense";
 import { motifControleTva } from "@/lib/bilan-justificatifs";
 import { LIBELLE_JUSTIFICATION } from "@/lib/justification-paie";
@@ -57,7 +57,12 @@ export default function DepensesPage() {
       const apercu = await (await authFetch("/api/admin/justificatifs/rapprochement-auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mois }) })).json();
       if (apercu.error) throw new Error(apercu.error);
       const nb = apercu.associations?.length || 0;
-      const detail = (apercu.ignorees || []).slice(0, 6).map((i: { nom?: string; motif: string }) => `• ${i.nom || "pièce"} : ${i.motif}`).join("\n");
+      // Six motifs sur quinze pièces laissaient croire à une panne muette :
+      // on montre chaque pièce écartée et sa raison, c'est la seule façon de
+      // savoir quoi corriger.
+      const restantes = apercu.ignorees || [];
+      const detail = restantes.slice(0, 20).map((i: { nom?: string; motif: string }) => `• ${i.nom || "pièce"} : ${i.motif}`).join("\n")
+        + (restantes.length > 20 ? `\n… et ${restantes.length - 20} autre(s)` : "");
       if (!nb) {
         setMessage(`Aucune association certaine sur ${mois}.${apercu.nbIgnorees ? ` ${apercu.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${detail ? `\n${detail}` : ""}`);
         return;
@@ -212,8 +217,8 @@ export default function DepensesPage() {
         </div>
         {cible === l.id && <div className="min-w-0 border-t border-slate-100 mt-4 pt-4">{panneau}</div>}
         <details className="min-w-0 border-t border-slate-100 mt-4 pt-3">
-          <summary className="cursor-pointer text-sm font-medium text-blue-900">TVA et rapprochement · {l.statutTVA === "sans-tva" ? "Sans TVA" : l.statutTVA === "non-recuperee" ? "TVA non récupérée" : "TVA à vérifier"}{l.rapprochementExclu ? " · Opération exclue" : ""}</summary>
-          <div className="grid min-w-0 grid-cols-1 gap-4 pt-3 sm:grid-cols-2"><section className="min-w-0 space-y-2">{l.depensePersonnelle ? <p>Hors TVA professionnelle</p> : <><select aria-label={`TVA ${l.fournisseur}`} className="border rounded p-2" disabled={busy} value={l.statutTVA || "a-verifier"} onChange={e => void agir(endpoint, { action: "tva", id: l.id, statutTVA: e.target.value })}><option value="a-verifier">TVA à vérifier</option><option value="sans-tva">Sans TVA</option><option value="non-recuperee">TVA non récupérée</option></select>{motifControleTva(l) && <p className="mt-2 max-w-60 text-xs text-amber-800">{motifControleTva(l)}</p>}{!l.piece && l.statutTVA !== "sans-tva" && <p className="text-xs text-amber-800">TVA non justifiée : à contrôler avant toute déduction.</p>}{l.statutTVA === "sans-tva" && !!l.piece?.extraction?.tva && <p className="text-xs text-amber-800">La pièce indique de la TVA : vérifiez ce choix.</p>}</>}</section><section className="min-w-0 space-y-2"><p>{l.rapprochementExclu ? "Exclue" : l.depensePersonnelle ? "Personnel — hors charges" : l.piece ? "Associée" : l.justificatifReleve ? "Justifiée par relevé" : l.justifieeVia ? (l.justifieeVia.type === "releve-bancaire" ? "Justifiée par relevé" : "Justifiée (masse salariale)") : l.piecePerdue ? "Pièce perdue déclarée, relevé conservé" : "À compléter"}</p><button disabled={busy} className="underline" onClick={() => void agir(endpoint, { action: "exclure", id: l.id, exclue: !l.rapprochementExclu })}>{l.rapprochementExclu ? "Réactiver" : "Exclure du rapprochement"}</button></section></div>
+          <summary className="cursor-pointer text-sm font-medium text-blue-900">TVA et rapprochement · {l.statutTVA === "sans-tva" ? "Sans TVA" : l.statutTVA === "non-recuperee" ? "TVA non récupérée" : sansTvaParNature(l) ? "Sans TVA (par nature)" : "TVA à vérifier"}{l.rapprochementExclu ? " · Opération exclue" : ""}</summary>
+          <div className="grid min-w-0 grid-cols-1 gap-4 pt-3 sm:grid-cols-2"><section className="min-w-0 space-y-2">{l.depensePersonnelle ? <p>Hors TVA professionnelle</p> : <><select aria-label={`TVA ${l.fournisseur}`} className="border rounded p-2" disabled={busy} value={l.statutTVA || "a-verifier"} onChange={e => void agir(endpoint, { action: "tva", id: l.id, statutTVA: e.target.value })}><option value="a-verifier">TVA à vérifier</option><option value="sans-tva">Sans TVA</option><option value="non-recuperee">TVA non récupérée</option></select>{sansTvaParNature(l) && l.statutTVA !== "sans-tva" && <p className="mt-2 max-w-60 text-xs text-slate-600">Opération sans TVA par nature (intérêts et frais bancaires exonérés, salaires et cotisations hors champ) : rien à vérifier ici.</p>}{motifControleTva(l) && <p className="mt-2 max-w-60 text-xs text-amber-800">{motifControleTva(l)}</p>}{!l.piece && l.statutTVA !== "sans-tva" && <p className="text-xs text-amber-800">TVA non justifiée : à contrôler avant toute déduction.</p>}{l.statutTVA === "sans-tva" && !!l.piece?.extraction?.tva && <p className="text-xs text-amber-800">La pièce indique de la TVA : vérifiez ce choix.</p>}</>}</section><section className="min-w-0 space-y-2"><p>{l.rapprochementExclu ? "Exclue" : l.depensePersonnelle ? "Personnel — hors charges" : l.piece ? "Associée" : l.justificatifReleve ? "Justifiée par relevé" : l.justifieeVia ? (l.justifieeVia.type === "releve-bancaire" ? "Justifiée par relevé" : "Justifiée (masse salariale)") : l.piecePerdue ? "Pièce perdue déclarée, relevé conservé" : "À compléter"}</p><button disabled={busy} className="underline" onClick={() => void agir(endpoint, { action: "exclure", id: l.id, exclue: !l.rapprochementExclu })}>{l.rapprochementExclu ? "Réactiver" : "Exclure du rapprochement"}</button></section></div>
         </details>
       </article>; })}</div>
       {!visibles.length && <p>Aucune opération affichée pour cette sélection.</p>}

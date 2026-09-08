@@ -101,6 +101,12 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Frais bancaires & commissions (CB, Stripe)": [[/(com carte|commission cb|commission carte|vente( a)? distance|vad|stripe|sumup|cawl|worldline|tpe)/, "62710000"], [/(emprunt|dossier)/, "62720000"], [/(ancv)/, "62840000"]],
   "Publicité & communication": [[/(imprim|print|flyer|catalogue|affiche|banderole|copinew)/, "62360000"], [/(cadeau|coupe|medaille|trophee)/, "62340000"]],
   "Autres dépenses": [[/(tickets? (resto|restaurants?)|edenred)/, "64700000"], [/(mobile|portable)/, "62630000"], [/(restaurant|resto|la cale|kin saya|equinoxe|reception|traiteur|pizza|burger|mcdo)/, "62570000"], [/(hotel|mission|airbnb|gite)/, "62560000"], [/(peage|sncf|train|parking|deplacement|chargemap|carburant)/, "62510000"], [/(la poste|colissimo|chronopost|ups\b|timbre)/, "62610000"], [/(orange|free|bouygues|sfr|internet|box|fibre)/, "62640000"], [/(openai|anthropic|google|resend|adobe|elevenlabs|midjourney|o2switch|standardfacile|hosteur|abonnement|logiciel|saas|deezer|canva|microsoft|apple)/, "61800000"], [/(formation|ocapiat|stage form)/, "63330000"], [/(ifce|sire|cotisation cheval)/, "62830000"], [/(cotisation|adhesion|filiation|licence dirigeant)/, "62810000"], [/(amende|penalite|majoration)/, "67120000"], [/(medecine du travail|mutualite|pharmacie)/, "64750000"], [/(mco nuisibles|derat|desinsect|nettoyage)/, "61550000"]],
+  // Le Crédit Agricole prélève capital et intérêts sur deux lignes distinctes,
+  // en le disant dans le libellé (« … 01/09/26 INTERETS »). Quand le relevé
+  // tranche lui-même, inutile de demander à la comptable de ventiler : seule
+  // une mensualité globale, qui ne dit rien, reste à répartir d'après le
+  // tableau d'amortissement.
+  "Emprunts": [[/\binterets?\b/, "66120000"], [/\bcapital\b|amortissement/, "16420000"], [/assurance/, "61600000"]],
   "Cotisations sociales": [[/(msa richard|richard|exploitant)/, "43110000"], [/(salari|dsn)/, "43700000"]],
   "Immobilisation — à amortir": [[/(?=.*(cheval|chevaux|poney|jument|hongre|pouliche))(?=.*\b(sport|competition)\b)/, "24313000"], [/(cheval|chevaux|poney|jument|hongre|pouliche|manege)/, "24314000"], [/(tracteur|remorque|van|epandeur|tondeuse|quad|materiel agri|broyeur)/, "21540000"], [/(camion|vehicule|voiture|utilitaire|fourgon)/, "21820000"], [/(ordinateur|pc\b|mac\b|tablette|imprimante|informatique|ecran|serveur)/, "21830000"], [/(carriere|cloture|barriere|box|abri|hangar|agencement|amenagement|obstacle)/, "21210000"]],
 };

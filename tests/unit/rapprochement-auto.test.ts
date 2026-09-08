@@ -38,7 +38,10 @@ test("ni escompte, ni devise, ni paie, ni lecture douteuse", () => {
   assert.deepEqual(candidatsAutomatiques(piece({ ttc: 23 }), [debit("a")]), [], "écart de montant = escompte, jamais automatique");
   assert.deepEqual(candidatsAutomatiques(piece({ devise: "USD" }), [debit("a")]), []);
   assert.deepEqual(candidatsAutomatiques(piece({ typeDocument: "paie" }), [debit("a")]), []);
-  assert.deepEqual(candidatsAutomatiques(piece({ ht: 10, tva: 1, ttc: 22.46 }), [debit("a")]), [], "HT + TVA ≠ TTC : alerte de lecture");
+  // HT + TVA ≠ TTC ne bloque plus : la ventilation TVA est à reprendre, mais
+  // le TTC payé — le seul montant qui figure au relevé — reste identifiable.
+  assert.equal(candidatsAutomatiques(piece({ ht: 10, tva: 1, ttc: 22.46 }), [debit("a")]).length, 1, "un écart de TVA ne masque pas le paiement");
+  assert.deepEqual(candidatsAutomatiques(piece({ fournisseur: "" }), [debit("a")]), [], "sans fournisseur, la pièce n'identifie personne");
   assert.deepEqual(candidatsAutomatiques(piece({ date: undefined }), [debit("a")]), [], "sans date de facture, aucun délai vérifiable");
   for (const patch of [{ typeDocument: "vente" }, { typeDocument: "inconnu" }, { ttc: -22.46 }] as Partial<PieceExtraite>[])
     assert.deepEqual(candidatsAutomatiques(piece(patch), [debit("a")]), [], JSON.stringify(patch));
@@ -70,7 +73,7 @@ test("les pièces hors jeu sont écartées avec leur motif", () => {
     [{ id: "liee", extraction: piece(), depenseId: "x" }, null],
     [{ id: "retiree", extraction: piece(), retire: true }, null],
     [{ id: "fractionnee", extraction: piece(), paiementsAssocies: [{ id: "e", montant: 10 }] }, null],
-    [{ id: "humaine", extraction: piece(), decisionHumaine: true }, /déjà traitée à la main/],
+    [{ id: "misedecote", extraction: piece(), decisionAssociation: true }, /mise de côté pour un traitement manuel/],
     [{ id: "nonlue", extraction: null }, /pas encore lue/],
     [{ id: "paie", extraction: piece({ typeDocument: "paie", salarie: "X", moisPaie: "2026-07", netAPayer: 1000 }) }, /seules les factures d'achat/],
     [{ id: "devise", extraction: piece({ devise: "USD" }) }, /devise étrangère/],
@@ -108,4 +111,29 @@ test("deux pièces différentes vers deux débits distincts : les deux passent",
   const r = planifierRapprochementAuto(pieces, debits, new Set());
   assert.deepEqual(r.associations.map(a => [a.pieceId, a.depenseId]), [["p1", "a"], ["p2", "b"]]);
   assert.deepEqual(r.ignorees, []);
+});
+
+/**
+ * Quinze tickets lus, corrigés à la main, et zéro rapprochement : deux règles
+ * trop larges les écartaient toutes. Corriger la lecture d'une pièce, c'est
+ * préparer son rapprochement, pas y renoncer ; et un ticket de caisse à
+ * plusieurs taux de TVA se lit souvent avec un HT partiel, sans que le TTC
+ * payé — le seul montant qui figure au relevé — en souffre.
+ */
+test("une lecture corrigée à la main reste rapprochable", () => {
+  const r = planifierRapprochementAuto([{ id: "p1", extraction: piece(), decisionAssociation: false }], [debit("a")], new Set());
+  assert.equal(r.associations.length, 1);
+  assert.equal(r.associations[0].depenseId, "a");
+});
+
+test("un écart HT + TVA n'empêche pas d'identifier le paiement", () => {
+  // Ticket de caisse : 47,32 € payés, mais seul le HT à 5,5 % a été lu.
+  const ticket = piece({ ht: 12, tva: 0.66, ttc: 47.32 });
+  const r = planifierRapprochementAuto([{ id: "t", extraction: ticket }], [debit("a", { montant: 47.32 })], new Set());
+  assert.equal(r.associations.length, 1, JSON.stringify(r.ignorees));
+  // Une date ou un TTC manquants, eux, restent bloquants : sans eux on ne
+  // sait pas quel paiement la pièce justifie.
+  const sansDate = planifierRapprochementAuto([{ id: "s", extraction: piece({ date: "" }) }], [debit("a")], new Set());
+  assert.deepEqual(sansDate.associations, []);
+  assert.match(sansDate.ignorees[0].motif, /Lecture à compléter/);
 });

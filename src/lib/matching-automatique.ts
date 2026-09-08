@@ -21,16 +21,21 @@
  *
  *   - un escompte ou tout écart de montant (confirmation humaine) ;
  *   - une pièce en devise étrangère, un bulletin de paie, un avoir ;
- *   - une pièce dont la lecture porte une alerte (HT + TVA ≠ TTC…) ;
+ *   - une pièce dont la lecture ne permet pas d'identifier le paiement
+ *     (fournisseur, date, TTC ou devise manquants) ;
  *   - deux pièces qui se ressemblent (même fournisseur et même numéro) ;
  *   - un débit que plusieurs pièces pourraient justifier, ou l'inverse ;
- *   - une pièce sur laquelle un humain a déjà tranché.
+ *   - une pièce qu'un humain a mise de côté pour la traiter lui-même.
+ *
+ * En revanche un écart de ventilation TVA (HT + TVA ≠ TTC, fréquent sur un
+ * ticket de caisse à plusieurs taux) n'empêche plus le rapprochement : le TTC
+ * payé reste juste, seule la ventilation reste à reprendre.
  *
  * Chaque association posée reste défaisable d'un clic (Dissocier), et le
  * rapport dit sur quoi elle s'appuie.
  */
 
-import { alertesPiece, dateValide, fournisseurProche, proposerAssociations, type PieceExtraite, type DepenseCandidate } from "./justificatifs";
+import { alertesIdentification, dateValide, fournisseurProche, proposerAssociations, type PieceExtraite, type DepenseCandidate } from "./justificatifs";
 
 export type PieceMatching = {
   id: string;
@@ -38,8 +43,19 @@ export type PieceMatching = {
   extraction?: PieceExtraite | null;
   retire?: boolean;
   depenseId?: string | null;
-  /** Un humain a corrigé, classé ou contrôlé cette pièce : on n'y touche plus. */
-  decisionHumaine?: boolean;
+  /**
+   * Un humain a tranché l'ASSOCIATION de cette pièce (contrôle manuel mis de
+   * côté, bulletin classé) : on n'y touche plus.
+   *
+   * À ne pas confondre avec une correction de lecture. Corriger un
+   * fournisseur, une date ou le classement « vente » d'une facture d'achat,
+   * c'est préparer le rapprochement, pas y renoncer — c'est même le geste
+   * qu'on demande à l'écran quand la lecture automatique s'est trompée.
+   * L'ancienne version bloquait les deux sans distinction : quinze tickets
+   * corrigés à la main devenaient quinze tickets définitivement hors du
+   * rapprochement automatique.
+   */
+  decisionAssociation?: boolean;
   paiementsAssocies?: { id: string; montant: number }[];
 };
 
@@ -79,7 +95,7 @@ export interface CandidatAutomatique extends DepenseCandidate {
  * contradictoire.
  */
 export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandidate[]): CandidatAutomatique[] {
-  if (p.devise !== "EUR" || p.typeDocument !== "achat" || p.ttc === null || p.ttc <= 0 || !p.date || alertesPiece(p).length) return [];
+  if (p.devise !== "EUR" || p.typeDocument !== "achat" || p.ttc === null || p.ttc <= 0 || !p.date || alertesIdentification(p).length) return [];
   return proposerAssociations(p, depenses)
     .filter(d => !d.ecart) // un escompte se confirme à la main, jamais tout seul
     .map(d => {
@@ -113,13 +129,13 @@ export function planifierRapprochementAuto(
 
   for (const p of actives) {
     const ignorer = (motif: string) => ignorees.push({ pieceId: p.id, nom: p.nom, motif });
-    if (p.decisionHumaine) { ignorer("Pièce déjà traitée à la main : laissée telle quelle."); continue; }
+    if (p.decisionAssociation) { ignorer("Pièce mise de côté pour un traitement manuel : laissée telle quelle."); continue; }
     const e = p.extraction;
     if (!e) { ignorer("Pièce pas encore lue : lancez la lecture avant le rapprochement."); continue; }
     if (e.typeDocument !== "achat") { ignorer(`Document classé « ${e.typeDocument || "inconnu"} » : seules les factures d'achat sont rapprochées seules.`); continue; }
     if (e.devise !== "EUR") { ignorer("Facture en devise étrangère : association manuelle."); continue; }
-    const alertes = alertesPiece(e);
-    if (alertes.length) { ignorer(`Lecture à vérifier : ${alertes[0]}`); continue; }
+    const alertes = alertesIdentification(e);
+    if (alertes.length) { ignorer(`Lecture à compléter : ${alertes[0]}`); continue; }
 
     // Deux exemplaires de la même facture : rien d'automatique tant que le
     // doublon n'est pas tranché.
@@ -129,7 +145,7 @@ export function planifierRapprochementAuto(
     if (doublon) { ignorer("Une autre pièce porte le même fournisseur et le même numéro : doublon à trancher."); continue; }
 
     const candidats = candidatsAutomatiques(e, depenses);
-    if (!candidats.length) { ignorer(`Aucun débit de ${e.ttc?.toFixed(2)} € dans les ${DELAI_DEBIT_JOURS} jours suivant le ${e.date}.`); continue; }
+    if (!candidats.length) { ignorer(`Aucun débit de ${e.ttc?.toFixed(2)} € entre le ${e.date} et les ${DELAI_DEBIT_JOURS} jours suivants. Un achat de fin de mois est souvent débité le mois d'après : relancez sur le mois suivant.`); continue; }
     if (candidats.length > 1) { ignorer(`${candidats.length} débits possibles pour ce montant : à choisir à la main.`); continue; }
 
     const d = candidats[0];

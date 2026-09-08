@@ -54,6 +54,27 @@ export function etatPiece(l: LigneMois): EtatPiece {
   return "facture-a-obtenir";
 }
 
+/**
+ * Une ligne qui ne portera jamais de TVA, quoi qu'on fasse.
+ *
+ * Le tableau affichait « TVA à vérifier » sur chaque échéance de prêt, chaque
+ * commission bancaire, chaque salaire : autant d'invitations à un geste qui
+ * n'a pas lieu d'être. Les opérations bancaires et les intérêts d'emprunt
+ * sont exonérés (art. 261 C du CGI), salaires et cotisations sont hors champ,
+ * un virement interne ou une dépense personnelle ne sont pas des achats.
+ *
+ * On n'écrit rien en base pour autant : c'est un simple constat d'affichage,
+ * et un choix explicite du gérant le remplace toujours.
+ */
+export function sansTvaParNature(l: LigneMois): boolean {
+  return justifiableSansFacture(l)
+    || l.depensePersonnelle === true
+    || l.poste === CATEGORIE_PERSONNELLE
+    || l.poste === "Salaires"
+    || l.poste === "Cotisations sociales"
+    || l.poste === "Virements internes";
+}
+
 /** Libellé court affiché sur la ligne. */
 export const LIBELLE_ETAT_PIECE: Record<EtatPiece, string> = {
   "facture-a-obtenir": "Facture à obtenir",

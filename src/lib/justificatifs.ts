@@ -51,6 +51,18 @@ export function nettoyerPiece(v: Record<string, unknown>): PieceExtraite {
     debutPeriode: dateValide(v.debutPeriode), finPeriode: dateValide(v.finPeriode),
     ht: paie ? null : montant(v.ht), tva: paie ? null : montant(v.tva), ttc: paie ? null : montant(v.ttc) };
 }
+/**
+ * Libellés des deux alertes qui ne gênent QUE la ventilation comptable.
+ *
+ * Un ticket de caisse à plusieurs taux de TVA se lit souvent avec un HT
+ * partiel : HT + TVA ne retombe pas sur le TTC. C'est un vrai défaut pour la
+ * déclaration de TVA, mais le TTC — le montant réellement payé, celui qui
+ * figure au relevé — reste juste. Bloquer le rapprochement là-dessus revenait
+ * à refuser d'identifier un paiement parfaitement identifiable.
+ */
+export const ALERTE_TVA = "HT + TVA ne correspond pas au TTC.";
+export const ALERTE_PERIODE = "Période inversée.";
+
 export function alertesPiece(p: PieceExtraite): string[] {
   const alerts: string[] = [];
   if (p.typeDocument === "paie") {
@@ -61,11 +73,24 @@ export function alertesPiece(p: PieceExtraite): string[] {
   if (p.typeDocument === "autre") return ["Document hors facture ou bulletin : vous pouvez l’exclure."];
   if (!p.devise) alerts.push("Devise à vérifier sur la facture.");
   if (!p.fournisseur || !p.date || p.ttc === null) alerts.push("Fournisseur, date ou TTC à compléter.");
-  if (p.ht !== null && p.tva !== null && p.ttc !== null && Math.abs(Math.round(p.ht * 100) + Math.round(p.tva * 100) - Math.round(p.ttc * 100)) > 1) alerts.push("HT + TVA ne correspond pas au TTC.");
-  if (p.debutPeriode && p.finPeriode && p.debutPeriode > p.finPeriode) alerts.push("Période inversée.");
+  if (p.ht !== null && p.tva !== null && p.ttc !== null && Math.abs(Math.round(p.ht * 100) + Math.round(p.tva * 100) - Math.round(p.ttc * 100)) > 1) alerts.push(ALERTE_TVA);
+  if (p.debutPeriode && p.finPeriode && p.debutPeriode > p.finPeriode) alerts.push(ALERTE_PERIODE);
   if (p.ttc !== null && p.ttc <= 0) alerts.push("Avoir ou montant nul : traitement manuel nécessaire.");
   return alerts;
 }
+/**
+ * Ce qui empêche vraiment de dire QUEL paiement cette pièce justifie.
+ *
+ * `alertesPiece` liste tout ce qui mérite un coup d'œil ; ici on ne garde que
+ * ce qui rend l'identification du paiement impossible : type de document,
+ * devise, fournisseur/date/TTC manquants, avoir. Un écart de ventilation TVA
+ * ou une période inversée n'empêchent pas de reconnaître un débit de
+ * 47,32 € du 12 août : ils restent à corriger, la pièce reste rapprochable.
+ */
+export function alertesIdentification(p: PieceExtraite): string[] {
+  return alertesPiece(p).filter(a => a !== ALERTE_TVA && a !== ALERTE_PERIODE);
+}
+
 const normaliser = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 /** Escompte pour paiement à l'échéance : débit inférieur au TTC de 0,5 % à 3 %, même fournisseur. */
 export const ESCOMPTE_MIN = 0.005, ESCOMPTE_MAX = 0.03;
