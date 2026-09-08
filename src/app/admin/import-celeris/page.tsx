@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import { authFetch } from "@/lib/auth-fetch";
+import { GROUPES_COPIE } from "@/lib/groupes-copie-test";
 
 // Page admin temporaire pour importer les familles des stages de juillet 2026
 // depuis Celeris, sur la base TEST uniquement. À retirer après usage.
 export default function ImportCelerisPage() {
   const [loading, setLoading] = useState(false);
   const [basePropre, setBasePropre] = useState(false);
+  // Groupes de données à garder tels quels en test (ni vidés, ni recopiés).
+  const [gardes, setGardes] = useState<string[]>([]);
   const [rapport, setRapport] = useState<any>(null);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [erreur, setErreur] = useState("");
@@ -156,13 +159,17 @@ export default function ImportCelerisPage() {
       const params = new URLSearchParams();
       if (apply) {
         // Mot-clé saisi à la main : la copie écrase la base de test.
-        const mot = window.prompt(basePropre
-          ? "BASE PROPRE : la base de TEST sera entièrement VIDÉE puis recopiée depuis la production. Pour confirmer, tapez : COPIER-VERS-TEST"
-          : "Pour copier réellement vers la base de TEST, tapez : COPIER-VERS-TEST");
+        const gardesLisibles = GROUPES_COPIE.filter(g => gardes.includes(g.id)).map(g => g.libelle).join(" ; ");
+        const mot = window.prompt((basePropre
+          ? "BASE PROPRE : la base de TEST sera VIDÉE puis recopiée depuis la production"
+          : "La production sera recopiée par-dessus la base de TEST")
+          + (gardesLisibles ? `, SAUF : ${gardesLisibles} (gardés tels quels en test)` : "")
+          + ". Pour confirmer, tapez : COPIER-VERS-TEST");
         if (mot !== "COPIER-VERS-TEST") { setErreur("Mot-clé incorrect — opération annulée."); setLoading(false); return; }
         params.set("apply", "true"); params.set("confirm", mot);
       }
       if (basePropre) params.set("propre", "true");
+      if (gardes.length) params.set("garder", gardes.join(","));
       const url = `/api/admin/copy-prod-to-test${params.size ? `?${params}` : ""}`;
       const res = await authFetch(url, { method: "POST" });
       const data = await res.json();
@@ -175,10 +182,11 @@ export default function ImportCelerisPage() {
         return;
       }
       const vidage = data.effaces_test ? ` — base de test ${data.mode.startsWith("DRY") ? "à vider" : "vidée"} : ${data.effaces_test.total} document(s)` : "";
+      const gardees = Array.isArray(data.collections_gardees) && data.collections_gardees.length ? ` — gardées en test : ${data.collections_gardees.join(", ")}` : "";
       const sous = data.sous_collections ? Object.entries(data.sous_collections as Record<string, number>).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(", ") : "";
       setRapport({
         kind: "reset",
-        mode: `${data.mode} — COPIE ${data.source} → ${data.destination}${vidage}${sous ? ` — sous-collections : ${sous}` : ""}${data.duree_secondes != null ? ` — ${data.duree_secondes} s` : ""}`,
+        mode: `${data.mode} — COPIE ${data.source} → ${data.destination}${vidage}${gardees}${sous ? ` — sous-collections : ${sous}` : ""}${data.duree_secondes != null ? ` — ${data.duree_secondes} s` : ""}`,
         projectId: data.projectId,
         total_documents: data.total_documents,
         par_collection: data.par_collection || {},
@@ -332,6 +340,22 @@ export default function ImportCelerisPage() {
             identique à la production. Sans cette case, les documents déjà présents en test et absents en
             production restent en place.</span>
         </label>
+        <div className="w-full grid gap-2 sm:grid-cols-2">
+          {GROUPES_COPIE.map(g => {
+            const garde = gardes.includes(g.id);
+            return <label key={g.id} className={`rounded-xl border p-3 font-body text-xs cursor-pointer ${garde ? "border-amber-300 bg-amber-50" : "border-gray-200 bg-white"}`}>
+              <span className="flex items-center justify-between gap-2">
+                <strong className="text-gray-800">{g.libelle}</strong>
+                <select aria-label={`Sort de « ${g.libelle} »`} className="border rounded p-1 text-xs" disabled={loading} value={garde ? "garder" : "prod"}
+                  onChange={e => setGardes(prev => e.target.value === "garder" ? [...new Set([...prev, g.id])] : prev.filter(x => x !== g.id))}>
+                  <option value="prod">Recopier depuis la production</option>
+                  <option value="garder">Garder ma version test</option>
+                </select>
+              </span>
+              <span className="block mt-1 text-gray-500">{g.detail}</span>
+            </label>;
+          })}
+        </div>
         <button type="button" onClick={() => copierProd(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-purple-700 bg-purple-50 border border-purple-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu copie prod→test"}
