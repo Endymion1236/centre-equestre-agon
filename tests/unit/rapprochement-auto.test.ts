@@ -20,6 +20,16 @@ test("le nom du fournisseur ne sert qu'à opposer un veto", () => {
   assert.equal(concordanceFournisseur("e. p", "CB U EXPRESS"), "indetermine", "OCR illisible : on ne bloque pas");
   assert.equal(concordanceFournisseur("", "CB ORANGE"), "indetermine");
   assert.equal(concordanceFournisseur("CARREFOUR MARKET", "PRLV ORANGE SA"), "contradictoire");
+  // Un veto se fonde sur une contradiction, pas sur une absence de
+  // ressemblance : la station-service du magasin U d'Agon et le libellé
+  // bancaire du même magasin ne se recouvrent pas, mais partagent « agon ».
+  assert.equal(concordanceFournisseur("STATION U AGON COUTAINVILLE", "Paiement par carte X4673 UEP*U EXPRESS AGON C 01/09"), "indetermine");
+  // Deux commerçants sans le moindre mot commun restent un veto.
+  assert.equal(concordanceFournisseur("Céléris (GD-OBS)", "Paiement par carte X4673 UEP*U EXPRESS AGON C 01/09"), "contradictoire");
+  assert.equal(concordanceFournisseur("Agrial", "PRLV PADD"), "contradictoire");
+  // Le jargon du relevé ne crée pas de ressemblance : « paiement », « carte »,
+  // « prlv » et les références de carte ne désignent personne.
+  assert.equal(concordanceFournisseur("Paiement Orange", "Paiement par carte X4673 CHEZ AGRIAL"), "contradictoire");
 });
 
 test("un débit du même montant dans les sept jours est candidat ; au-delà, non", () => {
@@ -251,4 +261,25 @@ test("le diagnostic d'un débit dit ce qui a écarté chaque pièce", () => {
     exacte,
   ], false);
   assert.deepEqual(tri.candidats.map(c => c.pieceId), ["ok", "loin"]);
+});
+
+/**
+ * Le cas qui a motivé l'assouplissement du veto : un plein d'essence à la
+ * station du magasin U d'Agon, débité au centime près le lendemain, refusé
+ * parce que le libellé bancaire du groupe U ne ressemble pas au nom de la
+ * station.
+ */
+test("la station-service du magasin U se rattache à son débit", () => {
+  const ticket = piece({ fournisseur: "STATION U AGON COUTAINVILLE", ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-01", numero: "" });
+  const d = debit("d1", { montant: 107.98, dateOperation: "2026-09-02", mois: "2026-09", fournisseur: "Paiement par carte X4673 UEP*U EXPRESS AGON C 01/09" });
+
+  const r = planifierRapprochementAuto([{ id: "sp95", nom: "Station U.pdf", extraction: ticket }], [d], new Set(), "2026-09");
+  assert.deepEqual(r.associations.map(a => [a.pieceId, a.depenseId]), [["sp95", "d1"]], JSON.stringify(r.ignorees));
+
+  // La pièce d'un tout autre fournisseur, au même montant et au même jour,
+  // reste écartée : le veto n'a pas disparu, il s'est resserré.
+  const celeris = piece({ fournisseur: "Céléris (GD-OBS)", ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-01", numero: "" });
+  const r2 = planifierRapprochementAuto([{ id: "cel", nom: "Céléris.pdf", extraction: celeris }], [d], new Set(), "2026-09");
+  assert.deepEqual(r2.associations, []);
+  assert.match(r2.ignorees[0].motif, /bon montant et la bonne date.*ne ressemble pas/);
 });

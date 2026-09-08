@@ -97,7 +97,11 @@ export const ESCOMPTE_MIN = 0.005, ESCOMPTE_MAX = 0.03;
 export interface EcartAssociation { type: "escompte"; taux: number; montant: number }
 export type Proposition = DepenseCandidate & { score: number; raisons: string[]; ecart?: EcartAssociation };
 
-const MOTS_VIDES = new Set(["sarl", "sas", "sasu", "eurl", "earl", "scea", "gaec", "societe", "cabinet", "clinique", "centre", "france", "paris", "des", "les", "the"]);
+// « paiement », « carte », « prlv » ne désignent aucun fournisseur : ce sont
+// les mots que la banque met devant tous ses libellés. Les compter comme
+// significatifs rapprochait deux commerçants n'ayant que ce jargon en commun.
+const MOTS_VIDES = new Set(["sarl", "sas", "sasu", "eurl", "earl", "scea", "gaec", "societe", "cabinet", "clinique", "centre", "france", "paris", "des", "les", "the",
+  "paiement", "paiements", "carte", "cartes", "achat", "achats", "virement", "virements", "prelevement", "prelevements", "prlv", "vir", "sepa", "facture", "factures"]);
 const mots = (s: string) => s.split(" ").filter(m => m.length >= 3 && !MOTS_VIDES.has(m) && !/^\d+$/.test(m));
 /**
  * Fournisseur « proche » : les libellés bancaires abrègent (« CLINIQUE VET

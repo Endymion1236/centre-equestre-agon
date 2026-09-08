@@ -64,6 +64,32 @@ export const DELAI_DEBIT_JOURS = 7;
 
 const normaliser = (s: unknown) => String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
+/**
+ * Mots qui ne désignent personne : jargon du relevé, formes juridiques,
+ * mots de liaison. « Paiement par carte » et « Paiement Orange » ne se
+ * ressemblent pas parce qu'ils partagent « paiement ».
+ */
+const MOTS_NON_DISCRIMINANTS = new Set([
+  "paiement", "paiements", "carte", "cartes", "achat", "achats", "virement", "virements",
+  "prelevement", "prelevements", "prlv", "vir", "inst", "sepa", "facture", "factures",
+  "commission", "commissions", "remise", "avoir", "client", "clients",
+  "sarl", "sasu", "eurl", "earl", "scea", "gaec", "societe", "france", "cedex",
+  "les", "des", "the", "sur", "par", "pour", "avec", "chez", "dans",
+]);
+
+/**
+ * Les mots d'un libellé qui désignent réellement un commerçant.
+ *
+ * On écarte les mots courts, les nombres, les références de carte (« x4673 »)
+ * et le jargon bancaire. Ce qui reste, ce sont des noms : « express »,
+ * « agon », « carrefour », « agrial ».
+ */
+function motsSignificatifs(s: unknown): string[] {
+  return String(s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ").trim().split(" ")
+    .filter(m => m.length >= 4 && !MOTS_NON_DISCRIMINANTS.has(m) && !/^[a-z]?\d+$/.test(m));
+}
+
 export type Concordance = "identique" | "proche" | "indetermine" | "contradictoire";
 
 /**
@@ -82,6 +108,16 @@ export function concordanceFournisseur(nomPiece: unknown, nomDebit: unknown): Co
   if (lettres(a) < 4 || lettres(b) < 4) return "indetermine";
   if (a === b || a.includes(b) || b.includes(a)) return "identique";
   if (fournisseurProche(String(nomPiece ?? ""), String(nomDebit ?? ""))) return "proche";
+  // Un veto doit se fonder sur une CONTRADICTION, pas sur une simple absence
+  // de ressemblance. « STATION U AGON COUTAINVILLE » et « UEP*U EXPRESS AGON »
+  // sont deux noms du même magasin ; ils ne se recouvrent pas, mais ils
+  // partagent « agon » — trop court pour la règle de proximité, assez pour
+  // dire qu'ils ne désignent pas deux commerçants opposés. Refuser là, sur un
+  // montant identique au centime et une date à un jour, revenait à écarter la
+  // bonne pièce. Le veto ne tombe donc que sur ZÉRO mot en commun :
+  // « CARREFOUR MARKET » contre « PRLV ORANGE SA », par exemple.
+  const communs = motsSignificatifs(nomDebit);
+  if (motsSignificatifs(nomPiece).some(m => communs.includes(m))) return "indetermine";
   return "contradictoire";
 }
 
