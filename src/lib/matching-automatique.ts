@@ -123,7 +123,15 @@ export function concordanceFournisseur(nomPiece: unknown, nomDebit: unknown): Co
 
 export interface CandidatAutomatique extends DepenseCandidate {
   concordance: Concordance;
+  /** Le débit n'a pas de date : c'est son mois qui a servi de fenêtre. */
+  viaMois?: boolean;
 }
+
+/** Mois suivant, au format AAAA-MM. */
+const moisSuivant = (m: string) => {
+  const a = Number(m.slice(0, 4)), b = Number(m.slice(5, 7));
+  return b === 12 ? `${a + 1}-01` : `${a}-${String(b + 1).padStart(2, "0")}`;
+};
 
 /**
  * Débits que cette pièce pourrait justifier sans intervention : montant exact,
@@ -132,15 +140,24 @@ export interface CandidatAutomatique extends DepenseCandidate {
  */
 export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandidate[]): CandidatAutomatique[] {
   if (p.devise !== "EUR" || p.typeDocument !== "achat" || p.ttc === null || p.ttc <= 0 || !p.date || alertesIdentification(p).length) return [];
+  const moisPiece = p.date.slice(0, 7);
   return proposerAssociations(p, depenses)
     .filter(d => !d.ecart) // un escompte se confirme à la main, jamais tout seul
     .map(d => {
       const date = dateValide(d.dateOperation);
       const jours = date ? (Date.parse(date) - Date.parse(p.date!)) / 86400000 : -1;
-      return { d, jours, concordance: concordanceFournisseur(p.fournisseur, d.fournisseur) };
+      // Un relevé importé sans dates d'opération bloquait tout : vingt-trois
+      // pièces d'un même mois attendaient un débit qui existait, au centime
+      // près, mais qu'aucun délai ne pouvait valider. Le mois du débit tient
+      // alors lieu de fenêtre — celui de la pièce, ou le suivant pour un
+      // achat de fin de mois. Les garanties d'unicité, elles, ne bougent pas :
+      // un seul débit candidat, une seule pièce prétendante, et le veto du
+      // nom s'applique comme avant.
+      const viaMois = !date && !!d.mois && (d.mois === moisPiece || d.mois === moisSuivant(moisPiece));
+      return { d, jours, viaMois, concordance: concordanceFournisseur(p.fournisseur, d.fournisseur) };
     })
-    .filter(({ jours, concordance }) => jours >= 0 && jours <= DELAI_DEBIT_JOURS && concordance !== "contradictoire")
-    .map(({ d, concordance }) => ({ ...d, concordance }));
+    .filter(({ jours, viaMois, concordance }) => (viaMois || (jours >= 0 && jours <= DELAI_DEBIT_JOURS)) && concordance !== "contradictoire")
+    .map(({ d, concordance, viaMois }) => ({ ...d, concordance, ...(viaMois ? { viaMois: true } : {}) }));
 }
 
 /**
@@ -173,7 +190,7 @@ export function indiceProximite(p: PieceExtraite, depenses: DepenseCandidate[]):
   if (meilleur.ecart === 0) {
     // Le débit existe et porte le bon montant, mais le relevé importé n'a pas
     // conservé sa date : c'est le relevé qu'il faut compléter, pas la pièce.
-    if (meilleur.jours === null) return { famille: "sans-date", texte: ` Un débit du même montant existe (« ${d.fournisseur} »), mais sans date d'opération. Complétez les dates du relevé (Import bancaire → « Compléter les dates existantes »), puis relancez ; en attendant, associez-le à la main.` };
+    if (meilleur.jours === null) return { famille: "sans-date", texte: ` Un débit du même montant existe (« ${d.fournisseur} »), sans date d'opération et sur un autre mois (${d.mois || "mois inconnu"}) que la pièce. Vérifiez, puis associez à la main.` };
     if (meilleur.jours < 0) return { famille: "hors-delai", texte: ` Un débit du même montant existe le ${quand} (« ${d.fournisseur} »), soit AVANT la date lue sur la pièce : la date de la pièce est peut-être mal lue.` };
     if (meilleur.jours > DELAI_DEBIT_JOURS) return { famille: "hors-delai", texte: ` Un débit du même montant existe le ${quand} (« ${d.fournisseur} »), mais ${meilleur.jours} jours après : hors du délai de ${DELAI_DEBIT_JOURS} jours.` };
     // Montant et date concordent : c'est donc le nom qui a opposé son veto.
@@ -272,7 +289,7 @@ export function resumerRefus(ignorees: PieceIgnoree[]): { famille: FamilleRefus;
     .filter(f => f.nb > 0);
 }
 
-export type AssociationAuto = { pieceId: string; depenseId: string; concordance: Concordance; nom?: string; fournisseur?: string; montant: number; dateOperation?: string };
+export type AssociationAuto = { pieceId: string; depenseId: string; concordance: Concordance; nom?: string; fournisseur?: string; montant: number; dateOperation?: string; viaMois?: boolean };
 /**
  * Famille d'un refus, pour que le rapport se lise d'un coup d'œil.
  *
@@ -370,7 +387,7 @@ export function planifierRapprochementAuto(
     if (concurrente) { ignorer("Une autre pièce pourrait justifier ce même débit : à choisir à la main.", "ambigu"); continue; }
 
     debitsPris.add(d.id);
-    associations.push({ pieceId: p.id, depenseId: d.id, concordance: d.concordance, nom: p.nom, fournisseur: d.fournisseur, montant: d.montant, dateOperation: d.dateOperation });
+    associations.push({ pieceId: p.id, depenseId: d.id, concordance: d.concordance, nom: p.nom, fournisseur: d.fournisseur, montant: d.montant, dateOperation: d.dateOperation, ...(d.viaMois ? { viaMois: true } : {}) });
   }
   return { associations, ignorees };
 }

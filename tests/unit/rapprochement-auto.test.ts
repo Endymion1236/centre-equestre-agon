@@ -109,7 +109,10 @@ test("un ancien débit sans date, de même montant, empêche l'automatique", () 
   const r = planifierRapprochementAuto([{ id: "p1", extraction: piece() }],
     [debit("a"), debit("vieux", { dateOperation: "", mois: "2026-07" })], new Set());
   assert.deepEqual(r.associations, []);
-  assert.match(r.ignorees[0].motif, /sans date d'opération, pourrait être le même paiement/);
+  // Depuis qu'un débit sans date est un candidat à part entière, le refus
+  // vient de l'ambiguïté plutôt que d'une règle dédiée — et le motif nomme
+  // les deux débits au lieu d'évoquer un risque.
+  assert.match(r.ignorees[0].motif, /2 débits possibles/);
 });
 
 test("deux pièces différentes vers deux débits distincts : les deux passent", () => {
@@ -282,4 +285,38 @@ test("la station-service du magasin U se rattache à son débit", () => {
   const r2 = planifierRapprochementAuto([{ id: "cel", nom: "Céléris.pdf", extraction: celeris }], [d], new Set(), "2026-09");
   assert.deepEqual(r2.associations, []);
   assert.match(r2.ignorees[0].motif, /bon montant et la bonne date.*ne ressemble pas/);
+});
+
+/**
+ * Un relevé importé sans dates d'opération bloquait vingt-trois pièces d'un
+ * même mois : leur débit existait, au centime près, mais aucun délai ne
+ * pouvait être vérifié. Le mois du débit tient alors lieu de fenêtre.
+ */
+test("un débit sans date se rattache par son mois, sans perdre les garanties", () => {
+  const facture = piece({ fournisseur: "SAUR", ttc: 894.71, ht: 894.71, tva: 0, date: "2026-07-16", numero: "F-S1" });
+  const sansDate = (id: string, extra: Partial<DepenseCandidate> = {}) =>
+    debit(id, { montant: 894.71, fournisseur: "SAUR50", dateOperation: "", mois: "2026-07", ...extra });
+
+  const r = planifierRapprochementAuto([{ id: "saur", extraction: facture }], [sansDate("d1")], new Set(), "2026-07");
+  assert.deepEqual(r.associations.map(a => [a.pieceId, a.depenseId, a.viaMois]), [["saur", "d1", true]], JSON.stringify(r.ignorees));
+
+  // Un achat de fin de mois débité le mois suivant reste rattachable.
+  const finJuillet = piece({ fournisseur: "POINT.P", ttc: 54.54, ht: 54.54, tva: 0, date: "2026-07-31", numero: "F-P1" });
+  const aout = planifierRapprochementAuto([{ id: "pp", extraction: finJuillet }],
+    [debit("d2", { montant: 54.54, fournisseur: "POINT P", dateOperation: "", mois: "2026-08" })], new Set(), "2026-08");
+  assert.equal(aout.associations.length, 1, JSON.stringify(aout.ignorees));
+
+  // Deux débits sans date, même montant, même mois : l'ambiguïté l'emporte.
+  const deux = planifierRapprochementAuto([{ id: "saur", extraction: facture }], [sansDate("d1"), sansDate("d2")], new Set(), "2026-07");
+  assert.deepEqual(deux.associations, []);
+
+  // Un débit sans date d'un mois trop éloigné n'est pas un candidat.
+  const loin = planifierRapprochementAuto([{ id: "saur", extraction: facture }], [sansDate("d1", { mois: "2026-11" })], new Set(), "2026-07");
+  assert.deepEqual(loin.associations, []);
+  assert.match(loin.ignorees[0].motif, /sans date d'opération et sur un autre mois \(2026-11\)/);
+
+  // Le veto du nom s'applique comme avant.
+  const autre = planifierRapprochementAuto([{ id: "saur", extraction: facture }],
+    [sansDate("d1", { fournisseur: "PRLV ORANGE SA" })], new Set(), "2026-07");
+  assert.deepEqual(autre.associations, []);
 });
