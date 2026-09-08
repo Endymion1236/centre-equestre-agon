@@ -45,6 +45,33 @@ export default function DepensesPage() {
   }, [mois]);
   useEffect(() => { if (user && isAdmin && vue === "tableau") { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); } }, [user, isAdmin, vue, charger]);
   async function post(url: string, body: object) { const r = await authFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; }
+  /**
+   * Rapprochement automatique du mois : aperçu d'abord, écriture seulement
+   * après confirmation, rapport ensuite. Les pièces non associées sont
+   * expliquées une à une plutôt que comptées en bloc.
+   */
+  async function rapprocherAuto() {
+    setBusy(true); setMessage("");
+    try {
+      const apercu = await (await authFetch("/api/admin/justificatifs/rapprochement-auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mois }) })).json();
+      if (apercu.error) throw new Error(apercu.error);
+      const nb = apercu.associations?.length || 0;
+      const detail = (apercu.ignorees || []).slice(0, 6).map((i: { nom?: string; motif: string }) => `• ${i.nom || "pièce"} : ${i.motif}`).join("\n");
+      if (!nb) {
+        setMessage(`Aucune association certaine sur ${mois}.${apercu.nbIgnorees ? ` ${apercu.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${detail ? `\n${detail}` : ""}`);
+        return;
+      }
+      const liste = apercu.associations.slice(0, 10).map((a: { nom?: string; fournisseur?: string; montant: number; dateOperation?: string }) => `• ${a.nom || "pièce"} → ${a.fournisseur} ${euros(a.montant)} du ${a.dateOperation}`).join("\n");
+      if (!window.confirm(`${nb} justificatif(s) correspondent à un seul débit, au centime et à la date près :\n\n${liste}${nb > 10 ? `\n… et ${nb - 10} autre(s)` : ""}\n\nLes associer ? Chacune reste défaisable ensuite.`)) return;
+      const r = await (await authFetch("/api/admin/justificatifs/rapprochement-auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mois, apply: true }) })).json();
+      if (r.error) throw new Error(r.error);
+      await charger();
+      const refus = (r.refusees || []).length;
+      setMessage(`${r.associations.length} justificatif(s) rattaché(s) automatiquement.${refus ? ` ${refus} refusé(s) au dernier contrôle.` : ""}${r.nbIgnorees ? ` ${r.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${detail ? `\n${detail}` : ""}`);
+    } catch (e) { setMessage((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
   async function agir(url: string, body: object) {
     setBusy(true); setMessage("");
     try { await post(url, body); await charger(); setMessage("Enregistré."); return true; }
@@ -130,7 +157,13 @@ export default function DepensesPage() {
   return <main className="depenses-page min-w-0 w-full space-y-5">
     <style>{`.depenses-page input:not([type=checkbox]), .depenses-page select, .depenses-page textarea { min-width: 0; max-width: 100%; box-sizing: border-box; } .depense-operation { overflow-wrap: anywhere; } .depense-operation select { width: 100%; }`}</style>
     <h1 className="font-bold text-2xl">Dépenses et justificatifs</h1>
-    <ImportMouvementsBancaires onImported={m => { setVue("tableau"); setMois(m); if (m === mois) void charger().catch(e => setMessage(e.message)); }} />
+    <ImportMouvementsBancaires onImported={m => {
+      // Les débits viennent d'entrer : la suite du travail, ce sont leurs
+      // justificatifs. On y amène directement plutôt que de laisser chercher.
+      setVue("tableau"); setMois(m); setFiltre("manquantes"); setCible(null); setChoix(null);
+      setMessage("Débits importés. Voici les lignes sans justificatif : importez le dossier Drive du mois, puis lancez le rapprochement automatique.");
+      if (m === mois) void charger().catch(e => setMessage(e.message));
+    }} />
     <nav className="flex flex-wrap gap-3">{[["tableau", "Tableau des opérations"], ["synthese", "Synthèse par catégorie"]].map(([v, label]) => <button key={v} disabled={busy} className={`rounded border px-4 py-2 ${vue === v ? "bg-blue-900 text-white" : "bg-white"}`} onClick={() => { setVue(v); setMessage(""); }}>{label}</button>)}</nav>
     {vue === "pieces" ? <><p>Documents en attente et archives. Pour associer un paiement, revenez au tableau des opérations.</p><PiecesSansLigne /></> : vue === "synthese" ? <VueParPoste /> : <>
       <p>Choisissez une ligne, vérifiez sa catégorie et ajoutez le justificatif correspondant. Une pièce manquante reste à compléter, même pour une opération sans TVA. Exclure du rapprochement conserve le montant, la catégorie et le traitement TVA.</p>
@@ -138,7 +171,9 @@ export default function DepensesPage() {
       <div className="flex flex-wrap gap-3"><label>Mois <input type="month" className="border rounded p-2" disabled={busy} value={mois} onChange={e => { if(e.target.value) { setMois(e.target.value); setCible(null); setChoix(null); } }} /></label>
         <select className="border rounded p-2" aria-label="État" value={filtre} onChange={e => setFiltre(e.target.value)}><option value="actives">Toutes les lignes actives</option><option value="manquantes">Justificatifs manquants</option><option value="sans-tva">Sans TVA</option><option value="a-ventiler">Comptes à ventiler</option><option value="exclues">Exclues du rapprochement</option></select>
         <input className="border rounded p-2" aria-label="Rechercher" placeholder="Fournisseur, montant, catégorie, compte…" value={recherche} onChange={e => setRecherche(e.target.value)} />
-        <button disabled={busy} className="underline" onClick={() => { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); }}>Actualiser</button></div>
+        <button disabled={busy} className="underline" onClick={() => { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); }}>Actualiser</button>
+        <button disabled={busy} className="underline" onClick={() => void rapprocherAuto()}>Rapprocher automatiquement les pièces</button>
+        <button disabled={busy} className="underline" onClick={() => setVue("pieces")}>Importer un dossier Drive</button></div>
       {(() => { const comp = completudeJustificatifs(lignes); const tva = bilanTvaMois(lignes); const ventilation = bilanVentilationAchats(lignes); return <div className="rounded-lg border bg-white p-3 space-y-1 text-sm">
         <p><b>{comp.justifies} / {comp.total}</b> dépenses justifiées ({comp.pourcent} %) · <b className={comp.sansPiece ? "text-amber-800" : "text-green-800"}>{eurosCourt(comp.montantSansPiece)}</b> sans justificatif sur {comp.sansPiece} ligne{comp.sansPiece > 1 ? "s" : ""}. Un débit classé dans une catégorie de charge entre dans la synthèse des charges, justifié ou non ; salaires, virements internes, emprunts et immobilisations restent hors synthèse.</p>
         <p>TVA du mois : <b>{eurosCourt(tva.deductibleJustifiee)}</b> documentée sur {tva.nbJustifiees} paiement{tva.nbJustifiees > 1 ? "s" : ""} · {tva.aVerifier.nb} ligne{tva.aVerifier.nb > 1 ? "s" : ""} à vérifier ({eurosCourt(tva.aVerifier.ttc)} TTC){tva.pieceSansTva.nb ? ` · ${tva.pieceSansTva.nb} pièce(s) sans TVA lue` : ""} · {tva.sansTva.nb} sans TVA · {tva.nonRecuperee.nb} non récupérée{tva.nonRecuperee.nb > 1 ? "s" : ""}.

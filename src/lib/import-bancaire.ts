@@ -50,12 +50,81 @@ export function proposerPosteBancaire(libelle: string) {
   const commission = posteCommissionCarte(libelle); if (commission) return commission;
   if (estVersementCompteFfe(libelle)) return CATEGORIE_COMPTE_FFE;
   const n = fournisseurNormalise(libelle);
-  const regles: [RegExp, string][] = [[/\b(salaire|paie)\b/, "Salaires"], [/\b(msa|urssaf)\b/, "Cotisations sociales"], [/\b(pret|emprunt)\b/, "Emprunts"],
-    [/\b(agrial|nutrea|foin|paille|granules)\b/, "Aliments, litières, paille"], [/\b(marechal|ferrure|parage)\b/, "Maréchalerie & travail des chevaux"],
-    [/\b(veterinaire|veterinaires|vetodiag)\b/, "Vétérinaire & santé des chevaux"], [/\b(edf|engie|saur|veolia)\b/, "Eau & électricité"],
-    [/\b(arval|loyer)\b/, "Locations & loyers"], [/\b(allianz|groupama|generali)\b/, "Assurances"], [/\b(ghn|pignolet)\b/, "Honoraires & gestion (compta, juridique, GHN)"]];
+  // L'ordre compte : « Station U » est un plein de carburant, « U Express »
+  // une course. Le plus spécifique passe donc avant le plus général.
+  const regles: [RegExp, string][] = [
+    [/\b(salaire|paie)\b/, "Salaires"], [/\b(msa|urssaf)\b/, "Cotisations sociales"], [/\b(pret|emprunt)\b/, "Emprunts"],
+    [/\b(agrial|nutrea|lamaison|lacolley|picotin|foin|paille|granules|copeaux|litiere|point vert)\b/, "Aliments, litières, paille"],
+    [/\b(marechal|ferrure|parage|tabac)\b/, "Maréchalerie & travail des chevaux"],
+    [/\b(veterinaire|veterinaires|vetodiag|pommiers|pharmacie)\b/, "Vétérinaire & santé des chevaux"],
+    [/\b(edf|engie|saur|veolia|enercoop|energie d ici|electricite)\b/, "Eau & électricité"],
+    // Carburant : enseignes de station et produits pétroliers, avant les enseignes de magasin.
+    [/\b(station u|station service|total|totalenergies|esso|avia|dyneff|carburant|gazole|sp95|sp98|e10|maridys)\b/, "Carburants"],
+    [/\b(arval|loyer|equilocation|rex rotary|manuloc|leasing|location)\b/, "Locations & loyers"],
+    [/\b(allianz|groupama|generali|axa|maif|mma|matmut)\b/, "Assurances"],
+    [/\b(ghn|pignolet|omga|api expertises|comptable|notaire|avocat|huissier|greffe)\b/, "Honoraires & gestion (compta, juridique, GHN)"],
+    // Prestataires : moniteur indépendant, artisan, travaux facturés.
+    [/\b(moniteur|monitrice|enseignant|coach|debourrage|dressage|prestation|sous traitance|honoraires moniteur)\b/, "Prestataires & sous-traitance (moniteurs, travaux)"],
+    [/\b(macon|maconnerie|plombier|plomberie|electricien|charpente|couverture|menuiserie|terrassement|paysagiste|elagage|travaux)\b/, "Prestataires & sous-traitance (moniteurs, travaux)"],
+    // Informatique : logiciels, abonnements, hébergement, télécom.
+    [/\b(openai|anthropic|resend|adobe|canva|midjourney|elevenlabs|figma|notion|github|vercel|o2switch|hosteur|ovh|standardfacile|logiciel|abonnement|saas|licence logiciel|sage|microsoft|apple com|google)\b/, "Informatique, logiciels & abonnements"],
+    [/\b(orange|free|bouygues|sfr|internet|fibre|telecom)\b/, "Informatique, logiciels & abonnements"],
+    [/\b(point p|bricomarche|leroy merlin|castorama|weldom|mr bricolage|brico)\b/, "Fournitures & petit équipement (dont sellerie)"],
+    [/\b(sellerie|padd|horze|equiclic|equi clic|decathlon|devoucoux|forestier)\b/, "Fournitures & petit équipement (dont sellerie)"],
+    [/\b(garage|pneu|controle technique|carrosserie|vidange|motin|jb mega)\b/, "Entretien (bâtiments, matériel, véhicules)"],
+    [/\b(printoclock|print o clock|copinew|imprimerie|flyer|regie ouest|publicite)\b/, "Publicité & communication"],
+    // Dépenses manifestement privées : sorties des charges, à confirmer à l'écran.
+    [/\b(hellofresh|vinted|netflix|spotify|disney|deliveroo|uber eats|amazon prime video)\b/, CATEGORIE_PERSONNELLE],
+    // Courses et repas : « Autres dépenses » retombe sur réceptions ou frais divers à la ventilation.
+    [/\b(restaurant|equinoxe|kin saya|la cale|mcdo|burger|traiteur|boulangerie)\b/, "Autres dépenses"],
+    [/\b(super u|u express|uexpress|carrefour|leclerc|intermarche|lidl|aldi|amazon|temu|cdiscount)\b/, "Autres dépenses"],
+  ];
   return regles.find(([re]) => re.test(n))?.[1] || POSTE_HORS_DEPENSES;
 }
+/**
+ * Ce que le gérant a déjà décidé pour ce fournisseur.
+ *
+ * Les règles ci-dessus ne connaissent que les libellés prévus d'avance. Or la
+ * même enseigne revient tous les mois : une fois « Cheval Énergie » classé en
+ * aliments, l'import n'a aucune raison de reproposer « à classer » le mois
+ * suivant. On relit donc les dépenses déjà catégorisées et on retient, par
+ * fournisseur normalisé, la catégorie la plus souvent choisie — en cas
+ * d'égalité, la plus récente. Rien n'est stocké : la mémoire, c'est le
+ * travail déjà fait.
+ *
+ * Les catégories d'attente ne sont jamais mémorisées : « à classer » n'est
+ * pas une décision.
+ */
+/**
+ * Clé de mémoire d'un libellé bancaire : le fournisseur sans les préfixes de
+ * la banque ni les chiffres. « PRLV CHEVAL ENERGIE 12/08 » et « CB CHEVAL
+ * ENERGIE 04/09 » sont le même fournisseur ; la date collée au libellé ne
+ * doit pas empêcher de le reconnaître le mois suivant.
+ */
+export const cleFournisseurMemoire = (libelle: string) =>
+  fournisseurNormalise(libelle || "").replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+
+export function memoirePostes(existantes: ExistanteImport[]): Map<string, string> {
+  const compte = new Map<string, Map<string, { n: number; date: string }>>();
+  for (const e of existantes) {
+    if (e.archive || e.rapprochementExclu) continue;
+    const poste = e.poste;
+    if (!poste || poste === POSTE_HORS_DEPENSES || !CATEGORIES_IMPORT.includes(poste)) continue;
+    const cle = cleFournisseurMemoire(e.fournisseur || "");
+    if (cle.length < 4) continue;
+    const parPoste = compte.get(cle) || new Map<string, { n: number; date: string }>();
+    const vu = parPoste.get(poste) || { n: 0, date: "" };
+    parPoste.set(poste, { n: vu.n + 1, date: e.dateOperation > vu.date ? e.dateOperation : vu.date });
+    compte.set(cle, parPoste);
+  }
+  const memoire = new Map<string, string>();
+  for (const [cle, parPoste] of compte) {
+    const meilleur = [...parPoste.entries()].sort((a, b) => b[1].n - a[1].n || b[1].date.localeCompare(a[1].date) || a[0].localeCompare(b[0]))[0];
+    if (meilleur) memoire.set(cle, meilleur[0]);
+  }
+  return memoire;
+}
+
 export function lireCsvDepenses(brut: string) {
   if (brut.length > 2_000_000) throw new ErreurImportBancaire("CSV de 2 Mo maximum.");
   const texte = brut.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");
@@ -111,12 +180,16 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
   if (refs.size !== source.operations.length) throw new ErreurImportBancaire("Opération chargée deux fois dans le même import.");
   verifierDecisionsImport(decisions, refs);
   const index = new Map(existantes.map(e => [e.id, { compte: banque(e), centimes: Math.round(e.montant * 100), libelle: fournisseurNormalise(e.fournisseur), date: dateImportValide(e.dateOperation) ? Date.parse(e.dateOperation) : null }]));
+  const memoire = memoirePostes(existantes);
   const counts = new Map<string, number>();
   for (const o of source.operations) { const k = cle(o.date, o.centimes, o.libelle); counts.set(k, (counts.get(k) || 0) + 1); }
   const lignes: LignePlanImport[] = source.operations.map(operation => {
     const o = operation, d = decisions[o.ref] || {}, lien = liens[o.ref];
-    const r: LignePlanImport = { operation: { ...o, poste: d.poste || o.poste }, etat: "nouveau", cible: null, motif: "Nouveau mouvement.", candidats: [], manuel: false };
     const libelleNormalise = fournisseurNormalise(o.libelle), dateMs = Date.parse(o.date);
+    // Priorité : le choix explicite de cet import, puis ce que le gérant a
+    // déjà décidé pour ce fournisseur, puis la règle sur le libellé.
+    const posteMemorise = o.poste === POSTE_HORS_DEPENSES ? memoire.get(cleFournisseurMemoire(o.libelle)) : undefined;
+    const r: LignePlanImport = { operation: { ...o, poste: d.poste || posteMemorise || o.poste }, etat: "nouveau", cible: null, motif: "Nouveau mouvement.", candidats: [], manuel: false };
     const sameAmount = (e: ExistanteImport) => index.get(e.id)!.centimes === o.centimes;
     const sameLabel = (e: ExistanteImport) => !!index.get(e.id)!.libelle && index.get(e.id)!.libelle === libelleNormalise;
     const inAccount = (e: ExistanteImport) => !index.get(e.id)!.compte || index.get(e.id)!.compte === source.compte;

@@ -28,7 +28,7 @@ const norm = (s: unknown) => String(s ?? "").normalize("NFD").replace(/[\u0300-\
 /** Comptes de charges et assimilés utilisés par le cabinet en 2024-25 (extrait). */
 export const COMPTES: Record<string, string> = {
   "60141000": "Aliments concentrés", "60142000": "Litières copeaux", "60143000": "Aliments grossiers", "60150000": "Produits vétérinaires chevaux", "60278100": "Paille",
-  "60544000": "Maréchalerie", "60560000": "Travail des chevaux", "60580000": "Prestations diverses",
+  "60544000": "Maréchalerie", "60560000": "Travail des chevaux", "60580000": "Prestations diverses", "61100000": "Sous-traitance générale",
   "60610000": "Eau", "60630000": "Électricité", "60640000": "Carburants lubrifiants",
   "60660000": "Fournitures d'entretien et petit équipement", "60660100": "Matériel de sellerie", "60662000": "Fournitures administratives",
   "61310000": "Loyer centre équestre", "61320000": "Location véhicule Skoda", "61321000": "Location machine à café", "61322000": "Location imprimante", "61323000": "Location TPE", "61340000": "Locations d'animaux", "61380000": "Autres locations",
@@ -65,6 +65,10 @@ const PAR_CATEGORIE: Record<string, string> = {
   "Locations & loyers": "61380000",
   "Assurances": "61600000",
   "Honoraires & gestion (compta, juridique, GHN)": "62262000",
+  // Un prestataire facture une prestation : sous-traitance, pas un salaire.
+  "Prestataires & sous-traitance (moniteurs, travaux)": "60580000",
+  // Abonnements et logiciels : maintenance par défaut, télécom par mot-clé.
+  "Informatique, logiciels & abonnements": "61562000",
   "Frais bancaires & commissions (CB, Stripe)": "62700000",
   "Publicité & communication": "62300000",
   "Engagements de concours": "46730000",
@@ -87,6 +91,12 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Entretien (bâtiments, matériel, véhicules)": [[/(garage|pneu|controle technique|carross|vidange|motin|jb ?mega|vehicule|camion|skoda)/, "61553000"], [/(batiment|toiture|platrerie|peinture|macon|couverture)/, "61530000"], [/(maintenance|sage|logiciel|contrat d entretien)/, "61562000"], [/(terrain|carriere|sable|clotur)/, "61510000"]],
   "Locations & loyers": [[/(arval|skoda|vehicule|lld)/, "61320000"], [/(rex rotary|imprimante|copieur)/, "61322000"], [/(tpe|leasing solutions|cm cic|leasecom|terminal)/, "61323000"], [/(cafe)/, "61321000"], [/(equilocation|cheval|poney|animal)/, "61340000"], [/(association|asso ce|ce d agon|loyer)/, "61310000"]],
   "Assurances": [[/(vehicule|auto|camion|flotte)/, "61610000"], [/(agricole|materiel|tracteur|groupama.*mat)/, "61680000"]],
+  // Un moniteur indépendant relève du travail des chevaux quand il monte ou
+  // débourre ; un artisan, de l'entretien du bâtiment. Un gros chantier reste
+  // une immobilisation, à classer comme telle sur la ligne.
+  "Prestataires & sous-traitance (moniteurs, travaux)": [[/(moniteur|monitrice|enseignant|coach|debourrage|dressage|travail du cheval)/, "60560000"], [/(macon|maconnerie|plombier|plomberie|electricien|charpente|couverture|menuiserie|peinture|terrassement|paysagiste|elagage|travaux)/, "61530000"]],
+  // Télécom et internet ont leur propre compte ; le reste est de la maintenance.
+  "Informatique, logiciels & abonnements": [[/(orange|free|bouygues|sfr|internet|fibre|telecom)/, "62640000"], [/(mobile|portable|forfait)/, "62630000"], [/(formation|apprentissage)/, "63330000"]],
   "Honoraires & gestion (compta, juridique, GHN)": [[/(ghn|groupement hippique)/, "62261000"], [/(notaire|avocat|juridique|infogreffe)/, "62260000"], [/(huissier|acte|contentieux)/, "62270000"], [/(pignolet|comptable|expert|api expertises)/, "62262000"]],
   "Frais bancaires & commissions (CB, Stripe)": [[/(com carte|commission cb|commission carte|vente( a)? distance|vad|stripe|sumup|cawl|worldline|tpe)/, "62710000"], [/(emprunt|dossier)/, "62720000"], [/(ancv)/, "62840000"]],
   "Publicité & communication": [[/(imprim|print|flyer|catalogue|affiche|banderole|copinew)/, "62360000"], [/(cadeau|coupe|medaille|trophee)/, "62340000"]],

@@ -22,6 +22,12 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
   { nom: "Assurances", ref: 9992 },
   { nom: "Retraite / PER — à vérifier", ref: null },
   { nom: "Honoraires & gestion (compta, juridique, GHN)", ref: 5321 },
+  // Prestations facturées par un tiers : moniteur indépendant, artisan,
+  // débourrage confié. À distinguer d'un salarié (Salaires) et d'un gros
+  // chantier qui, lui, s'immobilise et s'amortit.
+  { nom: "Prestataires & sous-traitance (moniteurs, travaux)", ref: null },
+  // Logiciels, abonnements en ligne, hébergement, téléphonie et internet.
+  { nom: "Informatique, logiciels & abonnements", ref: null },
   // Bilan 24-25 : services bancaires 1 464 + commissions CB 995 + commissions
   // s/emprunt 39 + frais ANCV 76 — les « Commission vente à distance »,
   // « Com Carte », factures Crédit Agricole et commissions Stripe vont ici.

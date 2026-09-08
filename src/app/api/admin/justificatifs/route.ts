@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
         const p = nettoyerPiece(current.data()?.extraction || {});
         if (current.data()?.retire || current.data()?.depenseId || p.typeDocument !== "paie" || !p.salarie || !p.moisPaie || p.netAPayer == null || p.netAPayer < 0 || !p.devise)
           throw new Error("Vérifiez le salarié, le mois, la devise et le net à payer avant de classer le bulletin.");
-        tx.update(ref, { paieValidee: true, autoBloque: true, reviewedBy: auth.uid, reviewedAt: FieldValue.serverTimestamp() });
+        tx.update(ref, { paieValidee: true, autoBloque: true, decisionHumaine: true, reviewedBy: auth.uid, reviewedAt: FieldValue.serverTimestamp() });
         tx.create(ref.collection("historique").doc(), { action: "classer-paie", uid: auth.uid, at: FieldValue.serverTimestamp() });
       });
       return NextResponse.json({ ok: true });
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
         if (current.data()?.retire) throw new Error("Pièce retirée");
-        tx.update(ref, { autoBloque: true });
+        tx.update(ref, { autoBloque: true, decisionHumaine: true });
         tx.create(ref.collection("historique").doc(), { action: "controle-manuel", uid: auth.uid, at: FieldValue.serverTimestamp() });
       });
       return NextResponse.json({ ok: true });
@@ -159,7 +159,7 @@ export async function POST(req: NextRequest) {
         const current = await tx.get(ref);
         if (current.data()?.retire) throw new Error("Cette pièce est archivée : restaurez-la avant de corriger.");
         if (current.data()?.depenseId || current.data()?.paiementsAssocies?.length) throw new Error("Cette pièce est déjà liée à un paiement. Utilisez Dissocier pour corriger dans le panneau de la pièce.");
-        tx.update(ref, { extraction, paieValidee: false, reviewedBy: auth.uid, reviewedAt: FieldValue.serverTimestamp() });
+        tx.update(ref, { extraction, paieValidee: false, decisionHumaine: true, reviewedBy: auth.uid, reviewedAt: FieldValue.serverTimestamp() });
         tx.create(ref.collection("historique").doc(), { action: "corriger", avant: current.data()?.extraction || null, apres: extraction, uid: auth.uid, at: FieldValue.serverTimestamp() });
       });
       return NextResponse.json({ ok: true, extraction });
