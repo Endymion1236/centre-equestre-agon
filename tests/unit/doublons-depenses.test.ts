@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { doublonPossible, groupesDoublons, preparerLotDoublons, fournisseurNormalise } from "../../src/lib/doublons-depenses";
+import { doublonPossible, groupesDoublons, memeCommercant, preparerLotDoublons, fournisseurNormalise } from "../../src/lib/doublons-depenses";
+import type { DepenseCandidate } from "../../src/lib/justificatifs";
 const a = { id: "datee", fournisseur: "Arrosage Distrib Ste", montant: 77.49, mois: "2026-07", dateOperation: "2026-07-09", source: "releve-bancaire" };
 const b = { ...a, id: "ancienne", dateOperation: "" };
 test("deux imports Mol Fulfiller avec préfixe Carte et astérisque : proposés ensemble", () => {
@@ -53,4 +54,44 @@ test("les préfixes bancaires (Prlv, Vir, Carte…) ne distinguent pas deux fois
   assert.equal(fournisseurNormalise("PRLV SEPA Groupama Centre Manche"), "groupama centre manche");
   assert.equal(fournisseurNormalise("CARTE Point.P"), "point p");
   assert.equal(doublonPossible(a, { ...b, fournisseur: "Prlv Groupama Sud" }), false, "le reste du libellé doit être identique");
+});
+
+/**
+ * Le même relevé importé deux fois — une fois par CSV, une fois par PDF —
+ * arrive avec des libellés tronqués à des longueurs différentes. Le gérant
+ * voyait « Anthropic San Franci » et « Anthropic San Francisco » côte à côte
+ * dans son tableau ; l'écran de contrôle, qui exigeait une égalité stricte,
+ * n'y voyait aucun doublon.
+ */
+test("un libellé tronqué reste le même commerçant", () => {
+  for (const [a, b] of [
+    ["Anthropic San Franci", "Anthropic San Francisco"],
+    ["Elevenlabs.io", "Elevenlabs.io New Yo"],
+    ["Lemonde.fr", "Lemonde.fr Paris"],
+    ["Mp Carrefour Blainvi", "Mp Carrefour Blainville"],
+    ["Action Coutance", "Action 4307 Coutance"],
+    ["Groupama Centre Manche", "Prlv Groupama Centre Manche"],
+  ]) assert.ok(memeCommercant(a, b), `${a} / ${b}`);
+
+  // Deux commerçants distincts ne se confondent pas, même au même montant.
+  for (const [a, b] of [
+    ["Anthropic San Francisco", "Elevenlabs.io"],
+    ["Uep u Express Agon", "Uep dac Resterdis"],
+    ["Avem", "Agon"],
+    ["", "Anthropic"],
+  ]) assert.ok(!memeCommercant(a, b), `${a} / ${b}`);
+});
+
+test("deux troncatures du même débit forment un groupe de doublons", () => {
+  const l = (id: string, fournisseur: string, extra: Partial<DepenseCandidate> = {}): DepenseCandidate => ({
+    id, fournisseur, montant: 15.83, mois: "2026-07", source: "releve-bancaire", ...extra,
+  } as DepenseCandidate);
+  const groupes = groupesDoublons([
+    l("a", "Anthropic San Franci"),
+    l("b", "Anthropic San Francisco"),
+    // Même montant, autre commerçant : ne doit pas être happé par le groupe.
+    l("c", "Groupama Centre Manche"),
+  ]);
+  assert.equal(groupes.length, 1);
+  assert.deepEqual(groupes[0].map(d => d.id).sort(), ["a", "b"]);
 });

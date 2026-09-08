@@ -26,7 +26,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { nettoyerPiece, type DepenseCandidate } from "@/lib/justificatifs";
-import { diagnostiquerDebit, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "@/lib/matching-automatique";
+import { cleAlias, diagnostiquerDebit, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "@/lib/matching-automatique";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -138,6 +138,7 @@ export async function POST(req: NextRequest) {
         ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode" && i.famille !== "paie").slice(0, 100),
         nbIgnorees: plan.ignorees.length,
         resume: resumerRefus(plan.ignorees),
+        probables: plan.probables,
         note: plan.associations.length
           ? `${plan.associations.length} association(s) possibles sans ambiguïté. Rien n'est encore écrit.`
           : "Aucune association certaine. Les pièces restent à associer à la main.",
@@ -147,7 +148,17 @@ export async function POST(req: NextRequest) {
     const posees: typeof plan.associations = [];
     const refusees: { pieceId: string; nom?: string; motif: string }[] = [];
 
-    for (const a of plan.associations) {
+    // Associations « probables » que le gérant a confirmées : tout concordait
+    // sauf le nom, parce que l'enseigne se débite sous celui de sa société
+    // d'exploitation (Resterdis pour un Super U, Constellacom pour
+    // Printoclock). Les poser apprend la correspondance : les factures des
+    // mois suivants se rattacheront seules.
+    const confirmes: string[] = Array.isArray(body.confirmer)
+      ? body.confirmer.filter((x: unknown): x is string => typeof x === "string" && /^[\w-]{1,150}$/.test(x)).slice(0, 200)
+      : [];
+    const aPoser = [...plan.associations, ...plan.probables.filter(pr => confirmes.includes(pr.pieceId))];
+
+    for (const a of aPoser) {
       const pieceRef = adminDb.collection("justificatifs").doc(a.pieceId);
       const lienRef = adminDb.collection("justificatifs-liens").doc(a.depenseId);
       const depenseRef = adminDb.collection("depenses").doc(a.depenseId);
@@ -170,9 +181,20 @@ export async function POST(req: NextRequest) {
             associationDevise: null, operationAssociee: null,
           });
           tx.create(pieceRef.collection("historique").doc(), {
-            action: "associer-automatique", avant: null, apres: a.depenseId,
+            action: confirmes.includes(a.pieceId) ? "associer-confirme" : "associer-automatique",
+            avant: null, apres: a.depenseId,
             concordance: a.concordance, uid: auth.uid, at: FieldValue.serverTimestamp(),
           });
+          // Une confirmation vaut apprentissage : le gérant vient d'établir
+          // que ces deux libellés désignent le même fournisseur.
+          if (confirmes.includes(a.pieceId)) {
+            const nomPiece = String(p.extraction?.fournisseur || ""), nomDebit = String(depense.data()?.fournisseur || "");
+            const cle = cleAlias(nomPiece, nomDebit);
+            if (nomPiece && nomDebit && cle.length > 3 && cle.length < 400) {
+              tx.set(adminDb.collection("fournisseurs-alias").doc(encodeURIComponent(cle).slice(0, 380)),
+                { nomPiece: nomPiece.slice(0, 120), nomDebit: nomDebit.slice(0, 120), cle, uid: auth.uid, at: FieldValue.serverTimestamp() }, { merge: true });
+            }
+          }
         });
         posees.push(a);
       } catch (e) {
@@ -187,7 +209,7 @@ export async function POST(req: NextRequest) {
       ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode" && i.famille !== "paie").slice(0, 100),
       nbIgnorees: plan.ignorees.length,
       resume: resumerRefus(plan.ignorees),
-      note: `${posees.length} justificatif(s) rattaché(s) automatiquement. Chaque association reste défaisable depuis le tableau (« Dissocier ce paiement »).`,
+      note: `${posees.length} justificatif(s) rattaché(s)${confirmes.length ? " (dont vos confirmations, désormais mémorisées)" : " automatiquement"}. Chaque association reste défaisable depuis le tableau (« Dissocier ce paiement »).`,
     });
   } catch (e) {
     console.error("[justificatifs/rapprochement-auto]", e);

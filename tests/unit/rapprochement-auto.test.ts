@@ -284,7 +284,12 @@ test("la station-service du magasin U se rattache à son débit", () => {
   const celeris = piece({ fournisseur: "Céléris (GD-OBS)", ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-01", numero: "" });
   const r2 = planifierRapprochementAuto([{ id: "cel", nom: "Céléris.pdf", extraction: celeris }], [d], new Set(), "2026-09");
   assert.deepEqual(r2.associations, []);
-  assert.match(r2.ignorees[0].motif, /bon montant et la bonne date.*ne ressemble pas/);
+  // Rien n'est posé, mais le cas remonte en « probable » : deux montants
+  // identiques le même jour peuvent être une coïncidence comme une enseigne
+  // débitée sous un autre nom. C'est au gérant de trancher, un cas à la fois.
+  assert.match(r2.ignorees[0].motif, /ne ressemble pas/);
+  assert.match(r2.ignorees[0].motif, /À confirmer/);
+  assert.deepEqual(r2.probables.map(a => a.pieceId), ["cel"]);
 });
 
 /**
@@ -383,4 +388,40 @@ test("une correspondance de noms validée à la main fait autorité ensuite", ()
   assert.deepEqual(planifierRapprochementAuto([{ id: "p", extraction: facture }], [d], new Set(), "2026-07").associations, []);
   const avecAlias = planifierRapprochementAuto([{ id: "p", extraction: facture }], [d], new Set(), "2026-07", appris);
   assert.deepEqual(avecAlias.associations.map(a => a.depenseId), ["d1"], JSON.stringify(avecAlias.ignorees));
+});
+
+/**
+ * Beaucoup d'enseignes se débitent sous le nom de leur société
+ * d'exploitation : « Uep dac Resterdis » pour un Super U, « SAS
+ * CONSTELLACOM » pour Printoclock. Le veto joue à raison — sur la bonne
+ * pièce. Ces cas sont donc présentés pour confirmation en lot, pas posés
+ * seuls ni tus.
+ */
+test("quand le nom est le seul obstacle, l'association est proposée à confirmer", () => {
+  const quittance = piece({ fournisseur: "SUPER U STATION", ttc: 94.76, ht: 94.76, tva: 0, date: "2026-06-29", numero: "2396540220" });
+  const d = debit("d1", { montant: 94.76, fournisseur: "Uep dac Resterdis", dateOperation: "", mois: "2026-07" });
+
+  const r = planifierRapprochementAuto([{ id: "sp98", nom: "Super U.pdf", extraction: quittance }], [d], new Set(), "2026-07");
+  // Rien n'est posé sans confirmation…
+  assert.deepEqual(r.associations, []);
+  // …mais la proposition existe, et le motif dit pourquoi.
+  assert.deepEqual(r.probables.map(a => [a.pieceId, a.depenseId]), [["sp98", "d1"]]);
+  assert.equal(r.ignorees[0].famille, "veto-nom");
+  assert.match(r.ignorees[0].motif, /société d'exploitation/);
+
+  // Deux pièces se disputant le même débit : aucune proposition, l'humain tranche.
+  const autre = piece({ fournisseur: "GARAGE MARTIN", ttc: 94.76, ht: 94.76, tva: 0, date: "2026-06-29", numero: "X-1" });
+  const deux = planifierRapprochementAuto(
+    [{ id: "sp98", extraction: quittance }, { id: "gar", extraction: autre }], [d], new Set(), "2026-07");
+  assert.deepEqual(deux.probables, []);
+
+  // Un débit déjà justifié n'est jamais proposé.
+  const pris = planifierRapprochementAuto([{ id: "sp98", extraction: quittance }], [d], new Set(["d1"]), "2026-07");
+  assert.deepEqual(pris.probables, []);
+
+  // Et une fois la correspondance apprise, l'association devient certaine.
+  const appris = new Set([cleAlias("SUPER U STATION", "Uep dac Resterdis")]);
+  const sur = planifierRapprochementAuto([{ id: "sp98", extraction: quittance }], [d], new Set(), "2026-07", appris);
+  assert.deepEqual(sur.associations.map(a => a.depenseId), ["d1"]);
+  assert.deepEqual(sur.probables, []);
 });

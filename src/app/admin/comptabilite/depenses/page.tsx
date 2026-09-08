@@ -69,8 +69,34 @@ export default function DepensesPage() {
         ...restantes.slice(0, 12).map(i => `• ${i.nom || "pièce"} : ${i.motif}`),
         restantes.length > 12 ? `… et ${restantes.length - 12} autre(s)` : "",
       ].filter(Boolean).join("\n");
+      // Associations où tout concorde sauf le nom : beaucoup d'enseignes se
+      // débitent sous celui de leur société d'exploitation (Resterdis pour un
+      // Super U, Constellacom pour Printoclock). Les poser seul serait
+      // imprudent ; les taire oblige à tout refaire à la main. On les propose
+      // donc en lot, et chaque confirmation apprend la correspondance.
+      const probables: { pieceId: string; nom?: string; fournisseur?: string; montant: number; dateOperation?: string }[] = apercu.probables || [];
+      // Une par une, jamais en bloc : deux montants identiques le même jour
+      // peuvent être une coïncidence (une facture Céléris de 107,98 € et un
+      // débit U Express du même montant), et un bouton unique ferait valider
+      // l'erreur avec le reste. Chaque cas se juge d'un coup d'œil.
+      const proposerProbables = async () => {
+        if (!probables.length) return false;
+        const retenus: string[] = [];
+        for (const [i, a] of probables.slice(0, 25).entries()) {
+          const ok = window.confirm(`Correspondance ${i + 1} / ${Math.min(probables.length, 25)} — montant et date concordent, le nom diffère.\n\nPièce : ${a.nom || "sans nom"}\nDébit : ${a.fournisseur} · ${euros(a.montant)}${a.dateOperation ? ` du ${a.dateOperation}` : ""}\n\nBeaucoup d'enseignes se débitent sous le nom de leur société d'exploitation. Est-ce bien le même fournisseur ?\n\nOK pour rattacher, Annuler pour passer.`);
+          if (ok) retenus.push(a.pieceId);
+        }
+        if (!retenus.length) return false;
+        const rc = await (await authFetch("/api/admin/justificatifs/rapprochement-auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mois, apply: true, confirmer: retenus }) })).json();
+        if (rc.error) throw new Error(rc.error);
+        await charger();
+        setMessage(`${rc.associations.length} justificatif(s) rattaché(s). Les correspondances de noms confirmées sont mémorisées : les factures des mois suivants se rattacheront seules.${detail ? `\n${detail}` : ""}`);
+        return true;
+      };
+
       if (!nb) {
-        setMessage(`Aucune association certaine sur ${mois}.${apercu.nbIgnorees ? ` ${apercu.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${detail ? `\n${detail}` : ""}`);
+        if (await proposerProbables()) return;
+        setMessage(`Aucune association certaine sur ${mois}.${apercu.nbIgnorees ? ` ${apercu.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${probables.length ? `\n${probables.length} association(s) probable(s) non confirmée(s).` : ""}${detail ? `\n${detail}` : ""}`);
         return;
       }
       const liste = apercu.associations.slice(0, 10).map((a: { nom?: string; fournisseur?: string; montant: number; dateOperation?: string }) => `• ${a.nom || "pièce"} → ${a.fournisseur} ${euros(a.montant)} du ${a.dateOperation}`).join("\n");
@@ -80,6 +106,7 @@ export default function DepensesPage() {
       await charger();
       const refus = (r.refusees || []).length;
       setMessage(`${r.associations.length} justificatif(s) rattaché(s) automatiquement.${refus ? ` ${refus} refusé(s) au dernier contrôle.` : ""}${r.nbIgnorees ? ` ${r.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${detail ? `\n${detail}` : ""}`);
+      await proposerProbables();
     } catch (e) { setMessage((e as Error).message); }
     finally { setBusy(false); }
   }

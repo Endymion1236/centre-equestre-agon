@@ -151,7 +151,7 @@ const moisSuivant = (m: string) => {
  * débit le jour de la pièce ou dans les sept jours, fournisseur non
  * contradictoire.
  */
-export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandidate[], alias?: ReadonlySet<string>): CandidatAutomatique[] {
+export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandidate[], alias?: ReadonlySet<string>, ignorerVeto = false): CandidatAutomatique[] {
   if (p.devise !== "EUR" || p.typeDocument !== "achat" || p.ttc === null || p.ttc <= 0 || !p.date || alertesIdentification(p).length) return [];
   const moisPiece = p.date.slice(0, 7);
   return proposerAssociations(p, depenses)
@@ -169,7 +169,7 @@ export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandida
       const viaMois = !date && !!d.mois && (d.mois === moisPiece || d.mois === moisSuivant(moisPiece));
       return { d, jours, viaMois, concordance: concordanceFournisseur(p.fournisseur, d.fournisseur, alias) };
     })
-    .filter(({ jours, viaMois, concordance }) => (viaMois || (jours >= 0 && jours <= DELAI_DEBIT_JOURS)) && concordance !== "contradictoire")
+    .filter(({ jours, viaMois, concordance }) => (viaMois || (jours >= 0 && jours <= DELAI_DEBIT_JOURS)) && (ignorerVeto || concordance !== "contradictoire"))
     .map(({ d, concordance, viaMois }) => ({ ...d, concordance, ...(viaMois ? { viaMois: true } : {}) }));
 }
 
@@ -203,7 +203,17 @@ export function indiceProximite(p: PieceExtraite, depenses: DepenseCandidate[]):
   if (meilleur.ecart === 0) {
     // Le débit existe et porte le bon montant, mais le relevé importé n'a pas
     // conservé sa date : c'est le relevé qu'il faut compléter, pas la pièce.
-    if (meilleur.jours === null) return { famille: "sans-date", texte: ` Un débit du même montant existe (« ${d.fournisseur} »), sans date d'opération et sur un autre mois (${d.mois || "mois inconnu"}) que la pièce. Vérifiez, puis associez à la main.` };
+    if (meilleur.jours === null) {
+      // Le mois suivant est une fenêtre valable — un achat de fin de mois est
+      // débité le mois d'après. Annoncer « un autre mois » pour une quittance
+      // du 29 juin débitée en juillet était faux, et envoyait chercher le
+      // problème du mauvais côté : ce qui bloque alors, c'est le nom.
+      const moisPiece = p.date!.slice(0, 7);
+      if (d.mois === moisPiece || d.mois === moisSuivant(moisPiece)) {
+        return { famille: "veto-nom", texte: ` Un débit du même montant existe (« ${d.fournisseur} », mois ${d.mois}), mais son libellé ne ressemble pas à « ${p.fournisseur} » : associez à la main, ou corrigez le fournisseur lu sur la pièce.` };
+      }
+      return { famille: "sans-date", texte: ` Un débit du même montant existe (« ${d.fournisseur} »), sans date d'opération et sur un autre mois (${d.mois || "mois inconnu"}) que la pièce. Vérifiez, puis associez à la main.` };
+    }
     if (meilleur.jours < 0) return { famille: "hors-delai", texte: ` Un débit du même montant existe le ${quand} (« ${d.fournisseur} »), soit AVANT la date lue sur la pièce : la date de la pièce est peut-être mal lue.` };
     if (meilleur.jours > DELAI_DEBIT_JOURS) return { famille: "hors-delai", texte: ` Un débit du même montant existe le ${quand} (« ${d.fournisseur} »), mais ${meilleur.jours} jours après : hors du délai de ${DELAI_DEBIT_JOURS} jours.` };
     // Montant et date concordent : c'est donc le nom qui a opposé son veto.
@@ -350,7 +360,7 @@ export function planifierRapprochementAuto(
   mois?: string,
   /** Correspondances de noms déjà validées à la main (cf. `cleAlias`). */
   alias?: ReadonlySet<string>,
-): { associations: AssociationAuto[]; ignorees: PieceIgnoree[] } {
+): { associations: AssociationAuto[]; ignorees: PieceIgnoree[]; probables: AssociationAuto[] } {
   const actives = pieces.filter(p => !p.retire && !p.depenseId && !p.paiementsAssocies?.length);
   // Seuls les débits du mois demandé sont chargés : une facture d'août ou de
   // février n'a évidemment aucun candidat en juillet. Les compter comme
@@ -361,6 +371,18 @@ export function planifierRapprochementAuto(
   const fin = mois ? `${mois}-31` : "";
   const associations: AssociationAuto[] = [];
   const ignorees: PieceIgnoree[] = [];
+  /**
+   * Associations où TOUT concorde sauf le nom.
+   *
+   * « SUPER U STATION » sur la quittance, « Uep dac Resterdis » au relevé —
+   * Resterdis exploite ce Super U. « SAS CONSTELLACOM » pour Printoclock.
+   * Ces sociétés d'exploitation sont légion, et aucune règle textuelle ne
+   * peut les rapprocher. Les poser seul serait imprudent ; les taire oblige
+   * à tout reprendre à la main. On les présente donc pour confirmation en
+   * lot : un coup d'œil suffit à valider ou écarter, et chaque confirmation
+   * apprend la correspondance pour les mois suivants.
+   */
+  const probables: AssociationAuto[] = [];
   // Un même débit ne peut être promis à deux pièces dans le même passage.
   const debitsPris = new Set<string>();
 
@@ -391,6 +413,21 @@ export function planifierRapprochementAuto(
 
     const candidats = candidatsAutomatiques(e, depenses, alias);
     if (!candidats.length) {
+      // Le nom est-il le SEUL obstacle ? On refait le calcul sans le veto :
+      // si un unique débit reste, et qu'aucune autre pièce ne le vise, c'est
+      // une association probable — à confirmer d'un coup d'œil, pas à poser
+      // seul.
+      const sansVeto = candidatsAutomatiques(e, depenses, alias, true);
+      if (sansVeto.length === 1 && !depensesLiees.has(sansVeto[0].id) && !debitsPris.has(sansVeto[0].id)) {
+        const d = sansVeto[0];
+        const concurrente = actives.some(q => q.id !== p.id && !q.depenseId && q.extraction && !q.retire
+          && candidatsAutomatiques(q.extraction, [d], alias, true).length > 0);
+        if (!concurrente) {
+          probables.push({ pieceId: p.id, depenseId: d.id, concordance: d.concordance, nom: p.nom, fournisseur: d.fournisseur, montant: d.montant, dateOperation: d.dateOperation, ...(d.viaMois ? { viaMois: true } : {}) });
+          ignorer(`Montant et date concordent, mais « ${e.fournisseur} » ne ressemble pas à « ${d.fournisseur} ». À confirmer : beaucoup d'enseignes se débitent sous le nom de leur société d'exploitation.`, "veto-nom");
+          continue;
+        }
+      }
       const { texte, famille } = indiceProximite(e, depenses);
       ignorer(`Aucun débit de ${e.ttc?.toFixed(2)} € entre le ${e.date} et les ${DELAI_DEBIT_JOURS} jours suivants.${texte || " Un achat de fin de mois est souvent débité le mois d'après : relancez sur le mois suivant."}`, famille);
       continue;
@@ -434,5 +471,5 @@ export function planifierRapprochementAuto(
     debitsPris.add(d.id);
     associations.push({ pieceId: p.id, depenseId: d.id, concordance: d.concordance, nom: p.nom, fournisseur: d.fournisseur, montant: d.montant, dateOperation: d.dateOperation, ...(d.viaMois ? { viaMois: true } : {}) });
   }
-  return { associations, ignorees };
+  return { associations, ignorees, probables };
 }
