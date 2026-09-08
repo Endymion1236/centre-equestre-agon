@@ -39,6 +39,12 @@
  * moment de la copie. L'outil de reset de la production a été retiré le
  * 30/08/2026 (loi anti-fraude) ; celui-ci ne peut vider QUE la base de test.
  *
+ * ── Garder des familles de données (?garder=compta-depenses,…) ───────────
+ *
+ * Les groupes listés dans ?garder= (cf. lib/groupes-copie-test) ne sont ni
+ * vidés ni recopiés : le travail fait en test sur ces données (rapprochements,
+ * justificatifs…) survit à la remise à niveau du reste.
+ *
  * ── Sous-collections ─────────────────────────────────────────────────────
  *
  * `listCollections()` ne voit que le premier niveau. Les sous-collections
@@ -62,6 +68,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 import { firestoreDeTest, projetDeTest, BaseDeTestIndisponible } from "@/lib/firebase-admin-test";
+import { lireGroupesGardes, planifierCopie, resumeParGroupe } from "@/lib/groupes-copie-test";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -86,6 +93,13 @@ export async function POST(req: NextRequest) {
   const confirm = req.nextUrl.searchParams.get("confirm") || "";
   let etape = "initialisation";
   const debut = Date.now();
+
+  let garder: string[];
+  try {
+    garder = lireGroupesGardes(req.nextUrl.searchParams.get("garder"));
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e), projectId: source }, { status: 400 });
+  }
 
   try {
     if (!destination) {
@@ -125,6 +139,21 @@ export async function POST(req: NextRequest) {
     // qu'après plusieurs minutes de lecture.
     const collectionsTest = await dbTest.listCollections();
 
+    // Toutes les collections de la source, découvertes à l'exécution : aucune
+    // liste à maintenir, et rien qui puisse être oublié à l'ajout d'un module.
+    const collections = await adminDb.listCollections();
+
+    // Le plan dit, collection par collection, ce qui lui arrive ; les groupes
+    // gardés n'y apparaissent qu'en « garder ».
+    const plan = planifierCopie({
+      collectionsSource: collections.map((c) => c.id),
+      collectionsTest: collectionsTest.map((c) => c.id),
+      propre,
+      garder,
+    });
+    const actionDe = new Map(plan.map((p) => [p.collection, p.action]));
+    const gardees = plan.filter((p) => p.action === "garder").map((p) => p.collection);
+
     // ── Base propre : vider la destination avant de copier ──────────────
     // `recursiveDelete` emporte les sous-collections ; il ne connaît que
     // `dbTest`, jamais `adminDb` — la production n'est pas atteignable ici.
@@ -132,6 +161,7 @@ export async function POST(req: NextRequest) {
     let totalEffaces = 0;
     if (propre) {
       for (const coll of collectionsTest) {
+        if (actionDe.get(coll.id) !== "vider-puis-copier") continue;
         etape = `comptage de « ${coll.id} » dans ${destination} (base propre)`;
         const nb = (await coll.count().get()).data().count;
         effaces[coll.id] = nb;
@@ -142,14 +172,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Toutes les collections de la source, découvertes à l'exécution : aucune
-    // liste à maintenir, et rien qui puisse être oublié à l'ajout d'un module.
-    const collections = await adminDb.listCollections();
-
     const parCollection: Record<string, number> = {};
     let total = 0;
 
     for (const coll of collections) {
+      if (actionDe.get(coll.id) === "garder") continue;
       etape = `lecture de « ${coll.id} » dans ${source}`;
       const snap = await coll.get();
       parCollection[coll.id] = snap.size;
@@ -177,8 +204,9 @@ export async function POST(req: NextRequest) {
     for (const nom of SOUS_COLLECTIONS) {
       etape = `lecture des sous-collections « ${nom} » dans ${source}`;
       const snap = await adminDb.collectionGroup(nom).get();
-      // Les collections de premier niveau portant ce nom ont déjà été copiées.
-      const docs = snap.docs.filter((d) => d.ref.parent.parent !== null);
+      // Les collections de premier niveau portant ce nom ont déjà été copiées ;
+      // une sous-collection suit le sort de sa collection racine.
+      const docs = snap.docs.filter((d) => d.ref.parent.parent !== null && actionDe.get(d.ref.path.split("/")[0]) !== "garder");
       sousCollections[nom] = docs.length;
       total += docs.length;
       if (!apply || docs.length === 0) continue;
@@ -205,6 +233,10 @@ export async function POST(req: NextRequest) {
       destination,
       projectId: source,
       base_propre: propre,
+      garder,
+      groupes: resumeParGroupe(garder),
+      collections_gardees: gardees,
+      plan,
       effaces_test: propre ? { total: totalEffaces, par_collection: effaces } : null,
       total_documents: total,
       par_collection: parCollection,
@@ -212,9 +244,9 @@ export async function POST(req: NextRequest) {
       duree_secondes: Math.round((Date.now() - debut) / 1000),
       note: apply
         ? (propre
-          ? `La base de test a été vidée (${totalEffaces} documents) puis recopiée : elle est identique à la production à cet instant. Comptes Auth et fichiers Storage non copiés.`
+          ? `La base de test a été vidée (${totalEffaces} documents) puis recopiée${gardees.length ? `, sauf ${gardees.length} collection(s) gardée(s) telle(s) quelle(s) en test` : " : elle est identique à la production à cet instant"}. Comptes Auth et fichiers Storage non copiés.`
           : "Les documents absents de la source n'ont pas été supprimés de la base de test.")
-        : `Aucune écriture. Relancez avec ?apply=true&confirm=${MOT_CLE}${propre ? "&propre=true" : ""}.`,
+        : `Aucune écriture. Relancez avec ?apply=true&confirm=${MOT_CLE}${propre ? "&propre=true" : ""}${garder.length ? `&garder=${garder.join(",")}` : ""}.`,
     });
   } catch (e: unknown) {
     if (e instanceof BaseDeTestIndisponible) {
