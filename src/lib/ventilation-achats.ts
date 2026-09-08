@@ -9,11 +9,14 @@ export function comptesProposes(ligne: LigneMois) {
   const banque = banqueDepense(ligne);
   // Les comptes de tiers et les virements internes ne sont pas des achats.
   const achat = /^[26]/.test(imputation.compte) && !/^627/.test(imputation.compte);
-  const fournisseur = achat ? compteFournisseur(ligne.fournisseur) : { compte: "", libelle: "" };
+  const fournisseur = achat ? compteFournisseur(ligne.fournisseur) : { compte: "", libelle: "", collectif: false };
   const controles = [
     ...(imputation.source === "a-ventiler" ? [imputation.note || "Imputation à préciser."] : []),
     ...(!banque.compte ? ["Compte de prélèvement à préciser."] : []),
-    ...(achat && !fournisseur.compte ? ["Compte fournisseur à identifier."] : []),
+    // Un fournisseur non reconnu n'est plus un point de contrôle : il part au
+    // compte collectif 40100000, ce que fait déjà le journal préparatoire.
+    // « Compte fournisseur à identifier » s'affichait sur chaque ticket de
+    // caisse d'un commerçant occasionnel et noyait les vraies alertes.
     ...(ligne.doublonProbable ? ["Doublon probable à contrôler avant comptabilisation."] : []),
   ];
   return { imputation, banque, fournisseur, controles, aVentiler: controles.length > 0 };

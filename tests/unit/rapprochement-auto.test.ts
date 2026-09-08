@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { candidatsAutomatiques, concordanceFournisseur, planifierRapprochementAuto, type PieceMatching } from "../../src/lib/matching-automatique";
+import { candidatsAutomatiques, concordanceFournisseur, indiceProximite, planifierRapprochementAuto, type PieceMatching } from "../../src/lib/matching-automatique";
 import type { DepenseCandidate, PieceExtraite } from "../../src/lib/justificatifs";
 
 const piece = (extra: Partial<PieceExtraite> = {}): PieceExtraite => ({
@@ -136,4 +136,36 @@ test("un écart HT + TVA n'empêche pas d'identifier le paiement", () => {
   const sansDate = planifierRapprochementAuto([{ id: "s", extraction: piece({ date: "" }) }], [debit("a")], new Set());
   assert.deepEqual(sansDate.associations, []);
   assert.match(sansDate.ignorees[0].motif, /Lecture à compléter/);
+});
+
+/**
+ * « Aucun débit de 47,32 € » ne dit pas quoi faire. Le rapport nomme
+ * désormais le débit le plus proche et l'écart exact : c'est la différence
+ * entre un constat et une consigne.
+ */
+test("le rapport montre le débit le plus proche et ce qui cloche", () => {
+  const p = (extra: Partial<PieceExtraite> = {}) => piece({ ttc: 47.32, ht: 47.32, tva: 0, ...extra });
+
+  // Un chiffre mal lu par l'OCR.
+  assert.match(indiceProximite(p(), [debit("a", { montant: 47.23, dateOperation: "2026-07-29" })]),
+    /Le débit le plus proche est 47.23 € le 2026-07-29.*0.09 € d'écart/);
+
+  // Bon montant, mais trop tard.
+  assert.match(indiceProximite(p(), [debit("a", { montant: 47.32, dateOperation: "2026-08-20" })]),
+    /mais 23 jours après/);
+
+  // Bon montant, date antérieure à celle lue sur la pièce.
+  assert.match(indiceProximite(p(), [debit("a", { montant: 47.32, dateOperation: "2026-07-20" })]),
+    /AVANT la date lue sur la pièce/);
+
+  // Montant et date bons : c'est le nom qui a fait veto.
+  assert.match(indiceProximite(p({ fournisseur: "GERBER" }), [debit("a", { montant: 47.32, dateOperation: "2026-07-30", fournisseur: "CB CARREFOUR CONTACT" })]),
+    /bon montant et la bonne date.*ne ressemble pas à « GERBER »/);
+
+  // Rien de comparable : aucun indice inventé.
+  assert.equal(indiceProximite(p(), [debit("a", { montant: 900 })]), "");
+
+  // Et l'indice remonte bien dans le motif de la pièce écartée.
+  const r = planifierRapprochementAuto([{ id: "t", extraction: p() }], [debit("a", { montant: 47.23, dateOperation: "2026-07-29" })], new Set());
+  assert.match(r.ignorees[0].motif, /Le débit le plus proche est 47.23 €/);
 });

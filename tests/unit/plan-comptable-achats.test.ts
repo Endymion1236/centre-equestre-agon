@@ -51,5 +51,9 @@ test("les banques FFE sont distinctes et une banque inconnue reste vide", () => 
 test("les comptes fournisseurs sont reconnus sans inventer un compte divers", () => {
   assert.equal(compteFournisseur("PRLV ARVAL").compte, "401ARVAL");
   assert.equal(compteFournisseur("Agrial").compte, "401AGRIAL");
-  assert.equal(compteFournisseur("Inconnu").compte, "");
+  // Un commerçant occasionnel part au compte collectif du cabinet, comme le
+  // fait déjà le journal préparatoire : ce n'est pas une anomalie.
+  assert.equal(compteFournisseur("Inconnu").compte, "40100000");
+  assert.equal(compteFournisseur("Inconnu").collectif, true);
+  assert.equal(compteFournisseur("Agrial").collectif, undefined);
 });

@@ -44,9 +44,14 @@ test("les points à ventiler comprennent emprunt, catégorie, banque et fourniss
   assert.match(comptesProposes(lignes[5]).controles.join(" "), /capital.*intérêts/);
   assert.equal(comptesProposes(lignes[6]).aVentiler, true);
   assert.equal(comptesProposes({ ...lignes[0], compte: "Inconnue" }).banque.compte, "");
-  assert.equal(comptesProposes({ ...lignes[0], fournisseur: "Inconnu" }).fournisseur.compte, "");
+  // Un fournisseur non répertorié part au compte collectif : c'est une
+  // proposition utilisable, pas un point de contrôle.
+  assert.equal(comptesProposes({ ...lignes[0], fournisseur: "Inconnu" }).fournisseur.compte, "40100000");
+  assert.equal(comptesProposes({ ...lignes[0], fournisseur: "Inconnu" }).aVentiler, false);
   assert.equal(comptesProposes({ ...lignes[0], doublonProbable: true }).aVentiler, true);
-  assert.deepEqual(bilanVentilationAchats(lignes), { total: 9, aVentiler: 4, montantAVentiler: 940 });
+  // Deux lignes de moins qu'avant : elles n'étaient « à ventiler » que parce
+  // que leur fournisseur n'était pas répertorié, ce qui n'empêche rien.
+  assert.deepEqual(bilanVentilationAchats(lignes), { total: 9, aVentiler: 2, montantAVentiler: 760 });
 });
 
 test("le colis du mois contient exactement le CSV proposé à l'écran et le bilan TVA prudent", () => {
@@ -59,7 +64,7 @@ test("le colis du mois contient exactement le CSV proposé à l'écran et le bil
   assert.equal(colis.resume.tvaDeductibleJustifiee, 0);
   assert.ok(colis.resume.tvaAVerifier!.nb >= 2);
   const mail = corpsEmailComptable({ mois: colis.mois, resume: colis.resume, pieces: colis.pieces.map(p => p.filename), nomCentre: "Club test" });
-  assert.match(mail, /4 à ventiler/);
+  assert.match(mail, /2 à ventiler/);
   assert.match(mail, /hors total TVA automatique/);
   const justificatifs = construireExportJustificatifs(lignes);
   assert.match(justificatifs, /Compte d’imputation proposé/);

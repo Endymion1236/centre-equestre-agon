@@ -107,6 +107,42 @@ export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandida
     .map(({ d, concordance }) => ({ ...d, concordance }));
 }
 
+/**
+ * Pourquoi cette pièce n'a trouvé aucun débit — en montrant le plus proche.
+ *
+ * « Aucun débit de 47,32 € dans les sept jours » ne dit pas quoi faire : le
+ * débit est-il absent du relevé, décalé de deux jours, ou lu 47,23 € par
+ * l'OCR ? En nommant le candidat le plus proche et l'écart exact, le rapport
+ * devient une consigne : corriger un chiffre, élargir la date, ou aller
+ * chercher le débit ailleurs.
+ */
+export function indiceProximite(p: PieceExtraite, depenses: DepenseCandidate[]): string {
+  if (p.ttc === null || !p.date) return "";
+  const ttc = Math.round(p.ttc * 100);
+  const candidats = depenses
+    .filter(d => d.source === "releve-bancaire" && Number.isFinite(d.montant))
+    .map(d => {
+      const date = dateValide(d.dateOperation);
+      return { d, ecart: Math.abs(Math.round(d.montant * 100) - ttc), jours: date ? Math.round((Date.parse(date) - Date.parse(p.date!)) / 86400000) : null };
+    })
+    // Un débit dix fois plus gros n'apprend rien : on reste dans le voisinage.
+    .filter(c => c.ecart <= Math.max(200, ttc * 0.05))
+    .sort((a, b) => a.ecart - b.ecart || Math.abs(a.jours ?? 999) - Math.abs(b.jours ?? 999));
+
+  const meilleur = candidats[0];
+  if (!meilleur) return "";
+  const d = meilleur.d;
+  const quand = d.dateOperation || "date inconnue";
+  if (meilleur.ecart === 0) {
+    if (meilleur.jours === null) return ` Un débit du même montant existe (« ${d.fournisseur} »), mais sans date : associez-le à la main.`;
+    if (meilleur.jours < 0) return ` Un débit du même montant existe le ${quand} (« ${d.fournisseur} »), soit AVANT la date lue sur la pièce : la date de la pièce est peut-être mal lue.`;
+    if (meilleur.jours > DELAI_DEBIT_JOURS) return ` Un débit du même montant existe le ${quand} (« ${d.fournisseur} »), mais ${meilleur.jours} jours après : hors du délai de ${DELAI_DEBIT_JOURS} jours.`;
+    // Montant et date concordent : c'est donc le nom qui a opposé son veto.
+    return ` Le débit de ${quand} (« ${d.fournisseur} ») a le bon montant et la bonne date, mais son libellé ne ressemble pas à « ${p.fournisseur} » : associez-le à la main, ou corrigez le fournisseur lu sur la pièce.`;
+  }
+  return ` Le débit le plus proche est ${(d.montant).toFixed(2)} € le ${quand} (« ${d.fournisseur} »), soit ${(meilleur.ecart / 100).toFixed(2)} € d'écart : vérifiez le montant lu sur la pièce.`;
+}
+
 export type AssociationAuto = { pieceId: string; depenseId: string; concordance: Concordance; nom?: string; fournisseur?: string; montant: number; dateOperation?: string };
 export type PieceIgnoree = { pieceId: string; nom?: string; motif: string };
 
@@ -145,8 +181,15 @@ export function planifierRapprochementAuto(
     if (doublon) { ignorer("Une autre pièce porte le même fournisseur et le même numéro : doublon à trancher."); continue; }
 
     const candidats = candidatsAutomatiques(e, depenses);
-    if (!candidats.length) { ignorer(`Aucun débit de ${e.ttc?.toFixed(2)} € entre le ${e.date} et les ${DELAI_DEBIT_JOURS} jours suivants. Un achat de fin de mois est souvent débité le mois d'après : relancez sur le mois suivant.`); continue; }
-    if (candidats.length > 1) { ignorer(`${candidats.length} débits possibles pour ce montant : à choisir à la main.`); continue; }
+    if (!candidats.length) {
+      const indice = indiceProximite(e, depenses);
+      ignorer(`Aucun débit de ${e.ttc?.toFixed(2)} € entre le ${e.date} et les ${DELAI_DEBIT_JOURS} jours suivants.${indice || " Un achat de fin de mois est souvent débité le mois d'après : relancez sur le mois suivant."}`);
+      continue;
+    }
+    if (candidats.length > 1) {
+      ignorer(`${candidats.length} débits possibles pour ${e.ttc?.toFixed(2)} € : ${candidats.slice(0, 3).map(c => `${c.dateOperation || "?"} « ${c.fournisseur} »`).join(", ")}. À choisir à la main.`);
+      continue;
+    }
 
     const d = candidats[0];
     if (depensesLiees.has(d.id) || debitsPris.has(d.id)) { ignorer("Le débit correspondant porte déjà un justificatif."); continue; }

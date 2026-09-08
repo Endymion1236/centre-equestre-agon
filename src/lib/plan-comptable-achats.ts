@@ -149,10 +149,24 @@ const FOURNISSEURS: [RegExp, string, string][] = [
   [/sonovente/, "401SONOVEN", "Sonovente"], [/standardfacile|standard facile/, "401STAND", "StandardFacile"], [/super u|u express|station u/, "401SUP", "Super U / U Express"], [/tabac/, "401TABAFRA", "Tabac Franck (maréchal)"],
   [/temu/, "401TEMU", "Temu"], [/tjm vivier/, "401TJM", "TJM Vivier"], [/veterin|clinique vet|pommiers/, "401VETERIN", "Vétérinaires"], [/vis express/, "401VISEXP", "Vis Express"], [/vital concept/, "401VITAL", "Vital Concept"], [/vida ?xl/, "401VXINTER", "Vida XL"],
 ];
-export function compteFournisseur(fournisseur: unknown): CompteAchat {
+/**
+ * Compte du fournisseur, nominatif quand le cabinet en tient un.
+ *
+ * Le cabinet ouvre un compte 401 nominatif pour ses fournisseurs réguliers
+ * (Agrial, Padd, Orange…). Pour un achat occasionnel — le ticket de caisse
+ * d'un commerçant qu'on ne reverra pas — il passe par le compte collectif
+ * 40100000, et c'est très bien ainsi. Réclamer un compte nominatif pour
+ * chaque ticket transformait la moitié du tableau en alertes orange sans
+ * rien apprendre à personne.
+ *
+ * `collectif` distingue les deux : la proposition reste utilisable telle
+ * quelle, et la comptable ouvre un compte nominatif si le fournisseur
+ * s'installe dans les habitudes du club.
+ */
+export function compteFournisseur(fournisseur: unknown): CompteAchat & { collectif?: boolean } {
   const t = norm(fournisseur);
   for (const [re, compte, libelle] of FOURNISSEURS) if (re.test(t)) return { compte, libelle };
-  return { compte: "", libelle: "Fournisseur à identifier" };
+  return { compte: "40100000", libelle: "Fournisseurs (compte collectif)", collectif: true };
 }
 
 /** Compte de banque : celui du relevé importé quand on le connaît. */
