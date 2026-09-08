@@ -90,17 +90,27 @@ export async function POST(req: NextRequest) {
     // pièces, cinq lots, soit dix mille lectures Firestore pour une question
     // qui n'en demande que cent. On demande désormais uniquement les pièces
     // qui portent l'un des identifiants Drive de ce dossier.
+    //
+    // Une pièce ARCHIVÉE ne compte pas comme « déjà importée » : après
+    // « Repartir avec une liste de pièces vide », son identifiant Drive est
+    // toujours là et la faisait écarter ici, avant même la boucle. Le dossier
+    // paraissait entièrement importé alors que la liste était vide. On ne
+    // saute donc que les pièces encore actives — ou déjà rattachées à un
+    // paiement, qu'un réimport n'a aucune raison de déranger.
     const dejaDrive = new Set<string>();
     for (let i = 0; i < fichiers.length; i += 30) {
       const lot = fichiers.slice(i, i + 30).map(f => f.id);
       if (!lot.length) continue;
-      const snap = await adminDb.collection("justificatifs").where("driveFileId", "in", lot).select("driveFileId").get();
-      for (const d of snap.docs) { const v = d.data().driveFileId; if (v) dejaDrive.add(String(v)); }
+      const snap = await adminDb.collection("justificatifs").where("driveFileId", "in", lot).select("driveFileId", "retire", "depenseId").get();
+      for (const d of snap.docs) {
+        const v = d.data();
+        if (v.driveFileId && (v.retire !== true || v.depenseId)) dejaDrive.add(String(v.driveFileId));
+      }
     }
     const aFaire = fichiers.filter(f => !dejaDrive.has(f.id));
     await reglages().set({ driveFolderId: folderId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
-    const importes: string[] = [], doublons: string[] = [], ignores: string[] = [];
+    const importes: string[] = [], doublons: string[] = [], ignores: string[] = [], restaurees: string[] = [];
     let traites = 0;
     for (const f of aFaire.slice(0, LOT)) {
       // Rendre la main avant la coupure plutôt que de perdre le rapport.
@@ -115,7 +125,23 @@ export async function POST(req: NextRequest) {
         const ref = adminDb.collection("justificatifs").doc(id);
         const existant = await ref.get();
         if (existant.exists) {
-          // Même contenu déjà déposé (à la main ou depuis un autre dossier) : on note l'origine Drive, sans doublon.
+          // Même contenu déjà déposé (à la main ou depuis un autre dossier) :
+          // on note l'origine Drive, sans doublon.
+          //
+          // Cas particulier, et il n'est pas rare : la pièce est ARCHIVÉE.
+          // Après « Repartir avec une liste de pièces vide », réimporter le
+          // dossier ne rendait rien — chaque fichier était reconnu à son
+          // empreinte, compté « déjà connu », et laissé archivé. La liste
+          // restait vide et l'import semblait ne rien faire. Réimporter un
+          // dossier, c'est vouloir ses pièces : on les remet en circulation,
+          // sauf celles déjà rattachées à un paiement, qu'on ne touche pas.
+          const v = existant.data() || {};
+          if (v.retire === true && !v.depenseId) {
+            await ref.set({ driveFileId: f.id, driveNom: f.name, retire: false, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            await ref.collection("historique").doc().create({ action: "restaurer-import-drive", uid: auth.uid, at: FieldValue.serverTimestamp() });
+            restaurees.push(f.name);
+            continue;
+          }
           await ref.set({ driveFileId: f.id, driveNom: f.name }, { merge: true });
           doublons.push(f.name); continue;
         }
@@ -133,7 +159,7 @@ export async function POST(req: NextRequest) {
       }
     }
     return NextResponse.json({
-      ok: true, total: fichiers.length, importes, doublons, ignores,
+      ok: true, total: fichiers.length, importes, doublons, ignores, restaurees,
       // Les fichiers déjà connus par leur identifiant Drive sont écartés avant
       // la boucle : sans ce compte, un dossier entièrement importé renvoyait
       // « 0 importée, 0 déjà connue », ce qui ressemble à une panne.

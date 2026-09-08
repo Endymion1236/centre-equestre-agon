@@ -72,7 +72,7 @@ export default function JustificatifsPage() {
   async function importerDrive() {
     if (!drive?.dossier.trim()) { setMessage("Collez le lien du dossier Drive à importer."); return; }
     setBusy(true); setEdition(false);
-    const nouveaux: string[] = []; let doublons = 0, ignores: string[] = [], total = 0, tours = 0, dejaImportes = 0;
+    const nouveaux: string[] = []; let doublons = 0, ignores: string[] = [], total = 0, tours = 0, dejaImportes = 0, restaurees = 0;
     try {
       let restants = 1;
       while (restants > 0 && tours < 40) {
@@ -84,7 +84,7 @@ export default function JustificatifsPage() {
         const d = await r.json().catch(() => ({ error: `Réponse illisible du serveur (HTTP ${r.status}). Réessayez ; les pièces déjà importées sont conservées.` }));
         if (!r.ok) throw new Error(d.error || `Import refusé (HTTP ${r.status}).`);
         nouveaux.push(...d.importes); doublons += d.doublons.length; ignores = [...ignores, ...d.ignores]; total = d.total; restants = d.restants;
-        dejaImportes = d.dejaImportes ?? 0;
+        dejaImportes = d.dejaImportes ?? 0; restaurees += (d.restaurees || []).length;
       }
       await load();
       let lues = 0, echecs = 0;
@@ -99,8 +99,12 @@ export default function JustificatifsPage() {
       const dejaTotal = dejaImportes + doublons;
       setMessage([`Dossier Drive : ${total} fichier(s) PDF/JPEG/PNG.`,
         nouveaux.length ? `${nouveaux.length} nouvelle(s) pièce(s) importée(s)${dejaTotal ? `, ${dejaTotal} déjà présente(s)` : ""}.` : "",
-        !nouveaux.length && dejaTotal ? `Rien de nouveau : les ${dejaTotal} fichier(s) sont déjà dans les pièces à rattacher.` : "",
-        !nouveaux.length && !dejaTotal && total ? "Aucun fichier n'a pu être importé — voir les motifs ci-dessous." : "",
+        // Une pièce archivée que le réimport remet en circulation n'est ni
+        // « nouvelle » ni « déjà présente » : sans cette ligne, le rapport
+        // annoncerait qu'il ne s'est rien passé.
+        restaurees ? `${restaurees} pièce(s) archivée(s) remise(s) dans la liste à rattacher (leur lecture est conservée ; ré-archivez celles que vous vouliez écarter).` : "",
+        !nouveaux.length && !restaurees && dejaTotal ? `Rien de nouveau : les ${dejaTotal} fichier(s) sont déjà dans les pièces à rattacher.` : "",
+        !nouveaux.length && !restaurees && !dejaTotal && total ? "Aucun fichier n'a pu être importé — voir les motifs ci-dessous." : "",
         nouveaux.length ? `${lues} lue(s) par l'IA${echecs ? `, ${echecs} à relire à la main` : ""}.` : "", ...ignores.map(i => `Ignoré : ${i}`)].filter(Boolean).join("\n"));
     } catch (e) { setMessage(e instanceof Error ? e.message : "Import Drive impossible"); }
     finally { setBusy(false); }
