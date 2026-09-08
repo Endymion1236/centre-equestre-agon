@@ -56,9 +56,16 @@ export function diagnosticImportDrive(message: string): DiagnosticImportDrive | 
   // L'API Drive est une API distincte de Gmail : elle doit être activée dans
   // le projet Google Cloud. Sans elle, tout dossier, même partagé, est refusé.
   if (/accessNotConfigured|has not been used in project|Drive API has not|API .{0,20}(disabled|not enabled)/i.test(message)) {
+    // Google nomme le projet concerné : c'est LA donnée qui dit où activer
+    // l'API. L'activer sur un autre projet ne change rien.
+    const motif = motifGoogle(message);
+    const projet = /project (\d{6,})/.exec(motif || message)?.[1];
     return {
       statut: 409,
-      erreur: "L'API Google Drive n'est pas activée pour cette application. Dans la console Google Cloud du projet, ouvrez « API et services » puis « Bibliothèque », activez « Google Drive API », attendez une minute et relancez l'import. Le partage du dossier n'y change rien tant que l'API est désactivée.",
+      erreur: "L'API Google Drive n'est pas activée pour le projet Google Cloud qui porte les identifiants de connexion de l'application"
+        + (projet ? ` — Google nomme le projet numéro ${projet}. Activez-la sur CE projet précisément` : "")
+        + ". Dans la console Google Cloud, ouvrez « API et services » puis « Bibliothèque », activez « Google Drive API », attendez une minute et relancez l'import. Le partage du dossier n'y change rien tant que l'API est désactivée."
+        + (motif ? ` Message de Google : « ${motif} »` : ""),
     };
   }
   // Le quota se présente aussi en 403 : il se traite avant le refus d'accès.

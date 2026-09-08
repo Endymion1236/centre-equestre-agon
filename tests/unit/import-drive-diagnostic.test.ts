@@ -48,6 +48,11 @@ test("API Drive désactivée dans le projet Google : cause nommée, geste préci
   assert.match(d.erreur, /API Google Drive n'est pas activée/);
   assert.match(d.erreur, /Bibliothèque/);
   assert.match(d.erreur, /partage du dossier n'y change rien/);
+  // Le numéro de projet dit OÙ activer l'API : l'activer ailleurs ne sert à rien.
+  assert.match(d.erreur, /projet numéro 785848912923/);
+  assert.match(d.erreur, /Activez-la sur CE projet/);
+  // Sans numéro dans le message, la consigne reste utilisable.
+  assert.match(diagnosticImportDrive("drive list 403: accessNotConfigured")!.erreur, /API Google Drive n'est pas activée/);
 });
 
 test("un 403 d'accès cite le motif renvoyé par Google", () => {
