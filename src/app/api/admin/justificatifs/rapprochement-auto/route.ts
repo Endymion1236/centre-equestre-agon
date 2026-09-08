@@ -130,7 +130,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         ok: true, mois, mode: "aperçu",
         associations: plan.associations,
-        ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode").slice(0, 100),
+        ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode" && i.famille !== "paie").slice(0, 100),
         nbIgnorees: plan.ignorees.length,
         resume: resumerRefus(plan.ignorees),
         note: plan.associations.length
@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
       ok: true, mois, mode: "appliqué",
       associations: posees,
       refusees,
-      ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode").slice(0, 100),
+      ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode" && i.famille !== "paie").slice(0, 100),
       nbIgnorees: plan.ignorees.length,
       resume: resumerRefus(plan.ignorees),
       note: `${posees.length} justificatif(s) rattaché(s) automatiquement. Chaque association reste défaisable depuis le tableau (« Dissocier ce paiement »).`,

@@ -248,7 +248,15 @@ export function diagnostiquerDebit(
       if (alertes.length) return { ...infos, verdict: `Lecture à compléter : ${alertes[0]}` };
       if (ecartCts === null) return { ...infos, verdict: "Montant TTC illisible sur la pièce." };
       if (ecartCts !== 0) return { ...infos, verdict: `Montant différent : ${e.ttc!.toFixed(2)} € sur la pièce contre ${(d.montant || 0).toFixed(2)} € au relevé.` };
-      if (jours === null) return { ...infos, verdict: dateDebit ? "Date absente sur la pièce." : "Ce débit n'a pas de date d'opération : complétez les dates du relevé." };
+      if (jours === null) {
+        if (!e.date) return { ...infos, verdict: "Date absente sur la pièce : corrigez la lecture." };
+        // Le débit n'a pas de date : c'est son mois qui sert de fenêtre.
+        const moisPiece = e.date.slice(0, 7);
+        if (d.mois === moisPiece || d.mois === moisSuivant(moisPiece)) {
+          return { ...infos, verdict: `Ce débit n'a pas de date, mais son mois (${d.mois}) correspond : cette pièce aurait dû être rattachée. Relancez le rapprochement sur ${d.mois}.` };
+        }
+        return { ...infos, verdict: `Ce débit n'a pas de date d'opération et son mois (${d.mois || "inconnu"}) ne correspond pas à la pièce (${moisPiece}) : associez à la main.` };
+      }
       if (jours < 0) return { ...infos, verdict: `Pièce datée ${Math.abs(jours)} jour(s) APRÈS le débit : vérifiez la date lue.` };
       if (jours > DELAI_DEBIT_JOURS) return { ...infos, verdict: `Débit ${jours} jours après la pièce : au-delà du délai de ${DELAI_DEBIT_JOURS} jours.` };
       if (concordance === "contradictoire") return { ...infos, verdict: `Montant et date concordent, mais « ${e.fournisseur} » ne ressemble pas à « ${d.fournisseur} » : associez à la main.` };
@@ -278,7 +286,8 @@ export const LIBELLE_FAMILLE: Record<FamilleRefus, string> = {
   "non-lue": "lecture pas encore lancée",
   "a-completer": "lecture à compléter (fournisseur, date, TTC, devise)",
   "aucun-debit": "aucun débit comparable au relevé",
-  "pas-un-achat": "pas une facture d'achat (paie, vente, divers)",
+  "pas-un-achat": "lues « vente » ou « autre » : lecture à corriger si le club est le client",
+  "paie": "bulletins de salaire (à classer depuis Masse salariale)",
   "hors-periode": "pièces d'un autre mois",
 };
 
@@ -301,7 +310,8 @@ export type AssociationAuto = { pieceId: string; depenseId: string; concordance:
  */
 export type FamilleRefus =
   | "hors-periode"    // pièce d'un autre mois : ce n'est pas un problème
-  | "pas-un-achat"    // bulletin de paie, facture de vente, document divers
+  | "paie"            // bulletin de salaire : circuit dédié, pas un problème
+  | "pas-un-achat"    // facture de vente, document divers — souvent une lecture à corriger
   | "non-lue"         // lecture pas encore lancée
   | "doublon"         // deux exemplaires de la même facture
   | "sans-date"       // le débit correspondant n'a pas de date d'opération
@@ -348,7 +358,11 @@ export function planifierRapprochementAuto(
     // tour. On le dit avant tout autre motif, sinon le rapport reproche à une
     // facture d'août de n'avoir pas de débit en juillet.
     if (mois && e.date && (e.date < debut || e.date > fin)) { ignorer(`Pièce du ${e.date} : hors du mois traité, relancez sur ${e.date.slice(0, 7)}.`, "hors-periode"); continue; }
-    if (e.typeDocument !== "achat") { ignorer(`Document classé « ${e.typeDocument || "inconnu"} » : seules les factures d'achat sont rapprochées seules.`, "pas-un-achat"); continue; }
+    // Un bulletin de salaire ne se rapproche jamais ici : il se classe depuis
+    // l'écran Masse salariale. Le compter parmi les refus faisait figurer
+    // vingt-trois « problèmes » là où il n'y en avait aucun.
+    if (e.typeDocument === "paie") { ignorer("Bulletin de salaire : se classe depuis l'écran Masse salariale.", "paie"); continue; }
+    if (e.typeDocument !== "achat") { ignorer(`Document classé « ${e.typeDocument || "inconnu"} » : si le club en est le client (ticket de caisse, appel de cotisations), corrigez la lecture en « achat ».`, "pas-un-achat"); continue; }
     if (e.devise !== "EUR") { ignorer("Facture en devise étrangère : association manuelle.", "a-completer"); continue; }
     const alertes = alertesIdentification(e);
     if (alertes.length) { ignorer(`Lecture à compléter : ${alertes[0]}`, "a-completer"); continue; }

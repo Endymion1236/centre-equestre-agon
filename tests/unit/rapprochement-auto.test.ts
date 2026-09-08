@@ -85,7 +85,7 @@ test("les pièces hors jeu sont écartées avec leur motif", () => {
     [{ id: "fractionnee", extraction: piece(), paiementsAssocies: [{ id: "e", montant: 10 }] }, null],
     [{ id: "misedecote", extraction: piece(), decisionAssociation: true }, /mise de côté pour un traitement manuel/],
     [{ id: "nonlue", extraction: null }, /pas encore lue/],
-    [{ id: "paie", extraction: piece({ typeDocument: "paie", salarie: "X", moisPaie: "2026-07", netAPayer: 1000 }) }, /seules les factures d'achat/],
+    [{ id: "paie", extraction: piece({ typeDocument: "paie", salarie: "X", moisPaie: "2026-07", netAPayer: 1000 }) }, /se classe depuis l'écran Masse salariale/],
     [{ id: "devise", extraction: piece({ devise: "USD" }) }, /devise étrangère/],
     [{ id: "sansdebit", extraction: piece({ ttc: 999, ht: 999, tva: 0 }) }, /Aucun débit de 999.00 €/],
   ];
@@ -204,7 +204,7 @@ test("le rapport se borne au mois traité et classe ses refus", () => {
   const familles = Object.fromEntries(r.ignorees.map(i => [i.pieceId, i.famille]));
   assert.equal(familles.aout, "hors-periode");
   assert.equal(familles.fevrier, "hors-periode");
-  assert.equal(familles.bulletin, "pas-un-achat");
+  assert.equal(familles.bulletin, "paie");
   assert.match(r.ignorees.find(i => i.pieceId === "aout")!.motif, /relancez sur 2026-08/);
 
   // Un achat du 28 juin débité début juillet reste examiné en juillet.
@@ -217,7 +217,7 @@ test("le rapport se borne au mois traité et classe ses refus", () => {
   assert.equal(planifierRapprochementAuto(pieces, [debit("a")], new Set()).ignorees.some(i => i.famille === "hors-periode"), false);
 
   const resume = resumerRefus(r.ignorees);
-  assert.deepEqual(resume.map(f => [f.famille, f.nb]), [["pas-un-achat", 1], ["hors-periode", 2]]);
+  assert.deepEqual(resume.map(f => [f.famille, f.nb]), [["paie", 1], ["hors-periode", 2]]);
 });
 
 /**
