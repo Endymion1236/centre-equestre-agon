@@ -6,6 +6,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { DEVISES_PIECES, type PieceExtraite } from "@/lib/justificatifs";
 import { verifierAssociationTableau, verifierEcheance } from "@/lib/tableau-depenses";
 import ReinitialiserPieces from "./ReinitialiserPieces";
+import SupprimerPieces from "./SupprimerPieces";
 import { posteCommissionCarte, POSTES_DEPENSES } from "@/lib/postes-depenses";
 import { CATEGORIE_IMMOBILISATION, CATEGORIE_EMPRUNTS, CATEGORIE_COMPTE_FFE, SEUIL_ALERTE_IMMOBILISATION_TTC } from "@/lib/tableau-depenses";
 import { completudeJustificatifs, bilanTvaMois, construireExportTva, construireExportJustificatifs } from "@/lib/bilan-justificatifs";
@@ -228,7 +229,7 @@ export default function DepensesPage() {
       </article>; })}</div>
       {!visibles.length && <p>Aucune opération affichée pour cette sélection.</p>}
 
-      <details><summary>Autres outils</summary><div className="flex flex-wrap gap-4 p-3"><button disabled={busy} className="underline" onClick={() => setVue("pieces")}>Documents en attente et archives</button><Link className="underline" href="/admin/comptabilite/tresorerie">Comptes et relevés</Link><Link className="underline" href="/admin/comptabilite/depenses/doublons">Contrôler les doublons</Link><Link className="underline" href="/admin/comptabilite/cloture-mois">Boucler le mois</Link><Link className="underline" href="/admin/comptabilite/documents">Documents comptables</Link><Link className="underline" href="/admin/comptabilite/celeris">Historique Céleris</Link></div><ReinitialiserPieces termine={charger} verrouiller={setBusy} /></details>
+      <details><summary>Autres outils</summary><div className="flex flex-wrap gap-4 p-3"><button disabled={busy} className="underline" onClick={() => setVue("pieces")}>Documents en attente et archives</button><Link className="underline" href="/admin/comptabilite/tresorerie">Comptes et relevés</Link><Link className="underline" href="/admin/comptabilite/depenses/doublons">Contrôler les doublons</Link><Link className="underline" href="/admin/comptabilite/cloture-mois">Boucler le mois</Link><Link className="underline" href="/admin/comptabilite/documents">Documents comptables</Link><Link className="underline" href="/admin/comptabilite/celeris">Historique Céleris</Link></div><ReinitialiserPieces termine={charger} verrouiller={setBusy} /><SupprimerPieces termine={charger} verrouiller={setBusy} /></details>
     </>}
   </main>;
 }
