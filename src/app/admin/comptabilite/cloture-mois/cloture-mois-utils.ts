@@ -55,7 +55,7 @@ export function construirePointsCloture(params: {
   lignesMS: LigneMasseSalarialeCloture[];
   resultat: MoisResultatCloture[];
   /** Complétude des justificatifs du tableau des opérations (lib/bilan-justificatifs). Absent : point non affiché. */
-  justificatifs?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number };
+  justificatifs?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number; perdues?: number; montantPerdues?: number };
 }): PointCloture[] {
   const { mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs } = params;
   const ligneResultat = resultat.find((ligne) => ligne.mois === mois);
@@ -153,8 +153,8 @@ export function construirePointsCloture(params: {
       detail: justificatifs.total === 0
         ? "Aucune dépense dans le tableau des opérations pour ce mois."
         : justificatifs.sansPiece === 0
-          ? `${justificatifs.total}/${justificatifs.total} dépenses justifiées (pièce, relevé ou masse salariale).`
-          : `${justificatifs.justifies}/${justificatifs.total} dépenses justifiées — ${formaterEurosCloture(justificatifs.montantSansPiece)} sans pièce sur ${justificatifs.sansPiece} ligne(s). L'envoi reste possible, la comptable le verra.`,
+          ? `${justificatifs.justifies}/${justificatifs.total} dépenses justifiées (pièce, relevé ou masse salariale).${justificatifs.perdues ? ` ${justificatifs.perdues} pièce(s) déclarée(s) perdue(s), relevé conservé (${formaterEurosCloture(justificatifs.montantPerdues || 0)}) : la comptable voit le motif.` : ""}`
+          : `${justificatifs.justifies}/${justificatifs.total} dépenses justifiées — ${formaterEurosCloture(justificatifs.montantSansPiece)} sans pièce sur ${justificatifs.sansPiece} ligne(s).${justificatifs.perdues ? ` ${justificatifs.perdues} pièce(s) déclarée(s) perdue(s), relevé conservé.` : ""} L'envoi reste possible, la comptable le verra.`,
       href: "/admin/comptabilite/depenses",
       lien: "Ouvrir le tableau des opérations",
     });

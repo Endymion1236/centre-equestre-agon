@@ -24,6 +24,8 @@ export interface LigneMois {
   dateOperation?: string; mois?: string; fournisseur?: string; poste?: string; montant: number; source?: string; compte?: string; note?: string; compteBanqueConfirme?: string | null;
   suivie?: boolean; rapprochementExclu?: boolean; depensePersonnelle?: boolean; immobilisation?: boolean; avanceFfe?: boolean;
   statutTVA?: string; justificatifReleve?: boolean; referenceJustificatifReleve?: string | null;
+  /** Pièce déclarée perdue par le gérant, relevé conservé : le cas est traité, pas justifié. */
+  piecePerdue?: { motif: string; declareeLe?: string } | null;
   origineBancaire?: string; dernierReleveBancaire?: { nom: string };
   /** Justifiée par un autre écran (Masse salariale) : { type, detail }. */
   justifieeVia?: { type: string; detail: string } | null;
@@ -35,17 +37,24 @@ export interface LigneMois {
 const c = (n: number) => Math.round(n * 100) / 100;
 export const dansPerimetre = (l: LigneMois) => l.suivie !== false && !l.rapprochementExclu && !l.depensePersonnelle;
 export const estJustifiee = (l: LigneMois) => !!(l.piece || l.justificatifReleve || l.justifieeVia);
+/** Déclarée perdue et toujours sans pièce : signalée à part, ni justifiée ni « manquante ». */
+export const estDeclareePerdue = (l: LigneMois) => !!l.piecePerdue && !estJustifiee(l);
 export const natureLigne = (l: LigneMois) => l.depensePersonnelle ? "personnel" : l.immobilisation ? "immobilisation" : l.avanceFfe ? "avance compte FFE" : l.suivie === false ? "hors charges" : "charge";
 
 export function completudeJustificatifs(lignes: LigneMois[]) {
   const base = lignes.filter(dansPerimetre);
-  const sans = base.filter(l => !estJustifiee(l));
+  const perdues = base.filter(estDeclareePerdue);
+  const sans = base.filter(l => !estJustifiee(l) && !estDeclareePerdue(l));
+  const justifies = base.length - sans.length - perdues.length;
   return {
     total: base.length,
-    justifies: base.length - sans.length,
+    justifies,
     sansPiece: sans.length,
     montantSansPiece: c(sans.reduce((s, l) => s + (l.montant || 0), 0)),
-    pourcent: base.length ? Math.round(((base.length - sans.length) / base.length) * 100) : 100,
+    /** Pièces déclarées perdues (relevé conservé) : traitées, mais pas justifiées. */
+    perdues: perdues.length,
+    montantPerdues: c(perdues.reduce((s, l) => s + (l.montant || 0), 0)),
+    pourcent: base.length ? Math.round((justifies / base.length) * 100) : 100,
   };
 }
 
@@ -104,7 +113,7 @@ const fr = (d?: string | null) => d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split("
 const num = (n: number | null | undefined) => n == null || !Number.isFinite(n) ? "" : n.toFixed(2);
 const libelleStatutTva: Record<string, string> = { "a-verifier": "À vérifier", "sans-tva": "Sans TVA", "non-recuperee": "TVA non récupérée" };
 export const etatJustificatif = (l: LigneMois) =>
-  l.piece ? "Pièce associée" : l.justificatifReleve ? `Relevé bancaire${l.referenceJustificatifReleve ? ` (${l.referenceJustificatifReleve})` : ""}` : l.justifieeVia ? `Justifiée ailleurs : ${l.justifieeVia.detail}` : "Manquant";
+  l.piece ? "Pièce associée" : l.justificatifReleve ? `Relevé bancaire${l.referenceJustificatifReleve ? ` (${l.referenceJustificatifReleve})` : ""}` : l.justifieeVia ? `Justifiée ailleurs : ${l.justifieeVia.detail}` : l.piecePerdue ? `Pièce perdue, relevé conservé : ${l.piecePerdue.motif}` : "Manquant";
 
 /** Une ligne par dépense du mois : justificatif, pièce, HT/TVA lus, écart devise ou escompte. */
 export function construireExportJustificatifs(lignes: LigneMois[]) {

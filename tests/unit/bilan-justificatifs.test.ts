@@ -17,7 +17,7 @@ const lignes: LigneMois[] = [
 
 test("complétude : en nombre et en euros, hors mouvements, exclues et personnel ; relevé et Masse salariale comptent comme justifiés", () => {
   const c = completudeJustificatifs(lignes);
-  assert.deepEqual(c, { total: 6, justifies: 5, sansPiece: 1, montantSansPiece: 66, pourcent: 83 });
+  assert.deepEqual(c, { total: 6, justifies: 5, sansPiece: 1, montantSansPiece: 66, perdues: 0, montantPerdues: 0, pourcent: 83 });
 });
 test("TVA : seule la TVA lue sur une pièce d'achat en euros est déductible justifiée ; l'immobilisation compte pour la TVA", () => {
   const t = bilanTvaMois(lignes);

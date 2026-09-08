@@ -84,7 +84,7 @@ export function preparerJournalAchats(lignes: LigneMois[], periode: Periode, cor
       if (!conforme) r.motifs.push("TVA non justifiable : facture d’achat EUR unique et cohérente, sans écart ni fractionnement, requise.");
     } else r.notes.push("Montant TTC comptabilisé provisoirement ; aucune TVA déduite. À revoir avec la pièce et les règles de déductibilité.");
     if (!dateFacture) r.notes.push("Date comptable provisoire = date du débit ; rattachement à la date de facture à contrôler.");
-    if (!l.piece) r.notes.push("Justificatif manquant.");
+    if (!l.piece) r.notes.push(l.piecePerdue ? `Pièce déclarée perdue, relevé conservé : ${l.piecePerdue.motif}` : "Justificatif manquant.");
     if (!fournisseur.compte && !/^627/.test(compte)) r.notes.push("Compte fournisseur collectif 40100000 ; détail conservé dans le libellé.");
     if (r.motifs.length) continue;
     r.etat = "inclus";

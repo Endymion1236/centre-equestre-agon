@@ -40,7 +40,7 @@ export interface ResumeColis {
   nbDepenses: number;
   totalDepenses: number;
   /** Présents quand les lignes du tableau des opérations ont été fournies. */
-  completude?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number; pourcent: number };
+  completude?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number; perdues?: number; montantPerdues?: number; pourcent: number };
   tvaDeductibleJustifiee?: number;
   tvaAVerifier?: { nb: number; ttc: number };
   ventilationAchats?: { total: number; aVentiler: number; montantAVentiler: number };
@@ -153,7 +153,7 @@ export function corpsEmailComptable(params: {
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Factures émises</td><td style="padding:4px 0;"><b>${resume.nbFactures}</b> — ${eur(resume.totalTTC)} TTC (${eur(resume.totalHT)} HT)</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Encaissements au journal</td><td style="padding:4px 0;"><b>${resume.nbEncaissements}</b> — ${eur(resume.totalEncaisse)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Dépenses saisies</td><td style="padding:4px 0;"><b>${resume.nbDepenses}</b> — ${eur(resume.totalDepenses)}</td></tr>
-      ${resume.completude ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Justificatifs</td><td style="padding:4px 0;"><b>${resume.completude.justifies}/${resume.completude.total}</b> dépenses justifiées${resume.completude.sansPiece ? ` — <span style="color:#b45309;">${eur(resume.completude.montantSansPiece)} sans pièce sur ${resume.completude.sansPiece} ligne(s)</span>` : ""}</td></tr>` : ""}
+      ${resume.completude ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Justificatifs</td><td style="padding:4px 0;"><b>${resume.completude.justifies}/${resume.completude.total}</b> dépenses justifiées${resume.completude.sansPiece ? ` — <span style="color:#b45309;">${eur(resume.completude.montantSansPiece)} sans pièce sur ${resume.completude.sansPiece} ligne(s)</span>` : ""}${resume.completude.perdues ? ` — ${resume.completude.perdues} pièce(s) déclarée(s) perdue(s), relevé conservé (${eur(resume.completude.montantPerdues || 0)}, motif dans le CSV justificatifs, sans TVA déduite)` : ""}</td></tr>` : ""}
       ${resume.tvaDeductibleJustifiee != null ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">TVA documentée — paiements uniques</td><td style="padding:4px 0;"><b>${eur(resume.tvaDeductibleJustifiee)}</b>${resume.tvaAVerifier?.nb ? ` — ${resume.tvaAVerifier.nb} ligne(s) à vérifier (${eur(resume.tvaAVerifier.ttc)} TTC)` : ""}</td></tr>` : ""}
       ${resume.ventilationAchats ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventilation des achats</td><td>${resume.ventilationAchats.total} opérations, <b>${resume.ventilationAchats.aVentiler} à ventiler</b> (${eur(resume.ventilationAchats.montantAVentiler)}). Comptes proposés à valider.</td></tr>` : ""}
     </table>

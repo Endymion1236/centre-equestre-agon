@@ -62,6 +62,19 @@ export async function POST(req: NextRequest) {
         // sinon le compte et le mois — le relevé du mois reste retrouvable.
         const reference = d.data()!.dernierReleveBancaire?.nom || d.data()!.note || `Relevé ${d.data()!.compte || "bancaire"} ${d.data()!.mois || ""}`.trim();
         tx.update(ref, { justificatifReleve: b.confirme, ...(b.confirme ? { poste: posteCommissionCarte(d.data()!.fournisseur) || d.data()!.poste, referenceJustificatifReleve: reference } : { referenceJustificatifReleve: null }) });
+      } else if (b.action === "piece-perdue") {
+        // Règle du gérant : une pièce perdue se déclare avec son motif, le
+        // relevé bancaire est conservé. La ligne n'est pas « justifiée » : elle
+        // sort seulement des « manquants », la comptable lit le motif dans le
+        // colis. Sans facture, aucune TVA n'est déduite : le statut passe en
+        // « non récupérée » s'il n'avait pas déjà été tranché.
+        if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
+        if (b.confirme) {
+          const motif = typeof b.motif === "string" ? b.motif.trim().replace(/\s+/g, " ") : "";
+          if (motif.length < 3 || motif.length > 300) throw new Error("Indiquez le motif en 3 à 300 caractères (ticket perdu, facture jamais reçue, fournisseur injoignable…).");
+          const statutTVA = d.data()!.statutTVA;
+          tx.update(ref, { piecePerdue: { motif, declareeLe: new Date().toISOString().slice(0, 10), par: auth.uid }, ...(!statutTVA || statutTVA === "a-verifier" ? { statutTVA: "non-recuperee" } : {}) });
+        } else tx.update(ref, { piecePerdue: null });
       } else if (b.action === "categorie") {
         // Un débit « hors dépenses » qui reçoit une catégorie de charge devient
         // une dépense, avec ou sans justificatif (règle du gérant : la charge
@@ -146,7 +159,7 @@ export async function POST(req: NextRequest) {
           associationEcart: association.nature === "escompte" && "ecart" in association ? association.ecart : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
-      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, ...(b.action === "compte-banque" ? { avantCompteBanque: d.data()!.compteBanqueConfirme || null, apresCompteBanque: b.compteBanqueConfirme } : {}), avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && (POSTES_DEPENSES.some(p => p.nom === b.poste) || b.poste === CATEGORIE_IMMOBILISATION), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, ...(b.action === "compte-banque" ? { avantCompteBanque: d.data()!.compteBanqueConfirme || null, apresCompteBanque: b.compteBanqueConfirme } : {}), avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantPiecePerdue: d.data()!.piecePerdue?.motif || null, apresPiecePerdue: b.action === "piece-perdue" ? (b.confirme ? String(b.motif).trim().slice(0, 300) : false) : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && (POSTES_DEPENSES.some(p => p.nom === b.poste) || b.poste === CATEGORIE_IMMOBILISATION), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
