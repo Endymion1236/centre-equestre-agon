@@ -7,6 +7,7 @@ import { authFetch } from "@/lib/auth-fetch";
 // depuis Celeris, sur la base TEST uniquement. À retirer après usage.
 export default function ImportCelerisPage() {
   const [loading, setLoading] = useState(false);
+  const [basePropre, setBasePropre] = useState(false);
   const [rapport, setRapport] = useState<any>(null);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [erreur, setErreur] = useState("");
@@ -152,13 +153,17 @@ export default function ImportCelerisPage() {
   const copierProd = async (apply: boolean) => {
     setLoading(true); setErreur(""); setRapport(null);
     try {
-      let url = `/api/admin/copy-prod-to-test`;
+      const params = new URLSearchParams();
       if (apply) {
         // Mot-clé saisi à la main : la copie écrase la base de test.
-        const mot = window.prompt("Pour copier réellement vers la base de TEST, tapez : COPIER-VERS-TEST");
+        const mot = window.prompt(basePropre
+          ? "BASE PROPRE : la base de TEST sera entièrement VIDÉE puis recopiée depuis la production. Pour confirmer, tapez : COPIER-VERS-TEST"
+          : "Pour copier réellement vers la base de TEST, tapez : COPIER-VERS-TEST");
         if (mot !== "COPIER-VERS-TEST") { setErreur("Mot-clé incorrect — opération annulée."); setLoading(false); return; }
-        url += `?apply=true&confirm=${encodeURIComponent(mot)}`;
+        params.set("apply", "true"); params.set("confirm", mot);
       }
+      if (basePropre) params.set("propre", "true");
+      const url = `/api/admin/copy-prod-to-test${params.size ? `?${params}` : ""}`;
       const res = await authFetch(url, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
@@ -169,9 +174,11 @@ export default function ImportCelerisPage() {
         setLoading(false);
         return;
       }
+      const vidage = data.effaces_test ? ` — base de test ${data.mode.startsWith("DRY") ? "à vider" : "vidée"} : ${data.effaces_test.total} document(s)` : "";
+      const sous = data.sous_collections ? Object.entries(data.sous_collections as Record<string, number>).filter(([, n]) => n).map(([k, n]) => `${n} ${k}`).join(", ") : "";
       setRapport({
         kind: "reset",
-        mode: `${data.mode} — COPIE ${data.source} → ${data.destination}`,
+        mode: `${data.mode} — COPIE ${data.source} → ${data.destination}${vidage}${sous ? ` — sous-collections : ${sous}` : ""}${data.duree_secondes != null ? ` — ${data.duree_secondes} s` : ""}`,
         projectId: data.projectId,
         total_documents: data.total_documents,
         par_collection: data.par_collection || {},
@@ -316,9 +323,15 @@ export default function ImportCelerisPage() {
         <span className="font-body text-xs text-gray-400 w-full">
           Recopie <strong>toutes les collections</strong> de la base courante vers la base de TEST,
           pour essayer une fonctionnalité sur des données réalistes. Sens unique : cette copie ne
-          peut pas écrire en production. Les documents déjà présents en test et absents ici ne sont
-          pas supprimés.
+          peut pas écrire en production. À lancer depuis le site de production (en test, source et
+          destination sont la même base). Comptes de connexion et fichiers (pièces, photos) ne sont pas copiés.
         </span>
+        <label className="font-body text-xs text-gray-600 w-full flex items-start gap-2 cursor-pointer">
+          <input type="checkbox" className="mt-0.5" checked={basePropre} onChange={e => setBasePropre(e.target.checked)} disabled={loading} />
+          <span><strong>Base propre</strong> : vider entièrement la base de TEST avant la copie, pour qu&apos;elle soit
+            identique à la production. Sans cette case, les documents déjà présents en test et absents en
+            production restent en place.</span>
+        </label>
         <button type="button" onClick={() => copierProd(false)} disabled={loading}
           className="px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-purple-700 bg-purple-50 border border-purple-200 cursor-pointer disabled:opacity-50">
           {loading ? "…" : "Aperçu copie prod→test"}
