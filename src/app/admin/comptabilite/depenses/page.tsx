@@ -13,7 +13,7 @@ import { completudeJustificatifs, bilanTvaMois, construireExportTva, construireE
 import { bilanVentilationAchats, comptesProposes, construireExportVentilationAchats } from "@/lib/ventilation-achats";
 import { etatPiece, resteAFaire, sansTvaParNature } from "@/lib/piece-attendue";
 import { COMPTES_BANQUE_DEPENSE } from "@/lib/banque-depense";
-import { motifControleTva } from "@/lib/bilan-justificatifs";
+import { motifControleTva, type LigneMois } from "@/lib/bilan-justificatifs";
 import { LIBELLE_JUSTIFICATION } from "@/lib/justification-paie";
 import VueParPoste from "./VueParPoste";
 import PiecesSansLigne from "./PiecesSansLigne";
@@ -80,6 +80,26 @@ export default function DepensesPage() {
       await charger();
       const refus = (r.refusees || []).length;
       setMessage(`${r.associations.length} justificatif(s) rattaché(s) automatiquement.${refus ? ` ${refus} refusé(s) au dernier contrôle.` : ""}${r.nbIgnorees ? ` ${r.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${detail ? `\n${detail}` : ""}`);
+    } catch (e) { setMessage((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  /**
+   * Diagnostic d'une seule ligne : le rapport global part des pièces et ne
+   * répond pas à la question qu'on se pose devant une opération précise —
+   * « le justificatif est là, pourquoi ne s'est-il pas rattaché ? »
+   */
+  async function diagnostiquer(l: LigneMois) {
+    setBusy(true); setMessage("");
+    try {
+      const r = await authFetch("/api/admin/justificatifs/rapprochement-auto", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ depenseId: l.id }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || `Diagnostic refusé (HTTP ${r.status}).`);
+      const lignes = (d.candidats || []).map((c: { nom?: string; verdict: string; ecartMontant: number | null; jours: number | null }) =>
+        `• ${c.nom || "pièce"} : ${c.verdict}`);
+      setMessage([`${l.fournisseur} — ${euros(l.montant)} du ${l.dateOperation || "date inconnue"}`, d.verdictGeneral, ...lignes].filter(Boolean).join("\n"));
     } catch (e) { setMessage((e as Error).message); }
     finally { setBusy(false); }
   }
@@ -219,7 +239,7 @@ export default function DepensesPage() {
               : etatPiece(l) === "releve-suffit" ? <p className="text-slate-600">{posteCommissionCarte(l.fournisseur) ? "Commission ou frais bancaires : le relevé du mois en tient lieu. Rien à réclamer ; l’indication se pose d’elle-même une fois le relevé du mois rapproché." : l.poste === CATEGORIE_EMPRUNTS ? "Échéance de prêt : le relevé et le tableau d’amortissement en tiennent lieu." : "Versement au compte FFE : le relevé du compte FFE en tient lieu."}</p>
               : <p className="text-slate-500">Rien à fournir pour cette ligne.</p>}<button disabled={busy || !!l.rapprochementExclu} className="underline" onClick={() => { const motif = window.prompt(`Pièce perdue pour ${l.fournisseur} (${euros(l.montant)}) : indiquez le motif pour la comptable (ticket perdu, facture jamais reçue, fournisseur injoignable…). Le relevé bancaire reste la seule preuve ; la TVA passe en « non récupérée ».`); if (motif && motif.trim().length >= 3) void agir(endpoint, { action: "piece-perdue", id: l.id, confirme: true, motif: motif.trim() }); else if (motif !== null) setMessage("Motif trop court : trois caractères au moins."); }}>Déclarer la pièce perdue (relevé conservé)</button></>)}{(posteCommissionCarte(l.fournisseur) || l.poste === CATEGORIE_EMPRUNTS) && l.source === "releve-bancaire" && (l.origineBancaire !== "csv" || !!l.dernierReleveBancaire) && !l.justifieeVia && <button disabled={busy || !!l.rapprochementExclu} className="underline" onClick={() => { if(window.confirm(l.poste === CATEGORIE_EMPRUNTS
   ? `Je confirme que cette échéance de ${euros(l.montant)} figure sur le relevé et que je conserve le tableau d'amortissement du prêt pour la comptable, qui ventilera capital et intérêts.`
-  : `Je confirme que la commission de ${euros(l.montant)} figure sur le relevé ${l.note ? "indiqué" : `du compte ${l.compte || "bancaire"} de ce mois`} et que je conserve ce relevé original pour le comptable. Ce choix ne valide aucune TVA déductible.`)) void agir(endpoint, { action: "justifier-releve", id: l.id, confirme: true }); }}>{l.poste === CATEGORIE_EMPRUNTS ? "Échéance de prêt : relevé + tableau d'amortissement" : "Utiliser le relevé comme justificatif"}</button>}{l.poste === CATEGORIE_EMPRUNTS && <p className="text-xs">Échéance de prêt : capital hors charges, intérêts en charges financières. La comptable ventile d'après le tableau d'amortissement.</p>}</>}<label className="block underline cursor-pointer">Importer une pièce<input aria-label={`Importer un justificatif pour ${l.fournisseur}`} className="block min-w-0 w-full max-w-full" type="file" accept="application/pdf,image/jpeg,image/png" disabled={busy || !!l.rapprochementExclu || l.source !== "releve-bancaire"} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importer(l, f); }} /></label><button disabled={busy || !!l.rapprochementExclu || l.source !== "releve-bancaire"} className="underline" onClick={() => { setMessage(""); setMode("normal"); setCible(l.id); setChoix(null); setCorrection(null); }}>Choisir une pièce existante</button></>}</section>
+  : `Je confirme que la commission de ${euros(l.montant)} figure sur le relevé ${l.note ? "indiqué" : `du compte ${l.compte || "bancaire"} de ce mois`} et que je conserve ce relevé original pour le comptable. Ce choix ne valide aucune TVA déductible.`)) void agir(endpoint, { action: "justifier-releve", id: l.id, confirme: true }); }}>{l.poste === CATEGORIE_EMPRUNTS ? "Échéance de prêt : relevé + tableau d'amortissement" : "Utiliser le relevé comme justificatif"}</button>}{l.poste === CATEGORIE_EMPRUNTS && <p className="text-xs">Échéance de prêt : capital hors charges, intérêts en charges financières. La comptable ventile d'après le tableau d'amortissement.</p>}</>}<label className="block underline cursor-pointer">Importer une pièce<input aria-label={`Importer un justificatif pour ${l.fournisseur}`} className="block min-w-0 w-full max-w-full" type="file" accept="application/pdf,image/jpeg,image/png" disabled={busy || !!l.rapprochementExclu || l.source !== "releve-bancaire"} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void importer(l, f); }} /></label><button disabled={busy || !!l.rapprochementExclu || l.source !== "releve-bancaire"} className="underline" onClick={() => { setMessage(""); setMode("normal"); setCible(l.id); setChoix(null); setCorrection(null); }}>Choisir une pièce existante</button><button disabled={busy} className="block underline text-left" onClick={() => void diagnostiquer(l)}>Pourquoi le rapprochement automatique ne l&apos;a pas trouvée ?</button></>}</section>
         </div>
         {cible === l.id && <div className="min-w-0 border-t border-slate-100 mt-4 pt-4">{panneau}</div>}
         <details className="min-w-0 border-t border-slate-100 mt-4 pt-3">

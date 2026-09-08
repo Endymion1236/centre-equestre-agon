@@ -26,7 +26,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { nettoyerPiece, type DepenseCandidate } from "@/lib/justificatifs";
-import { planifierRapprochementAuto, resumerRefus, type PieceMatching } from "@/lib/matching-automatique";
+import { diagnostiquerDebit, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "@/lib/matching-automatique";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -42,6 +42,39 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const mois = String(body.mois || "");
   const apply = body.apply === true;
+
+  // Diagnostic d'UNE ligne : « le justificatif est là, pourquoi ne s'est-il
+  // pas rattaché ? » Le rapport global part des pièces et ne répond pas à
+  // cette question-là ; ici on part du débit.
+  const depenseId = typeof body.depenseId === "string" ? body.depenseId : "";
+  if (depenseId) {
+    if (!/^[\w-]{1,150}$/.test(depenseId)) return NextResponse.json({ error: "Dépense invalide." }, { status: 400 });
+    try {
+      const [depSnap, piecesSnap, lienSnap] = await Promise.all([
+        adminDb.collection("depenses").doc(depenseId).get(),
+        adminDb.collection("justificatifs").limit(MAX_PIECES + 1).get(),
+        adminDb.collection("justificatifs-liens").doc(depenseId).get(),
+      ]);
+      if (!depSnap.exists) return NextResponse.json({ error: "Débit introuvable." }, { status: 404 });
+      if (piecesSnap.size > MAX_PIECES) return NextResponse.json({ error: "Trop de pièces pour un diagnostic. Archivez les pièces traitées." }, { status: 413 });
+      const pieces: PieceMatching[] = piecesSnap.docs.map(d => {
+        const v = d.data();
+        return {
+          id: d.id, nom: v.nom || v.driveNom || "",
+          extraction: v.extraction ? nettoyerPiece(v.extraction) : null,
+          retire: v.retire === true, depenseId: v.depenseId || null,
+          decisionAssociation: v.controleManuel === true || v.paieValidee === true,
+          paiementsAssocies: v.paiementsAssocies || [],
+        };
+      });
+      const depense = { ...depSnap.data(), id: depSnap.id } as DepenseCandidate & { rapprochementExclu?: boolean };
+      return NextResponse.json({ ok: true, mode: "diagnostic", ...diagnostiquerDebit(depense, pieces, lienSnap.exists) });
+    } catch (e) {
+      console.error("[justificatifs/rapprochement-auto] diagnostic", e);
+      return NextResponse.json({ error: "Diagnostic indisponible pour le moment." }, { status: 500 });
+    }
+  }
+
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) {
     return NextResponse.json({ error: "Mois invalide." }, { status: 400 });
   }

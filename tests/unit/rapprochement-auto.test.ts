@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { candidatsAutomatiques, concordanceFournisseur, indiceProximite, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "../../src/lib/matching-automatique";
+import { candidatsAutomatiques, concordanceFournisseur, diagnostiquerDebit, indiceProximite, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "../../src/lib/matching-automatique";
 import type { DepenseCandidate, PieceExtraite } from "../../src/lib/justificatifs";
 
 const piece = (extra: Partial<PieceExtraite> = {}): PieceExtraite => ({
@@ -205,4 +205,50 @@ test("le rapport se borne au mois traité et classe ses refus", () => {
 
   const resume = resumerRefus(r.ignorees);
   assert.deepEqual(resume.map(f => [f.famille, f.nb]), [["pas-un-achat", 1], ["hors-periode", 2]]);
+});
+
+/**
+ * « Le justificatif est là, pourquoi ne s'est-il pas rattaché ? » Le rapport
+ * global part des pièces et ne répond pas à cette question, posée devant une
+ * ligne précise du tableau. Le diagnostic prend le problème par l'autre bout.
+ */
+test("le diagnostic d'un débit dit ce qui a écarté chaque pièce", () => {
+  const d = debit("d1", { montant: 107.98, dateOperation: "2026-09-02", fournisseur: "Paiement par carte X4673 UEP*U EXPRESS AGON C 01/09", mois: "2026-09" });
+
+  // La pièce exacte : tout concorde, donc c'est le mois du lancement qui a manqué.
+  const exacte = { id: "ok", nom: "U Express.pdf", extraction: piece({ ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-01" }) };
+  const r = diagnostiquerDebit(d, [exacte], false);
+  assert.match(r.verdictGeneral, /Lancez le rapprochement automatique sur 2026-09/);
+  assert.match(r.candidats[0].verdict, /aurait dû être rattachée/);
+  assert.equal(r.candidats[0].ecartMontant, 0);
+  assert.equal(r.candidats[0].jours, 1);
+
+  // Chaque obstacle a sa phrase, et elle dit quoi faire.
+  const cas: [PieceMatching, RegExp][] = [
+    [{ id: "nonlue", extraction: null }, /pas encore lue/],
+    [{ id: "vente", extraction: piece({ typeDocument: "vente", ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-01" }) }, /corrigez la lecture en « achat »/],
+    [{ id: "prise", extraction: piece({ ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-01" }), depenseId: "autre" }, /Déjà rattachée/],
+    [{ id: "montant", extraction: piece({ ttc: 99, ht: 99, tva: 0, date: "2026-09-01" }) }, /Montant différent : 99.00 € sur la pièce contre 107.98 €/],
+    [{ id: "tard", extraction: piece({ ttc: 107.98, ht: 107.98, tva: 0, date: "2026-08-01" }) }, /32 jours après la pièce/],
+    [{ id: "apres", extraction: piece({ ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-10" }) }, /8 jour\(s\) APRÈS le débit/],
+    [{ id: "cote", extraction: piece({ ttc: 107.98, ht: 107.98, tva: 0, date: "2026-09-01" }), decisionAssociation: true }, /Mise de côté/],
+  ];
+  for (const [p, motif] of cas) {
+    const res = diagnostiquerDebit(d, [p], false);
+    assert.equal(res.candidats.length, 1, p.id);
+    assert.match(res.candidats[0].verdict, motif, p.id);
+  }
+
+  // Un débit déjà justifié, exclu ou saisi à la main : rien à diagnostiquer.
+  assert.match(diagnostiquerDebit(d, [exacte], true).verdictGeneral, /porte déjà un justificatif/);
+  assert.match(diagnostiquerDebit({ ...d, rapprochementExclu: true }, [exacte], false).verdictGeneral, /exclu du rapprochement/);
+  assert.match(diagnostiquerDebit({ ...d, source: "saisie" }, [exacte], false).verdictGeneral, /débits issus d'un relevé/);
+
+  // Les pièces archivées ne sont pas proposées ; les plus proches viennent en tête.
+  const tri = diagnostiquerDebit(d, [
+    { id: "loin", extraction: piece({ ttc: 12, ht: 12, tva: 0, date: "2026-09-01" }) },
+    { id: "archivee", extraction: piece({ ttc: 107.98, ht: 107.98, tva: 0 }), retire: true },
+    exacte,
+  ], false);
+  assert.deepEqual(tri.candidats.map(c => c.pieceId), ["ok", "loin"]);
 });

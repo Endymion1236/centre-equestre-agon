@@ -146,6 +146,74 @@ export function indiceProximite(p: PieceExtraite, depenses: DepenseCandidate[]):
   return { famille: "montant-proche", texte: ` Le débit le plus proche est ${(d.montant).toFixed(2)} € le ${quand} (« ${d.fournisseur} »), soit ${(meilleur.ecart / 100).toFixed(2)} € d'écart : vérifiez le montant lu sur la pièce.` };
 }
 
+/**
+ * Pourquoi CE débit n'a pas trouvé sa pièce.
+ *
+ * Le rapport global part des pièces ; il ne répond pas à la question qu'on se
+ * pose devant une ligne du tableau : « le justificatif est là, pourquoi ne
+ * s'est-il pas rattaché ? » Ce diagnostic prend le problème par l'autre bout
+ * — un débit, toutes les pièces — et dit pour chacune ce qui l'a écartée.
+ */
+export type DiagnosticPiece = {
+  pieceId: string;
+  nom?: string;
+  /** Écart en euros entre le TTC de la pièce et le débit ; null si illisible. */
+  ecartMontant: number | null;
+  /** Jours entre la pièce et le débit ; null si l'une des deux dates manque. */
+  jours: number | null;
+  concordance: Concordance;
+  verdict: string;
+};
+
+export function diagnostiquerDebit(
+  d: DepenseCandidate & { rapprochementExclu?: boolean },
+  pieces: PieceMatching[],
+  dejaLie: boolean,
+): { verdictGeneral: string; candidats: DiagnosticPiece[] } {
+  if (dejaLie) return { verdictGeneral: "Ce débit porte déjà un justificatif.", candidats: [] };
+  if (d.rapprochementExclu) return { verdictGeneral: "Ce débit est exclu du rapprochement.", candidats: [] };
+  if (d.source !== "releve-bancaire") return { verdictGeneral: "Saisie manuelle : le rapprochement automatique ne traite que les débits issus d'un relevé.", candidats: [] };
+
+  const debitCts = Math.round((d.montant || 0) * 100);
+  const dateDebit = dateValide(d.dateOperation);
+
+  const candidats = pieces
+    .filter(p => !p.retire)
+    .map((p): DiagnosticPiece => {
+      const e = p.extraction;
+      const base = { pieceId: p.id, nom: p.nom, ecartMontant: null as number | null, jours: null as number | null, concordance: "indetermine" as Concordance };
+      if (!e) return { ...base, verdict: "Pièce pas encore lue : lancez « Relire » avant le rapprochement." };
+      const ecartCts = e.ttc === null ? null : Math.round(e.ttc * 100) - debitCts;
+      const jours = e.date && dateDebit ? Math.round((Date.parse(dateDebit) - Date.parse(e.date)) / 86400000) : null;
+      const concordance = concordanceFournisseur(e.fournisseur, d.fournisseur);
+      const infos = { ...base, ecartMontant: ecartCts === null ? null : Math.abs(ecartCts) / 100, jours, concordance };
+
+      if (p.depenseId || p.paiementsAssocies?.length) return { ...infos, verdict: "Déjà rattachée à un autre paiement." };
+      if (e.typeDocument !== "achat") return { ...infos, verdict: `Lue comme « ${e.typeDocument || "inconnu"} » : corrigez la lecture en « achat » si le club en est le client.` };
+      if (p.decisionAssociation) return { ...infos, verdict: "Mise de côté pour un traitement manuel." };
+      const alertes = alertesIdentification(e);
+      if (alertes.length) return { ...infos, verdict: `Lecture à compléter : ${alertes[0]}` };
+      if (ecartCts === null) return { ...infos, verdict: "Montant TTC illisible sur la pièce." };
+      if (ecartCts !== 0) return { ...infos, verdict: `Montant différent : ${e.ttc!.toFixed(2)} € sur la pièce contre ${(d.montant || 0).toFixed(2)} € au relevé.` };
+      if (jours === null) return { ...infos, verdict: dateDebit ? "Date absente sur la pièce." : "Ce débit n'a pas de date d'opération : complétez les dates du relevé." };
+      if (jours < 0) return { ...infos, verdict: `Pièce datée ${Math.abs(jours)} jour(s) APRÈS le débit : vérifiez la date lue.` };
+      if (jours > DELAI_DEBIT_JOURS) return { ...infos, verdict: `Débit ${jours} jours après la pièce : au-delà du délai de ${DELAI_DEBIT_JOURS} jours.` };
+      if (concordance === "contradictoire") return { ...infos, verdict: `Montant et date concordent, mais « ${e.fournisseur} » ne ressemble pas à « ${d.fournisseur} » : associez à la main.` };
+      return { ...infos, verdict: "Tout concorde : cette pièce aurait dû être rattachée. Relancez le rapprochement sur le mois de ce débit." };
+    })
+    // Le plus ressemblant d'abord : montant, puis date, puis nom.
+    .sort((a, b) => (a.ecartMontant ?? 1e9) - (b.ecartMontant ?? 1e9)
+      || Math.abs(a.jours ?? 999) - Math.abs(b.jours ?? 999))
+    .slice(0, 5);
+
+  const verdictGeneral = candidats.some(c => /aurait dû être rattachée/.test(c.verdict))
+    ? `Une pièce correspond exactement. Lancez le rapprochement automatique sur ${d.mois || dateDebit.slice(0, 7) || "ce mois"}.`
+    : candidats.length
+      ? "Aucune pièce ne correspond au centime et à la date près. Voici les plus proches :"
+      : "Aucune pièce disponible à comparer.";
+  return { verdictGeneral, candidats };
+}
+
 /** Résumé du rapport : combien de pièces par famille, dans l'ordre d'affichage. */
 export const LIBELLE_FAMILLE: Record<FamilleRefus, string> = {
   "veto-nom": "débit trouvé, libellé différent (à associer d'un clic)",
