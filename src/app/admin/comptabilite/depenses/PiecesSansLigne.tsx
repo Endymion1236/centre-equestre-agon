@@ -109,6 +109,32 @@ export default function JustificatifsPage() {
     } catch (e) { setMessage(e instanceof Error ? e.message : "Import Drive impossible"); }
     finally { setBusy(false); }
   }
+  /**
+   * Lecture en masse des pièces jamais analysées.
+   *
+   * Une pièce sans lecture ne peut être rapprochée par rien : ni le
+   * rapprochement automatique, ni les propositions d'association. Or l'import
+   * n'analyse que les pièces qu'il vient de créer — une page rechargée en
+   * cours d'import, un dépôt fait à la main, une pièce restaurée d'une vieille
+   * archive, et le document reste muet. Le statut « À lire » existait par
+   * pièce, mais rien ne les comptait : sur cent documents, on ne les voit pas.
+   */
+  async function lireToutesLesNonLues() {
+    const aLire = pieces.filter(x => !x.retire && !x.extraction);
+    if (!aLire.length || !window.confirm(`Lancer la lecture IA de ${aLire.length} pièce(s) non lue(s) ? Comptez quelques secondes par document ; laissez la page ouverte.`)) return;
+    setBusy(true);
+    let lues = 0, echecs = 0;
+    try {
+      for (const x of aLire) {
+        setMessage(`Lecture ${lues + echecs + 1} / ${aLire.length}…`);
+        try { await envoyer({ action: "analyser", id: x.id }); lues++; } catch { echecs++; }
+      }
+      await load();
+      setMessage(`${lues} pièce(s) lue(s)${echecs ? `, ${echecs} en échec (relancez-les une à une)` : ""}. Vous pouvez relancer le rapprochement automatique.`);
+    } finally { setBusy(false); }
+  }
+
+  const nonLues = pieces.filter(x => !x.retire && !x.extraction).length;
   const p = pieces.find(x => x.id === selection);
   const e = p?.extraction;
   const liste = pieces.filter(x => (filtre === "exclues" ? x.retire : !x.retire && (filtre !== "paie" || x.extraction?.typeDocument === "paie")) && x.nom.toLowerCase().includes(recherche.toLowerCase()));
@@ -117,6 +143,11 @@ export default function JustificatifsPage() {
     <Link href="/admin/comptabilite/depenses" className="underline">← Dépenses</Link>
     <h1 className="text-2xl font-bold">Justificatifs — une pièce à la fois</h1>
     <p>1. Importez un document. 2. Vérifiez sa lecture. 3. Associez la facture, classez le bulletin de paie ou excluez le document.</p>
+    {nonLues > 0 && <section className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+      <p className="font-semibold text-amber-900">{nonLues} pièce(s) importée(s) mais pas encore lue(s).</p>
+      <p className="text-sm">Tant qu&apos;une pièce n&apos;est pas lue, aucun rapprochement ne peut la reconnaître : ni l&apos;automatique, ni les propositions d&apos;association. C&apos;est la cause la plus fréquente d&apos;un justificatif présent mais jamais rattaché.</p>
+      <button disabled={busy} className="mt-2 rounded bg-blue-900 px-4 py-2 text-white disabled:opacity-40" onClick={() => void lireToutesLesNonLues()}>Lire ces {nonLues} pièce(s)</button>
+    </section>}
     <section className="rounded-xl border bg-blue-50 p-5 space-y-2">
       <label htmlFor="piece" className="block font-semibold">Importer une facture, un ticket ou un bulletin de paie</label>
       <input id="piece" type="file" accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={ev => { const f = ev.target.files?.[0]; ev.target.value = ""; if (f) void depot(f); }} />
