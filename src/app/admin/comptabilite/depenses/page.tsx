@@ -131,6 +131,41 @@ export default function DepensesPage() {
     finally { setBusy(false); }
   }
 
+  /**
+   * Compléter les dates d'opération manquantes sans ressaisir le relevé.
+   *
+   * Les dates inscrites par la banque dans le libellé (« CB U EXPRESS AGON
+   * 28/07 ») sont appliquées d'office : ce n'est pas une interprétation. Les
+   * lignes muettes — commissions bancaires, prélèvements — sont proposées
+   * séparément au dernier jour de leur mois, la convention du relevé qui les
+   * justifie, et restent marquées comme estimées.
+   */
+  async function completerDates() {
+    setBusy(true); setMessage("");
+    try {
+      const url = `/api/admin/depenses/dates-libelles?mois=${mois}`;
+      const a = await (await authFetch(url)).json();
+      if (a.error) throw new Error(a.error);
+      if (!a.lues && !a.finDeMois) { setMessage(`Toutes les opérations de ${mois} ont déjà une date.`); return; }
+      if (a.lues) {
+        const ex = (a.exemplesLus || []).slice(0, 6).map((x: { fournisseur?: string; date: string }) => `• ${x.fournisseur || "opération"} → ${x.date}`).join("\n");
+        if (window.confirm(`${a.lues} date(s) sont écrites par la banque dans le libellé de l'opération :\n\n${ex}\n\nLes reprendre ? Ce n'est pas une estimation : c'est la date que porte votre relevé.`)) {
+          const r = await (await authFetch("/api/admin/depenses/dates-libelles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mois, appliquer: "lues" }) })).json();
+          if (r.error) throw new Error(r.error);
+          await charger();
+          setMessage(`${r.ecrites} date(s) reprises du relevé.${r.restantes ? ` ${r.restantes} opération(s) sans date lisible.` : ""}`);
+        }
+      }
+      if (a.finDeMois && window.confirm(`${a.finDeMois} opération(s) ne portent aucune date dans leur libellé — commissions bancaires, prélèvements.\n\nLes dater au dernier jour du mois (${mois}) ? C'est la convention du relevé qui les justifie ; elles resteront marquées comme dates estimées, corrigibles une à une.`)) {
+        const r = await (await authFetch("/api/admin/depenses/dates-libelles", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mois, appliquer: "toutes" }) })).json();
+        if (r.error) throw new Error(r.error);
+        await charger();
+        setMessage(`${r.ecrites} date(s) complétées, dont ${r.finDeMois} au dernier jour du mois.${r.restantes ? ` ${r.restantes} restante(s).` : ""}`);
+      }
+    } catch (e) { setMessage((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
   async function agir(url: string, body: object) {
     setBusy(true); setMessage("");
     try { await post(url, body); await charger(); setMessage("Enregistré."); return true; }
@@ -231,7 +266,7 @@ export default function DepensesPage() {
         <select className="border rounded p-2" aria-label="État" value={filtre} onChange={e => setFiltre(e.target.value)}><option value="actives">Toutes les lignes actives</option><option value="manquantes">Factures à obtenir</option><option value="sans-tva">Sans TVA</option><option value="a-ventiler">Comptes à ventiler</option><option value="exclues">Exclues du rapprochement</option></select>
         <input className="border rounded p-2" aria-label="Rechercher" placeholder="Fournisseur, montant, catégorie, compte…" value={recherche} onChange={e => setRecherche(e.target.value)} />
         <button disabled={busy} className="underline" onClick={() => { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); }}>Actualiser</button>
-        <button disabled={busy} className="underline" onClick={() => void rapprocherAuto()}>Rapprocher automatiquement les pièces</button>
+        <button disabled={busy} className="underline" onClick={() => void rapprocherAuto()}>Rapprocher automatiquement les pièces</button><button disabled={busy} className="underline" onClick={() => void completerDates()}>Compléter les dates manquantes</button>
         <button disabled={busy} className="underline" onClick={() => setVue("pieces")}>Importer un dossier Drive</button></div>
       {(() => { const comp = completudeJustificatifs(lignes); const tva = bilanTvaMois(lignes); const ventilation = bilanVentilationAchats(lignes); const reste = resteAFaire(lignes); return <div className="rounded-lg border bg-white p-3 space-y-1 text-sm">
         <p className={reste.factures ? "text-amber-900" : "text-green-800"}><b>{reste.factures}</b> facture{reste.factures > 1 ? "s" : ""} à obtenir{reste.factures ? ` (${eurosCourt(reste.montantFactures)})` : ""}{reste.releves ? <> · <b>{reste.releves}</b> ligne{reste.releves > 1 ? "s" : ""} que le relevé suffit à justifier ({eurosCourt(reste.montantReleves)}), en un clic depuis la ligne</> : null}. Commissions bancaires, échéances de prêt, salaires et versements au compte FFE n’attendent aucune facture.</p>

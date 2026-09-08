@@ -39,6 +39,31 @@ export default function DoublonsPage() {
     } catch (e) { setMessage(e instanceof Error ? e.message : "Opération impossible"); }
     finally { setBusy(false); }
   }
+  /**
+   * Écarter d'un coup toutes les autres lignes du groupe.
+   *
+   * L'action n'existait que sous forme d'un lien discret placé sous CHAQUE
+   * ligne à écarter, et seulement une fois un choix fait : on cochait « je
+   * garde celle-ci » et rien ne semblait se passer, faute de voir où
+   * confirmer. Le geste est le même, mais il est désormais là où on le
+   * cherche — au bas du groupe, une fois le choix exprimé.
+   */
+  async function ecarterAutres(groupe: DepenseCandidate[], conserveId: string) {
+    const autres = groupe.filter(d => d.id !== conserveId && doublonPossible(d, groupe.find(x => x.id === conserveId)!));
+    if (!autres.length) return;
+    if (!window.confirm(`Confirmez sur le relevé qu'il s'agit d'un seul paiement.\n\nConserver « ${groupe.find(x => x.id === conserveId)?.fournisseur} » et écarter ${autres.length} ligne(s) en double ?\n\nL'action est réversible : les lignes écartées restent récupérables plus bas.`)) return;
+    setBusy(true); setMessage("");
+    try {
+      for (const d of autres) {
+        const r = await authFetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: d.id, action: "archiver", conserveId }) });
+        const j = await r.json(); if (!r.ok) throw new Error(j.error);
+      }
+      await charger();
+      setMessage(`${autres.length} doublon(s) écarté(s). Original conservé dans les archives ci-dessous.`);
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Opération impossible"); }
+    finally { setBusy(false); }
+  }
+
   async function validerLot() {
     if (!lot) return;
     setBusy(true); setMessage("");
@@ -75,8 +100,12 @@ export default function DoublonsPage() {
       <h2 className="font-bold">{g[0].fournisseur} · {g[0].montant.toFixed(2)} € · {g.length} lignes à comparer</h2>
       {g.map(d => <div key={d.id} className="border rounded p-3 space-y-2">{detail(d)}
         <label className="block"><input type="radio" name={`groupe-${i}`} disabled={busy} checked={garder[i] === d.id} onChange={() => setGarder({ ...garder, [i]: d.id })} /> Conserver cette ligne</label>
-        {garder[i] && garder[i] !== d.id && doublonPossible(d, g.find(x => x.id === garder[i])!) && <button disabled={busy} className="underline text-red-800" onClick={() => void action(d.id, "archiver", garder[i])}>Écarter ce doublon</button>}
       </div>)}
+      {garder[i]
+        ? <button disabled={busy} className="rounded bg-blue-900 px-4 py-2 text-white disabled:opacity-40" onClick={() => void ecarterAutres(g, garder[i])}>
+            Conserver la ligne choisie et écarter {g.filter(d => d.id !== garder[i]).length} doublon(s)
+          </button>
+        : <p className="text-sm text-slate-600">Choisissez la ligne à conserver ci-dessus : le bouton pour écarter l&apos;autre apparaîtra ici.</p>}
     </section>)}
     <h2 className="text-xl font-bold">Lignes écartées — récupérables</h2>
     {archives.map(d => <div key={d.id} className="border rounded p-3">{detail(d)}<button disabled={busy} className="underline" onClick={() => void action(d.id, "restaurer")}>Restaurer cette dépense</button></div>)}
