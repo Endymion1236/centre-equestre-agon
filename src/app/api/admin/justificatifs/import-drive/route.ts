@@ -24,7 +24,7 @@ import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
-import { driveFolderId, driveGetFile, driveListFolder, gmailIsConnected } from "@/lib/gmail";
+import { driveFolderId, driveGetFile, driveListFolder, gmailAccount, gmailIsConnected } from "@/lib/gmail";
 import { diagnosticImportDrive } from "@/lib/diagnostic-import-drive";
 
 export const runtime = "nodejs";
@@ -43,8 +43,16 @@ export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
   if (auth instanceof NextResponse) return auth;
   try {
-    const [snap, connecte] = await Promise.all([reglages().get(), gmailIsConnected().catch(() => false)]);
-    return NextResponse.json({ dossier: snap.exists ? snap.data()?.driveFolderId || "" : "", dossierNom: snap.exists ? snap.data()?.driveFolderNom || "" : "", googleConnecte: connecte });
+    const [snap, connecte, compte] = await Promise.all([
+      reglages().get(),
+      gmailIsConnected().catch(() => false),
+      // L'adresse connectée est LA information qui manquait : le Drive
+      // personnel du gérant et le compte de l'assistant peuvent être deux
+      // comptes Google différents, et le second ne voit pas les dossiers du
+      // premier tant qu'ils ne lui sont pas partagés.
+      gmailAccount().then(a => a.email).catch(() => null),
+    ]);
+    return NextResponse.json({ dossier: snap.exists ? snap.data()?.driveFolderId || "" : "", dossierNom: snap.exists ? snap.data()?.driveFolderNom || "" : "", googleConnecte: connecte, compteGoogle: compte });
   } catch (e) {
     // Sans ce filet, un incident Firestore renvoyait un 500 sans corps :
     // l'écran affichait « erreur » sans jamais dire laquelle.
@@ -112,7 +120,16 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Import impossible";
     const diag = diagnosticImportDrive(message);
-    if (diag) return NextResponse.json({ error: diag.erreur }, { status: diag.statut });
+    if (diag) {
+      // Dossier introuvable ou refusé : dire AVEC QUEL COMPTE on a cherché.
+      const compte = diag.statut === 404 || diag.statut === 409
+        ? await gmailAccount().then(a => a.email).catch(() => null)
+        : null;
+      const precision = compte && (diag.statut === 404 || /refusé l'accès à ce dossier/.test(diag.erreur))
+        ? ` Le compte connecté est ${compte} : partagez le dossier avec cette adresse, ou déplacez-le dans son Drive.`
+        : "";
+      return NextResponse.json({ error: diag.erreur + precision }, { status: diag.statut });
+    }
     console.error("[justificatifs/import-drive]", message);
     // Message réel plutôt que « impossible pour le moment » : sans lui,
     // la panne n'est diagnosticable que dans les journaux Vercel.

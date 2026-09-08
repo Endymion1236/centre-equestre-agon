@@ -67,8 +67,8 @@ export default function JustificatifsPage() {
       const url = URL.createObjectURL(await r.blob()); const a = document.createElement("a"); a.href = url; a.download = p.nom; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) { setMessage(e instanceof Error ? e.message : "Erreur"); }
   }
-  const [drive, setDrive] = useState<{ dossier: string; googleConnecte: boolean } | null>(null);
-  useEffect(() => { if (user && isAdmin) void authFetch(`${endpoint}/import-drive`).then(r => r.json()).then(d => setDrive({ dossier: d.dossier || "", googleConnecte: !!d.googleConnecte })).catch(() => setDrive({ dossier: "", googleConnecte: false })); }, [user, isAdmin]);
+  const [drive, setDrive] = useState<{ dossier: string; googleConnecte: boolean; compteGoogle?: string | null } | null>(null);
+  useEffect(() => { if (user && isAdmin) void authFetch(`${endpoint}/import-drive`).then(r => r.json()).then(d => setDrive({ dossier: d.dossier || "", googleConnecte: !!d.googleConnecte, compteGoogle: d.compteGoogle || null })).catch(() => setDrive({ dossier: "", googleConnecte: false })); }, [user, isAdmin]);
   async function importerDrive() {
     if (!drive?.dossier.trim()) { setMessage("Collez le lien du dossier Drive à importer."); return; }
     setBusy(true); setEdition(false);
@@ -113,9 +113,10 @@ export default function JustificatifsPage() {
     <section className="rounded-xl border bg-white p-5 space-y-2">
       <label htmlFor="drive" className="block font-semibold">Importer un dossier Google Drive</label>
       <div className="flex flex-wrap gap-2">
-        <input id="drive" className="flex-1 min-w-64 border rounded p-2" placeholder="Lien du dossier Drive (…/folders/…) ou identifiant" value={drive?.dossier || ""} disabled={busy || !drive} onChange={e => setDrive(d => ({ dossier: e.target.value, googleConnecte: d?.googleConnecte ?? false }))} />
+        <input id="drive" className="flex-1 min-w-64 border rounded p-2" placeholder="Lien du dossier Drive (…/folders/…) ou identifiant" value={drive?.dossier || ""} disabled={busy || !drive} onChange={e => setDrive(d => ({ dossier: e.target.value, googleConnecte: d?.googleConnecte ?? false, compteGoogle: d?.compteGoogle ?? null }))} />
         <button disabled={busy || !drive} className="rounded bg-slate-900 text-white px-4 py-2 disabled:opacity-50" onClick={() => void importerDrive()}>Importer les nouveaux fichiers</button>
       </div>
+      {drive?.compteGoogle && <p className="text-sm text-blue-900">Compte Google utilisé pour lire Drive : <b>{drive.compteGoogle}</b>. Le dossier doit appartenir à ce compte, ou lui être partagé en lecture — un dossier d’un autre compte Google reste invisible.</p>}
       <p className="text-sm">Seuls les fichiers pas encore importés sont récupérés (PDF, JPEG, PNG, 10 Mo maximum), puis lus par l’IA. Le dossier Drive n’est ni modifié ni vidé : les pièces sont copiées dans le coffre privé de l’application, qui reste la référence.{drive && !drive.googleConnecte ? " Compte Google non connecté : connectez-le d’abord dans l’Assistant boîte mail." : ""}</p>
     </section>
     <p role="status" className="whitespace-pre-line rounded bg-slate-50 p-3">{message || "Choisissez un fichier ou ouvrez une pièce déjà importée."}</p>
