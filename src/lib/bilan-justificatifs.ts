@@ -31,6 +31,12 @@ export interface LigneMois {
   justifieeVia?: { type: string; detail: string } | null;
   /** Même débit présent deux fois ce mois (calculé, jamais stocké). */
   doublonProbable?: boolean;
+  /**
+   * Toutes les pièces d'un règlement groupé (plusieurs factures soldées par
+   * ce seul débit). `piece` en désigne la première, pour tout le code qui
+   * n'en attend qu'une ; le total de TVA, lui, les additionne.
+   */
+  piecesGroupe?: { extraction?: ExtractionMin | null }[];
   piece?: { id?: string; nom?: string; retire?: boolean; modeRattachement?: string | null; paiementsAssocies?: { id: string; montant: number }[]; extraction?: ExtractionMin | null; associationDevise?: { deviseFacture: string; montantFacture: number; montantDebiteEUR: number } | null; associationEcart?: { type: string; taux: number; montant: number } | null } | null;
 }
 
@@ -65,6 +71,10 @@ export function motifControleTva(l: LigneMois): string | null {
   if (!p) return null;
   if (p.modeRattachement === "echeance" || (p.paiementsAssocies?.length || 0) > 0) return "Paiement fractionné ou rattachement multiple : TVA de la facture non cumulable, période et montant à vérifier.";
   if (p.associationEcart) return "Écart de règlement : TVA à vérifier sur la facture et l’escompte.";
+  // Dans un règlement groupé, aucune facture ne couvre le débit à elle seule :
+  // c'est leur SOMME qui doit y tomber, et elle est vérifiée à l'association.
+  // Comparer la première pièce au débit y signalerait un écart systématique.
+  if ((l.piecesGroupe?.length || 0) > 1) return null;
   if (p.extraction?.devise === "EUR" && p.extraction.ttc != null && Math.round(l.montant * 100) !== Math.round(p.extraction.ttc * 100)) return "Le paiement diffère du TTC de la facture : TVA à vérifier.";
   return null;
 }
@@ -73,6 +83,20 @@ export function motifControleTva(l: LigneMois): string | null {
 export function tvaJustifiee(l: LigneMois): number | null {
   const e = l.piece?.extraction;
   if (!dansPerimetre(l) || l.avanceFfe || l.piece?.retire || motifControleTva(l)) return null;
+  // Règlement groupé : chaque facture n'est payée qu'une fois, donc chacune
+  // apporte sa TVA sans risque de double compte — à la différence d'un
+  // paiement fractionné, où la TVA d'une même facture serait comptée à chaque
+  // échéance. Une seule TVA manquante et le total perd son sens : on
+  // s'abstient plutôt que d'annoncer une somme incomplète.
+  if ((l.piecesGroupe?.length || 0) > 1) {
+    let somme = 0;
+    for (const p of l.piecesGroupe!) {
+      const x = p.extraction;
+      if (!x || x.typeDocument !== "achat" || x.devise !== "EUR" || typeof x.tva !== "number" || !Number.isFinite(x.tva) || x.tva < 0) return null;
+      somme += x.tva;
+    }
+    return somme > 0 ? c(somme) : null;
+  }
   if (!e || e.typeDocument !== "achat" || e.devise !== "EUR") return null;
   if (typeof e.tva !== "number" || !Number.isFinite(e.tva) || e.tva <= 0) return null;
   if (l.statutTVA === "sans-tva" || l.statutTVA === "non-recuperee") return null;

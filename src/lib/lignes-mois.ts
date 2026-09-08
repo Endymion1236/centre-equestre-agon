@@ -44,10 +44,17 @@ export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneM
   const lignes = new Map<string, Record<string, unknown>>();
   for (const d of ms.docs) if (!archives.has(d.id)) lignes.set(d.id, { ...d.data(), id: d.id, suivie: false });
   for (const d of ds.docs) if (!archives.has(d.id)) lignes.set(d.id, { ...d.data(), id: d.id, suivie: true });
-  const avecPiece = [...lignes.values()].map(l => ({
-    ...l,
-    piece: pieces.find(p => p.depenseId === l.id || p.paiementsAssocies.some(a => a.id === l.id)) || null,
-  })) as (LigneMois & Record<string, unknown>)[];
+  const avecPiece = [...lignes.values()].map(l => {
+    // Un règlement groupé pose PLUSIEURS pièces sur le même débit : `piece`
+    // reste la première pour tout le code qui n'en attend qu'une, et le
+    // groupe complet accompagne la ligne pour le total de TVA et l'affichage.
+    const duDebit = pieces.filter(p => p.depenseId === l.id || p.paiementsAssocies.some(a => a.id === l.id));
+    return {
+      ...l,
+      piece: duDebit[0] || null,
+      ...(duDebit.length > 1 ? { piecesGroupe: duDebit } : {}),
+    };
+  }) as unknown as (LigneMois & Record<string, unknown>)[];
   // Salaires et cotisations : justifiés par l'écran Masse salariale, sans rien écrire.
   const ailleurs = justifierParMasseSalariale(avecPiece, masse);
   // Commissions et frais bancaires : le relevé fait foi, d'office.
