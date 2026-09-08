@@ -47,10 +47,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const [piecesSnap, depensesSnap, liensSnap] = await Promise.all([
+    const [piecesSnap, depensesSnap] = await Promise.all([
       adminDb.collection("justificatifs").limit(MAX_PIECES + 1).get(),
       adminDb.collection("depenses").where("mois", "==", mois).limit(MAX_DEBITS + 1).get(),
-      adminDb.collection("justificatifs-liens").limit(5000).get(),
     ]);
     if (piecesSnap.size > MAX_PIECES || depensesSnap.size > MAX_DEBITS) {
       return NextResponse.json({ error: "Trop de pièces ou de débits à traiter en une fois. Archivez les pièces traitées, puis relancez." }, { status: 413 });
@@ -76,7 +75,16 @@ export async function POST(req: NextRequest) {
       .filter(d => d.data().source === "releve-bancaire" && d.data().rapprochementExclu !== true)
       .map(d => ({ ...d.data(), id: d.id }) as DepenseCandidate);
 
-    const depensesLiees = new Set(liensSnap.docs.map(d => d.id));
+    // Les liens portent l'identifiant du débit : seuls ceux des débits du
+    // mois nous intéressent. Lire la collection entière (jusqu'à cinq mille
+    // documents) pour n'en utiliser que quelques dizaines coûtait autant de
+    // lectures Firestore à chaque aperçu comme à chaque écriture.
+    const depensesLiees = new Set<string>();
+    for (let i = 0; i < depenses.length; i += 300) {
+      const refs = depenses.slice(i, i + 300).map(d => adminDb.collection("justificatifs-liens").doc(d.id));
+      if (!refs.length) continue;
+      for (const snap of await adminDb.getAll(...refs)) if (snap.exists) depensesLiees.add(snap.id);
+    }
     const plan = planifierRapprochementAuto(pieces, depenses, depensesLiees);
 
     if (!apply) {

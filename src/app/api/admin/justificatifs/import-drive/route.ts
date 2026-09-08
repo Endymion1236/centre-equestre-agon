@@ -85,8 +85,18 @@ export async function POST(req: NextRequest) {
     const fichiers = (await driveListFolder(folderId)).filter(f => MIMES[f.mimeType]);
 
     etape = "lecture des pièces déjà importées";
-    const connus = await adminDb.collection("justificatifs").limit(2001).get();
-    const dejaDrive = new Set(connus.docs.map(d => d.data().driveFileId).filter(Boolean));
+    // On interrogeait toute la collection des justificatifs (jusqu'à 2 001
+    // documents) à CHAQUE lot de 25 fichiers : pour un dossier de cent
+    // pièces, cinq lots, soit dix mille lectures Firestore pour une question
+    // qui n'en demande que cent. On demande désormais uniquement les pièces
+    // qui portent l'un des identifiants Drive de ce dossier.
+    const dejaDrive = new Set<string>();
+    for (let i = 0; i < fichiers.length; i += 30) {
+      const lot = fichiers.slice(i, i + 30).map(f => f.id);
+      if (!lot.length) continue;
+      const snap = await adminDb.collection("justificatifs").where("driveFileId", "in", lot).select("driveFileId").get();
+      for (const d of snap.docs) { const v = d.data().driveFileId; if (v) dejaDrive.add(String(v)); }
+    }
     const aFaire = fichiers.filter(f => !dejaDrive.has(f.id));
     await reglages().set({ driveFolderId: folderId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
 
