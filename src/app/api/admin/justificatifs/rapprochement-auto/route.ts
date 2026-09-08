@@ -26,7 +26,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { nettoyerPiece, type DepenseCandidate } from "@/lib/justificatifs";
-import { planifierRapprochementAuto, type PieceMatching } from "@/lib/matching-automatique";
+import { planifierRapprochementAuto, resumerRefus, type PieceMatching } from "@/lib/matching-automatique";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -89,14 +89,17 @@ export async function POST(req: NextRequest) {
       if (!refs.length) continue;
       for (const snap of await adminDb.getAll(...refs)) if (snap.exists) depensesLiees.add(snap.id);
     }
-    const plan = planifierRapprochementAuto(pieces, depenses, depensesLiees);
+    // Le mois borne les pièces examinées : sans lui, une facture d'août
+    // comptait comme « restant à associer » dans le rapport de juillet.
+    const plan = planifierRapprochementAuto(pieces, depenses, depensesLiees, mois);
 
     if (!apply) {
       return NextResponse.json({
         ok: true, mois, mode: "aperçu",
         associations: plan.associations,
-        ignorees: plan.ignorees.slice(0, 100),
+        ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode").slice(0, 100),
         nbIgnorees: plan.ignorees.length,
+        resume: resumerRefus(plan.ignorees),
         note: plan.associations.length
           ? `${plan.associations.length} association(s) possibles sans ambiguïté. Rien n'est encore écrit.`
           : "Aucune association certaine. Les pièces restent à associer à la main.",
@@ -143,8 +146,9 @@ export async function POST(req: NextRequest) {
       ok: true, mois, mode: "appliqué",
       associations: posees,
       refusees,
-      ignorees: plan.ignorees.slice(0, 100),
+      ignorees: plan.ignorees.filter(i => i.famille !== "hors-periode").slice(0, 100),
       nbIgnorees: plan.ignorees.length,
+      resume: resumerRefus(plan.ignorees),
       note: `${posees.length} justificatif(s) rattaché(s) automatiquement. Chaque association reste défaisable depuis le tableau (« Dissocier ce paiement »).`,
     });
   } catch (e) {

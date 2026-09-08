@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { candidatsAutomatiques, concordanceFournisseur, indiceProximite, planifierRapprochementAuto, type PieceMatching } from "../../src/lib/matching-automatique";
+import { candidatsAutomatiques, concordanceFournisseur, indiceProximite, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "../../src/lib/matching-automatique";
 import type { DepenseCandidate, PieceExtraite } from "../../src/lib/justificatifs";
 
 const piece = (extra: Partial<PieceExtraite> = {}): PieceExtraite => ({
@@ -92,14 +92,14 @@ test("deux exemplaires de la même facture : doublon à trancher", () => {
     [{ id: "p1", extraction: piece() }, { id: "p2", extraction: piece() }],
     [debit("a")], new Set());
   assert.deepEqual(r.associations, []);
-  assert.ok(r.ignorees.every(i => /doublon à trancher/.test(i.motif)));
+  assert.ok(r.ignorees.every(i => /archivez l'exemplaire en trop/.test(i.motif)));
 });
 
 test("un ancien débit sans date, de même montant, empêche l'automatique", () => {
   const r = planifierRapprochementAuto([{ id: "p1", extraction: piece() }],
     [debit("a"), debit("vieux", { dateOperation: "", mois: "2026-07" })], new Set());
   assert.deepEqual(r.associations, []);
-  assert.match(r.ignorees[0].motif, /sans date pourrait être le même paiement/);
+  assert.match(r.ignorees[0].motif, /sans date d'opération, pourrait être le même paiement/);
 });
 
 test("deux pièces différentes vers deux débits distincts : les deux passent", () => {
@@ -147,25 +147,62 @@ test("le rapport montre le débit le plus proche et ce qui cloche", () => {
   const p = (extra: Partial<PieceExtraite> = {}) => piece({ ttc: 47.32, ht: 47.32, tva: 0, ...extra });
 
   // Un chiffre mal lu par l'OCR.
-  assert.match(indiceProximite(p(), [debit("a", { montant: 47.23, dateOperation: "2026-07-29" })]),
+  assert.match(indiceProximite(p(), [debit("a", { montant: 47.23, dateOperation: "2026-07-29" })]).texte,
     /Le débit le plus proche est 47.23 € le 2026-07-29.*0.09 € d'écart/);
+  assert.equal(indiceProximite(p(), [debit("a", { montant: 47.23, dateOperation: "2026-07-29" })]).famille, "montant-proche");
 
   // Bon montant, mais trop tard.
-  assert.match(indiceProximite(p(), [debit("a", { montant: 47.32, dateOperation: "2026-08-20" })]),
+  assert.match(indiceProximite(p(), [debit("a", { montant: 47.32, dateOperation: "2026-08-20" })]).texte,
     /mais 23 jours après/);
 
   // Bon montant, date antérieure à celle lue sur la pièce.
-  assert.match(indiceProximite(p(), [debit("a", { montant: 47.32, dateOperation: "2026-07-20" })]),
+  assert.match(indiceProximite(p(), [debit("a", { montant: 47.32, dateOperation: "2026-07-20" })]).texte,
     /AVANT la date lue sur la pièce/);
 
   // Montant et date bons : c'est le nom qui a fait veto.
-  assert.match(indiceProximite(p({ fournisseur: "GERBER" }), [debit("a", { montant: 47.32, dateOperation: "2026-07-30", fournisseur: "CB CARREFOUR CONTACT" })]),
+  assert.match(indiceProximite(p({ fournisseur: "GERBER" }), [debit("a", { montant: 47.32, dateOperation: "2026-07-30", fournisseur: "CB CARREFOUR CONTACT" })]).texte,
     /bon montant et la bonne date.*ne ressemble pas à « GERBER »/);
+  assert.equal(indiceProximite(p({ fournisseur: "GERBER" }), [debit("a", { montant: 47.32, dateOperation: "2026-07-30", fournisseur: "CB CARREFOUR CONTACT" })]).famille, "veto-nom");
 
   // Rien de comparable : aucun indice inventé.
-  assert.equal(indiceProximite(p(), [debit("a", { montant: 900 })]), "");
+  assert.equal(indiceProximite(p(), [debit("a", { montant: 900 })]).texte, "");
 
   // Et l'indice remonte bien dans le motif de la pièce écartée.
   const r = planifierRapprochementAuto([{ id: "t", extraction: p() }], [debit("a", { montant: 47.23, dateOperation: "2026-07-29" })], new Set());
   assert.match(r.ignorees[0].motif, /Le débit le plus proche est 47.23 €/);
+});
+
+/**
+ * Cent trois pièces « restant à associer » pour un mois qui n'en comptait
+ * qu'une poignée : le rapport examinait toutes les pièces de la base, y
+ * compris celles d'août et de février, et reprochait à une facture d'août de
+ * n'avoir aucun débit en juillet.
+ */
+test("le rapport se borne au mois traité et classe ses refus", () => {
+  const pieces: PieceMatching[] = [
+    { id: "juillet", nom: "ticket.pdf", extraction: piece() },
+    { id: "aout", nom: "aout.pdf", extraction: piece({ date: "2026-08-26", numero: "F-9" }) },
+    { id: "fevrier", nom: "fevrier.pdf", extraction: piece({ date: "2026-02-25", numero: "F-8" }) },
+    { id: "bulletin", nom: "paie.pdf", extraction: piece({ typeDocument: "paie", salarie: "X", moisPaie: "2026-07", netAPayer: 1000, numero: "" }) },
+  ];
+  const r = planifierRapprochementAuto(pieces, [debit("a")], new Set(), "2026-07");
+  assert.deepEqual(r.associations.map(a => a.pieceId), ["juillet"]);
+
+  const familles = Object.fromEntries(r.ignorees.map(i => [i.pieceId, i.famille]));
+  assert.equal(familles.aout, "hors-periode");
+  assert.equal(familles.fevrier, "hors-periode");
+  assert.equal(familles.bulletin, "pas-un-achat");
+  assert.match(r.ignorees.find(i => i.pieceId === "aout")!.motif, /relancez sur 2026-08/);
+
+  // Un achat du 28 juin débité début juillet reste examiné en juillet.
+  const finJuin = planifierRapprochementAuto(
+    [{ id: "juin", extraction: piece({ date: "2026-06-28" }) }],
+    [debit("a", { dateOperation: "2026-07-02" })], new Set(), "2026-07");
+  assert.deepEqual(finJuin.associations.map(a => a.pieceId), ["juin"]);
+
+  // Sans mois, aucun bornage : le comportement d'origine est conservé.
+  assert.equal(planifierRapprochementAuto(pieces, [debit("a")], new Set()).ignorees.some(i => i.famille === "hors-periode"), false);
+
+  const resume = resumerRefus(r.ignorees);
+  assert.deepEqual(resume.map(f => [f.famille, f.nb]), [["pas-un-achat", 1], ["hors-periode", 2]]);
 });

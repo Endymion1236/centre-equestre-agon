@@ -134,6 +134,10 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({
       ok: true, total: fichiers.length, importes, doublons, ignores,
+      // Les fichiers déjà connus par leur identifiant Drive sont écartés avant
+      // la boucle : sans ce compte, un dossier entièrement importé renvoyait
+      // « 0 importée, 0 déjà connue », ce qui ressemble à une panne.
+      dejaImportes: fichiers.length - aFaire.length,
       restants: Math.max(0, aFaire.length - traites),
     });
   } catch (e) {

@@ -57,12 +57,17 @@ export default function DepensesPage() {
       const apercu = await (await authFetch("/api/admin/justificatifs/rapprochement-auto", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mois }) })).json();
       if (apercu.error) throw new Error(apercu.error);
       const nb = apercu.associations?.length || 0;
-      // Six motifs sur quinze pièces laissaient croire à une panne muette :
-      // on montre chaque pièce écartée et sa raison, c'est la seule façon de
-      // savoir quoi corriger.
-      const restantes = apercu.ignorees || [];
-      const detail = restantes.slice(0, 20).map((i: { nom?: string; motif: string }) => `• ${i.nom || "pièce"} : ${i.motif}`).join("\n")
-        + (restantes.length > 20 ? `\n… et ${restantes.length - 20} autre(s)` : "");
+      // Cent trois motifs en vrac ne disent rien. On donne d'abord le compte
+      // par famille — combien attendent un clic, combien ne sont pas des
+      // achats, combien sont d'un autre mois — puis le détail des pièces qui
+      // appellent vraiment un geste.
+      const restantes: { nom?: string; motif: string }[] = apercu.ignorees || [];
+      const resume: { libelle: string; nb: number }[] = apercu.resume || [];
+      const detail = [
+        resume.map(f => `  ${f.nb} — ${f.libelle}`).join("\n"),
+        ...restantes.slice(0, 12).map(i => `• ${i.nom || "pièce"} : ${i.motif}`),
+        restantes.length > 12 ? `… et ${restantes.length - 12} autre(s)` : "",
+      ].filter(Boolean).join("\n");
       if (!nb) {
         setMessage(`Aucune association certaine sur ${mois}.${apercu.nbIgnorees ? ` ${apercu.nbIgnorees} pièce(s) restent à associer à la main.` : ""}${detail ? `\n${detail}` : ""}`);
         return;
