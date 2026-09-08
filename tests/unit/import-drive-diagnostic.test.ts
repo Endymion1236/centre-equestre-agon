@@ -40,3 +40,26 @@ test("le message de reconnexion dit où aller, pas seulement qu'il y a un probl�
   assert.match(d.erreur, /Assistant boîte mail/);
   assert.match(d.erreur, /relancez l'import/);
 });
+
+test("API Drive désactivée dans le projet Google : cause nommée, geste précis", () => {
+  const message = 'drive list 403: {"error":{"code":403,"message":"Google Drive API has not been used in project 785848912923 before or it is disabled.","errors":[{"reason":"accessNotConfigured"}]}}';
+  const d = diagnosticImportDrive(message)!;
+  assert.equal(d.statut, 409);
+  assert.match(d.erreur, /API Google Drive n'est pas activée/);
+  assert.match(d.erreur, /Bibliothèque/);
+  assert.match(d.erreur, /partage du dossier n'y change rien/);
+});
+
+test("un 403 d'accès cite le motif renvoyé par Google", () => {
+  const d = diagnosticImportDrive('drive list 403: {"error":{"code":403,"message":"The user does not have sufficient permissions for this file."}}')!;
+  assert.equal(d.statut, 409);
+  assert.match(d.erreur, /Motif renvoyé par Google : « The user does not have sufficient permissions/);
+  // Sans corps JSON exploitable, le message reste utilisable tel quel.
+  assert.doesNotMatch(diagnosticImportDrive("drive list 403: forbidden")!.erreur, /Motif renvoyé/);
+});
+
+test("un quota présenté en 403 reste un quota", () => {
+  const d = diagnosticImportDrive('drive list 403: {"error":{"errors":[{"reason":"userRateLimitExceeded"}]}}')!;
+  assert.equal(d.statut, 429);
+  assert.match(d.erreur, /Attendez une minute/);
+});

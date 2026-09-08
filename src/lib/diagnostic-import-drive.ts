@@ -19,6 +19,23 @@ export interface DiagnosticImportDrive {
   erreur: string;
 }
 
+/**
+ * Motif lisible dans la réponse d'erreur de Google, quand elle est en JSON.
+ * On ne devine pas : on cite ce que Google a répondu, tronqué pour rester
+ * affichable.
+ */
+function motifGoogle(message: string): string | null {
+  const debut = message.indexOf("{");
+  if (debut < 0) return null;
+  try {
+    const corps = JSON.parse(message.slice(debut)) as { error?: { message?: string; errors?: { reason?: string; message?: string }[] } };
+    const brut = corps.error?.message || corps.error?.errors?.[0]?.message || corps.error?.errors?.[0]?.reason;
+    return brut ? String(brut).slice(0, 300) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function diagnosticImportDrive(message: string): DiagnosticImportDrive | null {
   if (!message) return null;
 
@@ -36,8 +53,26 @@ export function diagnosticImportDrive(message: string): DiagnosticImportDrive | 
   if (/^drive (list|meta|get) 401/.test(message)) {
     return { statut: 409, erreur: `Google a refusé l'accès (session expirée). ${RECONNECTER_GOOGLE}` };
   }
+  // L'API Drive est une API distincte de Gmail : elle doit être activée dans
+  // le projet Google Cloud. Sans elle, tout dossier, même partagé, est refusé.
+  if (/accessNotConfigured|has not been used in project|Drive API has not|API .{0,20}(disabled|not enabled)/i.test(message)) {
+    return {
+      statut: 409,
+      erreur: "L'API Google Drive n'est pas activée pour cette application. Dans la console Google Cloud du projet, ouvrez « API et services » puis « Bibliothèque », activez « Google Drive API », attendez une minute et relancez l'import. Le partage du dossier n'y change rien tant que l'API est désactivée.",
+    };
+  }
+  // Le quota se présente aussi en 403 : il se traite avant le refus d'accès.
+  if (/rateLimit|userRateLimitExceeded|quotaExceeded/i.test(message)) {
+    return { statut: 429, erreur: "Google limite temporairement les requêtes. Attendez une minute puis relancez : les fichiers déjà importés ne le seront pas deux fois." };
+  }
   if (/^drive (list|meta|get) 403/.test(message)) {
-    return { statut: 409, erreur: "Google a refusé l'accès à ce dossier. Vérifiez qu'il appartient bien au compte connecté, ou qu'il lui est partagé." };
+    // Sans le motif de Google, ce refus est indevinable : on le cite.
+    const motif = motifGoogle(message);
+    return {
+      statut: 409,
+      erreur: "Google a refusé l'accès à ce dossier. Vérifiez qu'il appartient bien au compte connecté, ou qu'il lui est partagé."
+        + (motif ? ` Motif renvoyé par Google : « ${motif} »` : ""),
+    };
   }
   if (/^Dossier Drive/.test(message)) {
     return { statut: 404, erreur: message };
