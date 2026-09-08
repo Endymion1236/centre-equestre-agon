@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { candidatsAutomatiques, concordanceFournisseur, diagnostiquerDebit, indiceProximite, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "../../src/lib/matching-automatique";
+import { candidatsAutomatiques, cleAlias, concordanceFournisseur, diagnostiquerDebit, indiceProximite, planifierRapprochementAuto, resumerRefus, type PieceMatching } from "../../src/lib/matching-automatique";
 import type { DepenseCandidate, PieceExtraite } from "../../src/lib/justificatifs";
 
 const piece = (extra: Partial<PieceExtraite> = {}): PieceExtraite => ({
@@ -319,4 +319,68 @@ test("un débit sans date se rattache par son mois, sans perdre les garanties", 
   const autre = planifierRapprochementAuto([{ id: "saur", extraction: facture }],
     [sansDate("d1", { fournisseur: "PRLV ORANGE SA" })], new Set(), "2026-07");
   assert.deepEqual(autre.associations, []);
+});
+
+/**
+ * Un abonnement mensuel produit chaque mois une facture et un débit
+ * identiques. La fenêtre d'un débit sans date couvrant le mois de la pièce
+ * et le suivant, la facture de juillet visait aussi le débit d'août : deux
+ * candidats, donc refus — alors que le mois exact tranche sans ambiguïté.
+ */
+test("un abonnement mensuel se range dans le débit de son propre mois", () => {
+  const abo = (mois: string) => piece({ fournisseur: "Google Commerce Limited", ttc: 4.99, ht: 4.99, tva: 0, date: `${mois}-10`, numero: `F-${mois}` });
+  const prlv = (id: string, mois: string) =>
+    debit(id, { montant: 4.99, fournisseur: "Wl google Google One", dateOperation: "", mois });
+
+  const r = planifierRapprochementAuto(
+    [{ id: "juillet", extraction: abo("2026-07") }],
+    [prlv("d7", "2026-07"), prlv("d8", "2026-08")], new Set(), "2026-07");
+  assert.deepEqual(r.associations.map(a => a.depenseId), ["d7"], JSON.stringify(r.ignorees));
+
+  // Le mois suivant reste la porte de sortie quand aucun débit du mois même
+  // ne convient : un achat de fin de mois débité début du suivant. La pièce
+  // doit être dans la fenêtre du mois traité, d'où le 28 juillet.
+  const finJuillet = piece({ fournisseur: "Google Commerce Limited", ttc: 4.99, ht: 4.99, tva: 0, date: "2026-07-28", numero: "F-fin" });
+  const finDeMois = planifierRapprochementAuto(
+    [{ id: "fin", extraction: finJuillet }], [prlv("d8", "2026-08")], new Set(), "2026-08");
+  assert.deepEqual(finDeMois.associations.map(a => a.depenseId), ["d8"], JSON.stringify(finDeMois.ignorees));
+
+  // Deux débits sans date du MÊME mois restent ambigus : rien à départager.
+  const memeMois = planifierRapprochementAuto(
+    [{ id: "juillet", extraction: abo("2026-07") }],
+    [prlv("d7", "2026-07"), prlv("d7bis", "2026-07")], new Set(), "2026-07");
+  assert.deepEqual(memeMois.associations, []);
+  assert.match(memeMois.ignorees[0].motif, /2 débits possibles/);
+
+  // Dès qu'un débit daté est en lice, l'ambiguïté reste entière : deux lignes
+  // en base pour un même paiement, c'est un doublon à trancher à la main.
+  const avecDate = planifierRapprochementAuto(
+    [{ id: "juillet", extraction: abo("2026-07") }],
+    [prlv("d7", "2026-07"), debit("date", { montant: 4.99, fournisseur: "Wl google Google One", dateOperation: "2026-07-12", mois: "2026-07" })],
+    new Set(), "2026-07");
+  assert.deepEqual(avecDate.associations, []);
+});
+
+/**
+ * Aucune règle textuelle ne peut deviner que « SAS CONSTELLACOM » édite les
+ * imprimés facturés « Printoclock Toulouse », ni que « Anthropic, PBC » se
+ * débite « Anthropic Claude ». Le gérant, lui, l'établit en associant les
+ * deux une première fois : la correspondance est alors mémorisée.
+ */
+test("une correspondance de noms validée à la main fait autorité ensuite", () => {
+  assert.equal(concordanceFournisseur("SAS CONSTELLACOM", "Printoclock Toulouse"), "contradictoire");
+  const appris = new Set([cleAlias("SAS CONSTELLACOM", "Printoclock Toulouse")]);
+  assert.equal(concordanceFournisseur("SAS CONSTELLACOM", "Printoclock Toulouse", appris), "identique");
+  // La normalisation rend la clé insensible à la casse, aux accents et à la
+  // ponctuation : le libellé du relevé varie d'un import à l'autre.
+  assert.equal(concordanceFournisseur("sas constellacom", "PRINTOCLOCK  TOULOUSE", appris), "identique");
+  // Une correspondance apprise ne vaut que pour la paire enregistrée.
+  assert.equal(concordanceFournisseur("SAS CONSTELLACOM", "PRLV ORANGE SA", appris), "contradictoire");
+
+  // Et de bout en bout : la facture se rattache une fois la paire connue.
+  const facture = piece({ fournisseur: "SAS CONSTELLACOM", ttc: 118.32, ht: 118.32, tva: 0, date: "2026-07-21", numero: "2026/07/001058425" });
+  const d = debit("d1", { montant: 118.32, fournisseur: "Printoclock Toulouse", dateOperation: "", mois: "2026-07" });
+  assert.deepEqual(planifierRapprochementAuto([{ id: "p", extraction: facture }], [d], new Set(), "2026-07").associations, []);
+  const avecAlias = planifierRapprochementAuto([{ id: "p", extraction: facture }], [d], new Set(), "2026-07", appris);
+  assert.deepEqual(avecAlias.associations.map(a => a.depenseId), ["d1"], JSON.stringify(avecAlias.ignorees));
 });

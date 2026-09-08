@@ -124,7 +124,12 @@ export async function POST(req: NextRequest) {
     }
     // Le mois borne les pièces examinées : sans lui, une facture d'août
     // comptait comme « restant à associer » dans le rapport de juillet.
-    const plan = planifierRapprochementAuto(pieces, depenses, depensesLiees, mois);
+    // Correspondances de noms déjà validées à la main : « SAS CONSTELLACOM »
+    // pour « Printoclock Toulouse », « Anthropic, PBC » pour « Anthropic
+    // Claude ». Aucune règle textuelle ne peut les deviner ; le gérant, si.
+    const aliasSnap = await adminDb.collection("fournisseurs-alias").select("cle").limit(2000).get();
+    const alias = new Set<string>(aliasSnap.docs.map(d => String(d.data().cle || "")).filter(Boolean));
+    const plan = planifierRapprochementAuto(pieces, depenses, depensesLiees, mois, alias);
 
     if (!apply) {
       return NextResponse.json({

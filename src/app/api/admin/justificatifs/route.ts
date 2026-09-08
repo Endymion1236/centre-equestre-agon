@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { cleAlias } from "@/lib/matching-automatique";
 import { nettoyerPiece, proposerAssociations, validerLienDevise, type DepenseCandidate } from "@/lib/justificatifs";
 
 export const runtime = "nodejs";
@@ -182,7 +183,7 @@ export async function POST(req: NextRequest) {
         if (!associer && body.depenseIdAttendue !== undefined && ancien !== body.depenseIdAttendue) throw new Error("L’association a changé : actualisez avant de dissocier.");
         if (associer && ancien && ancien !== id) throw new Error("Cette pièce a déjà été associée. Actualisez avant de modifier son association.");
         const lock = id ? adminDb.collection("justificatifs-liens").doc(id) : null;
-        let associationDevise = null;
+        let associationDevise = null, libelleDebit = "";
         if (associer) {
           const depense = await tx.get(adminDb.collection("depenses").doc(id));
           const lien = await tx.get(lock!);
@@ -191,6 +192,7 @@ export async function POST(req: NextRequest) {
           if (lien.exists && lien.data()?.pieceId !== body.id) throw new Error("Ce paiement est déjà associé à un autre justificatif. Vérifiez les pièces associées avant de le réutiliser.");
           const extraction = nettoyerPiece(current.data()?.extraction || {});
           const candidate = { ...depense.data(), id } as DepenseCandidate;
+          libelleDebit = String(depense.data()?.fournisseur || "");
           if (body.action === "associer-devise") {
             if (body.deviseFacture !== extraction.devise || body.montantFacture !== extraction.ttc || body.montantEUR !== candidate.montant) throw new Error("Les montants ont changé : actualisez et vérifiez la sélection.");
             associationDevise = validerLienDevise(extraction, candidate, body.confirme);
@@ -202,6 +204,22 @@ export async function POST(req: NextRequest) {
         if (ancien && ancien !== id) tx.delete(adminDb.collection("justificatifs-liens").doc(ancien));
         if (associer) tx.set(lock!, { pieceId: body.id });
         tx.update(ref, { depenseId: associer ? id : null, associationMode: "manuel", autoBloque: true, associationDevise, operationAssociee: null });
+        // Ce que le gérant vient d'établir et qu'aucune règle textuelle ne
+        // pouvait deviner : « SAS CONSTELLACOM » édite les imprimés facturés
+        // « Printoclock Toulouse », « Anthropic, PBC » se débite « Anthropic
+        // Claude ». On mémorise la correspondance pour que le rapprochement
+        // automatique la connaisse la fois suivante.
+        if (associer) {
+          const nomPiece = String(nettoyerPiece(current.data()?.extraction || {}).fournisseur || "");
+          const nomDebit = libelleDebit;
+          const cle = cleAlias(nomPiece, nomDebit);
+          if (nomPiece && nomDebit && cle.length > 3 && cle.length < 400) {
+            tx.set(adminDb.collection("fournisseurs-alias").doc(encodeURIComponent(cle).slice(0, 380)), {
+              nomPiece: nomPiece.slice(0, 120), nomDebit: nomDebit.slice(0, 120), cle,
+              uid: auth.uid, at: FieldValue.serverTimestamp(),
+            }, { merge: true });
+          }
+        }
         tx.create(ref.collection("historique").doc(), { action: body.action, avant: ancien || null, apres: associer ? id : null, associationDevise, uid: auth.uid, at: FieldValue.serverTimestamp() });
       });
       return NextResponse.json({ ok: true });

@@ -99,8 +99,21 @@ export type Concordance = "identique" | "proche" | "indetermine" | "contradictoi
  *   indetermine   — au moins un des deux noms est illisible ou trop court ;
  *   contradictoire — deux noms lisibles qui ne se ressemblent pas.
  */
-export function concordanceFournisseur(nomPiece: unknown, nomDebit: unknown): Concordance {
+/**
+ * Clé d'une correspondance apprise entre un nom de pièce et un libellé
+ * bancaire. Les deux sens sont normalisés puis joints : la table est ainsi
+ * indépendante de la casse, des accents et de la ponctuation.
+ */
+export const cleAlias = (nomPiece: unknown, nomDebit: unknown) => `${normaliser(nomPiece)}~${normaliser(nomDebit)}`;
+
+export function concordanceFournisseur(nomPiece: unknown, nomDebit: unknown, alias?: ReadonlySet<string>): Concordance {
   const a = normaliser(nomPiece), b = normaliser(nomDebit);
+  // Une correspondance déjà validée à la main fait autorité : aucune règle
+  // textuelle ne peut deviner que « SAS CONSTELLACOM » édite les imprimés
+  // facturés « Printoclock Toulouse », ni que « Wl google Google One »
+  // correspond à « Google Commerce Limited ». Le gérant, lui, l'a établi en
+  // associant les deux une première fois.
+  if (alias?.has(cleAlias(nomPiece, nomDebit))) return "identique";
   // On compte les lettres, pas les chiffres : « CB 4673 28/07 » ne nomme
   // personne, c'est un numéro de carte et une date. Le veto ne peut pas
   // s'appuyer sur un libellé qui ne porte aucun nom.
@@ -138,7 +151,7 @@ const moisSuivant = (m: string) => {
  * débit le jour de la pièce ou dans les sept jours, fournisseur non
  * contradictoire.
  */
-export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandidate[]): CandidatAutomatique[] {
+export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandidate[], alias?: ReadonlySet<string>): CandidatAutomatique[] {
   if (p.devise !== "EUR" || p.typeDocument !== "achat" || p.ttc === null || p.ttc <= 0 || !p.date || alertesIdentification(p).length) return [];
   const moisPiece = p.date.slice(0, 7);
   return proposerAssociations(p, depenses)
@@ -154,7 +167,7 @@ export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandida
       // un seul débit candidat, une seule pièce prétendante, et le veto du
       // nom s'applique comme avant.
       const viaMois = !date && !!d.mois && (d.mois === moisPiece || d.mois === moisSuivant(moisPiece));
-      return { d, jours, viaMois, concordance: concordanceFournisseur(p.fournisseur, d.fournisseur) };
+      return { d, jours, viaMois, concordance: concordanceFournisseur(p.fournisseur, d.fournisseur, alias) };
     })
     .filter(({ jours, viaMois, concordance }) => (viaMois || (jours >= 0 && jours <= DELAI_DEBIT_JOURS)) && concordance !== "contradictoire")
     .map(({ d, concordance, viaMois }) => ({ ...d, concordance, ...(viaMois ? { viaMois: true } : {}) }));
@@ -335,6 +348,8 @@ export function planifierRapprochementAuto(
   depenses: DepenseCandidate[],
   depensesLiees: Set<string>,
   mois?: string,
+  /** Correspondances de noms déjà validées à la main (cf. `cleAlias`). */
+  alias?: ReadonlySet<string>,
 ): { associations: AssociationAuto[]; ignorees: PieceIgnoree[] } {
   const actives = pieces.filter(p => !p.retire && !p.depenseId && !p.paiementsAssocies?.length);
   // Seuls les débits du mois demandé sont chargés : une facture d'août ou de
@@ -374,18 +389,34 @@ export function planifierRapprochementAuto(
       && normaliser(q.extraction.numero) === normaliser(e.numero));
     if (doublon) { ignorer("Une autre pièce porte le même fournisseur et le même numéro : archivez l'exemplaire en trop, puis relancez.", "doublon"); continue; }
 
-    const candidats = candidatsAutomatiques(e, depenses);
+    const candidats = candidatsAutomatiques(e, depenses, alias);
     if (!candidats.length) {
       const { texte, famille } = indiceProximite(e, depenses);
       ignorer(`Aucun débit de ${e.ttc?.toFixed(2)} € entre le ${e.date} et les ${DELAI_DEBIT_JOURS} jours suivants.${texte || " Un achat de fin de mois est souvent débité le mois d'après : relancez sur le mois suivant."}`, famille);
       continue;
     }
-    if (candidats.length > 1) {
-      ignorer(`${candidats.length} débits possibles pour ${e.ttc?.toFixed(2)} € : ${candidats.slice(0, 3).map(c => `${c.dateOperation || "?"} « ${c.fournisseur} »`).join(", ")}. À choisir à la main.`, "ambigu");
+    // Départage des débits SANS DATE par leur mois exact.
+    //
+    // Un abonnement mensuel — Google One à 4,99 €, Céléris à 108 € — produit
+    // chaque mois une facture et un débit identiques. Comme la fenêtre d'un
+    // débit sans date couvre le mois de la pièce ET le suivant, la facture de
+    // juillet visait aussi le débit d'août : deux candidats, donc refus. Or
+    // la facture de juillet appartient au débit de juillet ; le mois suivant
+    // n'est là que pour les achats de fin de mois, quand aucun débit du mois
+    // même ne convient. On ne départage QUE des candidats tous sans date : dès
+    // qu'un débit daté est en lice, l'ambiguïté reste entière (deux lignes en
+    // base pour un même paiement, c'est un doublon à trancher à la main).
+    let retenus = candidats;
+    if (candidats.length > 1 && candidats.every(c => c.viaMois)) {
+      const moisExact = candidats.filter(c => c.mois === e.date!.slice(0, 7));
+      if (moisExact.length === 1) retenus = moisExact;
+    }
+    if (retenus.length > 1) {
+      ignorer(`${retenus.length} débits possibles pour ${e.ttc?.toFixed(2)} € : ${retenus.slice(0, 3).map(c => `${c.dateOperation || c.mois || "?"} « ${c.fournisseur} »`).join(", ")}. À choisir à la main.`, "ambigu");
       continue;
     }
 
-    const d = candidats[0];
+    const d = retenus[0];
     if (depensesLiees.has(d.id) || debitsPris.has(d.id)) { ignorer("Le débit correspondant porte déjà un justificatif.", "ambigu"); continue; }
 
     // Un ancien import sans date pourrait être le même paiement : ne pas le masquer.
@@ -397,7 +428,7 @@ export function planifierRapprochementAuto(
 
     // Une autre pièce non associée conviendrait aussi à ce débit : ambiguïté.
     const concurrente = actives.some(q => q.id !== p.id && !q.depenseId && q.extraction && !q.retire
-      && candidatsAutomatiques(q.extraction, [d]).length > 0);
+      && candidatsAutomatiques(q.extraction, [d], alias).length > 0);
     if (concurrente) { ignorer("Une autre pièce pourrait justifier ce même débit : à choisir à la main.", "ambigu"); continue; }
 
     debitsPris.add(d.id);
