@@ -79,7 +79,10 @@ export default function JustificatifsPage() {
         tours++;
         setMessage(`Import depuis Drive… ${nouveaux.length} pièce(s) importée(s)${restants > 1 ? `, ${restants} restante(s)` : ""}`);
         const r = await authFetch(`${endpoint}/import-drive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dossier: drive.dossier }) });
-        const d = await r.json(); if (!r.ok) throw new Error(d.error);
+        // Une panne de plateforme ne renvoie pas de JSON : sans ce filet,
+        // l'écran affichait l'erreur de lecture au lieu du code HTTP.
+        const d = await r.json().catch(() => ({ error: `Réponse illisible du serveur (HTTP ${r.status}). Réessayez ; les pièces déjà importées sont conservées.` }));
+        if (!r.ok) throw new Error(d.error || `Import refusé (HTTP ${r.status}).`);
         nouveaux.push(...d.importes); doublons += d.doublons.length; ignores = [...ignores, ...d.ignores]; total = d.total; restants = d.restants;
       }
       await load();
