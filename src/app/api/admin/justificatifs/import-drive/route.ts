@@ -26,6 +26,7 @@ import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { driveFolderId, driveGetFile, driveListFolder, gmailAccount, gmailIsConnected } from "@/lib/gmail";
 import { diagnosticImportDrive } from "@/lib/diagnostic-import-drive";
+import { getActiveProjectId } from "@/lib/reset-guard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,7 +53,15 @@ export async function GET(req: NextRequest) {
       // premier tant qu'ils ne lui sont pas partagés.
       gmailAccount().then(a => a.email).catch(() => null),
     ]);
-    return NextResponse.json({ dossier: snap.exists ? snap.data()?.driveFolderId || "" : "", dossierNom: snap.exists ? snap.data()?.driveFolderNom || "" : "", googleConnecte: connecte, compteGoogle: compte });
+    // La connexion Google est stockée dans Firestore : elle appartient donc à
+    // la base active. Se connecter en production ne connecte pas la
+    // préversion, et l'inverse est vrai aussi. Nommer la base évite de
+    // chercher la panne du mauvais côté.
+    return NextResponse.json({
+      dossier: snap.exists ? snap.data()?.driveFolderId || "" : "",
+      dossierNom: snap.exists ? snap.data()?.driveFolderNom || "" : "",
+      googleConnecte: connecte, compteGoogle: compte, base: getActiveProjectId(),
+    });
   } catch (e) {
     // Sans ce filet, un incident Firestore renvoyait un 500 sans corps :
     // l'écran affichait « erreur » sans jamais dire laquelle.
