@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   try {
     const [ds, ar] = await Promise.all([adminDb.collection("depenses").where("mois", "==", mois).limit(2001).get(), archive().where("mois", "==", mois).limit(2001).get()]);
     const lignes = ds.docs.map(d => ({ ...d.data(), id: d.id })) as DepenseCandidate[];
-    return NextResponse.json({ groupes: groupesDoublons(lignes), archives: ar.docs.map(d => ({ id: d.id, ...d.data().original, conserveId: d.data().conserveId })), limite: ds.size > 2000 || ar.size > 2000 }, { headers: { "Cache-Control": "private, no-store" } });
+    return NextResponse.json({ groupes: groupesDoublons(lignes), archives: ar.docs.map(d => ({ id: d.id, ...d.data().original, conserveId: d.data().conserveId, motif: d.data().motif || null })), limite: ds.size > 2000 || ar.size > 2000 }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "Lecture impossible" }, { status: 500 }); }
 }
 export async function POST(req: NextRequest) {
@@ -29,7 +29,10 @@ export async function POST(req: NextRequest) {
       const [doc, ancien] = await tx.getAll(ref, ar);
       if (body.action === "restaurer") {
         if (!ancien.exists || doc.exists) throw new Error("Archive absente ou dépense déjà active");
-        tx.create(ref, ancien.data()!.original); tx.delete(ar);
+        // Une ligne retirée du tableau revient d'où elle vient : dépense, ou
+        // simple mouvement bancaire « à classer ».
+        const cible = ancien.data()!.collection === "mouvements-rapprochement" ? adminDb.collection("mouvements-rapprochement").doc(body.id) : ref;
+        tx.create(cible, ancien.data()!.original); tx.delete(ar);
       } else {
         if (!valide(body.conserveId) || body.conserveId === body.id) throw new Error("Choisissez une autre ligne à conserver");
         const garde = await tx.get(adminDb.collection("depenses").doc(body.conserveId));

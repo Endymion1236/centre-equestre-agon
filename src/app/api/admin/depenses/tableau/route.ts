@@ -151,6 +151,24 @@ export async function POST(req: NextRequest) {
         } else {
           tx.update(ref, { poste: b.poste, depensePersonnelle: b.poste === CATEGORIE_PERSONNELLE, immobilisation: b.poste === CATEGORIE_IMMOBILISATION, avanceFfe: b.poste === CATEGORIE_COMPTE_FFE });
         }
+      } else if (b.action === "retirer") {
+        // Une ligne qui n'est pas un débit — un virement Stripe reçu, lu comme
+        // une sortie par un ancien import — n'a rien à faire dans les charges.
+        // « Exclure du rapprochement » la laisserait dans les totaux du poste.
+        // On l'écarte comme un doublon : archivée, récupérable depuis le
+        // contrôle des doublons, jamais effacée.
+        if (b.confirme !== true) throw new Error("Confirmation requise");
+        const motif = typeof b.motif === "string" ? b.motif.trim().replace(/\s+/g, " ").slice(0, 300) : "";
+        if (motif.length < 3) throw new Error("Indiquez pourquoi cette ligne n'est pas un débit (virement reçu, remboursement, doublon…).");
+        const lien = await tx.get(adminDb.collection("justificatifs-liens").doc(b.id));
+        const pieces = await tx.get(adminDb.collection("justificatifs").where("depenseId", "==", b.id).limit(1));
+        if (lien.exists || !pieces.empty) throw new Error("Cette ligne est associée à un justificatif. Dissociez-le d'abord.");
+        const ar = adminDb.collection("depenses-doublons-archives").doc(b.id);
+        if ((await tx.get(ar)).exists) throw new Error("Cette ligne est déjà écartée : actualisez le tableau.");
+        tx.create(ar, { original: d.data(), collection: ds.exists ? "depenses" : "mouvements-rapprochement", mois: d.data()!.mois || "", conserveId: null, motif, uid: auth.uid, at: FieldValue.serverTimestamp() });
+        tx.delete(ref);
+        // Une dépense promue depuis un mouvement : le mouvement source part avec elle.
+        if (ds.exists && ms.exists) tx.delete(mov);
       } else if (b.action === "exclure" || b.action === "tva") {
         if (b.action === "exclure" && typeof b.exclue !== "boolean") throw new Error("Choix invalide");
         if (b.action === "tva" && !["a-verifier", "sans-tva", "non-recuperee"].includes(b.statutTVA)) throw new Error("Statut TVA invalide");

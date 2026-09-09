@@ -108,6 +108,6 @@ export default function DoublonsPage() {
         : <p className="text-sm text-slate-600">Choisissez la ligne à conserver ci-dessus : le bouton pour écarter l&apos;autre apparaîtra ici.</p>}
     </section>)}
     <h2 className="text-xl font-bold">Lignes écartées — récupérables</h2>
-    {archives.map(d => <div key={d.id} className="border rounded p-3">{detail(d)}<button disabled={busy} className="underline" onClick={() => void action(d.id, "restaurer")}>Restaurer cette dépense</button></div>)}
+    {archives.map(d => <div key={d.id} className="border rounded p-3">{detail(d)}{(d as { motif?: string }).motif && <p className="text-sm text-amber-800">Retirée : {(d as { motif?: string }).motif}</p>}<button disabled={busy} className="underline" onClick={() => void action(d.id, "restaurer")}>Restaurer cette dépense</button></div>)}
   </main>;
 }
