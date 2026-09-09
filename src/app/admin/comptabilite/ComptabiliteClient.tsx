@@ -18,6 +18,7 @@ import OngletRapprochement from "./OngletRapprochement";
 import { modeLabels } from "./libelles-modes";
 import EncartTvaAPayer from "./EncartTvaAPayer";
 import { bilanTvaMois, type LigneMois } from "@/lib/bilan-justificatifs";
+import { trimestreDe } from "@/lib/tva-a-payer";
 import {
   calculerSyntheseFactures,
   calculerTotauxJournaliers,
@@ -124,24 +125,28 @@ export default function ComptabilitePage() {
     () => calculerSyntheseFactures(filteredPayments),
     [filteredPayments],
   );
-  // Onglet TVA : la déductible justifiée du mois vient du tableau des
-  // opérations (page Dépenses), pour afficher collectée − déductible.
-  const [lignesTva, setLignesTva] = useState<LigneMois[] | null>(null);
+  // Onglet TVA : déclaration trimestrielle. La déductible justifiée de chaque
+  // mois du trimestre vient du tableau des opérations (page Dépenses), la
+  // collectée des factures déjà chargées ici.
+  const [lignesTva, setLignesTva] = useState<Record<string, LigneMois[]> | null>(null);
   useEffect(() => {
     if (tab !== "tva" || !/^\d{4}-\d{2}$/.test(period)) return;
     let actif = true;
     setLignesTva(null);
-    authFetch(`/api/admin/depenses/tableau?mois=${period}`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (actif) setLignesTva(d?.lignes || []); })
-      .catch(() => { if (actif) setLignesTva([]); });
+    const mois = trimestreDe(period).mois;
+    Promise.all(mois.map(m => authFetch(`/api/admin/depenses/tableau?mois=${m}`).then(r => (r.ok ? r.json() : null)).catch(() => null)))
+      .then(ds => { if (actif) setLignesTva(Object.fromEntries(mois.map((m, i) => [m, ds[i]?.lignes || []]))); });
     return () => { actif = false; };
   }, [tab, period]);
-  const tvaAPayerEntree = useMemo(() => {
-    if (!lignesTva) return null;
-    const bilan = bilanTvaMois(lignesTva);
-    return { collectee: totalTVA, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
-  }, [lignesTva, totalTVA]);
+  const tvaParMois = useMemo(() => {
+    const out: Record<string, { collectee: number; deductibleJustifiee: number; aVerifier: { nb: number; ttc: number } } | null> = {};
+    for (const m of trimestreDe(period).mois) {
+      if (!lignesTva) { out[m] = null; continue; }
+      const bilan = bilanTvaMois(lignesTva[m] || []);
+      out[m] = { collectee: calculerSyntheseFactures(filtrerFacturesPeriode(payments, m)).totalTVA, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
+    }
+    return out;
+  }, [lignesTva, payments, period]);
   const dailyTotals = useMemo(
     () => calculerTotauxJournaliers(encaissementsCompta, period),
     [encaissementsCompta, period],
@@ -483,7 +488,7 @@ export default function ComptabilitePage() {
       {/* ─── TVA ─── */}
       {!loading && tab === "tva" && (
         <div className="flex flex-col gap-5">
-          <EncartTvaAPayer mois={period} entree={tvaAPayerEntree} indisponible="Lecture des dépenses du mois en cours…" />
+          <EncartTvaAPayer moisReference={period} parMois={tvaParMois} chargement={!lignesTva} />
           <Card className="!p-0 overflow-hidden">
             <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               <span className="flex-1">Taux TVA</span>

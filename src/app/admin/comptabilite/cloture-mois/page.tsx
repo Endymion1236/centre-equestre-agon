@@ -18,6 +18,7 @@ import {
 } from "./cloture-mois-utils";
 import { completudeJustificatifs, bilanTvaMois, type LigneMois } from "@/lib/bilan-justificatifs";
 import EncartTvaAPayer from "../EncartTvaAPayer";
+import { trimestreDe } from "@/lib/tva-a-payer";
 
 /**
  * Boucler le mois — la checklist qui réunit les rituels de fin de mois.
@@ -31,6 +32,8 @@ export default function ClotureMoisPage() {
   const [horsTotal, setHorsTotal] = useState<string[]>([]);
   const [lignesMS, setLignesMS] = useState<LigneMS[]>([]);
   const [lignesTableau, setLignesTableau] = useState<LigneMois[] | null>(null);
+  // Les deux autres mois du trimestre civil, pour l'encart TVA (déclaration trimestrielle).
+  const [lignesTrimestre, setLignesTrimestre] = useState<Record<string, LigneMois[] | null>>({});
   const [resultat, setResultat] = useState<MoisResultat[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -92,6 +95,9 @@ export default function ClotureMoisPage() {
       setLignesMS(ms.lignes || []);
       setResultat(res.mois || []);
       setLignesTableau(tab?.lignes || null);
+      const autres = trimestreDe(mois).mois.filter(m => m !== mois);
+      const tabs = await Promise.all(autres.map(m => fetch(`/api/admin/depenses/tableau?mois=${m}`, { headers: h }).then(r => r.ok ? r.json() : null).catch(() => null)));
+      setLignesTrimestre(Object.fromEntries(autres.map((m, i) => [m, tabs[i]?.lignes || null])));
     } catch (e: any) { setError(e?.message || String(e)); }
     finally { setLoading(false); }
   }, [user, mois]);
@@ -103,13 +109,22 @@ export default function ClotureMoisPage() {
     [mois, releves, comptes, horsTotal, lignesMS, resultat, lignesTableau],
   );
   const { bloquants, boucle } = useMemo(() => resumerCloture(points), [points]);
-  // TVA du mois : collectée (API résultat) − déductible justifiée (tableau des opérations).
-  const tvaMois = useMemo(() => {
-    const ligne = resultat.find(r => r.mois === mois);
-    if (!ligne || typeof ligne.tvaCollectee !== "number" || !lignesTableau) return null;
-    const bilan = bilanTvaMois(lignesTableau);
-    return { collectee: ligne.tvaCollectee, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
-  }, [resultat, lignesTableau, mois]);
+  // TVA du trimestre : collectée (API résultat) − déductible justifiée
+  // (tableau des opérations), mois par mois.
+  const tvaParMois = useMemo(() => {
+    const tableaux: Record<string, LigneMois[] | null> = { ...lignesTrimestre, [mois]: lignesTableau };
+    const out: Record<string, { collectee: number; deductibleJustifiee: number; aVerifier: { nb: number; ttc: number } } | null> = {};
+    for (const m of trimestreDe(mois).mois) {
+      const ligne = resultat.find(r => r.mois === m);
+      const lignes = tableaux[m];
+      // Un mois sans aucune vente ni dépense lue : pas de chiffres. Un mois
+      // avec des ventes mais un tableau vide : collectée seule, déductible 0.
+      if (!lignes && !ligne) { out[m] = null; continue; }
+      const bilan = bilanTvaMois(lignes || []);
+      out[m] = { collectee: ligne?.tvaCollectee || 0, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
+    }
+    return out;
+  }, [resultat, lignesTableau, lignesTrimestre, mois]);
 
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
 
@@ -174,7 +189,7 @@ export default function ClotureMoisPage() {
             {boucle ? "✅ Mois bouclé — tout est en place." : `${bloquants} point(s) à régler pour boucler ${NOMS_MOIS[mois.slice(5)].toLowerCase()}.`}
           </div>
 
-          <EncartTvaAPayer mois={mois} entree={tvaMois} indisponible="Aucune vente ni dépense lue pour ce mois : l'encart TVA s'affichera dès que le tableau des opérations est chargé." />
+          <EncartTvaAPayer moisReference={mois} parMois={tvaParMois} />
 
           <div className="flex flex-col gap-2">
             {points.map((p, i) => (

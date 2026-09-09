@@ -67,3 +67,52 @@ export function phraseTvaAPayer(r: ResultatTvaAPayer): string {
   if (r.credit > 0) return `Crédit de TVA de ${eur(r.credit)} : la TVA déductible (${eur(r.deductible)}) dépasse la TVA collectée (${eur(r.collectee)}).`;
   return `${eur(r.aPayer)} à payer : ${eur(r.collectee)} collectés sur les ventes, moins ${eur(r.deductible)} déductibles sur les achats justifiés.`;
 }
+
+/**
+ * Déclaration TRIMESTRIELLE, trimestres civils : janvier–mars, avril–juin,
+ * juillet–septembre, octobre–décembre. Un mois désigne son trimestre.
+ */
+export interface Trimestre {
+  /** « T3 2026 » */
+  libelle: string;
+  /** « juillet à septembre 2026 » */
+  periode: string;
+  /** Les trois mois, AAAA-MM. */
+  mois: string[];
+}
+
+const NOMS_MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+export function trimestreDe(mois: string): Trimestre {
+  const annee = Number(mois.slice(0, 4));
+  const m = Number(mois.slice(5, 7));
+  const t = Math.floor((m - 1) / 3);
+  const premier = t * 3 + 1;
+  const trois = [0, 1, 2].map((i) => `${annee}-${String(premier + i).padStart(2, "0")}`);
+  return {
+    libelle: `T${t + 1} ${annee}`,
+    periode: `${NOMS_MOIS[premier - 1]} à ${NOMS_MOIS[premier + 1]} ${annee}`,
+    mois: trois,
+  };
+}
+
+export interface ResultatTvaTrimestre extends ResultatTvaAPayer {
+  trimestre: Trimestre;
+  /** Détail par mois ; `null` quand les chiffres du mois ne sont pas encore lus. */
+  parMois: { mois: string; resultat: ResultatTvaAPayer | null }[];
+  /** Mois du trimestre sans chiffres : le total est partiel. */
+  moisManquants: string[];
+}
+
+/** Somme des mois disponibles du trimestre ; dit lesquels manquent. */
+export function calculerTvaTrimestre(moisReference: string, parMois: Record<string, EntreeTvaAPayer | null | undefined>): ResultatTvaTrimestre {
+  const trimestre = trimestreDe(moisReference);
+  const detail = trimestre.mois.map((m) => ({ mois: m, resultat: parMois[m] ? calculerTvaAPayer(parMois[m]!) : null }));
+  const presents = detail.filter((d) => d.resultat).map((d) => d.resultat!);
+  const total = calculerTvaAPayer({
+    collectee: presents.reduce((s, r) => s + r.collectee, 0),
+    deductibleJustifiee: presents.reduce((s, r) => s + r.deductible, 0),
+    aVerifier: { nb: presents.reduce((s, r) => s + r.aVerifierNb, 0), ttc: presents.reduce((s, r) => s + r.aVerifierTtc, 0) },
+  });
+  return { ...total, trimestre, parMois: detail, moisManquants: detail.filter((d) => !d.resultat).map((d) => d.mois) };
+}
