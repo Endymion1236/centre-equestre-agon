@@ -261,7 +261,7 @@ export default function DepensesPage() {
             <p className={v.ok ? "font-semibold text-green-800" : "text-amber-800"}>{retenues.length} facture(s) · {resumeGroupe(v, ligne.montant)}</p>
             {v.erreurs.map(e => <p key={e} className="text-sm text-amber-800">{e}</p>)}
             <button disabled={busy || !v.ok} className="rounded bg-blue-900 px-4 py-2 text-white disabled:opacity-40"
-              onClick={async () => { if (await agir(endpoint, { action: "grouper", depenseId: ligne.id, pieceIds: retenues.map(p => p.id) })) { setCible(null); setGroupe([]); } }}>
+              onClick={async () => { if (await agir(justifs, { action: "grouper", depenseId: ligne.id, pieceIds: retenues.map(p => p.id) })) { setCible(null); setGroupe([]); } }}>
               Rattacher ces {retenues.length} factures à ce paiement
             </button>
           </div>;
@@ -288,7 +288,7 @@ export default function DepensesPage() {
         })()}
         {choix && <><p>{choix.nom}</p>
           {choix.depenseId && <div className="border border-amber-300 rounded p-3"><p>Cette pièce est déjà associée {choix.depenseId === ligne.id ? "à cette dépense" : "à un autre paiement"}. Pour modifier sa lecture, dissociez d’abord le lien.</p>{choix.depenseAssociee && <p>{choix.depenseAssociee.fournisseur} · {choix.depenseAssociee.dateOperation || "date inconnue"} · {typeof choix.depenseAssociee.montant === "number" ? euros(choix.depenseAssociee.montant) : "montant non disponible"}</p>}{choix.paiementsAssocies?.length ? choix.paiementsAssocies.map(a => <button key={a.id} disabled={busy} className="block underline" onClick={() => void delierPourCorriger(choix, a.id)}>Dissocier le paiement {a.id} · {euros(a.montant)}</button>) : <button disabled={busy} className="underline" onClick={() => void delierPourCorriger(choix)}>Dissocier pour corriger</button>}</div>}
-          {mode !== "normal" && !choix.retire && <button disabled={busy || !!correction || !!blocage || (mode === "echeance" && !extraction)} className="bg-blue-900 text-white rounded p-3 disabled:opacity-50 disabled:cursor-not-allowed" onClick={async () => {
+          {mode !== "normal" && mode !== "groupe" && !choix.retire && <button disabled={busy || !!correction || !!blocage || (mode === "echeance" && !extraction)} className="bg-blue-900 text-white rounded p-3 disabled:opacity-50 disabled:cursor-not-allowed" onClick={async () => {
             if (!window.confirm(mode === "ffe" ? `Confirmer que ce relevé du compte FFE couvre le versement de ${euros(ligne.montant)} ?` : mode === "per" ? "Confirmer que cette attestation concerne ce versement PER ? Le traitement fiscal reste à vérifier." : `Rattacher uniquement ce paiement de ${euros(ligne.montant)} à la facture complète de ${montantPiece} ${extraction?.devise || ""} ?`)) return;
             if (await agir(endpoint, { action: "rattacher", id: ligne.id, pieceId: choix.id, mode, confirme: true, montantEUR: ligne.montant, montantPiece: montantPiece ?? null, devise: extraction?.devise || null })) { setCible(null); setChoix(null); }
           }}>{mode === "ffe" ? "Joindre le relevé FFE à ce versement" : mode === "per" ? "Joindre l’attestation à ce versement" : "Rattacher cette échéance"}</button>}
