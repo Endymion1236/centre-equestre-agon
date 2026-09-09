@@ -22,11 +22,33 @@ const fournisseur = fournisseurNormalise;
  *
  * On accepte donc qu'un libellé soit le début de l'autre, ou que les deux
  * partagent deux mots significatifs (« Action Coutance » et « Action 4307
- * Coutance »). Cela reste un SIGNALEMENT : rien n'est supprimé sans décision,
- * et la reprise automatique garde ses propres conditions, bien plus
- * strictes.
+ * Coutance »), ou encore que leurs premiers mots se répondent en étant
+ * coupés au milieu d'un mot — « Dhl Intern Vad Le Bo » et « Dhl
+ * International » : le second débit DHL du même jour, au même montant,
+ * échappait au contrôle parce que « Intern » n'est ni « International » ni
+ * le début de tout le libellé. Cela reste un SIGNALEMENT : rien n'est
+ * supprimé sans décision, et la reprise automatique garde ses propres
+ * conditions, bien plus strictes.
  */
 const motsCles = (s: string) => s.split(" ").filter(m => m.length >= 4 && !/^\d+$/.test(m));
+
+/** Le même mot, ou l'un coupé au début de l'autre (« Intern » / « International »). */
+const memeMot = (a: string, b: string) =>
+  a === b || (a.length >= 4 && b.startsWith(a)) || (b.length >= 4 && a.startsWith(b));
+
+/**
+ * Les libellés commencent-ils par les mêmes mots, chacun pouvant être
+ * tronqué ? On aligne mot à mot depuis le début ; il faut au moins DEUX
+ * mots qui se répondent, formant un tronc d'au moins huit caractères. Un
+ * seul mot ne suffit pas : « Groupama Centre Manche » et « Groupama Sud »
+ * sont deux contrats, pas un doublon.
+ */
+const memeDebut = (x: string, y: string) => {
+  const ta = x.split(" "), tb = y.split(" ");
+  let i = 0;
+  while (i < ta.length && i < tb.length && memeMot(ta[i], tb[i])) i++;
+  return i >= 2 && ta.slice(0, i).join(" ").length >= 8;
+};
 
 export function memeCommercant(a: string, b: string): boolean {
   const x = fournisseur(a), y = fournisseur(b);
@@ -36,6 +58,8 @@ export function memeCommercant(a: string, b: string): boolean {
   // quelqu'un (« Uep » ou « Sarl » ne suffiraient pas).
   const court = x.length < y.length ? x : y, long = court === x ? y : x;
   if (court.length >= 8 && long.startsWith(court)) return true;
+  // Premiers mots communs, même coupés : « Dhl Intern Vad Le Bo » / « Dhl International ».
+  if (memeDebut(x, y)) return true;
   // Libellés remaniés autour des mêmes mots : « Action 4307 Coutance ».
   const ma = motsCles(x), mb = motsCles(y);
   return ma.filter(m => mb.includes(m)).length >= 2;

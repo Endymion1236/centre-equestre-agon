@@ -71,6 +71,9 @@ test("un libellé tronqué reste le même commerçant", () => {
     ["Mp Carrefour Blainvi", "Mp Carrefour Blainville"],
     ["Action Coutance", "Action 4307 Coutance"],
     ["Groupama Centre Manche", "Prlv Groupama Centre Manche"],
+    // Deux lectures du même débit DHL, coupées au milieu d'un mot.
+    ["Dhl Intern Vad Le Bo", "Dhl International"],
+    ["Dhl International", "Dhl Intern Vad Le Bo"],
   ]) assert.ok(memeCommercant(a, b), `${a} / ${b}`);
 
   // Deux commerçants distincts ne se confondent pas, même au même montant.
@@ -79,6 +82,9 @@ test("un libellé tronqué reste le même commerçant", () => {
     ["Uep u Express Agon", "Uep dac Resterdis"],
     ["Avem", "Agon"],
     ["", "Anthropic"],
+    // Même enseigne, autre magasin : le tronc commun est trop court pour conclure.
+    ["Super U Agon", "Super U Coutances"],
+    ["Action Coutance", "Action Cherbourg"],
   ]) assert.ok(!memeCommercant(a, b), `${a} / ${b}`);
 });
 
