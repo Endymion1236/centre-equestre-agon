@@ -6,7 +6,10 @@
  *                 se gagner ne compte pas) ;
  *   - masse     : coût de la masse salariale (coût employeur, sinon brut,
  *                 + charges patronales versées à part) — écran Masse salariale ;
- *   - depenses  : total des factures saisies — écran Dépenses par poste.
+ *   - depenses  : total des factures saisies — écran Dépenses par poste ;
+ *   - tvaCollectee : TVA des ventes du mois, calculée comme l'onglet
+ *                 Comptabilité → TVA (mêmes factures, même exclusion des
+ *                 annulées et en attente) — pour l'encart « TVA à payer ».
  *
  * L'agrégation se fait ICI pour ne jamais envoyer le détail des encaissements
  * au navigateur : seuls 3 totaux par mois sortent. Les mois sont calés sur
@@ -20,6 +23,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { calculerSyntheseFactures } from "@/app/admin/comptabilite/synthese-compta-utils";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -39,20 +43,35 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const [encSnap, msSnap, depSnap] = await Promise.all([
+    const [encSnap, msSnap, depSnap, paySnap] = await Promise.all([
       adminDb.collection("encaissements")
         .select("montant", "mode", "isApportCaisse", "isVersementBanque", "date")
         .get(),
       adminDb.collection("masse-salariale").get(),
       adminDb.collection("depenses").get(),
+      adminDb.collection("payments").select("status", "totalTTC", "paymentMode", "date", "items").get(),
     ]);
 
-    const parMois = new Map<string, { ca: number; masse: number; depenses: number }>();
+    const parMois = new Map<string, { ca: number; masse: number; depenses: number; tvaCollectee: number }>();
     const entree = (mois: string) => {
       let e = parMois.get(mois);
-      if (!e) { e = { ca: 0, masse: 0, depenses: 0 }; parMois.set(mois, e); }
+      if (!e) { e = { ca: 0, masse: 0, depenses: 0, tvaCollectee: 0 }; parMois.set(mois, e); }
       return e;
     };
+
+    // TVA collectée : les factures du mois, hors annulées et en attente —
+    // exactement ce que l'onglet TVA additionne, pour que les deux écrans
+    // donnent le même chiffre.
+    const statutsExclus = new Set(["cancelled", "pending", "draft"]);
+    const facturesParMois = new Map<string, any[]>();
+    paySnap.docs.forEach((d) => {
+      const r = d.data() as any;
+      if (r.status && statutsExclus.has(r.status)) return;
+      const mois = moisParis(r.date);
+      if (!mois) return;
+      facturesParMois.set(mois, [...(facturesParMois.get(mois) || []), r]);
+    });
+    for (const [m, factures] of facturesParMois) entree(m).tvaCollectee = calculerSyntheseFactures(factures).totalTVA;
 
     encSnap.docs.forEach((d) => {
       const r = d.data() as any;
@@ -91,6 +110,7 @@ export async function GET(req: NextRequest) {
         ca: Math.round(v.ca * 100) / 100,
         masse: Math.round(v.masse * 100) / 100,
         depenses: Math.round(v.depenses * 100) / 100,
+        tvaCollectee: Math.round(v.tvaCollectee * 100) / 100,
       }))
       .sort((a, b) => a.mois.localeCompare(b.mois));
 

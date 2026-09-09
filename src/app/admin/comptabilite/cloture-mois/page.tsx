@@ -16,7 +16,8 @@ import {
   type MoisResultatCloture as MoisResultat,
   type ReleveClotureMois as Releve,
 } from "./cloture-mois-utils";
-import { completudeJustificatifs, type LigneMois } from "@/lib/bilan-justificatifs";
+import { completudeJustificatifs, bilanTvaMois, type LigneMois } from "@/lib/bilan-justificatifs";
+import EncartTvaAPayer from "../EncartTvaAPayer";
 
 /**
  * Boucler le mois — la checklist qui réunit les rituels de fin de mois.
@@ -102,6 +103,13 @@ export default function ClotureMoisPage() {
     [mois, releves, comptes, horsTotal, lignesMS, resultat, lignesTableau],
   );
   const { bloquants, boucle } = useMemo(() => resumerCloture(points), [points]);
+  // TVA du mois : collectée (API résultat) − déductible justifiée (tableau des opérations).
+  const tvaMois = useMemo(() => {
+    const ligne = resultat.find(r => r.mois === mois);
+    if (!ligne || typeof ligne.tvaCollectee !== "number" || !lignesTableau) return null;
+    const bilan = bilanTvaMois(lignesTableau);
+    return { collectee: ligne.tvaCollectee, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
+  }, [resultat, lignesTableau, mois]);
 
   if (!isAdmin) return <div className="p-8"><h1 className="font-display text-2xl">Accès refusé</h1></div>;
 
@@ -165,6 +173,8 @@ export default function ClotureMoisPage() {
           <div className={`mb-4 rounded-xl px-4 py-3 font-body text-sm font-semibold ${boucle ? "bg-green-50 border border-green-200 text-green-800" : "bg-amber-50 border border-amber-200 text-amber-800"}`}>
             {boucle ? "✅ Mois bouclé — tout est en place." : `${bloquants} point(s) à régler pour boucler ${NOMS_MOIS[mois.slice(5)].toLowerCase()}.`}
           </div>
+
+          <EncartTvaAPayer mois={mois} entree={tvaMois} indisponible="Aucune vente ni dépense lue pour ce mois : l'encart TVA s'affichera dès que le tableau des opérations est chargé." />
 
           <div className="flex flex-col gap-2">
             {points.map((p, i) => (

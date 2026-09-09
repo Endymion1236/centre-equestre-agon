@@ -16,6 +16,8 @@ import OngletRemise from "./OngletRemise";
 import { useRapprochement } from "./useRapprochement";
 import OngletRapprochement from "./OngletRapprochement";
 import { modeLabels } from "./libelles-modes";
+import EncartTvaAPayer from "./EncartTvaAPayer";
+import { bilanTvaMois, type LigneMois } from "@/lib/bilan-justificatifs";
 import {
   calculerSyntheseFactures,
   calculerTotauxJournaliers,
@@ -122,6 +124,24 @@ export default function ComptabilitePage() {
     () => calculerSyntheseFactures(filteredPayments),
     [filteredPayments],
   );
+  // Onglet TVA : la déductible justifiée du mois vient du tableau des
+  // opérations (page Dépenses), pour afficher collectée − déductible.
+  const [lignesTva, setLignesTva] = useState<LigneMois[] | null>(null);
+  useEffect(() => {
+    if (tab !== "tva" || !/^\d{4}-\d{2}$/.test(period)) return;
+    let actif = true;
+    setLignesTva(null);
+    authFetch(`/api/admin/depenses/tableau?mois=${period}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (actif) setLignesTva(d?.lignes || []); })
+      .catch(() => { if (actif) setLignesTva([]); });
+    return () => { actif = false; };
+  }, [tab, period]);
+  const tvaAPayerEntree = useMemo(() => {
+    if (!lignesTva) return null;
+    const bilan = bilanTvaMois(lignesTva);
+    return { collectee: totalTVA, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
+  }, [lignesTva, totalTVA]);
   const dailyTotals = useMemo(
     () => calculerTotauxJournaliers(encaissementsCompta, period),
     [encaissementsCompta, period],
@@ -463,6 +483,7 @@ export default function ComptabilitePage() {
       {/* ─── TVA ─── */}
       {!loading && tab === "tva" && (
         <div className="flex flex-col gap-5">
+          <EncartTvaAPayer mois={period} entree={tvaAPayerEntree} indisponible="Lecture des dépenses du mois en cours…" />
           <Card className="!p-0 overflow-hidden">
             <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               <span className="flex-1">Taux TVA</span>
