@@ -137,14 +137,18 @@ export async function POST(req: NextRequest) {
             retire: v.retire === true, depenseId: v.depenseId || null, paiementsAssocies: v.paiementsAssocies || [] };
         });
         const verdict = verifierReglementGroupe(pieces, Number(depense.montant), depenseId);
-        if (!verdict.ok) throw new Error(verdict.erreurs[0]);
+        if (!verdict.ok && !(verdict.toleree && body.accepterEcart === true)) throw new Error(verdict.erreurs[0] || `Écart de ${Math.abs(verdict.ecart).toFixed(2)} € avec le débit : confirmez-le pour rattacher.`);
 
-        tx.set(lienRef, { pieceId: pieceIds[0], pieceIds, groupe: true, ...(verdict.escompte > 0 ? { escompte: verdict.escompte } : {}) });
+        tx.set(lienRef, { pieceId: pieceIds[0], pieceIds, groupe: true, ...(verdict.escompte > 0 ? { escompte: verdict.escompte } : {}), ...(verdict.toleree ? { ecartTolere: verdict.ecart } : {}) });
         // Escompte retenu sur le règlement : porté par les pièces, comme pour
         // un paiement unique escompté — la TVA de la ligne passe « à vérifier ».
+        // Un petit écart confirmé (erreur de report du fournisseur) est inscrit
+        // de même : la comptable le voit, la TVA de la ligne reste à vérifier.
         const associationEcart = verdict.escompte > 0
           ? { type: "escompte", taux: Math.round((verdict.escompte / verdict.totalPlein) * 10000) / 100, montant: verdict.escompte, annonce: true }
-          : null;
+          : verdict.toleree
+            ? { type: "arrondi", taux: Math.round((Math.abs(verdict.ecart) / Number(depense.montant)) * 10000) / 100, montant: Math.round(Math.abs(verdict.ecart) * 100) / 100 }
+            : null;
         for (const id of pieceIds) {
           tx.update(adminDb.collection("justificatifs").doc(id), {
             depenseId, modeRattachement: "groupe", associationMode: "manuel", autoBloque: true,

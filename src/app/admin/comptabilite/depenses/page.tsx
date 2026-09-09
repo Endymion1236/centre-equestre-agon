@@ -260,9 +260,9 @@ export default function DepensesPage() {
             </div>
             <p className={v.ok ? "font-semibold text-green-800" : "text-amber-800"}>{retenues.length} facture(s) · {resumeGroupe(v, ligne.montant)}</p>
             {v.erreurs.map(e => <p key={e} className="text-sm text-amber-800">{e}</p>)}
-            <button disabled={busy || !v.ok} className="rounded bg-blue-900 px-4 py-2 text-white disabled:opacity-40"
-              onClick={async () => { if (await agir(justifs, { action: "grouper", depenseId: ligne.id, pieceIds: retenues.map(p => p.id) })) { setCible(null); setGroupe([]); } }}>
-              Rattacher ces {retenues.length} factures à ce paiement
+            <button disabled={busy || !(v.ok || v.toleree)} className="rounded bg-blue-900 px-4 py-2 text-white disabled:opacity-40"
+              onClick={async () => { if (v.toleree && !window.confirm(`Écart de ${Math.abs(v.ecart).toFixed(2).replace(".", ",")} € entre les factures (${v.total.toFixed(2).replace(".", ",")} €) et le débit (${ligne.montant.toFixed(2).replace(".", ",")} €). Confirmer que ce sont bien les bonnes factures ? L'écart sera signalé à la comptable.`)) return; if (await agir(justifs, { action: "grouper", depenseId: ligne.id, pieceIds: retenues.map(p => p.id), ...(v.toleree ? { accepterEcart: true } : {}) })) { setCible(null); setGroupe([]); } }}>
+              {v.toleree ? `Rattacher malgré un écart de ${Math.abs(v.ecart).toFixed(2).replace(".", ",")} €` : `Rattacher ces ${retenues.length} factures à ce paiement`}
             </button>
           </div>;
         })()}

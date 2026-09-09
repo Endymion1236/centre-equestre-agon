@@ -29,6 +29,15 @@
  * y tombe — et il dit alors combien d'escompte a été retenu. Une facture sans
  * escompte annoncé compte pour son TTC dans les deux sommes.
  *
+ * ── Un petit écart, confirmé, reste possible ─────────────────────────────
+ *
+ * Trois factures du maréchal-ferrant : 1 029,04 € facturés, 1 028,90 €
+ * prélevés. Ce sont les bonnes factures, le fournisseur a fait une erreur de
+ * report de quelques centimes. Refuser bloquait pour rien. Un écart d'au plus
+ * ECART_TOLERE_EUROS et ECART_TOLERE_TAUX du débit peut donc être accepté,
+ * mais jamais en silence : le gérant le confirme, et il est inscrit sur les
+ * pièces pour que la comptable le voie (TVA de la ligne « à vérifier »).
+ *
  * ── Pourquoi la TVA se totalise ici, alors qu'elle ne se cumule pas pour
  *    un paiement fractionné ──────────────────────────────────────────────
  *
@@ -52,8 +61,15 @@ export type PieceDuGroupe = {
   paiementsAssocies?: { id: string; montant: number }[];
 };
 
+/** Écart maximal accepté sur confirmation : un euro, et un demi-pour-cent du débit. */
+export const ECART_TOLERE_EUROS = 1;
+export const ECART_TOLERE_TAUX = 0.005;
+
 export type VerdictGroupe = {
+  /** Le total tombe au centime : rattachable sans confirmation d'écart. */
   ok: boolean;
+  /** Écart petit (cf. ECART_TOLERE_*) : rattachable si le gérant le confirme. */
+  toleree: boolean;
   /** Somme des montants réglés des pièces retenues (escompte déduit quand il s'applique), en euros. */
   total: number;
   /** Somme des TTC pleins, avant escompte. Égale à `total` quand aucun escompte n'est retenu. */
@@ -78,7 +94,7 @@ const eur = (n: number) => `${n.toFixed(2)} €`;
  */
 export function verifierReglementGroupe(pieces: PieceDuGroupe[], montantDebit: number, debitId?: string): VerdictGroupe {
   const erreurs: string[] = [];
-  const vide = { ok: false, total: 0, totalPlein: 0, escompte: 0, ecart: 0, tva: null, erreurs };
+  const vide = { ok: false, toleree: false, total: 0, totalPlein: 0, escompte: 0, ecart: 0, tva: null, erreurs };
 
   if (!Number.isFinite(montantDebit) || montantDebit <= 0) {
     erreurs.push("Le débit doit être un montant positif.");
@@ -122,18 +138,23 @@ export function verifierReglementGroupe(pieces: PieceDuGroupe[], montantDebit: n
   const total = parEscompte ? totalEscompte : totalPlein;
   const escompte = parEscompte ? c(totalPlein - totalEscompte) : 0;
   const ecart = parEscompte ? ecartEscompte : ecartPlein;
-  if (!erreurs.length && Math.round(ecart * 100) !== 0) {
+  // Aucune somme ne tombe juste : l'écart le plus petit des deux est retenu.
+  const ecartRetenu = parEscompte || escomptesAnnonces === 0 || Math.abs(ecartPlein) <= Math.abs(ecartEscompte) ? ecart : ecartEscompte;
+  const toleree = !erreurs.length && Math.round(ecartRetenu * 100) !== 0
+    && Math.abs(ecartRetenu) <= ECART_TOLERE_EUROS && Math.abs(ecartRetenu) <= montantDebit * ECART_TOLERE_TAUX;
+  if (!erreurs.length && Math.round(ecart * 100) !== 0 && !toleree) {
     const precision = escomptesAnnonces > 0 && Math.round(ecartEscompte * 100) !== 0 ? ` Escompte déduit, le total serait de ${eur(totalEscompte)}.` : "";
     erreurs.push(ecart > 0
       ? `Le total des factures dépasse le débit de ${eur(ecart)} : ${eur(total)} contre ${eur(montantDebit)}. Une facture est en trop, ou l'une d'elles n'appartient pas à ce règlement.${precision}`
       : `Il manque ${eur(Math.abs(ecart))} pour atteindre le débit : ${eur(total)} contre ${eur(montantDebit)}. Une facture du règlement n'a pas encore été importée, ou n'est pas sélectionnée.${precision}`);
   }
-  return { ok: !erreurs.length, total, totalPlein, escompte, ecart, tva, erreurs };
+  return { ok: !erreurs.length && !toleree, toleree, total, totalPlein, escompte, ecart, tva, erreurs };
 }
 
 /** Résumé affichable d'un groupe en cours de composition. */
 export function resumeGroupe(v: VerdictGroupe, montantDebit: number): string {
   if (v.ok) return `${eur(v.total)} — le total correspond exactement au débit${v.escompte > 0 ? `, escompte de ${eur(v.escompte)} déduit sur ${eur(v.totalPlein)} facturés` : ""}${v.tva !== null ? `, dont ${eur(v.tva)} de TVA${v.escompte > 0 ? " sur les factures (à ajuster de l'escompte par la comptable)" : ""}` : " (TVA à compléter sur une des factures)"}.`;
+  if (v.toleree) return `${eur(v.total)} sélectionnés sur ${eur(montantDebit)} : écart de ${eur(Math.abs(v.ecart))} (${v.ecart > 0 ? "facturé en plus" : "prélevé en plus"}). Petit écart, acceptable si vous le confirmez — il sera signalé à la comptable et la TVA de la ligne restera à vérifier.`;
   if (!v.total) return `Débit à justifier : ${eur(montantDebit)}.`;
   return `${eur(v.total)} sélectionnés sur ${eur(montantDebit)}.`;
 }

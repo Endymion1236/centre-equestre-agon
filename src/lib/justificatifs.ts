@@ -105,7 +105,7 @@ export function alertesIdentification(p: PieceExtraite): string[] {
 const normaliser = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 /** Escompte pour paiement à l'échéance : débit inférieur au TTC de 0,5 % à 3 %, même fournisseur. */
 export const ESCOMPTE_MIN = 0.005, ESCOMPTE_MAX = 0.03;
-export interface EcartAssociation { type: "escompte"; taux: number; montant: number; /** La facture annonce elle-même ce montant escompte déduit. */ annonce?: boolean }
+export interface EcartAssociation { type: "escompte" | "arrondi"; taux: number; montant: number; /** La facture annonce elle-même ce montant escompte déduit. */ annonce?: boolean }
 export type Proposition = DepenseCandidate & { score: number; raisons: string[]; ecart?: EcartAssociation };
 
 // « paiement », « carte », « prlv » ne désignent aucun fournisseur : ce sont

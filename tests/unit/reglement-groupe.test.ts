@@ -30,16 +30,19 @@ test("trois factures qui totalisent le prélèvement au centime : le groupe est 
   assert.match(resumeGroupe(v, 245), /le total correspond exactement au débit.*40.83 € de TVA/);
 });
 
-test("un écart d'un centime suffit à refuser, et le message dit de quel côté", () => {
-  const manque = verifierReglementGroupe([piece("a", 120), piece("b", 124.99)], 245);
-  assert.equal(manque.ok, false);
-  assert.equal(manque.ecart, -0.01);
-  assert.match(manque.erreurs[0], /Il manque 0.01 €.*n'a pas encore été importée/);
+test("un écart au-delà de la tolérance est refusé, et le message dit de quel côté ; un centime reste à confirmer", () => {
+  const manque = verifierReglementGroupe([piece("a", 120), piece("b", 122.50)], 245);
+  assert.equal(manque.ok, false); assert.equal(manque.toleree, false);
+  assert.equal(manque.ecart, -2.5);
+  assert.match(manque.erreurs[0], /Il manque 2.50 €.*n'a pas encore été importée/);
 
-  const trop = verifierReglementGroupe([piece("a", 120), piece("b", 125.01)], 245);
-  assert.equal(trop.ok, false);
-  assert.equal(trop.ecart, 0.01);
-  assert.match(trop.erreurs[0], /dépasse le débit de 0.01 €.*facture est en trop/);
+  const trop = verifierReglementGroupe([piece("a", 120), piece("b", 127.50)], 245);
+  assert.equal(trop.ok, false); assert.equal(trop.toleree, false);
+  assert.match(trop.erreurs[0], /dépasse le débit de 2.50 €.*en trop/);
+
+  // Un centime : jamais « ok » tout seul, mais rattachable après confirmation.
+  const centime = verifierReglementGroupe([piece("a", 120), piece("b", 124.99)], 245);
+  assert.equal(centime.ok, false); assert.equal(centime.toleree, true); assert.equal(centime.ecart, -0.01);
 });
 
 test("une seule facture, ou deux fois la même, n'est pas un règlement groupé", () => {
@@ -101,6 +104,29 @@ test("escompte annoncé : le groupe accepte la somme des montants escompte dédu
   const ni = verifierReglementGroupe([a, b], 500);
   assert.equal(ni.ok, false);
   assert.match(ni.erreurs[0], /Escompte déduit, le total serait de 511.76 €/);
+});
+
+/**
+ * Trois factures du maréchal-ferrant, 1 029,04 € facturés pour 1 028,90 €
+ * prélevés : les bonnes factures, une erreur de report de 14 centimes chez
+ * le fournisseur. Un petit écart se confirme au lieu de bloquer.
+ */
+test("un écart de quelques centimes est toléré sur confirmation, et dit lequel", () => {
+  const v = verifierReglementGroupe([piece("a", 716.23, 119.37), piece("b", 312.81, 52.14)], 1028.90);
+  assert.equal(v.ok, false); assert.equal(v.toleree, true);
+  assert.deepEqual(v.erreurs, []);
+  assert.equal(v.ecart, 0.14);
+  assert.match(resumeGroupe(v, 1028.90), /écart de 0.14 €.*facturé en plus.*acceptable si vous le confirmez/);
+
+  // Au-delà d'un euro, ou d'un demi-pour-cent du débit : refus, comme avant.
+  const trop = verifierReglementGroupe([piece("a", 716.23), piece("b", 313.90)], 1028.90);
+  assert.equal(trop.toleree, false); assert.equal(trop.ok, false); assert.match(trop.erreurs[0], /dépasse le débit de 1.23 €/);
+  const petitDebit = verifierReglementGroupe([piece("a", 10.30), piece("b", 10.30)], 20);
+  assert.equal(petitDebit.toleree, false, "0,60 € sur 20 € : 3 %, trop pour un arrondi");
+
+  // Un total exact reste « ok », sans passer par la tolérance.
+  const exact = verifierReglementGroupe([piece("a", 716.23), piece("b", 312.67)], 1028.90);
+  assert.equal(exact.ok, true); assert.equal(exact.toleree, false);
 });
 
 test("une TVA manquante annule le total de TVA, sans bloquer le groupe", () => {
