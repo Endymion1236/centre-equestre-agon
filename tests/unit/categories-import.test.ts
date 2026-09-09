@@ -15,7 +15,7 @@ const debit = (fournisseur: string, poste: string, extra: Partial<ExistanteImpor
 });
 
 test("les nouvelles catégories existent et portent un compte du cabinet", () => {
-  for (const nom of ["Prestataires & sous-traitance (moniteurs, travaux)", "Informatique, logiciels & abonnements", "Impôts & taxes"]) {
+  for (const nom of ["Prestataires & sous-traitance (moniteurs, travaux)", "Informatique, logiciels & abonnements", "Impôts & taxes", "Repas, restauration & réceptions"]) {
     assert.ok(POSTES_DEPENSES.some(p => p.nom === nom), `${nom} absente des postes`);
     assert.ok(ventilerDepense({ poste: nom, fournisseur: "" }).compte, `${nom} sans compte par défaut`);
   }
@@ -31,7 +31,9 @@ test("le libellé bancaire propose la catégorie, du plus spécifique au plus g�
     ["CHQ MACON TRAVAUX BOX", "Prestataires & sous-traitance (moniteurs, travaux)"],
     ["CB HELLOFRESH FRANCE NE", CATEGORIE_PERSONNELLE],
     ["CB MGP*VINTED VILNIUS", CATEGORIE_PERSONNELLE],
-    ["CB KIN SAYA SAINT LO", "Autres dépenses"],
+    ["CB KIN SAYA SAINT LO", "Repas, restauration & réceptions"],
+    ["CB RESTAURANT LA CALE AGON", "Repas, restauration & réceptions"],
+    ["CB TRAITEUR DUPONT", "Repas, restauration & réceptions"],
     ["CB POINT P COUTANCES", "Fournitures & petit équipement (dont sellerie)"],
     ["VIR LACOLLEY JIMMY FOIN", "Aliments, litières, paille"],
     ["PRLV GROUPAMA", "Assurances"],

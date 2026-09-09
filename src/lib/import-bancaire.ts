@@ -78,8 +78,8 @@ export function proposerPosteBancaire(libelle: string) {
     [/\b(printoclock|print o clock|copinew|imprimerie|flyer|regie ouest|publicite)\b/, "Publicité & communication"],
     // Dépenses manifestement privées : sorties des charges, à confirmer à l'écran.
     [/\b(hellofresh|vinted|netflix|spotify|disney|deliveroo|uber eats|amazon prime video)\b/, CATEGORIE_PERSONNELLE],
-    // Courses et repas : « Autres dépenses » retombe sur réceptions ou frais divers à la ventilation.
-    [/\b(restaurant|equinoxe|kin saya|la cale|mcdo|burger|traiteur|boulangerie)\b/, "Autres dépenses"],
+    // Restaurants, traiteurs, boulangeries : repas et réceptions.
+    [/\b(restaurant|resto|brasserie|pizzeria|creperie|equinoxe|kin saya|la cale|mcdo|mcdonald|burger|kfc|traiteur|boulangerie|patisserie)\b/, "Repas, restauration & réceptions"],
     [/\b(super u|u express|uexpress|carrefour|leclerc|intermarche|lidl|aldi|amazon|temu|cdiscount)\b/, "Autres dépenses"],
   ];
   return regles.find(([re]) => re.test(n))?.[1] || POSTE_HORS_DEPENSES;

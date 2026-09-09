@@ -37,6 +37,10 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
   // « Com Carte », factures Crédit Agricole et commissions Stripe vont ici.
   { nom: "Frais bancaires & commissions (CB, Stripe)", ref: 2574 },
   { nom: "Publicité & communication", ref: 2024 },
+  // Restaurant avec un client ou un fournisseur, traiteur d'un événement,
+  // repas d'équipe, nourriture des stages : des réceptions (6257) ou des
+  // missions (6256), pas des « Autres dépenses ».
+  { nom: "Repas, restauration & réceptions", ref: null },
   { nom: "Engagements de concours", ref: null },
   { nom: "Autres dépenses", ref: null },
 ];

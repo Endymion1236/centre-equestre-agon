@@ -75,6 +75,7 @@ const PAR_CATEGORIE: Record<string, string> = {
   "Informatique, logiciels & abonnements": "61562000",
   "Frais bancaires & commissions (CB, Stripe)": "62700000",
   "Publicité & communication": "62300000",
+  "Repas, restauration & réceptions": "62570000",
   "Engagements de concours": "46730000",
   "Autres dépenses": "62880000",
   "Salaires": "42100000",
@@ -105,6 +106,8 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Honoraires & gestion (compta, juridique, GHN)": [[/(ghn|groupement hippique)/, "62261000"], [/(notaire|avocat|juridique|infogreffe)/, "62260000"], [/(huissier|acte|contentieux)/, "62270000"], [/(pignolet|comptable|expert|api expertises)/, "62262000"]],
   "Frais bancaires & commissions (CB, Stripe)": [[/(com carte|commission cb|commission carte|vente( a)? distance|vad|stripe|sumup|cawl|worldline|tpe)/, "62710000"], [/(emprunt|dossier)/, "62720000"], [/(ancv)/, "62840000"]],
   "Publicité & communication": [[/(imprim|print|flyer|catalogue|affiche|banderole|copinew)/, "62360000"], [/(cadeau|coupe|medaille|trophee)/, "62340000"]],
+  // Un repas en déplacement (concours, formation) est une mission ; le reste, une réception.
+  "Repas, restauration & réceptions": [[/(hotel|mission|deplacement|airbnb|gite)/, "62560000"], [/(tickets? (resto|restaurants?)|edenred)/, "64700000"]],
   "Autres dépenses": [[/(tickets? (resto|restaurants?)|edenred)/, "64700000"], [/(mobile|portable)/, "62630000"], [/(restaurant|resto|la cale|kin saya|equinoxe|reception|traiteur|pizza|burger|mcdo)/, "62570000"], [/(hotel|mission|airbnb|gite)/, "62560000"], [/(peage|sncf|train|parking|deplacement|chargemap|carburant)/, "62510000"], [/(la poste|colissimo|chronopost|ups\b|timbre)/, "62610000"], [/(orange|free|bouygues|sfr|internet|box|fibre)/, "62640000"], [/(openai|anthropic|google|resend|adobe|elevenlabs|midjourney|o2switch|standardfacile|hosteur|abonnement|logiciel|saas|deezer|canva|microsoft|apple)/, "61800000"], [/(formation|ocapiat|stage form)/, "63330000"], [/(ifce|sire|cotisation cheval)/, "62830000"], [/(cotisation|adhesion|filiation|licence dirigeant)/, "62810000"], [/(amende|penalite|majoration)/, "67120000"], [/(medecine du travail|mutualite|pharmacie)/, "64750000"], [/(mco nuisibles|derat|desinsect|nettoyage)/, "61550000"]],
   // Le Crédit Agricole prélève capital et intérêts sur deux lignes distinctes,
   // en le disant dans le libellé (« … 01/09/26 INTERETS »). Quand le relevé
