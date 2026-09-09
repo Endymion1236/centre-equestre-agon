@@ -1,5 +1,6 @@
 import { nettoyerPiece, proposerAssociations, validerLienDevise, deviseEtrangere, type DepenseCandidate } from "./justificatifs";
 import { doublonPossible } from "./doublons-depenses";
+import { POSTES_JUSTIFIES_PAR_LE_DEBIT } from "./postes-depenses";
 
 export const CATEGORIE_PERSONNELLE = "Personnel — hors charges";
 /**
@@ -26,7 +27,7 @@ export const CATEGORIE_EMPRUNTS = "Emprunts";
  */
 export const CATEGORIE_COMPTE_FFE = "Compte FFE (avance licences & engagements)";
 export const justifiableParReleve = (poste: unknown, fournisseur: unknown, estCommission: (l: unknown) => string | null) =>
-  !!estCommission(fournisseur) || poste === CATEGORIE_EMPRUNTS;
+  !!estCommission(fournisseur) || poste === CATEGORIE_EMPRUNTS || (typeof poste === "string" && POSTES_JUSTIFIES_PAR_LE_DEBIT.includes(poste));
 export const estPosteCharge = (poste: unknown, postesCharges: string[]) => typeof poste === "string" && postesCharges.includes(poste);
 
 /**

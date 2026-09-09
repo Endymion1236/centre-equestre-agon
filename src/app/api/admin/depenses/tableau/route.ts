@@ -4,7 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { dateValide, type DepenseCandidate } from "@/lib/justificatifs";
-import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, posteCommissionCarte } from "@/lib/postes-depenses";
+import { POSTES_DEPENSES, POSTE_HORS_DEPENSES, POSTE_ASSURANCES, posteCommissionCarte, estAssureur } from "@/lib/postes-depenses";
 import { verifierEcheance, verifierAssociationTableau, decisionCategorie, CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, justifiableParReleve } from "@/lib/tableau-depenses";
 import { verifierChoixBanque } from "@/lib/banque-depense";
 import { chargerLignesMois } from "@/lib/lignes-mois";
@@ -44,6 +44,50 @@ export async function POST(req: NextRequest) {
       });
       return NextResponse.json({ ok: true });
     }
+    // Reclassement en lot des prélèvements d'assureurs (Allianz, Groupama,
+    // Helmet…) : catégorie Assurances, sans TVA. Les mouvements encore « à
+    // classer » deviennent des dépenses, comme un choix de catégorie à la main.
+    if (b.action === "reclasser-assureurs") {
+      const [deps, movs] = await Promise.all([adminDb.collection("depenses").get(), mouvements().get()]);
+      const bilan = { reclassees: 0, promues: 0, dejaOk: 0, ignorees: 0 };
+      const lots: (() => Promise<void>)[] = [];
+      for (const d of deps.docs) {
+        const x = d.data();
+        if (!estAssureur(x.fournisseur) || x.archive || x.depensePersonnelle) { if (estAssureur(x.fournisseur)) bilan.ignorees++; continue; }
+        if (x.poste === POSTE_ASSURANCES && x.statutTVA === "sans-tva") { bilan.dejaOk++; continue; }
+        lots.push(async () => {
+          await d.ref.update({ poste: POSTE_ASSURANCES, statutTVA: "sans-tva", immobilisation: false, avanceFfe: false, updatedAt: FieldValue.serverTimestamp() });
+          await adminDb.collection("tableau-depenses-historique").add({ action: "reclasser-assureurs", id: d.id, avantCategorie: x.poste || null, apresCategorie: POSTE_ASSURANCES, avantTVA: x.statutTVA || "a-verifier", apresTVA: "sans-tva", uid: auth.uid, at: FieldValue.serverTimestamp() });
+        });
+        bilan.reclassees++;
+      }
+      const depIds = new Set(deps.docs.map(d => d.id));
+      for (const m of movs.docs) {
+        const x = m.data();
+        if (!estAssureur(x.fournisseur) || x.promueVers || depIds.has(m.id) || x.archive) continue;
+        lots.push(async () => {
+          await adminDb.collection("depenses").doc(m.id).create({
+            mois: x.mois, dateOperation: x.dateOperation || "", montant: x.montant,
+            fournisseur: x.fournisseur || "", compte: x.compte || "", note: x.note || "",
+            source: "releve-bancaire", sourceOperation: x.sourceOperation || null,
+            poste: POSTE_ASSURANCES, depensePersonnelle: false, immobilisation: false, statutTVA: "sans-tva",
+            ...(x.rapprochementExclu ? { rapprochementExclu: true } : {}),
+            ...(x.compteBanqueConfirme ? { compteBanqueConfirme: x.compteBanqueConfirme } : {}),
+            ...(x.origineBancaire ? { origineBancaire: x.origineBancaire } : {}),
+            ...(x.dernierImportCSV ? { dernierImportCSV: x.dernierImportCSV } : {}),
+            ...(x.dernierReleveBancaire ? { dernierReleveBancaire: x.dernierReleveBancaire } : {}),
+            ...(x.operationsDistinctesDe ? { operationsDistinctesDe: x.operationsDistinctesDe } : {}),
+            promueDepuisMouvement: true, updatedAt: FieldValue.serverTimestamp(),
+          });
+          await m.ref.update({ poste: POSTE_ASSURANCES, promueVers: m.id, updatedAt: FieldValue.serverTimestamp() });
+          await adminDb.collection("tableau-depenses-historique").add({ action: "reclasser-assureurs", id: m.id, avantCategorie: x.poste || null, apresCategorie: POSTE_ASSURANCES, avantTVA: x.statutTVA || "a-verifier", apresTVA: "sans-tva", promueEnDepense: true, uid: auth.uid, at: FieldValue.serverTimestamp() });
+        });
+        bilan.promues++;
+      }
+      if (b.confirme !== true) return NextResponse.json({ apercu: true, ...bilan });
+      for (const lot of lots) await lot();
+      return NextResponse.json({ ok: true, ...bilan });
+    }
     if (!idValide(b.id)) throw new Error("Ligne invalide");
     await adminDb.runTransaction(async tx => {
       const dep = adminDb.collection("depenses").doc(b.id), mov = mouvements().doc(b.id);
@@ -57,7 +101,7 @@ export async function POST(req: NextRequest) {
       } else if (b.action === "justifier-releve") {
         if (typeof b.confirme !== "boolean") throw new Error("Confirmation requise");
         if (b.confirme && d.data()!.origineBancaire === "csv" && !d.data()!.dernierReleveBancaire) throw new Error("Rapprochez d’abord le relevé PDF de ce mouvement CSV dans Trésorerie.");
-        if (b.confirme && (d.data()!.source !== "releve-bancaire" || !justifiableParReleve(d.data()!.poste, d.data()!.fournisseur, posteCommissionCarte))) throw new Error("Seuls une commission ou des frais prélevés par la banque, ou une échéance d'emprunt, peuvent être justifiés par le relevé.");
+        if (b.confirme && (d.data()!.source !== "releve-bancaire" || !justifiableParReleve(d.data()!.poste, d.data()!.fournisseur, posteCommissionCarte))) throw new Error("Seuls une commission ou des frais prélevés par la banque, une échéance d'emprunt, une assurance ou un impôt peuvent être justifiés par le relevé.");
         // Référence du relevé : son nom de fichier quand l'import l'a gardé,
         // sinon le compte et le mois — le relevé du mois reste retrouvable.
         const reference = d.data()!.dernierReleveBancaire?.nom || d.data()!.note || `Relevé ${d.data()!.compte || "bancaire"} ${d.data()!.mois || ""}`.trim();

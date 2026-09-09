@@ -29,7 +29,9 @@ export type EtatPiece = "facture-a-obtenir" | "releve-suffit" | "rien-a-fournir"
 
 /**
  * Une ligne dont la pièce se trouve ailleurs qu'auprès d'un fournisseur :
- * relevé bancaire, tableau d'amortissement, relevé du compte FFE.
+ * relevé bancaire, tableau d'amortissement, relevé du compte FFE — et,
+ * depuis septembre 2026, les assurances et les impôts (lib/postes-depenses,
+ * POSTES_JUSTIFIES_PAR_LE_DEBIT) : pas de facture mensuelle à réclamer.
  */
 export function justifiableSansFacture(l: LigneMois): boolean {
   return justifiableParReleve(l.poste, l.fournisseur, posteCommissionCarte)
@@ -60,8 +62,9 @@ export function etatPiece(l: LigneMois): EtatPiece {
  * Le tableau affichait « TVA à vérifier » sur chaque échéance de prêt, chaque
  * commission bancaire, chaque salaire : autant d'invitations à un geste qui
  * n'a pas lieu d'être. Les opérations bancaires et les intérêts d'emprunt
- * sont exonérés (art. 261 C du CGI), salaires et cotisations sont hors champ,
- * un virement interne ou une dépense personnelle ne sont pas des achats.
+ * sont exonérés (art. 261 C du CGI), tout comme les assurances ; salaires,
+ * cotisations, impôts et taxes sont hors champ ; un virement interne ou une
+ * dépense personnelle ne sont pas des achats.
  *
  * On n'écrit rien en base pour autant : c'est un simple constat d'affichage,
  * et un choix explicite du gérant le remplace toujours.

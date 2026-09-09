@@ -14,8 +14,8 @@ const debit = (fournisseur: string, poste: string, extra: Partial<ExistanteImpor
   fournisseur, montant: 42, poste, source: "releve-bancaire", ...extra,
 });
 
-test("les deux nouvelles catégories existent et portent un compte du cabinet", () => {
-  for (const nom of ["Prestataires & sous-traitance (moniteurs, travaux)", "Informatique, logiciels & abonnements"]) {
+test("les nouvelles catégories existent et portent un compte du cabinet", () => {
+  for (const nom of ["Prestataires & sous-traitance (moniteurs, travaux)", "Informatique, logiciels & abonnements", "Impôts & taxes"]) {
     assert.ok(POSTES_DEPENSES.some(p => p.nom === nom), `${nom} absente des postes`);
     assert.ok(ventilerDepense({ poste: nom, fournisseur: "" }).compte, `${nom} sans compte par défaut`);
   }
@@ -35,6 +35,11 @@ test("le libellé bancaire propose la catégorie, du plus spécifique au plus g�
     ["CB POINT P COUTANCES", "Fournitures & petit équipement (dont sellerie)"],
     ["VIR LACOLLEY JIMMY FOIN", "Aliments, litières, paille"],
     ["PRLV GROUPAMA", "Assurances"],
+    ["PRLV HELMET ASSURANCES", "Assurances"],
+    ["PRLV DGFIP CFE 2026", "Impôts & taxes"],
+    ["PRLV TAXE FONCIERE 2026", "Impôts & taxes"],
+    // La TVA n'est pas une charge : elle reste hors dépenses.
+    ["PRLV DGFIP TVA", POSTE_HORS_DEPENSES],
     ["CB QUELQUE CHOSE D INCONNU", POSTE_HORS_DEPENSES],
   ];
   for (const [libelle, attendu] of cas) assert.equal(proposerPosteBancaire(libelle), attendu, libelle);

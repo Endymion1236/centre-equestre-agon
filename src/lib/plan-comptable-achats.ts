@@ -42,6 +42,9 @@ export const COMPTES: Record<string, string> = {
   "62700000": "Services bancaires", "62710000": "Commissions CB", "62720000": "Commissions sur émission d'emprunt",
   "62800000": "Diverses cotisations", "62810000": "Cotisations professionnelles", "62820000": "Inscriptions, filiations", "62830000": "Cotisations chevaux", "62840000": "Frais ANCV", "62880000": "Autres services extérieurs",
   "63130000": "Participation formation continue", "63330000": "Formation professionnelle continue", "63570000": "Droits d'enregistrement, timbre",
+  // Impôts et taxes : numérotation du plan comptable général, à confirmer sur
+  // le prochain bilan (le cabinet n'en avait pas isolé dans l'extrait 2024-25).
+  "63310000": "Taxe d'apprentissage", "63511000": "Contribution économique territoriale (CFE)", "63512000": "Taxes foncières", "63500000": "Autres impôts, taxes et versements assimilés",
   "64111000": "Personnel permanent", "64500000": "Charges sociales salariés", "64510000": "Cotisations MSA", "64600000": "Cotisations sociales de l'exploitant", "64700000": "Tickets resto", "64750000": "Médecine du travail, pharmacie",
   "66120000": "Intérêts des emprunts", "67120000": "Pénalités et amendes",
   // Hors charges
@@ -64,6 +67,7 @@ const PAR_CATEGORIE: Record<string, string> = {
   "Entretien (bâtiments, matériel, véhicules)": "61550000",
   "Locations & loyers": "61380000",
   "Assurances": "61600000",
+  "Impôts & taxes": "63500000",
   "Honoraires & gestion (compta, juridique, GHN)": "62262000",
   // Un prestataire facture une prestation : sous-traitance, pas un salaire.
   "Prestataires & sous-traitance (moniteurs, travaux)": "60580000",
@@ -91,6 +95,7 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Entretien (bâtiments, matériel, véhicules)": [[/(garage|pneu|controle technique|carross|vidange|motin|jb ?mega|vehicule|camion|skoda)/, "61553000"], [/(batiment|toiture|platrerie|peinture|macon|couverture)/, "61530000"], [/(maintenance|sage|logiciel|contrat d entretien)/, "61562000"], [/(terrain|carriere|sable|clotur)/, "61510000"]],
   "Locations & loyers": [[/(arval|skoda|vehicule|lld)/, "61320000"], [/(rex rotary|imprimante|copieur)/, "61322000"], [/(tpe|leasing solutions|cm cic|leasecom|terminal)/, "61323000"], [/(cafe)/, "61321000"], [/(equilocation|cheval|poney|animal)/, "61340000"], [/(association|asso ce|ce d agon|loyer)/, "61310000"]],
   "Assurances": [[/(vehicule|auto|camion|flotte)/, "61610000"], [/(agricole|materiel|tracteur|groupama.*mat)/, "61680000"]],
+  "Impôts & taxes": [[/(cfe\b|cotisation fonciere|economique territoriale)/, "63511000"], [/(fonciere|foncier)/, "63512000"], [/(apprentissage)/, "63310000"], [/(formation)/, "63330000"], [/(enregistrement|timbre)/, "63570000"]],
   // Un moniteur indépendant relève du travail des chevaux quand il monte ou
   // débourre ; un artisan, de l'entretien du bâtiment. Un gros chantier reste
   // une immobilisation, à classer comme telle sur la ligne.

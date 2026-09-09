@@ -27,6 +27,10 @@ test("le relevé suffit pour ce que la banque ne facture pas", () => {
   assert.equal(etatPiece(ligne({ poste: "Compte FFE (avance licences & engagements)", suivie: false, avanceFfe: true })), "releve-suffit");
   assert.ok(justifiableSansFacture(ligne({ fournisseur: "Com Carte" })));
   assert.ok(!justifiableSansFacture(ligne()));
+  // Assurances et impôts : pas de facture mensuelle à réclamer, le débit suffit.
+  assert.equal(etatPiece(ligne({ poste: "Assurances", fournisseur: "PRLV ALLIANZ IARD" })), "releve-suffit");
+  assert.equal(etatPiece(ligne({ poste: "Assurances", fournisseur: "HELMET" })), "releve-suffit");
+  assert.equal(etatPiece(ligne({ poste: "Impôts & taxes", fournisseur: "PRLV DGFIP CFE" })), "releve-suffit");
 });
 
 test("rien à réclamer quand la pièce est là, ailleurs, ou sans objet", () => {
@@ -73,6 +77,8 @@ test("ce qui n'a jamais de TVA n'en réclame pas la vérification", () => {
   assert.ok(sansTvaParNature(ligne({ poste: "Cotisations sociales" })));
   assert.ok(sansTvaParNature(ligne({ poste: "Virements internes", suivie: false })));
   assert.ok(sansTvaParNature(ligne({ depensePersonnelle: true })));
+  assert.ok(sansTvaParNature(ligne({ poste: "Assurances", fournisseur: "PRLV GROUPAMA" })));
+  assert.ok(sansTvaParNature(ligne({ poste: "Impôts & taxes", fournisseur: "TAXE FONCIERE" })));
   // Un achat ordinaire, lui, garde sa vérification de TVA.
   assert.ok(!sansTvaParNature(ligne()));
   assert.ok(!sansTvaParNature(ligne({ poste: "Aliments, litières, paille", fournisseur: "AGRIAL" })));

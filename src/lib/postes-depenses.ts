@@ -20,6 +20,10 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
   { nom: "Entretien (bâtiments, matériel, véhicules)", ref: 10546 },
   { nom: "Locations & loyers", ref: 21357 },
   { nom: "Assurances", ref: 9992 },
+  // CFE, taxe foncière, taxe d'apprentissage, droits d'enregistrement : des
+  // charges (classe 63), sans TVA, que le débit justifie. La TVA elle-même
+  // reste hors dépenses : ce n'est pas une charge.
+  { nom: "Impôts & taxes", ref: null },
   { nom: "Retraite / PER — à vérifier", ref: null },
   { nom: "Honoraires & gestion (compta, juridique, GHN)", ref: 5321 },
   // Prestations facturées par un tiers : moniteur indépendant, artisan,
@@ -39,6 +43,32 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
 
 /** Valeur sentinelle pour un débit qui n'est PAS une dépense à suivre. */
 export const POSTE_HORS_DEPENSES = "hors-depenses";
+
+export const POSTE_ASSURANCES = "Assurances";
+export const POSTE_IMPOTS = "Impôts & taxes";
+
+/**
+ * Postes sans TVA par nature, dont le débit bancaire tient lieu de pièce :
+ * les assurances sont exonérées (art. 261 C du CGI) et leur avis d'échéance
+ * annuel n'est pas une facture mensuelle ; les impôts et taxes n'en ont
+ * jamais. Réclamer une « facture » pour chaque prélèvement Allianz noyait les
+ * vraies pièces manquantes.
+ */
+export const POSTES_JUSTIFIES_PAR_LE_DEBIT: readonly string[] = [POSTE_ASSURANCES, POSTE_IMPOTS];
+
+const normaliser = (libelle: unknown) => String(libelle ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** Prélèvement d'un assureur : Allianz, Groupama, Helmet… */
+export function estAssureur(libelle: unknown): boolean {
+  return /\b(allianz|groupama|helmet|generali|axa|maif|mma|matmut|hiscox)\b/.test(normaliser(libelle));
+}
+
+/** Impôt ou taxe (CFE, foncier, Trésor public), jamais la TVA. */
+export function estImpotOuTaxe(libelle: unknown): boolean {
+  const texte = normaliser(libelle);
+  if (/\btva\b/.test(texte)) return false;
+  return /\b(cfe|cotisation fonciere|taxe fonciere|taxes foncieres|impot|impots|tresor public|taxe d apprentissage)\b/.test(texte);
+}
 
 /**
  * Commission ou frais prélevés par la banque elle-même : « Com Carte »,

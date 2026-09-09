@@ -61,7 +61,10 @@ export function proposerPosteBancaire(libelle: string) {
     // Carburant : enseignes de station et produits pétroliers, avant les enseignes de magasin.
     [/\b(station u|station service|total|totalenergies|esso|avia|dyneff|carburant|gazole|sp95|sp98|e10|maridys)\b/, "Carburants"],
     [/\b(arval|loyer|equilocation|rex rotary|manuloc|leasing|location)\b/, "Locations & loyers"],
-    [/\b(allianz|groupama|generali|axa|maif|mma|matmut)\b/, "Assurances"],
+    [/\b(allianz|groupama|helmet|generali|axa|maif|mma|matmut|hiscox)\b/, "Assurances"],
+    // La TVA n'est pas une charge ; CFE, foncier et Trésor public en sont une.
+    [/\btva\b/, POSTE_HORS_DEPENSES],
+    [/\b(cfe|cotisation fonciere|taxe fonciere|taxes foncieres|impot|impots|tresor public)\b/, "Impôts & taxes"],
     [/\b(ghn|pignolet|omga|api expertises|comptable|notaire|avocat|huissier|greffe)\b/, "Honoraires & gestion (compta, juridique, GHN)"],
     // Prestataires : moniteur indépendant, artisan, travaux facturés.
     [/\b(moniteur|monitrice|enseignant|coach|debourrage|dressage|prestation|sous traitance|honoraires moniteur)\b/, "Prestataires & sous-traitance (moniteurs, travaux)"],
