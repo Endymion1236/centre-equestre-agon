@@ -113,7 +113,7 @@ export default function ClotureMoisPage() {
   // (tableau des opérations), mois par mois.
   const tvaParMois = useMemo(() => {
     const tableaux: Record<string, LigneMois[] | null> = { ...lignesTrimestre, [mois]: lignesTableau };
-    const out: Record<string, { collectee: number; deductibleJustifiee: number; aVerifier: { nb: number; ttc: number } } | null> = {};
+    const out: Record<string, { collectee: number; collecteeCeleris?: number; deductibleJustifiee: number; aVerifier: { nb: number; ttc: number } } | null> = {};
     for (const m of trimestreDe(mois).mois) {
       const ligne = resultat.find(r => r.mois === m);
       const lignes = tableaux[m];
@@ -121,7 +121,7 @@ export default function ClotureMoisPage() {
       // avec des ventes mais un tableau vide : collectée seule, déductible 0.
       if (!lignes && !ligne) { out[m] = null; continue; }
       const bilan = bilanTvaMois(lignes || []);
-      out[m] = { collectee: ligne?.tvaCollectee || 0, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
+      out[m] = { collectee: ligne?.tvaCollectee || 0, collecteeCeleris: ligne?.tvaCollecteeCeleris || 0, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
     }
     return out;
   }, [resultat, lignesTableau, lignesTrimestre, mois]);

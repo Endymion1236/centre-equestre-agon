@@ -9,7 +9,10 @@
  *   - depenses  : total des factures saisies — écran Dépenses par poste ;
  *   - tvaCollectee : TVA des ventes du mois, calculée comme l'onglet
  *                 Comptabilité → TVA (mêmes factures, même exclusion des
- *                 annulées et en attente) — pour l'encart « TVA à payer ».
+ *                 annulées et en attente) PLUS la TVA des écritures importées
+ *                 de Céleris pour les mois tenus dans l'ancien logiciel —
+ *                 pour l'encart « TVA à payer ». `tvaCollecteeCeleris` en
+ *                 donne la part Céleris.
  *
  * L'agrégation se fait ICI pour ne jamais envoyer le détail des encaissements
  * au navigateur : seuls 3 totaux par mois sortent. Les mois sont calés sur
@@ -43,19 +46,20 @@ export async function GET(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const [encSnap, msSnap, depSnap, paySnap] = await Promise.all([
+    const [encSnap, msSnap, depSnap, paySnap, celSnap] = await Promise.all([
       adminDb.collection("encaissements")
         .select("montant", "mode", "isApportCaisse", "isVersementBanque", "date")
         .get(),
       adminDb.collection("masse-salariale").get(),
       adminDb.collection("depenses").get(),
       adminDb.collection("payments").select("status", "totalTTC", "paymentMode", "date", "items").get(),
+      adminDb.collection("historiqueComptableCeleris").select("mois", "totaux").get(),
     ]);
 
-    const parMois = new Map<string, { ca: number; masse: number; depenses: number; tvaCollectee: number }>();
+    const parMois = new Map<string, { ca: number; masse: number; depenses: number; tvaCollectee: number; tvaCollecteeCeleris: number }>();
     const entree = (mois: string) => {
       let e = parMois.get(mois);
-      if (!e) { e = { ca: 0, masse: 0, depenses: 0, tvaCollectee: 0 }; parMois.set(mois, e); }
+      if (!e) { e = { ca: 0, masse: 0, depenses: 0, tvaCollectee: 0, tvaCollecteeCeleris: 0 }; parMois.set(mois, e); }
       return e;
     };
 
@@ -72,6 +76,18 @@ export async function GET(req: NextRequest) {
       facturesParMois.set(mois, [...(facturesParMois.get(mois) || []), r]);
     });
     for (const [m, factures] of facturesParMois) entree(m).tvaCollectee = calculerSyntheseFactures(factures).totalTVA;
+
+    // Mois tenus dans Céleris (juillet–août 2026, avant la bascule) : la TVA
+    // collectée est celle des écritures importées — comptes 445, en centimes.
+    celSnap.docs.forEach((d) => {
+      const r = d.data() as any;
+      const mois = String(r.mois || "");
+      const tva = Number(r.totaux?.tva);
+      if (!MOIS_RE.test(mois) || !Number.isFinite(tva)) return;
+      const e = entree(mois);
+      e.tvaCollecteeCeleris += tva / 100;
+      e.tvaCollectee += tva / 100;
+    });
 
     encSnap.docs.forEach((d) => {
       const r = d.data() as any;
@@ -111,6 +127,7 @@ export async function GET(req: NextRequest) {
         masse: Math.round(v.masse * 100) / 100,
         depenses: Math.round(v.depenses * 100) / 100,
         tvaCollectee: Math.round(v.tvaCollectee * 100) / 100,
+        tvaCollecteeCeleris: Math.round(v.tvaCollecteeCeleris * 100) / 100,
       }))
       .sort((a, b) => a.mois.localeCompare(b.mois));
 

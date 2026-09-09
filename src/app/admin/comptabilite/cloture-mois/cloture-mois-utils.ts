@@ -18,6 +18,7 @@ export interface MoisResultatCloture {
   depenses: number;
   /** TVA des ventes du mois (API résultat) — encart « TVA à payer ». */
   tvaCollectee?: number;
+  tvaCollecteeCeleris?: number;
 }
 
 export type EtatCloture = "ok" | "manque" | "info" | "neutre";

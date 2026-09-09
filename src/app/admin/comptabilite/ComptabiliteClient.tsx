@@ -129,6 +129,17 @@ export default function ComptabilitePage() {
   // mois du trimestre vient du tableau des opérations (page Dépenses), la
   // collectée des factures déjà chargées ici.
   const [lignesTva, setLignesTva] = useState<Record<string, LigneMois[]> | null>(null);
+  // TVA des mois tenus dans Céleris (écritures importées, comptes 445, en centimes).
+  const [tvaCeleris, setTvaCeleris] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (tab !== "tva") return;
+    let actif = true;
+    authFetch("/api/admin/comptabilite/celeris")
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (actif && d?.imports) setTvaCeleris(Object.fromEntries((d.imports as { mois: string; totaux?: { tva?: number } }[]).map(i => [i.mois, (Number(i.totaux?.tva) || 0) / 100]))); })
+      .catch(() => {});
+    return () => { actif = false; };
+  }, [tab]);
   useEffect(() => {
     if (tab !== "tva" || !/^\d{4}-\d{2}$/.test(period)) return;
     let actif = true;
@@ -139,14 +150,15 @@ export default function ComptabilitePage() {
     return () => { actif = false; };
   }, [tab, period]);
   const tvaParMois = useMemo(() => {
-    const out: Record<string, { collectee: number; deductibleJustifiee: number; aVerifier: { nb: number; ttc: number } } | null> = {};
+    const out: Record<string, { collectee: number; collecteeCeleris?: number; deductibleJustifiee: number; aVerifier: { nb: number; ttc: number } } | null> = {};
     for (const m of trimestreDe(period).mois) {
       if (!lignesTva) { out[m] = null; continue; }
       const bilan = bilanTvaMois(lignesTva[m] || []);
-      out[m] = { collectee: calculerSyntheseFactures(filtrerFacturesPeriode(payments, m)).totalTVA, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
+      const celeris = tvaCeleris[m] || 0;
+      out[m] = { collectee: calculerSyntheseFactures(filtrerFacturesPeriode(payments, m)).totalTVA + celeris, collecteeCeleris: celeris, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
     }
     return out;
-  }, [lignesTva, payments, period]);
+  }, [lignesTva, payments, period, tvaCeleris]);
   const dailyTotals = useMemo(
     () => calculerTotauxJournaliers(encaissementsCompta, period),
     [encaissementsCompta, period],

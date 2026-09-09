@@ -51,3 +51,14 @@ test("le trimestre additionne les mois disponibles et nomme ceux qui manquent", 
   assert.deepEqual(r.moisManquants, ["2026-09"]);
   assert.equal(r.parMois.length, 3); assert.equal(r.parMois[2].resultat, null);
 });
+
+test("la part Céleris est comprise dans la collectée, et reportée telle quelle", () => {
+  const r = calculerTvaAPayer({ collectee: 900, collecteeCeleris: 900, deductibleJustifiee: 100 });
+  assert.equal(r.collectee, 900); assert.equal(r.collecteeCeleris, 900); assert.equal(r.aPayer, 800);
+  const t = calculerTvaTrimestre("2026-09", {
+    "2026-07": { collectee: 900, collecteeCeleris: 900, deductibleJustifiee: 0 },
+    "2026-08": { collectee: 700, collecteeCeleris: 700, deductibleJustifiee: 0 },
+    "2026-09": { collectee: 500, deductibleJustifiee: 50 },
+  });
+  assert.equal(t.collectee, 2100); assert.equal(t.collecteeCeleris, 1600); assert.equal(t.aPayer, 2050);
+});

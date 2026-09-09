@@ -33,6 +33,7 @@ export default function EncartTvaAPayer({ moisReference, parMois, chargement }: 
             <div className="rounded-lg bg-orange-50 border border-orange-100 px-3 py-2">
               <div className="font-body text-[10px] font-semibold uppercase tracking-wide text-orange-700">Collectée sur les ventes</div>
               <div className="font-display text-xl font-bold text-orange-600">{eur(r.collectee)}</div>
+              {r.collecteeCeleris > 0 && <div className="font-body text-[11px] text-orange-700">dont {eur(r.collecteeCeleris)} des écritures Céleris</div>}
             </div>
             <div className="rounded-lg bg-green-50 border border-green-100 px-3 py-2">
               <div className="font-body text-[10px] font-semibold uppercase tracking-wide text-green-700">Déductible, facture à l&apos;appui</div>
@@ -51,7 +52,7 @@ export default function EncartTvaAPayer({ moisReference, parMois, chargement }: 
                   <td className="py-1 capitalize">{nomMois(d.mois)}</td>
                   {d.resultat ? (
                     <>
-                      <td className="text-right">{eur(d.resultat.collectee)}</td>
+                      <td className="text-right">{eur(d.resultat.collectee)}{d.resultat.collecteeCeleris > 0 ? <span className="text-slate-400 font-normal"> (Céleris)</span> : null}</td>
                       <td className="text-right">− {eur(d.resultat.deductible)}</td>
                       <td className="text-right">{d.resultat.credit > 0 ? `crédit ${eur(d.resultat.credit)}` : eur(d.resultat.aPayer)}</td>
                       <td className="text-right text-amber-700">{d.resultat.aVerifierNb ? `${d.resultat.aVerifierNb} ligne${d.resultat.aVerifierNb > 1 ? "s" : ""} · ${eur(d.resultat.aVerifierTtc)}` : "—"}</td>
@@ -71,7 +72,7 @@ export default function EncartTvaAPayer({ moisReference, parMois, chargement }: 
             </p>
           )}
           <p className="font-body text-[11px] text-slate-400 mt-2">
-            Collectée : ventes du mois, comme l&apos;onglet Comptabilité → TVA. Déductible : uniquement la TVA prouvée par une pièce associée sur la page Dépenses.
+            Collectée : ventes du mois, comme l&apos;onglet Comptabilité → TVA, plus la TVA des écritures importées de Céleris pour les mois tenus dans l&apos;ancien logiciel. Déductible : uniquement la TVA prouvée par une pièce associée sur la page Dépenses.
           </p>
         </>
       )}

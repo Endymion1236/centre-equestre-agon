@@ -16,8 +16,10 @@
  */
 
 export interface EntreeTvaAPayer {
-  /** TVA collectée sur les ventes du mois (euros). */
+  /** TVA collectée sur les ventes du mois (euros), Céleris compris. */
   collectee: number;
+  /** Part de `collectee` venant des écritures importées de Céleris (mois tenus dans l'ancien logiciel). */
+  collecteeCeleris?: number;
   /** TVA déductible documentée par une facture associée (euros). */
   deductibleJustifiee: number;
   /** Dépenses dont la TVA reste à vérifier : nombre et TTC. */
@@ -26,6 +28,7 @@ export interface EntreeTvaAPayer {
 
 export interface ResultatTvaAPayer {
   collectee: number;
+  collecteeCeleris: number;
   deductible: number;
   /** Montant à verser (positif) ; 0 quand la déductible dépasse la collectée. */
   aPayer: number;
@@ -52,6 +55,7 @@ export function calculerTvaAPayer(e: EntreeTvaAPayer): ResultatTvaAPayer {
   const aVerifierTtc = arrondi(Math.max(0, e.aVerifier?.ttc || 0));
   return {
     collectee,
+    collecteeCeleris: arrondi(Math.min(collectee, Math.max(0, e.collecteeCeleris || 0))),
     deductible,
     aPayer: solde > 0 ? solde : 0,
     credit: solde < 0 ? -solde : 0,
@@ -111,6 +115,7 @@ export function calculerTvaTrimestre(moisReference: string, parMois: Record<stri
   const presents = detail.filter((d) => d.resultat).map((d) => d.resultat!);
   const total = calculerTvaAPayer({
     collectee: presents.reduce((s, r) => s + r.collectee, 0),
+    collecteeCeleris: presents.reduce((s, r) => s + r.collecteeCeleris, 0),
     deductibleJustifiee: presents.reduce((s, r) => s + r.deductible, 0),
     aVerifier: { nb: presents.reduce((s, r) => s + r.aVerifierNb, 0), ttc: presents.reduce((s, r) => s + r.aVerifierTtc, 0) },
   });
