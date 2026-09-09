@@ -187,7 +187,7 @@ export async function POST(req: NextRequest) {
           const ids: string[] = lien.exists ? (lien.data()?.pieceIds || [lien.data()?.pieceId]).filter(Boolean) : [];
           if (!ids.length) throw new Error("Aucun règlement groupé sur ce paiement.");
           for (const pid of ids) {
-            tx.update(adminDb.collection("justificatifs").doc(pid), { depenseId: null, modeRattachement: null, associationMode: null });
+            tx.update(adminDb.collection("justificatifs").doc(pid), { depenseId: null, modeRattachement: null, associationMode: null, associationEcart: null });
             tx.create(adminDb.collection("justificatifs").doc(pid).collection("historique").doc(), { action: "degrouper", avant: depenseId, apres: null, uid: auth.uid, at: FieldValue.serverTimestamp() });
           }
           tx.delete(lienRef);
@@ -220,11 +220,16 @@ export async function POST(req: NextRequest) {
         const verdict = verifierReglementGroupe(pieces, Number(depense.montant), depenseId);
         if (!verdict.ok) throw new Error(verdict.erreurs[0]);
 
-        tx.set(lienRef, { pieceId: pieceIds[0], pieceIds, groupe: true });
+        tx.set(lienRef, { pieceId: pieceIds[0], pieceIds, groupe: true, ...(verdict.escompte > 0 ? { escompte: verdict.escompte } : {}) });
+        // Escompte retenu sur le règlement : porté par les pièces, comme pour
+        // un paiement unique escompté — la TVA de la ligne passe « à vérifier ».
+        const associationEcart = verdict.escompte > 0
+          ? { type: "escompte", taux: Math.round((verdict.escompte / verdict.totalPlein) * 10000) / 100, montant: verdict.escompte, annonce: true }
+          : null;
         for (const id of pieceIds) {
           tx.update(adminDb.collection("justificatifs").doc(id), {
             depenseId, modeRattachement: "groupe", associationMode: "manuel", autoBloque: true,
-            associationDevise: null, operationAssociee: null,
+            associationDevise: null, operationAssociee: null, associationEcart,
           });
           tx.create(adminDb.collection("justificatifs").doc(id).collection("historique").doc(), {
             action: "grouper", avant: null, apres: depenseId, groupe: pieceIds, uid: auth.uid, at: FieldValue.serverTimestamp(),

@@ -73,6 +73,36 @@ test("recomposer un groupe existant reste possible", () => {
   assert.equal(v.ok, true);
 });
 
+/**
+ * La clinique vétérinaire accorde 2 % d'escompte pour prélèvement à
+ * l'échéance et l'écrit sur chaque facture : « TTC 422,20 € — escompte déduit
+ * 413,76 € ». Deux factures soldées ensemble étaient refusées : la somme des
+ * TTC pleins ne tombait jamais sur le débit.
+ */
+test("escompte annoncé : le groupe accepte la somme des montants escompte déduit, et le dit", () => {
+  const a = piece("a", 422.20, 70.37, { extraction: lecture(422.20, 70.37, { ttcEscompte: 413.76 }) });
+  const b = piece("b", 100, 16.67, { extraction: lecture(100, 16.67, { ttcEscompte: 98 }) });
+  const v = verifierReglementGroupe([a, b], 511.76);
+  assert.deepEqual(v.erreurs, []);
+  assert.equal(v.ok, true);
+  assert.equal(v.total, 511.76); assert.equal(v.totalPlein, 522.20); assert.equal(v.escompte, 10.44);
+  assert.match(resumeGroupe(v, 511.76), /escompte de 10.44 € déduit sur 522.20 € facturés/);
+  assert.match(resumeGroupe(v, 511.76), /à ajuster de l'escompte/);
+
+  // Le fournisseur n'a pas appliqué l'escompte : le TTC plein reste accepté.
+  const plein = verifierReglementGroupe([a, b], 522.20);
+  assert.equal(plein.ok, true); assert.equal(plein.escompte, 0); assert.equal(plein.total, 522.20);
+
+  // Une facture sans escompte annoncé compte pour son TTC dans les deux sommes.
+  const mixte = verifierReglementGroupe([a, piece("c", 50, 8.33)], 463.76);
+  assert.equal(mixte.ok, true); assert.equal(mixte.escompte, 8.44);
+
+  // Ni l'un ni l'autre : refus, avec les deux totaux.
+  const ni = verifierReglementGroupe([a, b], 500);
+  assert.equal(ni.ok, false);
+  assert.match(ni.erreurs[0], /Escompte déduit, le total serait de 511.76 €/);
+});
+
 test("une TVA manquante annule le total de TVA, sans bloquer le groupe", () => {
   const v = verifierReglementGroupe([piece("a", 122.50, 20.42), piece("b", 122.50, null)], 245);
   assert.equal(v.ok, true);

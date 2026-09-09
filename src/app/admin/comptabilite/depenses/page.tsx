@@ -246,7 +246,7 @@ export default function DepensesPage() {
           const retenues = dispo.filter(p => groupe.includes(p.id));
           const v = verifierReglementGroupe(retenues.map(p => ({ id: p.id, nom: p.nom, extraction: p.extraction, retire: p.retire, depenseId: p.depenseId, paiementsAssocies: p.paiementsAssocies })), ligne.montant, ligne.id);
           return <div className="space-y-2">
-            <p>Cochez les factures soldées par ce seul prélèvement. Chacune garde sa lecture, son numéro et sa TVA ; leur total doit tomber au centime sur le débit.</p>
+            <p>Cochez les factures soldées par ce seul prélèvement. Chacune garde sa lecture, son numéro et sa TVA ; leur total doit tomber au centime sur le débit — escompte déduit quand une facture l&apos;annonce.</p>
             <label className="block text-sm">Rechercher (montant, fournisseur, nom du fichier)
               <input className="mt-1 block w-full rounded border p-2" value={rechercheePiece} disabled={busy} onChange={e => setRecherchePiece(e.target.value)} aria-label="Rechercher une facture à grouper" />
             </label>
