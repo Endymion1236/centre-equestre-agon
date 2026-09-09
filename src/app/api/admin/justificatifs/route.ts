@@ -92,6 +92,71 @@ export async function POST(req: NextRequest) {
     }
     if (Number(req.headers.get("content-length")) > 20_000) return NextResponse.json({ error: "Requête trop volumineuse" }, { status: 413 });
     const body = await req.json();
+    // Règlement groupé : plusieurs factures pour un débit. L'action porte un
+    // `depenseId` et des `pieceIds`, pas un `id` de pièce — elle se traite
+    // AVANT le contrôle d'identifiant commun aux actions sur une pièce.
+    if (body.action === "grouper" || body.action === "degrouper") {
+      const depenseId = String(body.depenseId || "");
+      if (!/^[\w-]{1,150}$/.test(depenseId)) return NextResponse.json({ error: "Dépense invalide." }, { status: 400 });
+      const lienRef = adminDb.collection("justificatifs-liens").doc(depenseId);
+
+      if (body.action === "degrouper") {
+        await adminDb.runTransaction(async tx => {
+          const lien = await tx.get(lienRef);
+          const ids: string[] = lien.exists ? (lien.data()?.pieceIds || [lien.data()?.pieceId]).filter(Boolean) : [];
+          if (!ids.length) throw new Error("Aucun règlement groupé sur ce paiement.");
+          for (const pid of ids) {
+            tx.update(adminDb.collection("justificatifs").doc(pid), { depenseId: null, modeRattachement: null, associationMode: null, associationEcart: null });
+            tx.create(adminDb.collection("justificatifs").doc(pid).collection("historique").doc(), { action: "degrouper", avant: depenseId, apres: null, uid: auth.uid, at: FieldValue.serverTimestamp() });
+          }
+          tx.delete(lienRef);
+        });
+        return NextResponse.json({ ok: true });
+      }
+
+      const pieceIds: string[] = Array.isArray(body.pieceIds)
+        ? body.pieceIds.filter((x: unknown): x is string => typeof x === "string" && /^[\w-]{1,150}$/.test(x)).slice(0, 30)
+        : [];
+      if (pieceIds.length < 2) return NextResponse.json({ error: "Choisissez au moins deux factures." }, { status: 400 });
+
+      await adminDb.runTransaction(async tx => {
+        const depenseSnap = await tx.get(adminDb.collection("depenses").doc(depenseId));
+        if (!depenseSnap.exists) throw new Error("Cette dépense n'existe plus.");
+        const depense = depenseSnap.data()!;
+        if (depense.source !== "releve-bancaire") throw new Error("Seul un débit issu d'un relevé peut être justifié par un groupe.");
+        if (depense.rapprochementExclu) throw new Error("Ce débit est exclu du rapprochement.");
+        const lien = await tx.get(lienRef);
+        const dejaIci: string[] = lien.exists ? (lien.data()?.pieceIds || [lien.data()?.pieceId]).filter(Boolean) : [];
+        if (lien.exists && !dejaIci.every(id => pieceIds.includes(id))) throw new Error("Ce paiement porte déjà un justificatif. Dissociez-le avant de composer un groupe.");
+
+        const snaps = await tx.getAll(...pieceIds.map(id => adminDb.collection("justificatifs").doc(id)));
+        const pieces: PieceDuGroupe[] = snaps.map((snap, i) => {
+          const v = snap.data();
+          if (!snap.exists || !v) throw new Error("Une des factures choisies n'existe plus.");
+          return { id: pieceIds[i], nom: v.nom || "", extraction: v.extraction ? nettoyerPiece(v.extraction) : null,
+            retire: v.retire === true, depenseId: v.depenseId || null, paiementsAssocies: v.paiementsAssocies || [] };
+        });
+        const verdict = verifierReglementGroupe(pieces, Number(depense.montant), depenseId);
+        if (!verdict.ok) throw new Error(verdict.erreurs[0]);
+
+        tx.set(lienRef, { pieceId: pieceIds[0], pieceIds, groupe: true, ...(verdict.escompte > 0 ? { escompte: verdict.escompte } : {}) });
+        // Escompte retenu sur le règlement : porté par les pièces, comme pour
+        // un paiement unique escompté — la TVA de la ligne passe « à vérifier ».
+        const associationEcart = verdict.escompte > 0
+          ? { type: "escompte", taux: Math.round((verdict.escompte / verdict.totalPlein) * 10000) / 100, montant: verdict.escompte, annonce: true }
+          : null;
+        for (const id of pieceIds) {
+          tx.update(adminDb.collection("justificatifs").doc(id), {
+            depenseId, modeRattachement: "groupe", associationMode: "manuel", autoBloque: true,
+            associationDevise: null, operationAssociee: null, associationEcart,
+          });
+          tx.create(adminDb.collection("justificatifs").doc(id).collection("historique").doc(), {
+            action: "grouper", avant: null, apres: depenseId, groupe: pieceIds, uid: auth.uid, at: FieldValue.serverTimestamp(),
+          });
+        }
+      });
+      return NextResponse.json({ ok: true });
+    }
     if (!valideId(body.id)) return NextResponse.json({ error: "Identifiant invalide" }, { status: 400 });
     const ref = pieces().doc(body.id);
     const doc = await ref.get();
@@ -176,68 +241,6 @@ export async function POST(req: NextRequest) {
     // Le lien porte la liste complète (`pieceIds`) et, pour que tout le code
     // existant continue de voir une pièce, la première d'entre elles dans
     // `pieceId`. Chaque pièce porte le débit et `modeRattachement: "groupe"`.
-    if (body.action === "grouper" || body.action === "degrouper") {
-      const depenseId = String(body.depenseId || "");
-      if (!/^[\w-]{1,150}$/.test(depenseId)) return NextResponse.json({ error: "Dépense invalide." }, { status: 400 });
-      const lienRef = adminDb.collection("justificatifs-liens").doc(depenseId);
-
-      if (body.action === "degrouper") {
-        await adminDb.runTransaction(async tx => {
-          const lien = await tx.get(lienRef);
-          const ids: string[] = lien.exists ? (lien.data()?.pieceIds || [lien.data()?.pieceId]).filter(Boolean) : [];
-          if (!ids.length) throw new Error("Aucun règlement groupé sur ce paiement.");
-          for (const pid of ids) {
-            tx.update(adminDb.collection("justificatifs").doc(pid), { depenseId: null, modeRattachement: null, associationMode: null, associationEcart: null });
-            tx.create(adminDb.collection("justificatifs").doc(pid).collection("historique").doc(), { action: "degrouper", avant: depenseId, apres: null, uid: auth.uid, at: FieldValue.serverTimestamp() });
-          }
-          tx.delete(lienRef);
-        });
-        return NextResponse.json({ ok: true });
-      }
-
-      const pieceIds: string[] = Array.isArray(body.pieceIds)
-        ? body.pieceIds.filter((x: unknown): x is string => typeof x === "string" && /^[\w-]{1,150}$/.test(x)).slice(0, 30)
-        : [];
-      if (pieceIds.length < 2) return NextResponse.json({ error: "Choisissez au moins deux factures." }, { status: 400 });
-
-      await adminDb.runTransaction(async tx => {
-        const depenseSnap = await tx.get(adminDb.collection("depenses").doc(depenseId));
-        if (!depenseSnap.exists) throw new Error("Cette dépense n'existe plus.");
-        const depense = depenseSnap.data()!;
-        if (depense.source !== "releve-bancaire") throw new Error("Seul un débit issu d'un relevé peut être justifié par un groupe.");
-        if (depense.rapprochementExclu) throw new Error("Ce débit est exclu du rapprochement.");
-        const lien = await tx.get(lienRef);
-        const dejaIci: string[] = lien.exists ? (lien.data()?.pieceIds || [lien.data()?.pieceId]).filter(Boolean) : [];
-        if (lien.exists && !dejaIci.every(id => pieceIds.includes(id))) throw new Error("Ce paiement porte déjà un justificatif. Dissociez-le avant de composer un groupe.");
-
-        const snaps = await tx.getAll(...pieceIds.map(id => adminDb.collection("justificatifs").doc(id)));
-        const pieces: PieceDuGroupe[] = snaps.map((snap, i) => {
-          const v = snap.data();
-          if (!snap.exists || !v) throw new Error("Une des factures choisies n'existe plus.");
-          return { id: pieceIds[i], nom: v.nom || "", extraction: v.extraction ? nettoyerPiece(v.extraction) : null,
-            retire: v.retire === true, depenseId: v.depenseId || null, paiementsAssocies: v.paiementsAssocies || [] };
-        });
-        const verdict = verifierReglementGroupe(pieces, Number(depense.montant), depenseId);
-        if (!verdict.ok) throw new Error(verdict.erreurs[0]);
-
-        tx.set(lienRef, { pieceId: pieceIds[0], pieceIds, groupe: true, ...(verdict.escompte > 0 ? { escompte: verdict.escompte } : {}) });
-        // Escompte retenu sur le règlement : porté par les pièces, comme pour
-        // un paiement unique escompté — la TVA de la ligne passe « à vérifier ».
-        const associationEcart = verdict.escompte > 0
-          ? { type: "escompte", taux: Math.round((verdict.escompte / verdict.totalPlein) * 10000) / 100, montant: verdict.escompte, annonce: true }
-          : null;
-        for (const id of pieceIds) {
-          tx.update(adminDb.collection("justificatifs").doc(id), {
-            depenseId, modeRattachement: "groupe", associationMode: "manuel", autoBloque: true,
-            associationDevise: null, operationAssociee: null, associationEcart,
-          });
-          tx.create(adminDb.collection("justificatifs").doc(id).collection("historique").doc(), {
-            action: "grouper", avant: null, apres: depenseId, groupe: pieceIds, uid: auth.uid, at: FieldValue.serverTimestamp(),
-          });
-        }
-      });
-      return NextResponse.json({ ok: true });
-    }
 
     if (body.action === "associer" || body.action === "associer-devise" || body.action === "dissocier") {
       const associer = body.action !== "dissocier";
