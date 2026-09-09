@@ -35,7 +35,6 @@ export async function POST(req: NextRequest) {
       familyId,
       familyName,
       origin: req.nextUrl.origin,
-      authHeader: req.headers.get("authorization") || "",
       sentBy: (auth as any)?.uid || "admin",
     });
 

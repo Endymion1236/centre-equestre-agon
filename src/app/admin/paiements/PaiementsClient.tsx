@@ -1644,7 +1644,7 @@ Règles :
                           : `${encoreValables.length} liens sont encore valables`} : la famille pourrait régler deux fois. Annulez-le ci-dessus si c&apos;est un doublon.
                       </div>
                     )}
-                    <div className="mt-1 text-indigo-700">Le lien restera utilisable 2 heures.</div>
+                    <div className="mt-1 text-indigo-700">Le lien restera valable 7 jours, et pourra être annulé ici à tout moment.</div>
                   </div>
                 );
               })()}

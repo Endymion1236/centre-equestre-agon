@@ -7,11 +7,12 @@ import { authFetch } from "@/lib/auth-fetch";
  * Liens de paiement déjà envoyés pour une commande, avec leur état, et de
  * quoi annuler ceux qui sont encore valables.
  *
- * Un lien CAWL vit 2 heures et ne peut pas être rappelé côté banque : ce que
- * l'annulation fait, c'est le marquer chez nous — s'il est réglé malgré tout,
- * l'encaissement est signalé sur la commande (« à vérifier ») au lieu de
- * passer inaperçu. Et surtout, la liste montre ce qui est encore en l'air
- * avant d'envoyer un nouveau lien : c'est là que le double envoi se voit.
+ * Le lien mène sur notre site (/payer/<jeton>), qui ouvre la page CAWL au
+ * clic : l'annuler ici le ferme pour de bon. Seule réserve : une page CAWL
+ * déjà ouverte par la famille vit encore jusqu'à 2 h — un règlement qui y
+ * aboutirait est signalé sur la commande (« à vérifier »). Et surtout, la
+ * liste montre ce qui est encore en l'air avant d'envoyer un nouveau lien :
+ * c'est là que le double envoi se voit.
  */
 
 export interface LienAffiche {
@@ -24,6 +25,7 @@ export interface LienAffiche {
   etat: "valide" | "expire" | "annule" | "paye";
   sentBy?: string;
   cancelledAt?: string;
+  ouvertures?: number;
 }
 
 const heure = (iso: string) =>
@@ -81,7 +83,7 @@ export function LiensEnvoyes({
       const d = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(d?.error || `Erreur ${r.status}`);
       onAnnule(d.lien || { ...lien, etat: "annule", status: "cancelled" });
-      toast(`Lien de ${lien.amount.toFixed(2)}€ annulé. Prévenez la famille de ne pas l'utiliser : s'il est réglé quand même, la commande passera « à vérifier ».`, "success", 7000);
+      toast(`Lien de ${lien.amount.toFixed(2)}€ annulé : il n'ouvre plus la page de paiement.`, "success", 6000);
     } catch (e: any) {
       toast(e?.message || "Annulation impossible", "error");
     }
@@ -104,8 +106,8 @@ export function LiensEnvoyes({
       </div>
       {valides.length > 0 && (
         <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-2 font-body text-[11px] text-amber-900">
-          ⚠️ {valides.length === 1 ? "Un lien est encore valable" : `${valides.length} liens sont encore valables`}. Si vous en envoyez un autre,
-          la famille peut régler les deux. Annulez d&apos;abord celui qui est en trop.
+          ⚠️ {valides.length === 1 ? "Un lien est encore valable" : `${valides.length} liens sont encore valables`}. Chaque lien se limite à ce que la commande
+          doit encore, mais deux liens ouverts à la suite peuvent faire payer deux fois. Annulez d&apos;abord celui qui est en trop.
         </div>
       )}
       <ul className="flex flex-col gap-1.5">
@@ -116,7 +118,8 @@ export function LiensEnvoyes({
               <span className="font-body text-sm font-semibold text-slate-700 w-20 shrink-0">{l.amount.toFixed(2)} €</span>
               <span className="font-body text-[11px] text-slate-500 truncate flex-1" title={l.recipientEmail}>
                 {l.recipientEmail} · envoyé le {heure(l.sentAt)}
-                {l.etat === "valide" && l.expiresAt ? ` · expire à ${new Date(l.expiresAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : ""}
+                {l.etat === "valide" && l.expiresAt ? ` · valable jusqu'au ${heure(l.expiresAt)}` : ""}
+                {l.ouvertures ? ` · ouvert ${l.ouvertures} fois` : ""}
               </span>
               <span className={`font-body text-[10px] font-semibold px-2 py-0.5 rounded-full border ${pill.cls}`}>{pill.label}</span>
               {l.etat === "valide" && (
@@ -141,8 +144,8 @@ export function LiensEnvoyes({
         })}
       </ul>
       <p className="font-body text-[10px] text-slate-400 mt-2">
-        Un lien reste utilisable 2 heures après l&apos;envoi, même annulé ici : CAWL ne sait pas le rappeler.
-        L&apos;annulation sert à ne pas l&apos;oublier — un règlement reçu sur un lien annulé ou en trop est signalé sur la commande.
+        Un lien vaut 7 jours et mène sur notre site, qui ouvre la page de paiement au clic pour ce que la commande doit encore.
+        Annulé ici, il n&apos;ouvre plus rien. Un règlement reçu en trop est signalé en haut de la page Paiements.
       </p>
     </div>
   );

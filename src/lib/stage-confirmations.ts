@@ -47,7 +47,7 @@ import { renderDerouleStage } from "@/lib/stage-deroule";
 import { dateEcheanceSolde } from "@/lib/email-prestations";
 import { envoyerLienPaiement } from "@/lib/lien-paiement";
 import { montantLienAcompte, montantsConfirmationDepuisCommande } from "@/lib/lien-paiement-regles";
-import { serviceAuthHeader, SERVICE_UID } from "@/lib/api-auth";
+import { SERVICE_UID } from "@/lib/api-auth";
 
 export const COLLECTION_CONFIRMATIONS = "stage_confirmations";
 
@@ -401,9 +401,8 @@ export async function envoyerConfirmationFamille(
  * la commande entière moins ce qui est déjà réglé. La lettre vient de partir
  * en disant « le lien vous parvient dans un message séparé » : il suit.
  *
- * L'envoi passe par l'identité service (lib/api-auth) : le cron n'a pas de
- * session admin. Un échec ici n'annule pas la lettre déjà partie — il est
- * inscrit sur la file, et l'admin peut renvoyer un lien depuis Paiements.
+ * Un échec ici n'annule pas la lettre déjà partie — il est inscrit sur la
+ * file, et l'admin peut renvoyer un lien depuis Paiements.
  */
 async function envoyerLienAcompte(
   file: FileConfirmation,
@@ -427,11 +426,6 @@ async function envoyerLienAcompte(
     await noter({ lienMontant: montant, lienErreur: "origine du site inconnue" });
     return { montant, envoye: false, erreur: "origine du site inconnue" };
   }
-  const authHeader = serviceAuthHeader();
-  if (!authHeader) {
-    await noter({ lienMontant: montant, lienErreur: "CRON_SECRET absent" });
-    return { montant, envoye: false, erreur: "CRON_SECRET absent" };
-  }
 
   const total = commande.totalTTC || 0;
   const paye = commande.paidAmount || 0;
@@ -453,7 +447,6 @@ async function envoyerLienAcompte(
     familyId: file.familyId,
     familyName: file.familyName,
     origin: opts.origin,
-    authHeader,
     sentBy: opts.sentBy || SERVICE_UID,
   });
   if (!r.ok) {

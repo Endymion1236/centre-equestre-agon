@@ -230,7 +230,7 @@ export const MANUAL: ManualChapter[] = [
           <p>Pour chaque ligne :</p>
           <ul>
             <li><strong>Relancer</strong> → envoie un email de rappel automatique</li>
-            <li><strong>Lien de paiement</strong> → envoie un lien CB en ligne personnalisé avec un montant custom. La fenêtre montre les liens déjà envoyés pour la commande (encore valable, expiré, annulé, réglé) et demande confirmation avant l'envoi. Un lien vit 2 heures et ne peut pas être rappelé côté CAWL : <strong>Annuler ce lien</strong> le marque chez nous, et un règlement reçu quand même (ou en trop) apparaît en haut de la page « à vérifier », à rembourser depuis le back-office CAWL.</li>
+            <li><strong>Lien de paiement</strong> → envoie un lien CB en ligne personnalisé avec un montant custom. La fenêtre montre les liens déjà envoyés pour la commande (encore valable, expiré, annulé, réglé) et demande confirmation avant l'envoi. Le lien vaut 7 jours et mène sur notre site, qui ouvre la page CAWL au clic pour ce que la commande doit encore : <strong>Annuler ce lien</strong> le ferme aussitôt. Un règlement reçu en trop malgré tout apparaît en haut de la page « à vérifier », à rembourser depuis le back-office CAWL.</li>
             <li><strong>Encaisser</strong> → accès rapide à l'encaissement</li>
           </ul>
           <p>Un badge rouge sur l'onglet indique le nombre d'impayés non à jour.</p>

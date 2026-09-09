@@ -18,8 +18,23 @@
  *      l'inscription du moment, pour qu'il colle à la lettre de confirmation.
  */
 
-/** Durée de vie d'une session de paiement hébergée CAWL : 2 heures. */
-export const DUREE_VALIDITE_LIEN_MS = 2 * 60 * 60 * 1000;
+/**
+ * Durée de vie d'un lien envoyé : 7 jours.
+ *
+ * Le lien mène sur NOTRE site (/payer/<jeton>), pas directement chez CAWL.
+ * C'est au clic que la page de paiement CAWL est ouverte — elle, ne vit que
+ * 2 heures, mais la famille est justement en train de payer. Le montant est
+ * relu sur la commande à ce moment-là : un lien ancien ne peut pas faire
+ * payer deux fois, et un lien annulé ne mène plus nulle part.
+ */
+export const DUREE_VALIDITE_LIEN_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Une page CAWL déjà ouverte pour ce lien est réutilisée tant qu'elle est
+ * fraîche : la famille qui clique deux fois retombe sur la MÊME session, et
+ * ne peut donc pas payer deux fois. Marge sous les 2 h de CAWL.
+ */
+export const FRAICHEUR_CHECKOUT_MS = 100 * 60 * 1000;
 
 /** Tolérance d'arrondi, en euros. */
 const EPSILON = 0.02;
@@ -171,4 +186,30 @@ export function montantsConfirmationDepuisCommande(
     dejaRegle: arrondi(paye),
     source: "commande",
   };
+}
+
+/**
+ * Montant à faire payer quand la famille ouvre le lien : ce que le lien
+ * demandait, jamais plus que ce que la commande doit encore. 0 → plus rien
+ * à régler, le lien est mort de sa belle mort.
+ */
+export function montantOuvertureLien(
+  montantLien: number,
+  commande: { totalTTC?: number; paidAmount?: number },
+): number {
+  const resteDu = arrondi(Math.max(0, (commande.totalTTC || 0) - (commande.paidAmount || 0)));
+  if (resteDu <= EPSILON) return 0;
+  return arrondi(Math.min(Math.max(0, montantLien || 0), resteDu));
+}
+
+/** La page CAWL déjà ouverte pour ce lien peut-elle resservir ? */
+export function checkoutReutilisable(
+  checkout: { url?: string; createdAt?: string | number | Date | null; amount?: number } | null | undefined,
+  montant: number,
+  maintenant: number = Date.now(),
+): boolean {
+  if (!checkout?.url) return false;
+  const cree = enMs(checkout.createdAt);
+  if (!cree || maintenant - cree > FRAICHEUR_CHECKOUT_MS) return false;
+  return Math.abs((checkout.amount || 0) - montant) <= EPSILON;
 }

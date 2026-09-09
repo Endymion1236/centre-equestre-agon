@@ -1,16 +1,25 @@
 /**
  * src/lib/lien-paiement.ts
  *
- * Envoi d'un lien de paiement CAWL à une famille — le cœur de
- * /api/send-payment-link, sorti de la route pour être appelé aussi depuis le
- * serveur (confirmation de stage différée, cron) sans passer par HTTP.
+ * Envoi et ouverture d'un lien de paiement — le cœur de /api/send-payment-link
+ * et de la page /payer/<jeton>.
+ *
+ * Le lien envoyé à la famille mène sur NOTRE site, pas directement sur la
+ * page CAWL. Pourquoi : une page de paiement hébergée CAWL ne vit que
+ * 2 heures et ne peut pas être rappelée. En passant par chez nous :
+ *
+ *   - le lien vaut 7 jours (lib/lien-paiement-regles), et se révoque pour
+ *     de vrai : un lien annulé n'ouvre plus rien ;
+ *   - la page CAWL est créée AU CLIC, du montant que la commande doit encore
+ *     à cet instant — un lien ancien ou en double ne fait pas payer deux fois ;
+ *   - deux clics sur le même lien retombent sur la même session CAWL tant
+ *     qu'elle est fraîche.
  *
  * Chaque envoi laisse une trace dans `payment-links` : montant, destinataire,
- * identifiant de session CAWL, heure d'expiration. C'est ce qui permet à
- * l'administration de voir les liens encore valables pour une commande, et
- * d'en annuler un (lib/lien-paiement-regles).
+ * jeton, expiration, puis la session CAWL ouverte au clic.
  */
 
+import { randomBytes } from "crypto";
 import { prestationsCourtes, lignesDetailHtml } from "@/lib/email-prestations";
 import {
   emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
@@ -21,11 +30,17 @@ import { FieldValue } from "firebase-admin/firestore";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
-import { expirationLien } from "@/lib/lien-paiement-regles";
+import { serviceAuthHeader } from "@/lib/api-auth";
+import {
+  expirationLien, etatLien, montantOuvertureLien, checkoutReutilisable, type EtatLien,
+} from "@/lib/lien-paiement-regles";
 
 const POLICE_TEXTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export const COLLECTION_LIENS = "payment-links";
+
+/** Adresse publique d'un lien : c'est elle qui figure dans l'email et le QR code. */
+export const urlLienPaiement = (origin: string, token: string) => `${origin.replace(/\/$/, "")}/payer/${token}`;
 
 export interface ParamsLienPaiement {
   paymentId: string;
@@ -35,24 +50,23 @@ export interface ParamsLienPaiement {
   message?: string;
   familyId?: string;
   familyName?: string;
-  /** Origine du site (https://…) : le checkout CAWL est une route interne. */
+  /** Origine du site (https://…) : le lien envoyé pointe dessus. */
   origin: string;
-  /** En-tête Authorization à transmettre au checkout (admin ou service). */
-  authHeader: string;
   /** Qui déclenche l'envoi — journal des emails. */
   sentBy: string;
 }
 
 export type ResultatLienPaiement =
-  | { ok: true; paymentUrl: string; linkId: string; hostedCheckoutId: string; expiresAt: string }
+  | { ok: true; paymentUrl: string; linkId: string; expiresAt: string }
   | { ok: false; error: string; status: number };
 
 export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<ResultatLienPaiement> {
-  const { paymentId, recipientEmail, amount, message, familyId, familyName, origin, authHeader, sentBy } = p;
+  const { paymentId, recipientEmail, amount, message, familyId, familyName, origin, sentBy } = p;
 
   if (!paymentId || !recipientEmail || !amount) {
     return { ok: false, error: "Champs requis : paymentId, recipientEmail, amount", status: 400 };
   }
+  if (!origin) return { ok: false, error: "Origine du site inconnue", status: 500 };
 
   // 1. Vérifier que le paiement existe
   const paySnap = await adminDb.collection("payments").doc(paymentId).get();
@@ -66,43 +80,13 @@ export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<Result
     return { ok: false, error: `Montant supérieur au reste dû (${resteDu.toFixed(2)}€)`, status: 400 };
   }
 
-  // 2. Générer le lien CAWL
-  // Si ce lien correspond à l'ACOMPTE de la commande (montant ≈ acompteAmount,
-  // rien encore payé), on le déclare comme acompte au checkout : CAWL
-  // TOKENISE alors la carte (Card-On-File), indispensable au prélèvement
-  // automatique du solde à J-7 (MIT/delayedCharge). Le montant reste `amount`.
-  const acompteAttendu = typeof payData.acompteAmount === "number" ? payData.acompteAmount : 0;
-  const estLienAcompte =
-    acompteAttendu > 0 &&
-    (payData.paidAmount || 0) < 0.01 &&
-    Math.abs(amount - acompteAttendu) < 0.02 &&
-    (payData.totalTTC || 0) > amount;
-  const depositPercentLien = estLienAcompte
-    ? Math.min(99, Math.max(1, Math.round((amount / (payData.totalTTC || amount)) * 100)))
-    : 0;
-  const cawlRes = await fetch(`${origin}/api/cawl/checkout`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": authHeader },
-    body: JSON.stringify({
-      items: (payData.items || []).map((i: any) => ({
-        name: i.activityTitle || i.description || "Prestation",
-        priceTTC: 0, // on utilise totalTTC direct
-      })),
-      totalTTC: amount,
-      ...(depositPercentLien > 0 ? { depositPercent: depositPercentLien } : {}),
-      familyId: familyId || payData.familyId,
-      familyEmail: recipientEmail,
-      familyName: familyName || payData.familyName,
-      paymentId,
-    }),
-  });
-
-  if (!cawlRes.ok) {
-    const err = await cawlRes.json().catch(() => ({}));
-    return { ok: false, error: err.error || "Erreur CAWL", status: 500 };
-  }
-
-  const { url: paymentUrl, hostedCheckoutId = "", merchantRef = "" } = await cawlRes.json();
+  // 2. Le lien lui-même : un jeton, une adresse chez nous. La page CAWL
+  //    n'est pas créée maintenant — elle le sera au clic (ouvrirLienPaiement).
+  const token = randomBytes(24).toString("hex");
+  const paymentUrl = urlLienPaiement(origin, token);
+  const envoyeLe = new Date();
+  const expiresAt = expirationLien(envoyeLe);
+  const joursValidite = Math.round((expiresAt.getTime() - envoyeLe.getTime()) / 86_400_000);
 
   // 3. Envoyer l'email avec le lien
   // Le panier a DÉJÀ mis le prénom dans activityTitle : le recoller donnait
@@ -170,7 +154,7 @@ export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<Result
       amount < resteDu ? emailLigne("Reste dû après ce paiement", euros(resteDu - amount)) : "",
     ].join("")),
     qrSection,
-    emailParagraphe(`<span style="color:${COULEURS.discret};">Paiement sécurisé par CAWL — Crédit Agricole. Ce lien est valable 2 heures.</span>`, 11),
+    emailParagraphe(`<span style="color:${COULEURS.discret};">Paiement sécurisé par CAWL — Crédit Agricole. Ce lien est valable ${joursValidite} jours.</span>`, 11),
     emailSignature(),
   ].join("\n"), `${euros(amount)} — ${prestations}`);
 
@@ -236,19 +220,16 @@ export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<Result
     }
   }
 
-  // 4. Tracer l'envoi — avec la session CAWL et son expiration, pour que
-  // l'admin puisse voir les liens encore valables et en annuler un.
-  const envoyeLe = new Date();
-  const expiresAt = expirationLien(envoyeLe);
+  // 4. Tracer l'envoi — jeton, expiration, pour que la page /payer retrouve
+  //    le lien et que l'admin voie ce qui est encore en l'air.
   const trace = await adminDb.collection(COLLECTION_LIENS).add({
     paymentId,
     familyId: payData.familyId,
     familyName: payData.familyName,
     recipientEmail,
     amount,
+    token,
     paymentUrl,
-    hostedCheckoutId,
-    merchantRef,
     message: message || "",
     sentAt: FieldValue.serverTimestamp(),
     sentAtIso: envoyeLe.toISOString(),
@@ -258,16 +239,122 @@ export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<Result
     status: "sent",
   });
 
-  // Le lien connaît sa trace : le webhook retrouve le document à marquer
-  // « payé » depuis la session CAWL.
-  if (hostedCheckoutId) {
-    await adminDb.collection("cawl_sessions").doc(hostedCheckoutId)
-      .set({ lienId: trace.id }, { merge: true })
-      .catch((e) => console.warn("lien-paiement: lienId non posé sur cawl_sessions:", e));
+  return { ok: true, paymentUrl, linkId: trace.id, expiresAt: expiresAt.toISOString() };
+}
+
+// ─── Ouverture d'un lien (page /payer/<jeton>) ────────────────────────────
+
+export type MotifRefus = "introuvable" | "expire" | "annule" | "paye" | "deja_regle" | "erreur";
+
+export type ResultatOuverture =
+  | { ok: true; url: string; montant: number; familyName: string }
+  | { ok: false; motif: MotifRefus; familyName?: string; montant?: number; detail?: string };
+
+/**
+ * La famille vient de cliquer : vérifie le lien, relit la commande, ouvre (ou
+ * réutilise) la page de paiement CAWL et rend son adresse.
+ */
+export async function ouvrirLienPaiement(token: string, origin: string): Promise<ResultatOuverture> {
+  if (!token || !/^[a-f0-9]{48}$/.test(token)) return { ok: false, motif: "introuvable" };
+
+  const snap = await adminDb.collection(COLLECTION_LIENS).where("token", "==", token).limit(1).get();
+  if (snap.empty) return { ok: false, motif: "introuvable" };
+  const ref = snap.docs[0].ref;
+  const lien = snap.docs[0].data() as any;
+  const familyName = String(lien.familyName || "");
+
+  const etat: EtatLien = etatLien({ status: lien.status, sentAt: lien.sentAtIso || null, expiresAt: lien.expiresAt || null });
+  if (etat === "annule") return { ok: false, motif: "annule", familyName };
+  if (etat === "paye") return { ok: false, motif: "paye", familyName };
+  if (etat === "expire") return { ok: false, motif: "expire", familyName };
+
+  const paySnap = await adminDb.collection("payments").doc(String(lien.paymentId || "")).get();
+  if (!paySnap.exists) return { ok: false, motif: "introuvable" };
+  const payData = paySnap.data() as any;
+
+  const montant = montantOuvertureLien(Number(lien.amount) || 0, payData);
+  if (montant <= 0) {
+    // Plus rien à régler : la commande a été soldée autrement (comptoir,
+    // autre lien). Le lien se ferme de lui-même.
+    await ref.update({ status: "paid", paidAt: new Date().toISOString(), paidVia: "commande soldée" }).catch(() => {});
+    return { ok: false, motif: "deja_regle", familyName };
   }
 
-  return { ok: true, paymentUrl, linkId: trace.id, hostedCheckoutId, expiresAt: expiresAt.toISOString() };
+  // Page CAWL encore fraîche pour ce lien ? On y renvoie : même session,
+  // donc un seul règlement possible même en cliquant deux fois.
+  if (checkoutReutilisable(lien.checkout, montant)) {
+    return { ok: true, url: String(lien.checkout.url), montant, familyName };
+  }
+
+  const authHeader = serviceAuthHeader();
+  if (!authHeader) {
+    console.error("ouvrirLienPaiement: CRON_SECRET absent — impossible d'ouvrir le checkout");
+    return { ok: false, motif: "erreur", familyName, detail: "configuration" };
+  }
+
+  // Si ce lien correspond à l'ACOMPTE de la commande (montant ≈ acompteAmount,
+  // rien encore payé), on le déclare comme acompte au checkout : CAWL
+  // TOKENISE alors la carte (Card-On-File), indispensable au prélèvement
+  // automatique du solde à J-7 (MIT/delayedCharge). Le montant reste `montant`.
+  const acompteAttendu = typeof payData.acompteAmount === "number" ? payData.acompteAmount : 0;
+  const estLienAcompte =
+    acompteAttendu > 0 &&
+    (payData.paidAmount || 0) < 0.01 &&
+    Math.abs(montant - acompteAttendu) < 0.02 &&
+    (payData.totalTTC || 0) > montant;
+  const depositPercentLien = estLienAcompte
+    ? Math.min(99, Math.max(1, Math.round((montant / (payData.totalTTC || montant)) * 100)))
+    : 0;
+
+  let cawlBody: any = null;
+  try {
+    const cawlRes = await fetch(`${origin}/api/cawl/checkout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": authHeader },
+      body: JSON.stringify({
+        items: (payData.items || []).map((i: any) => ({
+          name: i.activityTitle || i.description || "Prestation",
+          priceTTC: 0, // on utilise totalTTC direct
+        })),
+        totalTTC: montant,
+        ...(depositPercentLien > 0 ? { depositPercent: depositPercentLien } : {}),
+        familyId: lien.familyId || payData.familyId,
+        familyEmail: lien.recipientEmail || payData.familyEmail || "",
+        familyName: familyName || payData.familyName,
+        paymentId: paySnap.id,
+      }),
+    });
+    cawlBody = await cawlRes.json().catch(() => ({}));
+    if (!cawlRes.ok || !cawlBody?.url) {
+      console.error("ouvrirLienPaiement: checkout CAWL refusé:", cawlRes.status, cawlBody);
+      return { ok: false, motif: "erreur", familyName, detail: cawlBody?.error || `HTTP ${cawlRes.status}` };
+    }
+  } catch (e: any) {
+    console.error("ouvrirLienPaiement: checkout CAWL injoignable:", e);
+    return { ok: false, motif: "erreur", familyName, detail: e?.message || "réseau" };
+  }
+
+  const hostedCheckoutId = String(cawlBody.hostedCheckoutId || "");
+  const quand = new Date().toISOString();
+  await ref.update({
+    checkout: { hostedCheckoutId, merchantRef: cawlBody.merchantRef || "", url: cawlBody.url, createdAt: quand, amount: montant },
+    hostedCheckoutId,
+    merchantRef: cawlBody.merchantRef || "",
+    openedAt: FieldValue.arrayUnion(quand),
+  }).catch((e) => console.warn("ouvrirLienPaiement: trace non mise à jour:", e));
+
+  // La session connaît sa trace : le webhook marque le lien « réglé », et un
+  // lien annulé entre-temps est reconnu (lib/cawl-inattendu).
+  if (hostedCheckoutId) {
+    await adminDb.collection("cawl_sessions").doc(hostedCheckoutId)
+      .set({ lienId: ref.id }, { merge: true })
+      .catch((e) => console.warn("ouvrirLienPaiement: lienId non posé sur cawl_sessions:", e));
+  }
+
+  return { ok: true, url: String(cawlBody.url), montant, familyName };
 }
+
+// ─── Administration ──────────────────────────────────────────────────────
 
 /** Un lien vu depuis l'administration. */
 export interface LienEnvoye {
@@ -283,6 +370,8 @@ export interface LienEnvoye {
   cancelledAt?: string;
   cancelledBy?: string;
   paidAt?: string;
+  /** Nombre d'ouvertures par la famille. */
+  ouvertures?: number;
 }
 
 const isoDepuis = (v: any): string => {
@@ -307,7 +396,7 @@ export async function listerLiensCommande(paymentId: string): Promise<LienEnvoye
         amount: Number(x.amount) || 0,
         sentAt,
         // Les traces antérieures à ce module n'ont pas d'expiration : on la
-        // déduit de l'envoi (2 h).
+        // déduit de l'envoi.
         expiresAt: x.expiresAt || (sentAt ? expirationLien(new Date(sentAt)).toISOString() : ""),
         status: x.status || "sent",
         hostedCheckoutId: x.hostedCheckoutId || "",
@@ -315,17 +404,16 @@ export async function listerLiensCommande(paymentId: string): Promise<LienEnvoye
         cancelledAt: x.cancelledAt || "",
         cancelledBy: x.cancelledBy || "",
         paidAt: x.paidAt || "",
+        ouvertures: Array.isArray(x.openedAt) ? x.openedAt.length : 0,
       };
     })
     .sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || ""));
 }
 
 /**
- * Annule un lien envoyé.
- *
- * CAWL ne sait pas rappeler une page de paiement hébergée : l'annulation est
- * portée par l'application. Si la famille utilise malgré tout le lien avant
- * son expiration, l'encaissement est signalé au club (lib/cawl-inattendu).
+ * Annule un lien envoyé : il n'ouvre plus rien. Si une page CAWL avait déjà
+ * été ouverte au clic (2 h de vie), un règlement qui y aboutirait quand même
+ * est signalé au club (lib/cawl-inattendu).
  */
 export async function annulerLienPaiement(
   linkId: string,
@@ -342,8 +430,9 @@ export async function annulerLienPaiement(
   }
   const quand = new Date().toISOString();
   await ref.update({ status: "cancelled", cancelledAt: quand, cancelledBy: par });
-  if (x.hostedCheckoutId) {
-    await adminDb.collection("cawl_sessions").doc(x.hostedCheckoutId)
+  const hostedCheckoutId = x.checkout?.hostedCheckoutId || x.hostedCheckoutId || "";
+  if (hostedCheckoutId) {
+    await adminDb.collection("cawl_sessions").doc(hostedCheckoutId)
       .set({ annule: true, annuleA: quand, annulePar: par, lienId: linkId }, { merge: true })
       .catch((e) => console.warn("lien-paiement: annulation non posée sur cawl_sessions:", e));
   }
