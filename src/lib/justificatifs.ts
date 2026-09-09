@@ -18,6 +18,14 @@ export interface PieceExtraite {
   ht: number | null;
   tva: number | null;
   ttc: number | null;
+  /**
+   * TTC « escompte déduit » annoncé par la facture elle-même, quand le
+   * fournisseur accorde un escompte pour paiement à l'échéance (la clinique
+   * vétérinaire : « Total TTC 422,20 € — escompte déduit 413,76 €, prélevé le
+   * 25/07 »). C'est ce montant que la banque débite ; le rapprochement et la
+   * recherche par montant doivent le connaître.
+   */
+  ttcEscompte: number | null;
 }
 export interface DepenseCandidate {
   id: string;
@@ -49,8 +57,11 @@ export function nettoyerPiece(v: Record<string, unknown>): PieceExtraite {
     cotisationsSalariales: paie ? montant(v.cotisationsSalariales) : null, cotisationsPatronales: paie ? montant(v.cotisationsPatronales) : null, prelevementSource: paie ? montant(v.prelevementSource) : null,
     fournisseur: texte(v.fournisseur), numero: texte(v.numero), date: dateValide(v.date),
     debutPeriode: dateValide(v.debutPeriode), finPeriode: dateValide(v.finPeriode),
-    ht: paie ? null : montant(v.ht), tva: paie ? null : montant(v.tva), ttc: paie ? null : montant(v.ttc) };
+    ht: paie ? null : montant(v.ht), tva: paie ? null : montant(v.tva), ttc: paie ? null : montant(v.ttc),
+    ttcEscompte: paie ? null : ttcEscompteValide(montant(v.ttcEscompte), montant(v.ttc)) };
 }
+/** Un TTC escompte déduit n'a de sens que positif et inférieur au TTC. */
+const ttcEscompteValide = (e: number | null, ttc: number | null) => e !== null && ttc !== null && e > 0 && e < ttc ? e : null;
 /**
  * Libellés des deux alertes qui ne gênent QUE la ventilation comptable.
  *
@@ -94,7 +105,7 @@ export function alertesIdentification(p: PieceExtraite): string[] {
 const normaliser = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 /** Escompte pour paiement à l'échéance : débit inférieur au TTC de 0,5 % à 3 %, même fournisseur. */
 export const ESCOMPTE_MIN = 0.005, ESCOMPTE_MAX = 0.03;
-export interface EcartAssociation { type: "escompte"; taux: number; montant: number }
+export interface EcartAssociation { type: "escompte"; taux: number; montant: number; /** La facture annonce elle-même ce montant escompte déduit. */ annonce?: boolean }
 export type Proposition = DepenseCandidate & { score: number; raisons: string[]; ecart?: EcartAssociation };
 
 // « paiement », « carte », « prlv » ne désignent aucun fournisseur : ce sont
@@ -132,7 +143,11 @@ export function proposerAssociations(p: PieceExtraite, depenses: DepenseCandidat
     // débit à 2 % près n'est qu'une coïncidence.
     const manque = ttc - debit;
     const proche = !fournisseur && fournisseurProche(p.fournisseur, d.fournisseur);
-    const escompte = !exact && (fournisseur || proche) && manque > 0 && manque >= ttc * ESCOMPTE_MIN && manque <= ttc * ESCOMPTE_MAX;
+    // La facture annonce un montant escompte déduit, et c'est lui qui a été
+    // débité : aussi sûr qu'un TTC identique, quel que soit le libellé bancaire
+    // (la clinique facture sous un nom, la banque prélève sous un autre).
+    const annonce = !exact && p.ttcEscompte !== null && Math.round(p.ttcEscompte * 100) === debit;
+    const escompte = annonce || (!exact && (fournisseur || proche) && manque > 0 && manque >= ttc * ESCOMPTE_MIN && manque <= ttc * ESCOMPTE_MAX);
     if (!exact && !escompte) continue;
     const date = dateValide(d.dateOperation);
     const jours = p.date && date ? (Date.parse(date) - Date.parse(p.date)) / 86400000 : null;
@@ -140,10 +155,12 @@ export function proposerAssociations(p: PieceExtraite, depenses: DepenseCandidat
     const taux = Math.round((manque / ttc) * 10000) / 100;
     props.push({ ...d,
       // Le TTC identique passe toujours devant un escompte, à fournisseur égal.
-      score: (exact ? 40 : 30) + (fournisseur ? 40 : proche ? 30 : 0) + (dansLesDelais ? 20 : 0),
-      raisons: [exact ? "TTC identique" : `Escompte ${taux.toFixed(2).replace(".", ",")} % (${p.ttc.toFixed(2)} € facturés, ${d.montant.toFixed(2)} € débités)`,
+      score: (exact || annonce ? 40 : 30) + (fournisseur ? 40 : proche ? 30 : 0) + (dansLesDelais ? 20 : 0),
+      raisons: [exact ? "TTC identique"
+        : annonce ? `TTC escompte déduit identique (${p.ttc.toFixed(2)} € facturés, ${d.montant.toFixed(2)} € prélevés, escompte ${taux.toFixed(2).replace(".", ",")} % annoncé par la facture)`
+        : `Escompte ${taux.toFixed(2).replace(".", ",")} % (${p.ttc.toFixed(2)} € facturés, ${d.montant.toFixed(2)} € débités)`,
         ...(fournisseur ? ["Fournisseur concordant"] : proche ? ["Fournisseur proche"] : []), ...(dansLesDelais ? ["Paiement dans les 90 jours suivants"] : [])],
-      ...(escompte ? { ecart: { type: "escompte" as const, taux, montant: Math.round(manque) / 100 } } : {}) });
+      ...(escompte ? { ecart: { type: "escompte" as const, taux, montant: Math.round(manque) / 100, ...(annonce ? { annonce: true } : {}) } } : {}) });
   }
   return props.sort((a, b) => b.score - a.score || a.id.localeCompare(b.id));
 }

@@ -83,7 +83,7 @@ export function verifierAssociationTableau(extraction: Record<string, unknown>, 
   if (["vente", "autre"].includes(p.typeDocument || "")) throw new Error(`La lecture a classé ce document en « ${p.typeDocument === "vente" ? "vente" : "autre"} » : il n’est donc pas traité comme une facture reçue d’un fournisseur. Une facture d’achat est souvent lue « vente » parce qu’elle en est une pour son émetteur. Si le club en est bien le destinataire, ouvrez « Corriger la lecture ici », mettez Nature sur « achat », enregistrez, puis confirmez l’association. Pour une attestation PER, choisissez plutôt le rattachement correspondant.`);
   if (p.ttc === null || p.ttc <= 0) throw new Error("Montant TTC absent ou invalide : corrigez la lecture de la facture.");
   const [proposition] = proposerAssociations(p, [depense]);
-  if (!proposition) throw new Error(`Facture : ${p.ttc.toFixed(2)} ${p.devise} ; paiement : ${depense.montant.toFixed(2)} EUR. Si ce paiement est une échéance, choisissez Échéance d’une facture. Sinon, vérifiez les montants et la pièce sélectionnée.`);
+  if (!proposition) throw new Error(`Facture : ${p.ttc.toFixed(2)} ${p.devise}${p.ttcEscompte !== null ? ` (${p.ttcEscompte.toFixed(2)} escompte déduit)` : ""} ; paiement : ${depense.montant.toFixed(2)} EUR. Si ce paiement est une échéance, choisissez Échéance d’une facture. Si la facture accorde un escompte, renseignez « TTC escompte déduit » via Corriger la lecture ici. Sinon, vérifiez les montants et la pièce sélectionnée.`);
   if (proposition.ecart) return { nature: "escompte", montantPiece: p.ttc!, devisePiece: "EUR", montantEUR: depense.montant, ecart: proposition.ecart };
   return { nature: "facture", montantPiece: p.ttc!, devisePiece: "EUR", montantEUR: depense.montant };
 }

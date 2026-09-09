@@ -241,7 +241,7 @@ export default function DepensesPage() {
           // qu'une facture oubliée fausse la TVA du mois.
           const dispo = pieces.filter(p => !p.retire && (!p.depenseId || p.depenseId === ligne.id));
           const q = rechercheePiece.trim().toLowerCase().replace(",", ".");
-          const listees = q ? dispo.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.fournisseur ?? ""}`.toLowerCase().replace(/,/g, ".").includes(q)) : dispo;
+          const listees = q ? dispo.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.ttcEscompte ?? ""} ${p.extraction?.fournisseur ?? ""}`.toLowerCase().replace(/,/g, ".").includes(q)) : dispo;
           const retenues = dispo.filter(p => groupe.includes(p.id));
           const v = verifierReglementGroupe(retenues.map(p => ({ id: p.id, nom: p.nom, extraction: p.extraction, retire: p.retire, depenseId: p.depenseId, paiementsAssocies: p.paiementsAssocies })), ligne.montant, ligne.id);
           return <div className="space-y-2">
@@ -253,7 +253,7 @@ export default function DepensesPage() {
               {listees.map(p => <label key={p.id} className="block text-sm">
                 <input type="checkbox" disabled={busy} checked={groupe.includes(p.id)}
                   onChange={e => setGroupe(g => e.target.checked ? [...g, p.id] : g.filter(x => x !== p.id))} />{" "}
-                {p.nom}{typeof p.extraction?.ttc === "number" ? ` · ${euros(p.extraction.ttc)}` : ""}
+                {p.nom}{typeof p.extraction?.ttc === "number" ? ` · ${euros(p.extraction.ttc)}` : ""}{typeof p.extraction?.ttcEscompte === "number" ? ` (${euros(p.extraction.ttcEscompte)} escompte déduit)` : ""}
               </label>)}
               {!listees.length && <p className="text-sm">Aucune facture ne correspond à cette recherche.</p>}
             </div>
@@ -274,7 +274,7 @@ export default function DepensesPage() {
           // « 199,98 » comme « 199.98 » doivent tomber sur la même pièce.
           const q = rechercheePiece.trim().toLowerCase().replace(",", ".");
           const filtrees = q
-            ? disponibles.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.fournisseur ?? ""}`.toLowerCase().replace(/,/g, ".").includes(q))
+            ? disponibles.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.ttcEscompte ?? ""} ${p.extraction?.fournisseur ?? ""}`.toLowerCase().replace(/,/g, ".").includes(q))
             : disponibles;
           return <>
             <label className="block text-sm">Rechercher une pièce (montant, fournisseur, nom du fichier)
@@ -298,7 +298,7 @@ export default function DepensesPage() {
             {correction && !choix.depenseId && <form className="flex flex-wrap gap-3" onInvalidCapture={e => { const input = e.target as HTMLInputElement; setMessage(`Correction non enregistrée : vérifiez le champ ${input.name || "signalé"}. ${input.validationMessage}`); }} onSubmit={async e => { e.preventDefault(); setBusy(true); setMessage("Enregistrement des corrections…"); try { const d = await post(justifs, { action: "corriger", id: choix.id, extraction: correction }); if (!d.extraction) throw new Error("Réponse incomplète : actualisez pour vérifier l’enregistrement."); setChoix({ ...choix, extraction: d.extraction }); setCorrection(null); setMessage("Corrections enregistrées. Vous pouvez confirmer l’association si les montants correspondent."); try { await charger(); } catch { setMessage("Corrections enregistrées. Le tableau n’a pas pu être actualisé ; réessayez Actualiser."); } } catch(err) {setMessage(err instanceof Error ? err.message : "Enregistrement impossible"); try { const r = await authFetch(`${justifs}?piece=${choix.id}`); if (r.ok) { const d = await r.json(); if (d.pieces?.[0]) setChoix(d.pieces[0]); } } catch {} } finally {setBusy(false);} }}>
               <label>Nature<select className="block border p-2" value={correction.typeDocument} onChange={e => setCorrection({ ...correction, typeDocument: e.target.value as PieceExtraite["typeDocument"] })}>{["achat", "paie", "vente", "autre", "inconnu"].map(t => <option key={t}>{t}</option>)}</select></label>
               <label>Devise<select className="block border p-2" value={correction.devise || ""} onChange={e => setCorrection({ ...correction, devise: e.target.value })}><option value="">À vérifier</option>{DEVISES_PIECES.map(t => <option key={t}>{t}</option>)}</select></label>
-              {(correction.typeDocument === "paie" ? ["salarie", "moisPaie", "netAPayer"] : ["fournisseur", "numero", "date", "ht", "tva", "ttc"]).map(k => <label key={k}>{({ salarie: "Salarié", moisPaie: "Mois de paie", netAPayer: "Net à payer", fournisseur: "Fournisseur", numero: "Numéro", date: "Date", ht: "HT", tva: "TVA", ttc: "TTC" } as Record<string,string>)[k]}<input className="block border p-2" value={String((correction as unknown as Record<string, unknown>)[k] ?? "")} type={k === "date" ? "date" : k === "moisPaie" ? "month" : ["ht","tva","ttc","netAPayer"].includes(k) ? "number" : "text"} name={k} step={["ht","tva","ttc","netAPayer"].includes(k) ? "0.01" : undefined} onChange={e => setCorrection({ ...correction, [k]: ["ht","tva","ttc","netAPayer"].includes(k) ? e.target.value === "" ? null : Number(e.target.value) : e.target.value })} /></label>)}
+              {(correction.typeDocument === "paie" ? ["salarie", "moisPaie", "netAPayer"] : ["fournisseur", "numero", "date", "ht", "tva", "ttc", "ttcEscompte"]).map(k => <label key={k}>{({ salarie: "Salarié", moisPaie: "Mois de paie", netAPayer: "Net à payer", fournisseur: "Fournisseur", numero: "Numéro", date: "Date", ht: "HT", tva: "TVA", ttc: "TTC", ttcEscompte: "TTC escompte déduit (si la facture l'indique)" } as Record<string,string>)[k]}<input className="block border p-2" value={String((correction as unknown as Record<string, unknown>)[k] ?? "")} type={k === "date" ? "date" : k === "moisPaie" ? "month" : ["ht","tva","ttc","ttcEscompte","netAPayer"].includes(k) ? "number" : "text"} name={k} step={["ht","tva","ttc","ttcEscompte","netAPayer"].includes(k) ? "0.01" : undefined} onChange={e => setCorrection({ ...correction, [k]: ["ht","tva","ttc","ttcEscompte","netAPayer"].includes(k) ? e.target.value === "" ? null : Number(e.target.value) : e.target.value })} /></label>)}
               <button type="submit" disabled={busy} className="rounded border p-2 disabled:opacity-50">Enregistrer les corrections</button><button type="button" disabled={busy} onClick={() => setCorrection(null)}>Annuler</button>
             </form>}
             {correction && <p className="text-sm">Enregistrez les corrections avant de confirmer l’association.</p>}

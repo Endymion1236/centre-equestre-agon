@@ -155,7 +155,10 @@ export function candidatsAutomatiques(p: PieceExtraite, depenses: DepenseCandida
   if (p.devise !== "EUR" || p.typeDocument !== "achat" || p.ttc === null || p.ttc <= 0 || !p.date || alertesIdentification(p).length) return [];
   const moisPiece = p.date.slice(0, 7);
   return proposerAssociations(p, depenses)
-    .filter(d => !d.ecart) // un escompte se confirme à la main, jamais tout seul
+    // Un escompte se confirme à la main, jamais tout seul — sauf quand la
+    // facture annonce elle-même le montant escompte déduit et que c'est
+    // exactement lui qui a été débité : rien n'est deviné.
+    .filter(d => !d.ecart || d.ecart.annonce)
     .map(d => {
       const date = dateValide(d.dateOperation);
       const jours = date ? (Date.parse(date) - Date.parse(p.date!)) / 86400000 : -1;

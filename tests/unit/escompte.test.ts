@@ -24,6 +24,35 @@ test("un escompte se confirme à la main : jamais retenu par le rapprochement au
   const [premier] = proposerAssociations(facture, [debit, { ...debit, id: "e", montant: 429.25 }]);
   assert.equal(premier.id, "e");
 });
+/**
+ * La facture de la clinique dit elle-même : « Total TTC 422,20 € — Total TTC
+ * (escompte déduit) 413,76 € », prélevés à l'échéance. La banque débite
+ * 413,76 € sous le nom de la société (« SELAS FAMILYVETS »), sans rapport
+ * avec « Clinique Vétérinaire des Pommiers » : ni le TTC, ni le fournisseur
+ * ne collaient, la pièce restait introuvable par son montant.
+ */
+const pommiers = nettoyerPiece({ typeDocument: "achat", devise: "EUR", fournisseur: "Clinique Vétérinaire des Pommiers", numero: "CTC-202607-14194", date: "2026-07-08", ht: 351.83, tva: 70.37, ttc: 422.2, ttcEscompte: 413.76 });
+const prelevement = { id: "f", fournisseur: "PRLV SEPA SELAS FAMILYVETS", montant: 413.76, source: "releve-bancaire", dateOperation: "2026-07-25" };
+
+test("le TTC escompte déduit annoncé par la facture vaut un montant exact, même sous un autre nom bancaire", () => {
+  assert.equal(pommiers.ttcEscompte, 413.76);
+  const [p] = proposerAssociations(pommiers, [prelevement]);
+  assert.ok(p, "proposé malgré un libellé bancaire sans rapport");
+  assert.equal(p.ecart?.type, "escompte"); assert.equal(p.ecart?.annonce, true); assert.equal(p.ecart?.montant, 8.44); assert.equal(p.ecart?.taux, 2);
+  assert.match(p.raisons[0], /escompte déduit identique/);
+  assert.equal(p.score, 60, "comme un TTC identique dans les délais, sans bonus fournisseur");
+  // Le rapprochement automatique peut le retenir : rien n'est deviné, la facture le dit.
+  assert.equal(candidatsAutomatiques(pommiers, [{ ...prelevement, dateOperation: "2026-07-10" }], undefined, true).length, 1);
+  const r = verifierAssociationTableau(pommiers as unknown as Record<string, unknown>, prelevement);
+  assert.equal(r.nature, "escompte");
+});
+test("un TTC escompte déduit incohérent est ignoré ; un autre montant ne profite pas de l'annonce", () => {
+  assert.equal(nettoyerPiece({ typeDocument: "achat", devise: "EUR", ttc: 100, ttcEscompte: 120 }).ttcEscompte, null);
+  assert.equal(nettoyerPiece({ typeDocument: "achat", devise: "EUR", ttc: 100, ttcEscompte: 0 }).ttcEscompte, null);
+  assert.equal(nettoyerPiece({ typeDocument: "paie", devise: "EUR", ttc: 100, ttcEscompte: 90 }).ttcEscompte, null);
+  assert.equal(proposerAssociations(pommiers, [{ ...prelevement, montant: 400 }]).length, 0);
+});
+
 test("l'association depuis le tableau enregistre l'écart", () => {
   const r = verifierAssociationTableau(facture as unknown as Record<string, unknown>, debit);
   assert.equal(r.nature, "escompte"); assert.deepEqual((r as { ecart?: unknown }).ecart, { type: "escompte", taux: 2, montant: 8.59 });
