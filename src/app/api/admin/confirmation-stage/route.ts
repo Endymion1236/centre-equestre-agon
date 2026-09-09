@@ -57,6 +57,9 @@ export async function POST(req: NextRequest) {
     const r = await envoyerConfirmationFamille(body.familyId, {
       force: body.force !== false,
       declenchePar: uid,
+      // Le lien d'acompte qui suit la lettre est créé par le checkout CAWL,
+      // une route interne : il lui faut l'origine du site.
+      origin: req.nextUrl.origin,
     });
     return NextResponse.json(r);
   }
@@ -68,7 +71,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Mise en file ────────────────────────────────────────────────────────
-  const { familyId, familyName, email, paymentId, lienSepare, stage } = body;
+  const { familyId, familyName, email, paymentId, lienSepare, lienAcompte, stage } = body;
   if (!familyId || !email || !stage?.stageKey) {
     return NextResponse.json(
       { error: "Champs requis : familyId, email, stage.stageKey" },
@@ -82,6 +85,7 @@ export async function POST(req: NextRequest) {
     email,
     paymentId,
     lienSepare: !!lienSepare,
+    lienAcompte: !!lienAcompte,
     stage: {
       stageKey: String(stage.stageKey),
       stageTitle: stage.stageTitle || "Stage",

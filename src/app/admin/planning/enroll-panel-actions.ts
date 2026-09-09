@@ -20,7 +20,7 @@ export interface ContexteActions {
   families: any[];
   allFamilies: any[];
   enrolled: any[];
-  confirmationEnAttente: { familyId: string; familyName: string; nbStages: number; envoiPrevuA: string } | null;
+  confirmationEnAttente: { familyId: string; familyName: string; nbStages: number; envoiPrevuA: string; lienAcompte?: boolean; montantLien?: number; email?: string } | null;
   dateFinSaisonEffective: Date;
   highlightBusy: string;
   holdActif: any | null;
@@ -67,7 +67,16 @@ export async function envoyerConfirmationMaintenant(ctx: ContexteActions, rappel
     const json = await res.json().catch(() => null);
     if (json?.sent) {
       setEnvoiConfirmation("envoye");
-      panelToast(`Confirmation envoyée — 1 email pour ${confirmationEnAttente.nbStages} stage(s)`, "success");
+      const lien = json.lien as { montant: number; envoye: boolean; erreur?: string } | undefined;
+      const lienManque = !!lien && !lien.envoye && lien.erreur !== "rien à régler";
+      const suiteLien = !lien
+        ? ""
+        : lien.envoye
+          ? ` + lien de paiement de ${Number(lien.montant).toFixed(2)}€`
+          : lien.erreur === "rien à régler"
+            ? " (rien à régler : pas de lien)"
+            : ` — ⚠️ lien de paiement NON envoyé (${lien.erreur || "erreur"}) : envoie-le depuis Paiements`;
+      panelToast(`Confirmation envoyée — 1 email pour ${confirmationEnAttente.nbStages} stage(s)${suiteLien}`, lienManque ? "warning" : "success", 8000);
     } else {
       setEnvoiConfirmation("");
       panelToast(`Envoi impossible : ${json?.reason || "erreur"}`, "error");
@@ -90,7 +99,7 @@ export async function annulerConfirmationEnAttente(ctx: ContexteActions, rappels
       body: JSON.stringify({ action: "annuler", familyId: confirmationEnAttente.familyId }),
     });
     setEnvoiConfirmation("annule");
-    panelToast("Confirmation annulée — aucun email ne partira", "success");
+    panelToast(confirmationEnAttente.lienAcompte ? "Confirmation annulée — ni lettre ni lien de paiement ne partiront" : "Confirmation annulée — aucun email ne partira", "success");
   } catch (e: any) {
     panelToast(`Annulation impossible : ${e?.message || e}`, "error");
   }

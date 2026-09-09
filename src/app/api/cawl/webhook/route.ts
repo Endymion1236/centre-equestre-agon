@@ -14,6 +14,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { traiterBonCadeauSession } from "@/lib/bon-cadeau-traitement";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
+import { signalerSiInattendu, marquerLienRegle } from "@/lib/cawl-inattendu";
 import { prestationsCourtes, lignesDetailHtml, libelleModePaiement, titreSansEnfant, datesStage, horairesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 
@@ -152,6 +153,27 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Dernier repli : la session CAWL connaît sa commande. `payments.cawlRef`
+      // et `cawlHostedCheckoutId` ne gardent que le DERNIER checkout créé :
+      // quand deux liens ont été envoyés pour la même commande, la
+      // notification du premier ne retrouvait plus rien ici et l'argent
+      // encaissé n'était jamais enregistré si la famille avait fermé son
+      // navigateur.
+      if (!payRef && checkoutId) {
+        try {
+          const sess = await adminDb.collection("cawl_sessions").doc(checkoutId).get();
+          const sessPaymentId = sess.exists ? String((sess.data() as any)?.paymentId || "") : "";
+          if (sessPaymentId) {
+            const snap = await adminDb.collection("payments").doc(sessPaymentId).get();
+            if (snap.exists) {
+              payRef = snap.ref;
+              pData = snap.data() as Paiement;
+              console.log(`CAWL webhook: commande retrouvée via cawl_sessions → ${sessPaymentId}`);
+            }
+          }
+        } catch (e) { console.warn("CAWL webhook: repli cawl_sessions impossible:", e); }
+      }
+
       if (payRef && pData) {
         // ── Acompte ou paiement total ? (autoritatif, PAS d'heuristique) ──
         // On lit le marqueur isDeposit stocké dans cawl_sessions au checkout.
@@ -280,6 +302,21 @@ export async function POST(req: NextRequest) {
             ...(payment.id ? { cofInitialPaymentId: payment.id } : {}),
             updatedAt: FieldValue.serverTimestamp(),
           });
+
+          // Ce règlement était-il attendu ? Deux liens partiels réglés, ou un
+          // lien annulé par l'admin mais utilisé avant son expiration : on le
+          // crédite (l'argent est réel) et on le signale sur la commande.
+          await signalerSiInattendu({
+            payRef,
+            statutCommande: pData.status,
+            totalTTC: pData.totalTTC || 0,
+            dejaPaye: pData.paidAmount || 0,
+            montant: paidAmount,
+            hostedCheckoutId: checkoutId || hostedCheckoutId,
+            merchantRef,
+            source: "webhook",
+          });
+          await marquerLienRegle(checkoutId || hostedCheckoutId);
 
           await createEncaissementServer({
             paymentId: payRef.id,
@@ -426,7 +463,23 @@ export async function POST(req: NextRequest) {
             }
           }
         } else {
-          console.log(`CAWL webhook: paiement ${merchantRef} déjà confirmé, skip`);
+          // La commande était déjà soldée et CAWL vient pourtant d'encaisser :
+          // la famille a réglé un second lien. Rien n'est crédité, mais le
+          // club doit le voir pour rembourser — jusqu'ici, seul ce log le
+          // disait. Le verrou acquis plus haut évite un double signalement
+          // avec la route de retour navigateur.
+          console.log(`CAWL webhook: paiement ${merchantRef} déjà confirmé — encaissement en trop signalé`);
+          await signalerSiInattendu({
+            payRef,
+            statutCommande: "paid",
+            totalTTC: pData.totalTTC || 0,
+            dejaPaye: pData.paidAmount || 0,
+            montant: totalEuros,
+            hostedCheckoutId: checkoutId || hostedCheckoutId,
+            merchantRef,
+            source: "webhook",
+          });
+          await marquerLienRegle(checkoutId || hostedCheckoutId);
         }
       } else {
         // Normal pour un achat hors commande famille (bon cadeau deja traite

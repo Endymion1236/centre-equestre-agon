@@ -28,6 +28,14 @@
  *
  * Le document n'est jamais supprimé : il porte le statut de l'envoi, ce qui
  * permet de savoir depuis l'administration ce qui est parti et quand.
+ *
+ * Le lien de paiement de l'acompte suit le même chemin (septembre 2026). Il
+ * partait à l'inscription, un par passage dans le panneau : une famille a
+ * reçu un lien de 30 € puis un de 60 € pour la même commande, tandis que la
+ * lettre annonçait 199,20 €. Désormais le lien attend avec la lettre, et son
+ * montant est lu sur la COMMANDE au moment de l'envoi (lib/lien-paiement-
+ * regles) : un seul lien, du montant que la lettre annonce. « Ne pas
+ * envoyer » retient les deux.
  */
 
 import { adminDb } from "@/lib/firebase-admin";
@@ -37,6 +45,9 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { renderDerouleStage } from "@/lib/stage-deroule";
 import { dateEcheanceSolde } from "@/lib/email-prestations";
+import { envoyerLienPaiement } from "@/lib/lien-paiement";
+import { montantLienAcompte, montantsConfirmationDepuisCommande } from "@/lib/lien-paiement-regles";
+import { serviceAuthHeader, SERVICE_UID } from "@/lib/api-auth";
 
 export const COLLECTION_CONFIRMATIONS = "stage_confirmations";
 
@@ -73,6 +84,11 @@ export interface PayloadConfirmation {
   paymentId?: string;
   /** L'acompte part dans un lien de paiement séparé (l'email ne porte pas de bouton). */
   lienSepare?: boolean;
+  /**
+   * Envoyer le lien de paiement de l'acompte avec la lettre. Le montant n'est
+   * pas figé ici : il est lu sur la commande à l'envoi.
+   */
+  lienAcompte?: boolean;
   stage: StageEnAttente;
 }
 
@@ -82,6 +98,7 @@ interface FileConfirmation {
   email: string;
   paymentId?: string;
   lienSepare?: boolean;
+  lienAcompte?: boolean;
   stages: StageEnAttente[];
   status: "pending" | "sending" | "sent" | "failed";
   premierAjoutA: string;
@@ -92,6 +109,10 @@ interface FileConfirmation {
   envoyeA?: string;
   envoyePar?: string;
   sujet?: string;
+  /** Lien d'acompte parti avec la lettre : montant, trace, ou raison de l'échec. */
+  lienMontant?: number;
+  lienId?: string;
+  lienErreur?: string;
 }
 
 const iso = (ms: number) => new Date(ms).toISOString();
@@ -103,10 +124,10 @@ const arrondi = (n: number) => Math.round(n * 100) / 100;
  */
 export async function enfilerConfirmationStage(
   payload: PayloadConfirmation,
-): Promise<{ nbStages: number; envoiPrevuA: string }> {
+): Promise<{ nbStages: number; envoiPrevuA: string; lienAcompte: boolean; montantLien: number }> {
   const ref = adminDb.collection(COLLECTION_CONFIRMATIONS).doc(payload.familyId);
 
-  return adminDb.runTransaction(async (tx) => {
+  const file = await adminDb.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const maintenant = Date.now();
     const actuel = snap.exists ? (snap.data() as FileConfirmation) : null;
@@ -132,6 +153,7 @@ export async function enfilerConfirmationStage(
       email: payload.email,
       ...(payload.paymentId ? { paymentId: payload.paymentId } : {}),
       lienSepare: !!payload.lienSepare || (enCours ? !!actuel!.lienSepare : false),
+      lienAcompte: !!payload.lienAcompte || (enCours ? !!actuel!.lienAcompte : false),
       stages,
       status: "pending",
       premierAjoutA: iso(premier),
@@ -140,8 +162,13 @@ export async function enfilerConfirmationStage(
       tentatives: 0,
     };
     tx.set(ref, doc);
-    return { nbStages: stages.length, envoiPrevuA };
+    return { nbStages: stages.length, envoiPrevuA, lienAcompte: !!doc.lienAcompte };
   });
+
+  // Ce que le lien réclamera si on l'envoyait maintenant — pour l'afficher
+  // au panneau. Relu à l'envoi : d'autres enfants peuvent s'ajouter d'ici là.
+  const montantLien = file.lienAcompte ? montantLienAcompte(await lireCommande(payload.paymentId) || {}) : 0;
+  return { ...file, montantLien };
 }
 
 /** Files en attente, la plus urgente d'abord. */
@@ -181,14 +208,24 @@ async function derouleHtml(): Promise<string> {
  * a pu régler le lien d'acompte. Une lettre qui réclame un paiement déjà reçu
  * est pire que pas de lettre du tout.
  */
-async function dejaRegle(paymentId?: string): Promise<number> {
-  if (!paymentId) return 0;
+interface CommandeLue {
+  totalTTC?: number;
+  paidAmount?: number;
+  acompteAmount?: number;
+  soldeAmount?: number;
+  familyEmail?: string;
+  familyName?: string;
+  items?: any[];
+}
+
+async function lireCommande(paymentId?: string): Promise<CommandeLue | null> {
+  if (!paymentId) return null;
   try {
     const snap = await adminDb.collection("payments").doc(paymentId).get();
-    if (!snap.exists) return 0;
-    return Number((snap.data() as any)?.paidAmount) || 0;
+    if (!snap.exists) return null;
+    return snap.data() as CommandeLue;
   } catch {
-    return 0;
+    return null;
   }
 }
 
@@ -216,18 +253,26 @@ async function construireEmail(f: FileConfirmation): Promise<{ subject: string; 
 
   // Ce qui a déjà été encaissé vient en déduction de ce qu'on réclame : entre
   // l'inscription et l'envoi, la famille a pu régler l'acompte en ligne.
-  const regle = Math.min(await dejaRegle(f.paymentId), totalTTC);
-  const resteARegler = arrondi(Math.max(0, aRegler - regle));
+  //
+  // Et quand la commande porte exactement ces stages, c'est ELLE qui donne
+  // l'acompte et le solde : elle recalcule l'acompte à chaque enfant ajouté
+  // (30 € par enfant), là où les blocs de la lettre gardaient les montants
+  // figés à leur inscription — d'où « acompte 199,20 € » dans la lettre
+  // contre 60 € sur le lien.
+  const montants = montantsConfirmationDepuisCommande(
+    { totalTTC, aRegler, solde },
+    await lireCommande(f.paymentId),
+  );
 
   const { subject, html } = emailTemplates.confirmationStages({
     parentName: f.familyName || "",
     stages: stages.map((s) => ({ stageTitle: s.stageTitle, dates: s.dates, horaires: s.horaires || "", enfants: s.enfants })),
     totalTTC,
-    aRegler: resteARegler,
-    solde,
-    dejaRegle: regle,
+    aRegler: montants.aRegler,
+    solde: montants.solde,
+    dejaRegle: montants.dejaRegle,
     lienSepare: !!f.lienSepare,
-    dateSolde: solde > 0 ? dateEcheanceSolde(premierJour) : undefined,
+    dateSolde: montants.solde > 0 ? dateEcheanceSolde(premierJour) : undefined,
     derouleHtml: await derouleHtml(),
   });
   return { subject, html, template: "confirmationStages" };
@@ -240,6 +285,8 @@ export interface ResultatEnvoi {
   nbStages?: number;
   to?: string;
   subject?: string;
+  /** Lien d'acompte parti avec la lettre (absent si la file n'en demandait pas). */
+  lien?: { montant: number; envoye: boolean; erreur?: string };
 }
 
 /**
@@ -252,7 +299,7 @@ export interface ResultatEnvoi {
  */
 export async function envoyerConfirmationFamille(
   familyId: string,
-  opts: { force?: boolean; declenchePar?: string } = {},
+  opts: { force?: boolean; declenchePar?: string; origin?: string } = {},
 ): Promise<ResultatEnvoi> {
   const ref = adminDb.collection(COLLECTION_CONFIRMATIONS).doc(familyId);
 
@@ -335,11 +382,86 @@ export async function envoyerConfirmationFamille(
       majA: new Date().toISOString(),
       derniereErreur: "",
     });
-    return { sent: true, familyId, nbStages: (file.stages || []).length, to: file.email, subject };
+
+    const lien = file.lienAcompte
+      ? await envoyerLienAcompte(file, ref, { origin: opts.origin || "", sentBy })
+      : undefined;
+
+    return { sent: true, familyId, nbStages: (file.stages || []).length, to: file.email, subject, ...(lien ? { lien } : {}) };
   } catch (e: any) {
     console.error("[stage-confirmations] envoi", e);
     return await echec(e?.message || String(e));
   }
+}
+
+/**
+ * Le lien de paiement de l'acompte, juste après la lettre.
+ *
+ * Un seul lien, du montant que la commande réclame maintenant : l'acompte de
+ * la commande entière moins ce qui est déjà réglé. La lettre vient de partir
+ * en disant « le lien vous parvient dans un message séparé » : il suit.
+ *
+ * L'envoi passe par l'identité service (lib/api-auth) : le cron n'a pas de
+ * session admin. Un échec ici n'annule pas la lettre déjà partie — il est
+ * inscrit sur la file, et l'admin peut renvoyer un lien depuis Paiements.
+ */
+async function envoyerLienAcompte(
+  file: FileConfirmation,
+  ref: FirebaseFirestore.DocumentReference,
+  opts: { origin: string; sentBy: string },
+): Promise<{ montant: number; envoye: boolean; erreur?: string }> {
+  const commande = await lireCommande(file.paymentId);
+  const montant = montantLienAcompte(commande || {});
+  const noter = async (patch: Record<string, unknown>) => ref.update({ ...patch, majA: new Date().toISOString() }).catch(() => {});
+
+  if (!commande || !file.paymentId) {
+    await noter({ lienMontant: 0, lienErreur: "commande introuvable" });
+    return { montant: 0, envoye: false, erreur: "commande introuvable" };
+  }
+  if (montant <= 0) {
+    // Déjà réglé entre-temps (au comptoir, ou lien précédent) : rien à demander.
+    await noter({ lienMontant: 0 });
+    return { montant: 0, envoye: false, erreur: "rien à régler" };
+  }
+  if (!opts.origin) {
+    await noter({ lienMontant: montant, lienErreur: "origine du site inconnue" });
+    return { montant, envoye: false, erreur: "origine du site inconnue" };
+  }
+  const authHeader = serviceAuthHeader();
+  if (!authHeader) {
+    await noter({ lienMontant: montant, lienErreur: "CRON_SECRET absent" });
+    return { montant, envoye: false, erreur: "CRON_SECRET absent" };
+  }
+
+  const total = commande.totalTTC || 0;
+  const paye = commande.paidAmount || 0;
+  const acompte = typeof commande.acompteAmount === "number" && commande.acompteAmount > 0 ? commande.acompteAmount : total;
+  const solde = Math.max(0, Math.round((total - Math.max(acompte, paye)) * 100) / 100);
+  const nbEnfants = new Set((file.stages || []).flatMap((st) => st.enfants.map((e) => e.name))).size;
+  const objet = nbEnfants > 1 ? `vos ${nbEnfants} inscriptions` : "votre inscription";
+  const message =
+    "Bonjour,\n\n" +
+    `Voici le lien de paiement pour ${acompte < total ? `l'acompte de ${objet}` : objet}` +
+    ` (total ${total.toFixed(2)}€)${paye > 0 ? `, dont ${paye.toFixed(2)}€ déjà réglés` : ""} : ${montant.toFixed(2)}€ à régler.` +
+    (solde > 0 ? `\n\nLe solde de ${solde.toFixed(2)}€ vous sera demandé 7 jours avant le stage.` : "");
+
+  const r = await envoyerLienPaiement({
+    paymentId: file.paymentId,
+    recipientEmail: file.email,
+    amount: montant,
+    message,
+    familyId: file.familyId,
+    familyName: file.familyName,
+    origin: opts.origin,
+    authHeader,
+    sentBy: opts.sentBy || SERVICE_UID,
+  });
+  if (!r.ok) {
+    await noter({ lienMontant: montant, lienErreur: r.error.slice(0, 300) });
+    return { montant, envoye: false, erreur: r.error };
+  }
+  await noter({ lienMontant: montant, lienId: r.linkId, lienErreur: "" });
+  return { montant, envoye: true };
 }
 
 /**
@@ -375,7 +497,7 @@ async function libererEnvoisInterrompus(): Promise<void> {
  * égal » + « date antérieure » réclamerait un index composite à déployer, pour
  * une collection qui ne compte au plus qu'un document par famille en attente.
  */
-export async function envoyerConfirmationsDues(): Promise<ResultatEnvoi[]> {
+export async function envoyerConfirmationsDues(opts: { origin?: string } = {}): Promise<ResultatEnvoi[]> {
   const maintenant = new Date().toISOString();
   await libererEnvoisInterrompus();
   const snap = await adminDb
@@ -386,7 +508,7 @@ export async function envoyerConfirmationsDues(): Promise<ResultatEnvoi[]> {
   const resultats: ResultatEnvoi[] = [];
   for (const d of snap.docs) {
     if (((d.data() as FileConfirmation).envoiPrevuA || "") > maintenant) continue;
-    resultats.push(await envoyerConfirmationFamille(d.id));
+    resultats.push(await envoyerConfirmationFamille(d.id, { origin: opts.origin }));
   }
   return resultats;
 }

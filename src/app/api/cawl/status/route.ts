@@ -13,6 +13,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
+import { signalerSiInattendu, marquerLienRegle } from "@/lib/cawl-inattendu";
 import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, horairesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
@@ -326,6 +327,21 @@ export async function GET(req: NextRequest) {
       // la purge respecte de toute façon les paiements aboutis.
       await confirmerPlacesTenues(payRef.id);
 
+      // Règlement attendu ? Deux liens partiels réglés, ou un lien annulé par
+      // l'admin mais utilisé avant son expiration : crédité (l'argent est
+      // réel) et signalé sur la commande pour vérification.
+      await signalerSiInattendu({
+        payRef,
+        statutCommande: pData.status,
+        totalTTC,
+        dejaPaye: pData.paidAmount || 0,
+        montant: paidAmount,
+        hostedCheckoutId,
+        merchantRef: ref || "",
+        source: "status",
+      });
+      await marquerLienRegle(hostedCheckoutId);
+
       await createEncaissementServer({
         paymentId: payRef.id,
         familyId: familyId || pData.familyId,
@@ -486,8 +502,31 @@ export async function GET(req: NextRequest) {
             });
         } catch (e) { console.error("Email template error:", e); }
       }
-    } else if (pData?.status === "paid") {
-      console.log(`Payment ${payRef?.id} déjà payé, skip`);
+    } else if (pData?.status === "paid" && payRef) {
+      // Commande déjà soldée, et CAWL vient d'encaisser : la famille a réglé
+      // un second lien. Rien n'est crédité ; le club doit le voir pour
+      // rembourser. Même verrou que le webhook : un seul signalement.
+      console.log(`Payment ${payRef.id} déjà payé — encaissement en trop signalé`);
+      const lockAcquired = await acquireCawlConfirmationLock({
+        hostedCheckoutId,
+        stage: isDeposit ? "deposit" : "full",
+        source: "status",
+        paymentId: payRef.id,
+        amountCents: totalCents,
+      });
+      if (lockAcquired) {
+        await signalerSiInattendu({
+          payRef,
+          statutCommande: "paid",
+          totalTTC: pData.totalTTC || 0,
+          dejaPaye: pData.paidAmount || 0,
+          montant: totalEuros,
+          hostedCheckoutId,
+          merchantRef: ref || "",
+          source: "status",
+        });
+        await marquerLienRegle(hostedCheckoutId);
+      }
     } else {
       console.warn(`Payment Firestore introuvable: paymentId=${paymentId}, ref=${ref}`);
     }

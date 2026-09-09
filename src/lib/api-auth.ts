@@ -28,6 +28,28 @@ interface AuthOptions {
   adminOnly?: boolean;
   /** Si true, exige le custom claim `admin: true`/`moniteur: true` (ou email admin) */
   staffOnly?: boolean;
+  /**
+   * Si true, accepte aussi `Bearer ${CRON_SECRET}` — l'identité du serveur
+   * lui-même. Sert aux routes que le cron ou une file d'envoi doivent appeler
+   * sans session admin (envoi différé du lien d'acompte, cf.
+   * lib/stage-confirmations). Le jeton obtenu est admin, marqué `service`.
+   */
+  allowService?: boolean;
+}
+
+/** Jeton synthétique porté par les appels serveur → serveur. */
+export const SERVICE_UID = "system";
+
+export function estAppelService(req: NextRequest): boolean {
+  const secret = process.env.CRON_SECRET || "";
+  if (!secret) return false;
+  return req.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+/** En-tête à envoyer pour parler à une route en tant que service. */
+export function serviceAuthHeader(): string {
+  const secret = process.env.CRON_SECRET || "";
+  return secret ? `Bearer ${secret}` : "";
 }
 
 /**
@@ -51,6 +73,10 @@ export async function verifyAuth(
   options?: AuthOptions
 ): Promise<any | NextResponse> {
   const authHeader = req.headers.get("authorization");
+
+  if (options?.allowService && estAppelService(req)) {
+    return { uid: SERVICE_UID, email: "", admin: true, service: true };
+  }
 
   if (!authHeader?.startsWith("Bearer ")) {
     return NextResponse.json(

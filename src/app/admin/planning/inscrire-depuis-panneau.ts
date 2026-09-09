@@ -530,35 +530,12 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
           updatedAt: serverTimestamp(),
         });
 
-        // ── Lien de paiement du COMPLÉMENT d'acompte ────────────────────
-        //
-        // L'envoi n'existait que pour une commande neuve. Inscrire un second
-        // enfant dans une commande déjà ouverte ne déclenchait donc aucun
-        // email : la famille restait avec le lien du premier — 30 € et un
-        // « solde de 150 € » devenus faux, alors que la commande en réclamait
-        // 60 et 289,20. Rien n'était perdu, mais plus rien n'était juste.
-        //
-        // On ne redemande que ce qui manque : l'acompte de la commande
-        // entière moins ce qui a déjà été réglé.
-        const emailFamille = existingData.familyEmail || fam.parentEmail || "";
-        if (showAcompte && acompteReglement === "lien" && emailFamille) {
-          const dejaRegle = existingData.paidAmount || 0;
-          const complement = Math.round(Math.max(0, acompteTotal - dejaRegle) * 100) / 100;
-          if (complement > 0) {
-            authFetch("/api/send-payment-link", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                paymentId: openOrder.id,
-                recipientEmail: emailFamille,
-                amount: complement,
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                message: `Bonjour,\n\nVotre inscription porte maintenant sur ${nbEnfantsStage} enfant${nbEnfantsStage > 1 ? "s" : ""}, pour un total de ${mergedTotal.toFixed(2)}€.\n\nL'acompte est de ${acompteTotal.toFixed(2)}€${dejaRegle > 0 ? `, dont ${dejaRegle.toFixed(2)}€ déjà réglés` : ""}. Voici le lien pour régler ${complement.toFixed(2)}€.\n\nCe message remplace le précédent. Le solde de ${soldeTotal.toFixed(2)}€ vous sera demandé 7 jours avant le stage.`,
-              }),
-            }).catch(e => console.warn("Lien complément acompte:", e));
-          }
-        }
+        // Le lien de paiement de l'acompte ne part plus d'ici. Il partait à
+        // chaque passage — 30 € pour le premier enfant, puis 60 € « qui
+        // remplace le précédent » pour le second — et la famille pouvait
+        // régler les deux. Il est désormais mis en file AVEC la lettre de
+        // confirmation (plus bas, `lienAcompte`), et son montant est lu sur
+        // la commande au moment de l'envoi : un seul lien, du bon montant.
 
         // Acompte réglé au comptoir : même écriture comptable que la caisse,
         // et même confirmation d'acompte que lorsqu'il est payé en ligne.
@@ -620,21 +597,8 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
           }).catch(e => console.warn("Confirmation acompte:", e));
         }
 
-        // Envoyer automatiquement le lien de paiement pour l'acompte
-        if (showAcompte && acompteReglement === "lien" && fam.parentEmail) {
-          authFetch("/api/send-payment-link", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              paymentId: newPayRef.id,
-              recipientEmail: fam.parentEmail,
-              amount: stageAcompte,
-              familyId: fam.firestoreId,
-              familyName: fam.parentName || "",
-              message: `Bonjour,\n\nVoici le lien de paiement pour l'acompte du stage "${creneau.activityTitle}" (${stageAcompte}€).\n\nLe solde de ${stageSolde}€ vous sera demandé 7 jours avant le stage.`,
-            }),
-          }).catch(e => console.warn("Lien paiement acompte:", e));
-        }
+        // Le lien de paiement de l'acompte part avec la lettre de
+        // confirmation, plus bas (`lienAcompte`) — pas d'ici.
       }
 
       const noms = stageLines.map(l => l.childName).join(", ");
@@ -654,7 +618,13 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
       // cas /api/admin/stage-acompte-recu a déjà envoyé « Acompte confirmé —
       // la place est réservée », qui dit la même chose en mieux. La famille
       // recevait les deux à une seconde d'intervalle.
+      //
+      // Le lien de paiement de l'acompte suit la même file : il part juste
+      // après la lettre, une seule fois pour toutes les inscriptions
+      // regroupées, du montant que la commande réclame alors. Le bandeau du
+      // panneau annonce les deux, et « Ne pas envoyer » retient les deux.
       const acompteEncaisseAuComptoir = showAcompte && acompteReglement === "sur_place";
+      const lienAcompteAvecLaLettre = showAcompte && acompteReglement === "lien";
       if (fam.parentEmail && !acompteEncaisseAuComptoir) {
         try {
           const dates = stageMode === "jour"
@@ -670,7 +640,8 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
               paymentId: commandeId,
               // L'acompte part dans un lien de paiement séparé
               // (send-payment-link) : la lettre ne porte pas de bouton.
-              lienSepare: showAcompte && acompteReglement === "lien",
+              lienSepare: lienAcompteAvecLaLettre,
+              lienAcompte: lienAcompteAvecLaLettre,
               stage: {
                 stageKey,
                 stageTitle: creneau.activityTitle,
@@ -698,6 +669,9 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
               familyName: fam.parentName || "",
               nbStages: fileConfirmation.nbStages || 1,
               envoiPrevuA: fileConfirmation.envoiPrevuA || "",
+              lienAcompte: !!fileConfirmation.lienAcompte,
+              montantLien: Number(fileConfirmation.montantLien) || 0,
+              email: fam.parentEmail || "",
             });
             setEnvoiConfirmation("");
             programmerEnvoiConfirmation(fam.firestoreId, fileConfirmation.envoiPrevuA || "");

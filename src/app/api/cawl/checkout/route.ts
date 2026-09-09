@@ -8,7 +8,9 @@ import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 
 export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire
-  const auth = await verifyAuth(req);
+  // `allowService` : la confirmation de stage différée (cron, file d'envoi)
+  // crée le lien d'acompte sans session admin — cf. lib/api-auth.
+  const auth = await verifyAuth(req, { allowService: true });
   if (auth instanceof NextResponse) return auth;
 
   try {

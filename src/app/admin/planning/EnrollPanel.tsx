@@ -63,6 +63,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // ce qui partira, quand, et de quoi le devancer d'un clic.
   const [confirmationEnAttente, setConfirmationEnAttente] = useState<{
     familyId: string; familyName: string; nbStages: number; envoiPrevuA: string;
+    /** Le lien de paiement de l'acompte part avec la lettre — montant lu sur la commande. */
+    lienAcompte?: boolean; montantLien?: number; email?: string;
   } | null>(null);
   const [envoiConfirmation, setEnvoiConfirmation] = useState<"" | "envoi" | "envoye" | "annule">("");
   // Pré-notification SEPA d'un forfait annuel : à vérifier avant envoi.
@@ -887,9 +889,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 <div className="flex-1">
                   {envoiConfirmation === "envoye" ? (
                     <>Confirmation envoyée à {confirmationEnAttente.familyName || "la famille"} —
-                    {" "}<strong>1 seul email</strong> pour {confirmationEnAttente.nbStages} stage{confirmationEnAttente.nbStages > 1 ? "s" : ""}.</>
+                    {" "}<strong>1 seul email</strong> pour {confirmationEnAttente.nbStages} stage{confirmationEnAttente.nbStages > 1 ? "s" : ""}
+                    {confirmationEnAttente.lienAcompte ? <>, suivi du lien de paiement</> : null}.</>
                   ) : envoiConfirmation === "annule" ? (
-                    <>Confirmation annulée — aucun email ne partira pour ces inscriptions.</>
+                    <>Confirmation annulée — aucun email ne partira pour ces inscriptions{confirmationEnAttente.lienAcompte ? ", ni lettre ni lien de paiement" : ""}.</>
                   ) : (
                     <>
                       <strong>1 seul email</strong> de confirmation partira pour cette famille
@@ -898,6 +901,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         : <> — inscrivez d&apos;autres stages, ils s&apos;y ajouteront</>}
                       {confirmationEnAttente.envoiPrevuA && (
                         <> ; envoi vers {new Date(confirmationEnAttente.envoiPrevuA).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.</>
+                      )}
+                      {confirmationEnAttente.lienAcompte && (
+                        <div className="mt-1.5 text-blue-900">
+                          💳 Suivi d&apos;<strong>un seul lien de paiement</strong>
+                          {confirmationEnAttente.montantLien ? <> de <strong>{confirmationEnAttente.montantLien.toFixed(2)} €</strong></> : null}
+                          {confirmationEnAttente.email ? <> à {confirmationEnAttente.email}</> : null}
+                          {" "}— montant recalculé sur la commande au moment de l&apos;envoi. Rien ne part avant.
+                        </div>
                       )}
                     </>
                   )}

@@ -28,6 +28,8 @@ import { TabChequesDiffres } from "./TabChequesDiffres";
 import { TabFacturX } from "./TabFacturX";
 import { resumerDepots } from "./facturx-depot-utils";
 import { authFetch } from "@/lib/auth-fetch";
+import { LiensEnvoyes, useLiensCommande } from "./LiensEnvoyes";
+import { AlerteEncaissementsInattendus } from "./AlerteEncaissementsInattendus";
 import { enregistrerEncaissement as enregistrerEncaissementPartage } from "@/lib/encaissement";
 
 
@@ -60,6 +62,12 @@ export default function PaiementsPage() {
   const [payLinkMessage, setPayLinkMessage] = useState("");
   const [payLinkGenerating, setPayLinkGenerating] = useState(false);
   const [payLinkSending, setPayLinkSending] = useState(false);
+  // Envoi en deux temps : un récapitulatif (montant, destinataire, liens
+  // encore valables) avant que le mail ne parte. Deux liens étaient partis
+  // par mégarde pour une même commande — rien ne demandait confirmation.
+  const [payLinkConfirm, setPayLinkConfirm] = useState(false);
+  const liensCommande = useLiensCommande(payLinkModal?.id || null);
+  useEffect(() => { setPayLinkConfirm(false); }, [payLinkModal, payLinkAmount, payLinkEmail]);
   // Annulation : répartition avoir / remboursement (cf. AnnulationModal)
   const [annulModal, setAnnulModal] = useState<{ payment: any; encaisse: number; lignes: string[] } | null>(null);
 
@@ -959,6 +967,14 @@ export default function PaiementsPage() {
         </button>
       </div>
 
+      <AlerteEncaissementsInattendus
+        payments={payments}
+        toast={toast}
+        onTraite={(id, maj) => setPayments((prev: any[]) => prev.map((p) =>
+          p.id === id ? { ...p, encaissementsInattendus: maj, needsReview: maj.some((x) => !x.traite) } : p,
+        ))}
+      />
+
       {/* Barre d'onglets : elle passe à la ligne sur mobile plutôt que de
           défiler horizontalement. Huit onglets ne tiennent pas sur la largeur
           d'un téléphone, et les derniers — « Offerts », « Déclar. » — restaient
@@ -1545,6 +1561,13 @@ export default function PaiementsPage() {
                     className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none" />
                   <p className="font-body text-[10px] text-slate-400 mt-1">Reste dû : {due.toFixed(2)}€ — vous pouvez envoyer un montant partiel</p>
                 </div>
+                <LiensEnvoyes
+                  liens={liensCommande.liens}
+                  chargement={liensCommande.chargement}
+                  onRecharger={liensCommande.recharger}
+                  onAnnule={(lien) => liensCommande.setLiens((prev) => prev.map((l) => (l.id === lien.id ? lien : l)))}
+                  toast={toast}
+                />
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="font-body text-xs font-semibold text-slate-600">Message personnalisé</label>
@@ -1608,11 +1631,29 @@ Règles :
                   </div>
                 )}
               </div>
+              {payLinkConfirm && (() => {
+                const encoreValables = liensCommande.liens.filter((l) => l.etat === "valide");
+                return (
+                  <div className="mx-5 mb-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 font-body text-xs text-indigo-900">
+                    <div className="font-semibold mb-1">Vérifiez avant l&apos;envoi</div>
+                    <div>Un email avec un lien de paiement de <strong>{(parseFloat(payLinkAmount) || 0).toFixed(2)} €</strong> va partir à <strong>{payLinkEmail}</strong> pour {p.familyName}.</div>
+                    {encoreValables.length > 0 && (
+                      <div className="mt-1 text-red-700">
+                        ⚠️ {encoreValables.length === 1
+                          ? `Un lien de ${encoreValables[0].amount.toFixed(2)} € est encore valable`
+                          : `${encoreValables.length} liens sont encore valables`} : la famille pourrait régler deux fois. Annulez-le ci-dessus si c&apos;est un doublon.
+                      </div>
+                    )}
+                    <div className="mt-1 text-indigo-700">Le lien restera utilisable 2 heures.</div>
+                  </div>
+                );
+              })()}
               <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-                <button onClick={() => setPayLinkModal(null)}
-                  className="font-body text-sm text-slate-500 bg-white px-5 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                <button onClick={() => (payLinkConfirm ? setPayLinkConfirm(false) : setPayLinkModal(null))}
+                  className="font-body text-sm text-slate-500 bg-white px-5 py-2.5 rounded-lg border border-gray-200 cursor-pointer">{payLinkConfirm ? "Retour" : "Annuler"}</button>
                 <button disabled={payLinkSending || !payLinkEmail || !payLinkAmount || parseFloat(payLinkAmount) <= 0}
                   onClick={async () => {
+                    if (!payLinkConfirm) { setPayLinkConfirm(true); return; }
                     setPayLinkSending(true);
                     try {
                       const res = await authFetch("/api/send-payment-link", {
@@ -1639,7 +1680,7 @@ Règles :
                   }}
                   className="font-body text-sm font-semibold text-white bg-indigo-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-indigo-400 disabled:opacity-50 flex items-center gap-2">
                   {payLinkSending ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                  Envoyer le lien
+                  {payLinkConfirm ? "Confirmer l'envoi" : "Envoyer le lien"}
                 </button>
               </div>
             </div>

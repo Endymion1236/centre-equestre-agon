@@ -107,6 +107,20 @@ export interface Paiement {
   amountPaidReported?: number;
   amountExpected?: number;
   needsReview?: boolean;
+  /** Règlements CAWL arrivés alors que rien ne les attendait — deux liens
+   *  réglés, cumul dépassé, lien annulé. Écrits par lib/cawl-inattendu,
+   *  affichés dans Paiements jusqu'à être marqués traités. */
+  encaissementsInattendus?: Array<{
+    motif: "deja_solde" | "trop_percu" | "lien_annule";
+    exces: number;
+    montant: number;
+    hostedCheckoutId: string;
+    merchantRef?: string;
+    source: "webhook" | "status";
+    recuA: string;
+    traite?: boolean;
+    traiteA?: string;
+  }>;
 
   // ── Stage ─────────────────────────────────────────────────────────────
   stageDate?: string;
@@ -186,6 +200,12 @@ export interface SessionCawl {
   totalCents?: number;
   isDeposit?: boolean;
   depositPercent?: number;
+  /** Trace du lien envoyé (`payment-links`) qui a ouvert cette session. */
+  lienId?: string;
+  /** Lien annulé par l'administration : un règlement reçu malgré tout est signalé (lib/cawl-inattendu). */
+  annule?: boolean;
+  annuleA?: string;
+  annulePar?: string;
   /** Achat public d'un bon cadeau (sans compte). */
   bonCadeau?: boolean;
   montant?: number;

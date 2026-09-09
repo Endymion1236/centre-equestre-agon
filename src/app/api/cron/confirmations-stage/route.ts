@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const resultats = await envoyerConfirmationsDues();
+    const resultats = await envoyerConfirmationsDues({ origin: req.nextUrl.origin });
     const envoyes = resultats.filter((r) => r.sent);
     return NextResponse.json({
       ok: true,
