@@ -128,6 +128,10 @@ const nextConfig: NextConfig = {
     "/api/compta-export-pdf": ["./node_modules/pdfkit/js/**/*"],
     "/api/admin/sepa-mandate-pdf": ["./node_modules/pdfkit/js/**/*"],
     "/api/admin/facturx-pdf": ["./node_modules/pdfkit/js/**/*"],
+    // Le colis mensuel de la comptable (Boucler le mois → Envoyer, et le
+    // cron qui l'envoie tout seul) joint la synthèse PDF : même besoin.
+    "/api/admin/envoi-comptable": ["./node_modules/pdfkit/js/**/*"],
+    "/api/cron/envoi-comptable": ["./node_modules/pdfkit/js/**/*"],
   },
 
   // ─── Build — enlever les headers 'powered-by' inutiles ─────────────
