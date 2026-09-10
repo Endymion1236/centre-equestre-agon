@@ -20,6 +20,17 @@ function dateFec(date: Date) {
  * Construit le fichier des écritures de ventes.
  * La création du Blob et le téléchargement restent dans le composant client.
  */
+/**
+ * Compte de TVA collectée du cabinet selon le taux : 44571200 pour le taux
+ * réduit agricole 5,5 %, 44571700 pour le taux normal 20 % (plan comptable
+ * API Expertises). Un autre taux tombe sur le compte de régularisation.
+ */
+export function compteTvaCollectee(taux: number): { compte: string; libelle: string } {
+  if (Math.abs(taux - 5.5) < 0.01) return { compte: "44571200", libelle: "TVA collectée 5.5%" };
+  if (Math.abs(taux - 20) < 0.01) return { compte: "44571700", libelle: "TVA collectée 20%" };
+  return { compte: "44575000", libelle: "TVA collectée à régulariser" };
+}
+
 export function construireFecVentes(
   paiements: PaiementFec[],
   maintenant: Date = new Date(),
@@ -42,15 +53,17 @@ export function construireFecVentes(
 
       const montantTva = (item.priceTTC || 0) - (item.priceHT || 0);
       if (montantTva > 0) {
+        const taux = item.tva || 5.5;
+        const { compte: compteTva, libelle: libelleTva } = compteTvaCollectee(taux);
         lignes.push(
-          `VE\tVentes\t${numeroEcriture}\t${dateEcriture}\t44571\tTVA collectée\t\t\t${piece}\t${dateEcriture}\tTVA ${item.tva || 5.5}%\t\t${montantTva.toFixed(2)}\t\t\t${dateEcriture}\t\t`,
+          `VE\tVentes\t${numeroEcriture}\t${dateEcriture}\t${compteTva}\t${libelleTva}\t\t\t${piece}\t${dateEcriture}\tTVA ${taux}%\t\t${montantTva.toFixed(2)}\t\t\t${dateEcriture}\t\t`,
         );
         numeroEcriture++;
       }
     });
 
     lignes.push(
-      `VE\tVentes\t${numeroEcriture}\t${dateEcriture}\t411000\tClients\t${paiement.familyName}\t${paiement.familyName}\t${piece}\t${dateEcriture}\tCréance ${paiement.familyName}\t${(paiement.totalTTC || 0).toFixed(2)}\t\t\t\t${dateEcriture}\t\t`,
+      `VE\tVentes\t${numeroEcriture}\t${dateEcriture}\t41100000\tClients\t${paiement.familyName}\t${paiement.familyName}\t${piece}\t${dateEcriture}\tCréance ${paiement.familyName}\t${(paiement.totalTTC || 0).toFixed(2)}\t\t\t\t${dateEcriture}\t\t`,
     );
     numeroEcriture++;
   });

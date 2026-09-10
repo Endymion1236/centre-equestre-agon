@@ -4,9 +4,16 @@
  * Ventilation des DÉPENSES dans les comptes du cabinet comptable.
  *
  * Source : balance générale de l'EARL Centre équestre d'Agon-Coutainville,
- * exercice clos le 30/06/2025 (cabinet API Expertises). Les numéros et
- * libellés sont ceux du cabinet, à huit chiffres, pas le plan comptable
- * général : c'est ce que la comptable lit sans retraduire.
+ * exercice clos le 30/06/2025, puis le plan comptable complet transmis par
+ * le cabinet API Expertises (septembre 2026, avec les à-nouveaux au
+ * 01/07/2025). Les numéros et libellés sont ceux du cabinet, à huit
+ * chiffres, pas le plan comptable général : c'est ce que la comptable lit
+ * sans retraduire.
+ *
+ * Quelques comptes n'existent pas (encore) chez elle et suivent le plan
+ * général : 16420000 (emprunts, elle tient un compte par prêt), 61100000,
+ * 61510000, 62253000, 62340000, 63310000, 63500000, 63511000. Elle les
+ * créera ou les reclassera ; ils sont nommés pour qu'elle sache quoi faire.
  *
  * Trois niveaux, du plus sûr au plus approximatif, et jamais de « Divers »
  * silencieux :
@@ -44,7 +51,7 @@ export const COMPTES: Record<string, string> = {
   "63130000": "Participation formation continue", "63330000": "Formation professionnelle continue", "63570000": "Droits d'enregistrement, timbre",
   // Impôts et taxes : numérotation du plan comptable général, à confirmer sur
   // le prochain bilan (le cabinet n'en avait pas isolé dans l'extrait 2024-25).
-  "63310000": "Taxe d'apprentissage", "63511000": "Contribution économique territoriale (CFE)", "63512000": "Taxes foncières", "63500000": "Autres impôts, taxes et versements assimilés",
+  "63310000": "Taxe d'apprentissage", "63511000": "Contribution économique territoriale (CFE)", "63520000": "Taxes foncières", "63500000": "Autres impôts, taxes et versements assimilés",
   "64111000": "Personnel permanent", "64500000": "Charges sociales salariés", "64510000": "Cotisations MSA", "64600000": "Cotisations sociales de l'exploitant", "64700000": "Tickets resto", "64750000": "Médecine du travail, pharmacie",
   "66120000": "Intérêts des emprunts", "67120000": "Pénalités et amendes",
   // Hors charges
@@ -96,7 +103,7 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Entretien (bâtiments, matériel, véhicules)": [[/(garage|pneu|controle technique|carross|vidange|motin|jb ?mega|vehicule|camion|skoda)/, "61553000"], [/(batiment|toiture|platrerie|peinture|macon|couverture)/, "61530000"], [/(maintenance|sage|logiciel|contrat d entretien)/, "61562000"], [/(terrain|carriere|sable|clotur)/, "61510000"]],
   "Locations & loyers": [[/(arval|skoda|vehicule|lld)/, "61320000"], [/(rex rotary|imprimante|copieur)/, "61322000"], [/(tpe|leasing solutions|cm cic|leasecom|terminal)/, "61323000"], [/(cafe)/, "61321000"], [/(equilocation|cheval|poney|animal)/, "61340000"], [/(association|asso ce|ce d agon|loyer)/, "61310000"]],
   "Assurances": [[/(vehicule|auto|camion|flotte)/, "61610000"], [/(agricole|materiel|tracteur|groupama.*mat)/, "61680000"]],
-  "Impôts & taxes": [[/(cfe\b|cotisation fonciere|economique territoriale)/, "63511000"], [/(fonciere|foncier)/, "63512000"], [/(apprentissage)/, "63310000"], [/(formation)/, "63330000"], [/(enregistrement|timbre)/, "63570000"]],
+  "Impôts & taxes": [[/(cfe\b|cotisation fonciere|economique territoriale)/, "63511000"], [/(fonciere|foncier)/, "63520000"], [/(apprentissage)/, "63310000"], [/(formation)/, "63330000"], [/(enregistrement|timbre)/, "63570000"]],
   // Un moniteur indépendant relève du travail des chevaux quand il monte ou
   // débourre ; un artisan, de l'entretien du bâtiment. Un gros chantier reste
   // une immobilisation, à classer comme telle sur la ligne.
