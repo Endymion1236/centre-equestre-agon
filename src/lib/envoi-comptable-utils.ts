@@ -44,6 +44,25 @@ export interface ResumeColis {
   tvaDeductibleJustifiee?: number;
   tvaAVerifier?: { nb: number; ttc: number };
   ventilationAchats?: { total: number; aVentiler: number; montantAVentiler: number };
+  /**
+   * Mois tenu dans Céleris (juillet–août 2026) : les ventes ne sont pas dans
+   * l'application, elles sont dans les écritures importées. Montants en euros.
+   */
+  celeris?: { nombre: number; ht: number; tva: number; ttc: number };
+}
+
+/** Une écriture importée de Céleris, montants en centimes (lib/import-comptable-celeris). */
+export interface EcritureCelerisColis {
+  journal: string; compte: string; piece: string; date: string;
+  debit: number; credit: number; libelle: string; libelleCompte: string;
+}
+
+/** CSV des écritures Céleris du mois, montants en euros, même séparateur que les autres pièces. */
+export function construireExportCeleris(lignes: EcritureCelerisColis[]): string {
+  const champ = (v: unknown) => { const t = v == null ? "" : String(v); return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const eur = (c: number) => (c / 100).toFixed(2);
+  const lignesCsv = lignes.map((l) => [l.journal, l.compte, l.piece, l.date, eur(l.debit), eur(l.credit), l.libelle, l.libelleCompte].map(champ).join(";"));
+  return ["Journal;Compte;Pièce;Date;Débit;Crédit;Libellé écriture;Libellé compte", ...lignesCsv].join("\n");
 }
 
 export interface ColisComptable {
@@ -82,6 +101,8 @@ export function construireColisComptable(params: {
   maintenant?: Date;
   /** Lignes du tableau des opérations du mois (avec pièces) : ajoute le CSV des justificatifs et celui de la TVA. */
   lignesJustificatifs?: LigneMois[];
+  /** Écritures importées de Céleris pour ce mois, s'il a été tenu dans l'ancien logiciel. */
+  celeris?: { lignes: EcritureCelerisColis[]; totaux: { ht: number; tva: number; ttc: number } } | null;
 }): ColisComptable {
   const { mois, maintenant = new Date() } = params;
   const lignesJustificatifs = params.lignesJustificatifs?.filter(l => (l.mois || l.dateOperation?.slice(0, 7)) === mois);
@@ -107,6 +128,10 @@ export function construireColisComptable(params: {
     resume.tvaAVerifier = tva.aVerifier;
     resume.ventilationAchats = bilanVentilationAchats(lignesJustificatifs);
   }
+  const celeris = params.celeris && params.celeris.lignes.length ? params.celeris : null;
+  if (celeris) {
+    resume.celeris = { nombre: celeris.lignes.length, ht: arrondi(celeris.totaux.ht / 100), tva: arrondi(celeris.totaux.tva / 100), ttc: arrondi(celeris.totaux.ttc / 100) };
+  }
 
   const csv = "text/csv; charset=utf-8";
   const bom = "\uFEFF";
@@ -121,6 +146,7 @@ export function construireColisComptable(params: {
       { filename: `tva_${mois}.csv`, contenu: bom + construireExportTva(lignesJustificatifs), contentType: csv },
       { filename: `ventilation_achats_${mois}.csv`, contenu: bom + construireExportVentilationAchats(lignesJustificatifs), contentType: csv },
     ] : []),
+    ...(celeris ? [{ filename: `ecritures-celeris_${mois}.csv`, contenu: bom + construireExportCeleris(celeris.lignes), contentType: csv }] : []),
   ];
 
   return { mois, factures, encaissements, depenses, pieces, resume };
@@ -148,11 +174,13 @@ export function corpsEmailComptable(params: {
     <h2 style="color:#1e3a5f;">Écritures comptables — ${nom}</h2>
     <p>Bonjour,</p>
     <p>Voici les écritures du ${nomCentre} pour ${nom}, en pièces jointes.</p>
+    ${resume.celeris ? `<p style="font-size:13px;color:#374151;">Ce mois a été tenu dans Céleris pour les ventes : les factures et encaissements ci-dessous sont donc à zéro dans le nouvel outil, et les ventes figurent dans <b>ecritures-celeris_${mois}.csv</b>, reprises telles quelles de l'export Céleris.</p>` : ""}
     ${message ? `<p style="white-space:pre-wrap;border-left:3px solid #cbd5e1;padding-left:10px;color:#374151;">${message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>` : ""}
     <table style="border-collapse:collapse;font-size:14px;margin:12px 0;">
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Factures émises</td><td style="padding:4px 0;"><b>${resume.nbFactures}</b> — ${eur(resume.totalTTC)} TTC (${eur(resume.totalHT)} HT)</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Encaissements au journal</td><td style="padding:4px 0;"><b>${resume.nbEncaissements}</b> — ${eur(resume.totalEncaisse)}</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Dépenses saisies</td><td style="padding:4px 0;"><b>${resume.nbDepenses}</b> — ${eur(resume.totalDepenses)}</td></tr>
+      ${resume.celeris ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventes tenues dans Céleris</td><td style="padding:4px 0;"><b>${resume.celeris.nombre}</b> écritures importées — ${eur(resume.celeris.ttc)} TTC, dont ${eur(resume.celeris.tva)} de TVA collectée</td></tr>` : ""}
       ${resume.completude ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Justificatifs</td><td style="padding:4px 0;"><b>${resume.completude.justifies}/${resume.completude.total}</b> dépenses justifiées${resume.completude.sansPiece ? ` — <span style="color:#b45309;">${eur(resume.completude.montantSansPiece)} sans pièce sur ${resume.completude.sansPiece} ligne(s)</span>` : ""}${resume.completude.perdues ? ` — ${resume.completude.perdues} pièce(s) déclarée(s) perdue(s), relevé conservé (${eur(resume.completude.montantPerdues || 0)}, motif dans le CSV justificatifs, sans TVA déduite)` : ""}</td></tr>` : ""}
       ${resume.tvaDeductibleJustifiee != null ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">TVA documentée — paiements uniques</td><td style="padding:4px 0;"><b>${eur(resume.tvaDeductibleJustifiee)}</b>${resume.tvaAVerifier?.nb ? ` — ${resume.tvaAVerifier.nb} ligne(s) à vérifier (${eur(resume.tvaAVerifier.ttc)} TTC)` : ""}</td></tr>` : ""}
       ${resume.ventilationAchats ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventilation des achats</td><td>${resume.ventilationAchats.total} opérations, <b>${resume.ventilationAchats.aVentiler} à ventiler</b> (${eur(resume.ventilationAchats.montantAVentiler)}). Comptes proposés à valider.</td></tr>` : ""}

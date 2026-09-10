@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
     const mois = String(body.mois || "");
     if (!MOIS_RE.test(mois)) return NextResponse.json({ error: "Mois invalide" }, { status: 400 });
     const message = body.message ? String(body.message).slice(0, 2000) : undefined;
-    const r = await envoyerEcrituresComptable({ mois, declenche: "manuel", message });
+    const r = await envoyerEcrituresComptable({ mois, declenche: "manuel", message, declenchePar: { uid: (auth as any)?.uid, email: (auth as any)?.email } });
     if (!r.ok) return NextResponse.json({ error: r.error, code: r.code }, { status: r.code === "vide" ? 409 : 400 });
     return NextResponse.json(r);
   } catch (e) {

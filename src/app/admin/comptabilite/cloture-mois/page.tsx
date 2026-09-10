@@ -71,7 +71,7 @@ export default function ClotureMoisPage() {
       });
       const d = await r.json().catch(() => null);
       if (!r.ok) { setEnvoiRetour({ ok: false, texte: d?.error || `Erreur HTTP ${r.status}` }); return; }
-      setEnvoiRetour({ ok: true, texte: `Envoyé à ${d.to} : ${(d.pieces || []).length} pièces jointes.` });
+      setEnvoiRetour({ ok: true, texte: `Envoyé à ${d.to} : ${(d.pieces || []).length} pièces jointes.${Array.isArray(d.copie) && d.copie.length ? ` Copie à ${d.copie.join(", ")}.` : ""}` });
       setEnvoiMessage("");
       await chargerEnvoi(mois);
     } catch (e: any) {
@@ -240,7 +240,7 @@ export default function ClotureMoisPage() {
                         <Check size={13} /> Envoyé le {new Date(envoi.dernierEnvoi.at).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
                         {envoi.dernierEnvoi.declenche === "auto" ? " (automatique)" : ""}
                         {envoi.nbEnvois > 1 ? ` · ${envoi.nbEnvois} envois` : ""}
-                        {envoi.dernierEnvoi.resume ? ` · ${envoi.dernierEnvoi.resume.nbFactures} factures, ${envoi.dernierEnvoi.resume.nbEncaissements} encaissements, ${envoi.dernierEnvoi.resume.nbDepenses} dépenses` : ""}
+                        {envoi.dernierEnvoi.resume ? ` · ${envoi.dernierEnvoi.resume.nbFactures} factures, ${envoi.dernierEnvoi.resume.nbEncaissements} encaissements, ${envoi.dernierEnvoi.resume.nbDepenses} dépenses${envoi.dernierEnvoi.resume.celeris ? `, ${envoi.dernierEnvoi.resume.celeris.nombre} écritures Céleris (ventes)` : ""}` : ""}
                       </p>
                     )}
                     <textarea value={envoiMessage} onChange={e => setEnvoiMessage(e.target.value)} rows={2}

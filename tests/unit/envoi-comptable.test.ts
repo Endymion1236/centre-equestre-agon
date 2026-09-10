@@ -78,6 +78,19 @@ test("cinq pièces sont préparées, nommées par mois, CSV avec BOM", () => {
   }
 });
 
+test("un mois tenu dans Céleris joint ses écritures et le dit dans le résumé", () => {
+  const avecCeleris = construireColisComptable({ mois: "2026-07", payments: [], encaissements: [], depenses: [], maintenant: new Date("2026-08-02T08:00:00Z"),
+    celeris: { lignes: [{ journal: "VT", compte: "70600000", piece: "F1", date: "2026-07-03", debit: 0, credit: 5000, libelle: "Stage; été", libelleCompte: "Prestations" }], totaux: { ht: 5000, tva: 275, ttc: 5275 } } });
+  assert.deepEqual(avecCeleris.resume.celeris, { nombre: 1, ht: 50, tva: 2.75, ttc: 52.75 });
+  const piece = avecCeleris.pieces.find((p) => p.filename === "ecritures-celeris_2026-07.csv");
+  assert.ok(piece, "la pièce Céleris est jointe");
+  assert.ok(piece!.contenu.includes('"Stage; été"'), "le point-virgule du libellé est protégé");
+  assert.ok(piece!.contenu.includes("0.00;50.00"), "montants en euros");
+  assert.ok(corpsEmailComptable({ mois: "2026-07", resume: avecCeleris.resume, pieces: [], nomCentre: "CE" }).includes("tenu dans Céleris"));
+  // Sans écritures : ni pièce, ni résumé.
+  assert.equal(construireColisComptable({ mois: "2026-07", payments: [], encaissements: [], depenses: [], celeris: { lignes: [], totaux: { ht: 0, tva: 0, ttc: 0 } } }).resume.celeris, undefined);
+});
+
 console.log("\n── Contenu des exports ──");
 test("l'export des factures porte le numéro, les montants et le reste dû", () => {
   const csv = construireExportFactures(colis.factures);
