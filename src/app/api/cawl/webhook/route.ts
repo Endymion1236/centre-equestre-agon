@@ -8,6 +8,7 @@ import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
+import { moyenPaiementCawl, libelleEncaissementCawl } from "@/lib/cawl-moyen-paiement";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -319,13 +320,17 @@ export async function POST(req: NextRequest) {
           });
           await marquerLienRegle(checkoutId || hostedCheckoutId);
 
+          // Carte, PayPal, Apple Pay… (cf. lib/cawl-moyen-paiement).
+          const moyen = moyenPaiementCawl(payment.paymentOutput);
+          await payRef.update({ moyenPaiement: moyen.moyen, moyenPaiementLibelle: moyen.libelle, ...(moyen.produit != null ? { cawlPaymentProductId: moyen.produit } : {}) });
           await createEncaissementServer({
             paymentId: payRef.id,
             familyId: pData.familyId,
             familyName: pData.familyName || "",
             montant: paidAmount,
             mode: "cb_online",
-            modeLabel: isDeposit ? "CB en ligne CAWL (acompte)" : "CB en ligne (CAWL)",
+            modeLabel: libelleEncaissementCawl(moyen, isDeposit ? "acompte" : null),
+            moyenPaiement: moyen.moyen,
             ref: `CAWL-${payment.id}`,
             activityTitle: (pData.items || []).map((i: any) => i.activityTitle).join(", "),
           });

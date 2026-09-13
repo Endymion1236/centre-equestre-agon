@@ -78,6 +78,10 @@ export interface Paiement {
   status: StatutPaiement;
   paymentMode?: ModePaiement;
   paymentRef?: string;
+  /** Moyen réellement utilisé sur la page CAWL (carte, paypal, apple_pay…) et son libellé — cf. lib/cawl-moyen-paiement. */
+  moyenPaiement?: string;
+  moyenPaiementLibelle?: string;
+  cawlPaymentProductId?: number;
 
   /** Numéro séquentiel définitif (F-AAAA-NNNN). Absent = proforma.
    *  Attribué UNIQUEMENT par attribuerNumeroFacture() — jamais à la main. */

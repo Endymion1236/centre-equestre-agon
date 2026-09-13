@@ -37,6 +37,9 @@ interface Payment {
   paidAmount: number;
   date: any;
   reconciledByBank?: boolean;
+  /** Moyen réellement utilisé sur la page CAWL (paypal, apple_pay…), cf. lib/cawl-moyen-paiement. */
+  moyenPaiement?: string;
+  moyenPaiementLibelle?: string;
 }
 
 // Plan comptable partagé avec l'export CA ventilé (lib/ventilation-comptable).
@@ -398,7 +401,7 @@ export default function ComptabilitePage() {
                     <span className="w-20 font-body text-xs text-slate-500">{d.toLocaleDateString("fr-FR")}</span>
                     <span className="flex-1 font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
                     <span className="w-40 font-body text-xs text-slate-600 truncate">{(p.items || []).map((i) => i.activityTitle).join(", ")}</span>
-                    <span className="w-20 text-center"><Badge color="blue">{modeLabels[p.paymentMode] || p.paymentMode}</Badge></span>
+                    <span className="w-20 text-center"><Badge color="blue">{p.moyenPaiement && p.moyenPaiement !== "carte" ? `${p.moyenPaiementLibelle || p.moyenPaiement} (CAWL)` : modeLabels[p.paymentMode] || p.paymentMode}</Badge></span>
                     <span className="w-16 text-right font-body text-xs text-slate-600">{ht.toFixed(2)}€</span>
                     <span className="w-16 text-right font-body text-xs text-orange-500">{tva.toFixed(2)}€</span>
                     <span className="w-16 text-right font-body text-sm font-semibold text-blue-500">{(p.totalTTC || 0).toFixed(2)}€</span>

@@ -8,6 +8,7 @@ import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
+import { moyenPaiementCawl, libelleEncaissementCawl } from "@/lib/cawl-moyen-paiement";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -346,13 +347,18 @@ export async function GET(req: NextRequest) {
       });
       await marquerLienRegle(hostedCheckoutId);
 
+      // Carte, PayPal, Apple Pay… : le journal dit par quoi l'argent est
+      // passé, comme le back-office CAWL (cf. lib/cawl-moyen-paiement).
+      const moyen = moyenPaiementCawl(paymentOutput?.paymentOutput || paymentOutput);
+      await payRef.update({ moyenPaiement: moyen.moyen, moyenPaiementLibelle: moyen.libelle, ...(moyen.produit != null ? { cawlPaymentProductId: moyen.produit } : {}) });
       await createEncaissementServer({
         paymentId: payRef.id,
         familyId: familyId || pData.familyId,
         familyName: pData.familyName || "",
         montant: paidAmount,
         mode: "cb_online",
-        modeLabel: !isFullyPaid ? `CB en ligne CAWL (paiement partiel ${montantPaye.toFixed(2)}€)` : "CB en ligne (CAWL)",
+        modeLabel: libelleEncaissementCawl(moyen, !isFullyPaid ? `paiement partiel ${montantPaye.toFixed(2)}€` : null),
+        moyenPaiement: moyen.moyen,
         ref: `CAWL-${hostedCheckoutId}`,
         activityTitle: (pData.items || []).map((i: any) => i.activityTitle).join(", "),
       });
