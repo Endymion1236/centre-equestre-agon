@@ -6,6 +6,7 @@ import { refreshEmailMode, isRecipientAllowed } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 import { renderDerouleStage } from "@/lib/stage-deroule";
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
+import { construireLigneCommande, champsStageCommande, type CreneauLu } from "@/lib/commande-items";
 import {
   emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature, emailCouleurs as CE,
@@ -94,8 +95,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Détails du premier créneau de chaque item, pour la réservation.
-    const premiers = await Promise.all(items.map((it) => adminDb.collection("creneaux").doc(it.creneauIds[0]).get()));
+    // Tous les créneaux du panier : le premier de chaque item pour la
+    // réservation, tous pour la commande (dates et horaires d'un stage).
+    const idsCreneaux = Array.from(new Set(items.flatMap((it) => it.creneauIds)));
+    const snapsCreneaux = await Promise.all(idsCreneaux.map((id) => adminDb.collection("creneaux").doc(id).get()));
+    const creneauxLus: CreneauLu[] = snapsCreneaux.filter((s) => s.exists).map((s) => ({ id: s.id, ...(s.data() as any) }));
+    const premiers = items.map((it) => snapsCreneaux[idsCreneaux.indexOf(it.creneauIds[0])]);
+    const lignesCommande = items.map((it) => construireLigneCommande(it, creneauxLus));
 
     // 2-4. Réservations + commande + déclaration : un seul commit — tout ou rien.
     const batch = adminDb.batch();
@@ -125,14 +131,11 @@ export async function POST(req: NextRequest) {
     const payRef = adminDb.collection("payments").doc();
     batch.set(payRef, {
       familyId: auth.uid, familyName: fam.parentName || "",
-      items: items.map((i) => ({
-        activityTitle: `${i.activityTitle} — ${i.childName}`,
-        childId: i.childId, childName: i.childName,
-        creneauId: i.creneauIds[0],
-        // TOUS les jours : nécessaires à la levée des places tenues.
-        creneauIds: i.creneauIds,
-        priceHT: i.prixFinal / 1.055, tva: 5.5, priceTTC: i.prixFinal,
-      })),
+      // Même forme que le panier CB : la commande peut être réglée plus tard
+      // en ligne (Mes factures), et la confirmation CAWL doit alors retrouver
+      // le stage, ses dates et ses horaires (cf. lib/commande-items).
+      items: lignesCommande,
+      ...champsStageCommande(lignesCommande),
       totalTTC,
       paymentMode: mode, paymentRef: "",
       status: "pending", paidAmount: 0,

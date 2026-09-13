@@ -7,6 +7,7 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
+import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -344,6 +345,8 @@ export async function POST(req: NextRequest) {
 
           // Places tenues pendant le paiement → inscriptions définitives.
           await confirmerPlacesTenues(payRef.id);
+          // Déclaration « je paierai au bureau » devenue sans objet.
+          await cloreDeclarationsRegleesEnLigne(payRef.id, `CAWL-${payment.id}`);
 
           // ── Confirmer les réservations associées ──────────────────────
           // Les réservations créées en pending_payment au checkout doivent

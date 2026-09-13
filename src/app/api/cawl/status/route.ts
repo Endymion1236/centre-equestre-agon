@@ -7,6 +7,7 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
+import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -326,6 +327,9 @@ export async function GET(req: NextRequest) {
       // Non bloquant — un échec ici ne doit pas faire échouer l'encaissement,
       // la purge respecte de toute façon les paiements aboutis.
       await confirmerPlacesTenues(payRef.id);
+      // Une déclaration « je paierai au bureau » sur cette commande n'a plus
+      // lieu d'être : la famille a finalement réglé en ligne.
+      await cloreDeclarationsRegleesEnLigne(payRef.id, `CAWL-${hostedCheckoutId}`);
 
       // Règlement attendu ? Deux liens partiels réglés, ou un lien annulé par
       // l'admin mais utilisé avant son expiration : crédité (l'argent est
