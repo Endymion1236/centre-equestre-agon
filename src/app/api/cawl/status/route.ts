@@ -9,6 +9,7 @@ import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
 import { moyenPaiementCawl, libelleEncaissementCawl } from "@/lib/cawl-moyen-paiement";
+import { enregistrerEchecCawl } from "@/lib/cawl-tentatives";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -186,6 +187,15 @@ export async function GET(req: NextRequest) {
       // valide rien ici — une inscription en attente vaut mieux qu'une
       // place donnee sans encaissement.
       const motif = decision === "echec" ? "refused" : "pending";
+      // La cause est gardée (journal des tentatives, lien, commande) : sans
+      // ça, « certains liens marchent, d'autres sont rejetés » restait sans
+      // réponse. Une page CAWL refusée est aussi marquée consommée.
+      const echec = await enregistrerEchecCawl({ source: "retour", hostedCheckoutId, paymentId: paymentId || sessionPaymentId, paymentCawl: paymentOutput });
+      // Une famille venue d'un lien de paiement n'est pas forcément connectée :
+      // elle retourne sur la page du lien, qui explique et propose de réessayer.
+      if (echec.lienToken) {
+        return NextResponse.redirect(new URL(`/payer/${echec.lienToken}?retour=${motif}`, req.nextUrl.origin));
+      }
       return NextResponse.redirect(
         new URL(`/espace-cavalier/reserver?cancelled=true&motif=${motif}`, req.nextUrl.origin),
       );

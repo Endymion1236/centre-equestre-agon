@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { ouvrirLienPaiement, type MotifRefus } from "@/lib/lien-paiement";
+import { ouvrirLienPaiement, lireLienPourRetour, type MotifRefus } from "@/lib/lien-paiement";
+import { conseilApresEchec } from "@/lib/cawl-echec";
 
 /**
  * /payer/<jeton> — la page derrière chaque lien de paiement envoyé.
@@ -10,12 +11,20 @@ import { ouvrirLienPaiement, type MotifRefus } from "@/lib/lien-paiement";
  * commande, ouvre la page de paiement CAWL du montant encore dû et y envoie
  * la famille. Elle ne s'affiche que quand il n'y a plus rien à payer — lien
  * annulé, expiré, déjà réglé — et propose alors l'espace client.
+ *
+ * Elle s'affiche aussi au RETOUR d'un paiement refusé ou abandonné
+ * (`?retour=refused|pending`, posé par /api/cawl/status) : la famille n'est
+ * pas forcément connectée à son espace, et « rejeté » sans explication
+ * faisait croire que le lien était cassé. Ici : la cause, ce qu'il faut
+ * faire, et un bouton pour réessayer — sur une page CAWL neuve, puisque
+ * celle qui a refusé est marquée consommée.
  */
 
 export const dynamic = "force-dynamic";
 
 interface Props {
   params: Promise<{ token: string }>;
+  searchParams?: Promise<{ retour?: string }>;
 }
 
 const MESSAGES: Record<MotifRefus, { titre: string; texte: string }> = {
@@ -45,8 +54,40 @@ const MESSAGES: Record<MotifRefus, { titre: string; texte: string }> = {
   },
 };
 
-export default async function PayerPage({ params }: Props) {
+export default async function PayerPage({ params, searchParams }: Props) {
   const { token } = await params;
+  const retour = String((await searchParams)?.retour || "");
+
+  if (retour === "refused" || retour === "pending") {
+    const lien = await lireLienPourRetour(token);
+    const echec = lien?.dernierEchec || null;
+    const attente = retour === "pending";
+    return (
+      <main className="min-h-[70vh] flex items-center justify-center px-4 py-16">
+        <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-8 shadow-sm text-center">
+          <div className="text-4xl mb-3">{attente ? "⏳" : "💳"}</div>
+          <h1 className="font-display text-xl font-bold text-blue-800 mb-2">{attente ? "Paiement en attente de confirmation" : "Le paiement n'a pas abouti"}</h1>
+          {lien?.familyName && <p className="font-body text-xs text-slate-400 mb-3">Famille {lien.familyName}{lien.montant ? ` · ${lien.montant.toFixed(2).replace(".", ",")} €` : ""}</p>}
+          <p className="font-body text-sm text-slate-600 leading-relaxed">
+            {attente
+              ? "Votre banque n'a pas encore donné sa réponse. Si le paiement est confirmé, vous recevrez un email ; sinon, vous pourrez réessayer avec ce même lien."
+              : conseilApresEchec({ code: echec?.code ?? null, statut: echec?.statut || "", authentification: echec?.authentification || "" })}
+          </p>
+          {echec?.explication && (
+            <p className="font-body text-[11px] text-slate-400 mt-3">Motif indiqué par la plateforme de paiement : {echec.explication}</p>
+          )}
+          {!attente && (
+            <Link href={`/payer/${token}`}
+              className="inline-block mt-6 font-body text-sm font-semibold text-white bg-blue-600 px-5 py-2.5 rounded-lg no-underline hover:bg-blue-500">
+              Réessayer le paiement
+            </Link>
+          )}
+          <p className="font-body text-xs text-slate-400 mt-6">Centre Équestre d&apos;Agon-Coutainville</p>
+        </div>
+      </main>
+    );
+  }
+
   const h = await headers();
   const proto = h.get("x-forwarded-proto") || "https";
   const host = h.get("x-forwarded-host") || h.get("host") || "";

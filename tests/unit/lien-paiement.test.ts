@@ -77,6 +77,7 @@ console.log("══════════════════════�
   assert("page ouverte il y a plus de 100 min : rouverte", !checkoutReutilisable(page, 60, t0 + FRAICHEUR_CHECKOUT_MS + 1));
   assert("montant devenu différent : rouverte", !checkoutReutilisable(page, 30, t0 + 10 * 60_000));
   assert("aucune page encore : ouverte", !checkoutReutilisable(undefined, 60, t0));
+  assert("page dont le paiement a été refusé : jamais réutilisée, même fraîche", !checkoutReutilisable({ ...page, echecAt: new Date(t0 + 5 * 60_000).toISOString() }, 60, t0 + 10 * 60_000));
 }
 
 // ── 2. Encaissement inattendu ─────────────────────────────────────────────

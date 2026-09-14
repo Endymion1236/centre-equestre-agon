@@ -26,6 +26,8 @@ export interface LienAffiche {
   sentBy?: string;
   cancelledAt?: string;
   ouvertures?: number;
+  dernierEchec?: { at: string; statut: string; code: number | null; explication: string; moyen?: string } | null;
+  echecs?: number;
 }
 
 const heure = (iso: string) =>
@@ -120,6 +122,11 @@ export function LiensEnvoyes({
                 {l.recipientEmail} · envoyé le {heure(l.sentAt)}
                 {l.etat === "valide" && l.expiresAt ? ` · valable jusqu'au ${heure(l.expiresAt)}` : ""}
                 {l.ouvertures ? ` · ouvert ${l.ouvertures} fois` : ""}
+                {l.dernierEchec && (
+                  <span className="block text-red-600 truncate" title={l.dernierEchec.explication}>
+                    ✗ {l.echecs && l.echecs > 1 ? `${l.echecs} tentatives refusées, dernière` : "Tentative refusée"} le {heure(l.dernierEchec.at)} : {l.dernierEchec.explication}
+                  </span>
+                )}
               </span>
               <span className={`font-body text-[10px] font-semibold px-2 py-0.5 rounded-full border ${pill.cls}`}>{pill.label}</span>
               {l.etat === "valide" && (

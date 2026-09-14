@@ -354,6 +354,18 @@ export async function ouvrirLienPaiement(token: string, origin: string): Promise
   return { ok: true, url: String(cawlBody.url), montant, familyName };
 }
 
+/**
+ * Le lien tel que la page /payer le relit après un refus CAWL : de quoi
+ * expliquer à la famille ce qui s'est passé et lui proposer de réessayer.
+ */
+export async function lireLienPourRetour(token: string): Promise<{ familyName: string; montant: number; dernierEchec: LienEnvoye["dernierEchec"] } | null> {
+  if (!token || !/^[a-f0-9]{48}$/.test(token)) return null;
+  const snap = await adminDb.collection(COLLECTION_LIENS).where("token", "==", token).limit(1).get();
+  if (snap.empty) return null;
+  const x = snap.docs[0].data() as any;
+  return { familyName: String(x.familyName || ""), montant: Number(x.amount) || 0, dernierEchec: x.dernierEchec || null };
+}
+
 // ─── Administration ──────────────────────────────────────────────────────
 
 /** Un lien vu depuis l'administration. */
@@ -372,6 +384,10 @@ export interface LienEnvoye {
   paidAt?: string;
   /** Nombre d'ouvertures par la famille. */
   ouvertures?: number;
+  /** Dernière tentative de paiement refusée ou abandonnée sur ce lien. */
+  dernierEchec?: { at: string; statut: string; code: number | null; explication: string; moyen?: string; authentification?: string } | null;
+  /** Nombre de tentatives non abouties. */
+  echecs?: number;
 }
 
 const isoDepuis = (v: any): string => {
@@ -405,6 +421,8 @@ export async function listerLiensCommande(paymentId: string): Promise<LienEnvoye
         cancelledBy: x.cancelledBy || "",
         paidAt: x.paidAt || "",
         ouvertures: Array.isArray(x.openedAt) ? x.openedAt.length : 0,
+        dernierEchec: x.dernierEchec || null,
+        echecs: Number(x.echecs) || 0,
       };
     })
     .sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || ""));

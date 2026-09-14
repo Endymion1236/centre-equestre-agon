@@ -9,6 +9,7 @@ import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
 import { moyenPaiementCawl, libelleEncaissementCawl } from "@/lib/cawl-moyen-paiement";
+import { enregistrerEchecCawl } from "@/lib/cawl-tentatives";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
@@ -503,18 +504,16 @@ export async function POST(req: NextRequest) {
     if (status === "REJECTED" || status === "CANCELLED" || status === "REJECTED_CAPTURE") {
       console.log(`❌ CAWL payment failed: ref=${merchantRef}, status=${status}`);
 
+      let paymentIdEchec = "";
       if (merchantRef) {
         const snap = await adminDb.collection("payments")
           .where("cawlRef", "==", merchantRef)
           .limit(1)
           .get();
-        if (!snap.empty) {
-          await snap.docs[0].ref.update({
-            cawlLastFailStatus: status,
-            updatedAt: FieldValue.serverTimestamp(),
-          });
-        }
+        if (!snap.empty) paymentIdEchec = snap.docs[0].id;
       }
+      // Cause gardée et page CAWL marquée consommée (cf. lib/cawl-tentatives).
+      await enregistrerEchecCawl({ source: "webhook", hostedCheckoutId, paymentId: paymentIdEchec, paymentCawl: payment });
     }
 
     return NextResponse.json({ received: true });

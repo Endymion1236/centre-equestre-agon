@@ -204,11 +204,14 @@ export function montantOuvertureLien(
 
 /** La page CAWL déjà ouverte pour ce lien peut-elle resservir ? */
 export function checkoutReutilisable(
-  checkout: { url?: string; createdAt?: string | number | Date | null; amount?: number } | null | undefined,
+  checkout: { url?: string; createdAt?: string | number | Date | null; amount?: number; echecAt?: string | null } | null | undefined,
   montant: number,
   maintenant: number = Date.now(),
 ): boolean {
   if (!checkout?.url) return false;
+  // Une page dont le paiement a été refusé ou abandonné est consommée côté
+  // CAWL : y renvoyer la famille, c'est l'envoyer sur une page morte.
+  if (checkout.echecAt) return false;
   const cree = enMs(checkout.createdAt);
   if (!cree || maintenant - cree > FRAICHEUR_CHECKOUT_MS) return false;
   return Math.abs((checkout.amount || 0) - montant) <= EPSILON;
