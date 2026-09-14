@@ -108,3 +108,15 @@ export function construireTableauDuJour(creneaux: CreneauBrut[], maintenantHHMM:
   }
   return cartes.sort((a, b) => a.debut.localeCompare(b.debut) || a.titre.localeCompare(b.titre, "fr"));
 }
+
+/**
+ * « HH:MM » à Paris, en cycle 0–23 explicite. `hour12: false` donnait
+ * « 00:15 » à midi et quart sur Vercel (cycle h11) : tous les cours de
+ * l'après-midi partaient dans « plus tard », ceux du matin disparaissaient.
+ */
+export function heureParis(d: Date): string {
+  const parts = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d);
+  const h = Number(parts.find((p) => p.type === "hour")?.value || 0) % 24;
+  const m = Number(parts.find((p) => p.type === "minute")?.value || 0);
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}

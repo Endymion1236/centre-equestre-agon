@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { construireTableauDuJour, prenomAffiche } from "../../src/lib/borne-tableau";
+import { construireTableauDuJour, prenomAffiche, heureParis } from "../../src/lib/borne-tableau";
 
 const creneaux = [
   { id: "a", startTime: "14:00", endTime: "15:00", activityTitle: "Galop 2", monitor: "Nicolas",
@@ -41,4 +41,10 @@ test("jamais autre chose que titre, horaire, moniteur, état, prénoms et poneys
   const [c] = construireTableauDuJour(creneaux, "14:20");
   assert.deepEqual(Object.keys(c).sort(), ["cavaliers", "debut", "etat", "fin", "horaire", "id", "moniteur", "titre"]);
   assert.deepEqual(Object.keys(c.cavaliers[0]).sort(), ["poney", "prenom"]);
+});
+
+test("l'heure de Paris est en cycle 0–23 : midi et quart n'est pas 00:15, minuit n'est pas 24:00", () => {
+  assert.equal(heureParis(new Date("2026-09-15T10:15:00Z")), "12:15");
+  assert.equal(heureParis(new Date("2026-09-15T22:05:00Z")), "00:05");
+  assert.equal(heureParis(new Date("2026-01-15T08:30:00Z")), "09:30");
 });

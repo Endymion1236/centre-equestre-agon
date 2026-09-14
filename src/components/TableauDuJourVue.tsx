@@ -41,13 +41,14 @@ const ETIQUETTE: Record<CarteTableau["etat"], { texte: string; fond: string; enc
 const styles: Record<string, CSSProperties> = {
   page: { minHeight: "100vh", background: "linear-gradient(180deg,#FFF9EC 0%,#FDF3F3 100%)", color: "#1F2A44", fontFamily: POLICE, padding: "28px 32px 40px" },
   entete: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 24, flexWrap: "wrap", marginBottom: 24 },
-  titre: { fontSize: 56, lineHeight: 1, fontWeight: 800, margin: 0, color: "#1F2A44", letterSpacing: "-0.01em" },
-  sousTitre: { fontSize: 20, margin: "8px 0 0", color: "#5B6B8A", textTransform: "capitalize" as const },
+  // Police forcée : le site donne aux h1/h2 une police à empattements (Libre Baskerville).
+  titre: { fontFamily: POLICE, fontSize: 56, lineHeight: 1, fontWeight: 800, margin: 0, color: "#1F2A44", letterSpacing: "-0.01em" },
+  sousTitre: { fontSize: 20, margin: "8px 0 0", color: "#5B6B8A" },
   bulle: { background: "#fff", border: "4px solid #F4B942", borderRadius: 28, padding: "18px 24px", color: "#1F2A44", maxWidth: 560, boxShadow: "0 8px 0 #F4B942" },
   grille: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 22 },
   carte: { borderRadius: 28, padding: "20px 22px 22px", border: "4px solid", position: "relative" as const, boxShadow: "0 8px 0 rgba(0,0,0,0.08)" },
   carteEntete: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
-  carteTitre: { fontSize: 30, fontWeight: 800, margin: 0, lineHeight: 1.1 },
+  carteTitre: { fontFamily: POLICE, fontSize: 30, fontWeight: 800, margin: 0, lineHeight: 1.1 },
   carteInfo: { fontSize: 19, margin: "6px 0 0", opacity: 0.8 },
   etiquette: { borderRadius: 999, padding: "6px 14px", fontSize: 15, fontWeight: 800, whiteSpace: "nowrap" as const, flexShrink: 0 },
   stickers: { display: "flex", flexWrap: "wrap" as const, gap: 10, listStyle: "none", margin: 0, padding: 0 },
@@ -69,7 +70,7 @@ export default function TableauDuJourVue({ cartes, dateLongue, heure, erreur, ch
           <h1 style={styles.titre}>
             <span style={{ display: "inline-block", animation: "coucou 2.4s ease-in-out infinite" }}>🐴</span> Bienvenue au club&nbsp;!
           </h1>
-          <p style={styles.sousTitre}>{dateLongue}{heure ? ` · ${heure}` : ""}</p>
+          <p style={styles.sousTitre}>{dateLongue.charAt(0).toUpperCase() + dateLongue.slice(1)}{heure ? ` · ${heure}` : ""}</p>
         </div>
         <div style={styles.bulle}>
           <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.15, marginBottom: 8 }}>🔎 Trouve ton prénom et ton poney&nbsp;!</div>
