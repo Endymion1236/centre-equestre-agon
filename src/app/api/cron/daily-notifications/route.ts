@@ -7,6 +7,7 @@ import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
 import { addDaysParis } from "@/lib/date-local";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
+import { ajouterEnfantAuCreneau, cleCreneauSaison, corpsRappelSaison, type CreneauSaison } from "@/lib/rappel-saison";
 import {
   emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature, emailCouleurs as CE,
@@ -512,9 +513,9 @@ export async function GET(req: NextRequest) {
           const seasonCreneaux = seasonSnap.docs.map(d => ({ id: d.id, ...d.data() }))
             .filter((c: any) => c.activityType !== "stage" && c.activityType !== "stage_journee" && c.status !== "closed") as any[];
 
-          // Regrouper par famille → créneaux récurrents distincts (jour + heure + titre)
-          type Slot = { title: string; jour: string; horaire: string; moniteur: string };
-          const famSeason = new Map<string, { parentName: string; familyId: string; slots: Map<string, Slot> }>();
+          // Regrouper par famille → créneaux récurrents distincts (jour + heure
+          // + titre), chacun avec le prénom du ou des enfants (lib/rappel-saison).
+          const famSeason = new Map<string, { parentName: string; familyId: string; slots: Map<string, CreneauSaison> }>();
           for (const c of seasonCreneaux) {
             const [yy, mm, dd] = (c.date as string).split("-").map(Number);
             const jourLabel = new Date(yy, mm - 1, dd, 12).toLocaleDateString("fr-FR", { weekday: "long" });
@@ -530,11 +531,10 @@ export async function GET(req: NextRequest) {
               }
               if (!famEmail) continue;
               if (!famSeason.has(famEmail)) famSeason.set(famEmail, { parentName, familyId: e.familyId, slots: new Map() });
-              const slotKey = `${c.activityTitle}|${jourLabel}|${c.startTime}`;
-              famSeason.get(famEmail)!.slots.set(slotKey, {
+              ajouterEnfantAuCreneau(famSeason.get(famEmail)!.slots, cleCreneauSaison(c.activityTitle, jourLabel, c.startTime), {
                 title: c.activityTitle, jour: jourLabel,
                 horaire: `${c.startTime}–${c.endTime}`, moniteur: c.monitor || "",
-              });
+              }, e.childName || "");
             }
           }
           results.saisonRappel.families = famSeason.size;
@@ -546,20 +546,9 @@ export async function GET(req: NextRequest) {
               continue;
             }
             try {
-              const lignes = [...slots.values()]
-                .sort((a, b) => a.jour.localeCompare(b.jour) || a.horaire.localeCompare(b.horaire))
-                .map(s => emailPanneau(s.title, [
-                  emailLigne("Jour", s.jour),
-                  emailLigne("Horaire", s.horaire),
-                  s.moniteur ? emailLigne("Encadrement", s.moniteur) : "",
-                ].join(""))).join("");
               const subject = "Reprise des cours — votre planning de la saison";
               const html = emailLayout([
-                emailTitre("Les cours reprennent"),
-                P(`Bonjour ${parentName || "cher parent"},`),
-                P(`Les cours reprennent le <strong>${debutDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</strong>. Voici votre planning récurrent pour la saison :`),
-                lignes,
-                P("Ce créneau est le vôtre chaque semaine pour toute la saison.", 13),
+                corpsRappelSaison({ parentName, debut: debutDate, slots: slots.values() }),
                 emailSignature(),
               ].join("\n"), `Reprise le ${debutDate.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`);
               const res = await fetch("https://api.resend.com/emails", {
