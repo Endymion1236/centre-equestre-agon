@@ -44,7 +44,7 @@ const styles: Record<string, CSSProperties> = {
   titre: { fontSize: 56, lineHeight: 1, fontWeight: 800, margin: 0, color: "#1F2A44", letterSpacing: "-0.01em" },
   sousTitre: { fontSize: 20, margin: "8px 0 0", color: "#5B6B8A", textTransform: "capitalize" as const },
   bulle: { background: "#fff", border: "4px solid #F4B942", borderRadius: 28, padding: "18px 24px", color: "#1F2A44", maxWidth: 560, boxShadow: "0 8px 0 #F4B942" },
-  grille: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: 22 },
+  grille: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 22 },
   carte: { borderRadius: 28, padding: "20px 22px 22px", border: "4px solid", position: "relative" as const, boxShadow: "0 8px 0 rgba(0,0,0,0.08)" },
   carteEntete: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 },
   carteTitre: { fontSize: 30, fontWeight: 800, margin: 0, lineHeight: 1.1 },
