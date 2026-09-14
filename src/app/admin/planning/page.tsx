@@ -880,6 +880,11 @@ export default function PlanningPage() {
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg no-underline hover:bg-blue-100">
             🐴 Montoir
           </a>
+          <a href="/borne/tableau" target="_blank" rel="noopener"
+            title="Les cours d'aujourd'hui avec le prénom des cavaliers, à afficher sur la tablette de l'accueil"
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg no-underline hover:bg-amber-100">
+            📺 Tableau du jour
+          </a>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
 
