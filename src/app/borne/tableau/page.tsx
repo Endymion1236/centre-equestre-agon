@@ -23,7 +23,7 @@ import TableauDuJourVue from "@/components/TableauDuJourVue";
 const RAFRAICHISSEMENT_MS = 60_000;
 
 export default function BorneTableauPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin, isMoniteur } = useAuth();
   const [cartes, setCartes] = useState<CarteTableau[] | null>(null);
   const [heure, setHeure] = useState("");
   const [erreur, setErreur] = useState("");
@@ -41,15 +41,31 @@ export default function BorneTableauPage() {
     }
   }, []);
 
+  const autorise = isAdmin || isMoniteur;
+
   useEffect(() => {
-    if (!user) return;
+    if (!user || !autorise) return;
     void charger();
     const t = setInterval(() => void charger(), RAFRAICHISSEMENT_MS);
     return () => clearInterval(t);
-  }, [user, charger]);
+  }, [user, autorise, charger]);
 
   if (authLoading) {
     return <div className="min-h-screen bg-cream flex items-center justify-center"><Loader2 className="w-10 h-10 animate-spin text-blue-500" /></div>;
+  }
+  if (user && !autorise) {
+    return (
+      <div className="min-h-screen bg-cream flex items-center justify-center px-6 text-center">
+        <div className="max-w-md">
+          <div className="text-5xl mb-4">🐴</div>
+          <h1 className="font-display text-2xl font-bold text-blue-800 mb-3">Tableau réservé au club</h1>
+          <p className="font-body text-sm text-gray-500 mb-6">
+            Ce tableau nomme les cavaliers du jour : il ne s&apos;affiche que sur une tablette connectée avec un compte du club.
+          </p>
+          <a href="/borne" className="inline-block px-6 py-3 rounded-xl bg-blue-500 text-white font-body text-sm font-semibold no-underline">Ouvrir l&apos;assistant Câlin</a>
+        </div>
+      </div>
+    );
   }
   if (!user) {
     return (
@@ -57,7 +73,7 @@ export default function BorneTableauPage() {
         <div className="max-w-md">
           <div className="text-5xl mb-4">🔒</div>
           <h1 className="font-display text-2xl font-bold text-blue-800 mb-3">Borne non connectée</h1>
-          <p className="font-body text-sm text-gray-500 mb-6">Connectez cette tablette avec le compte du club pour afficher le tableau du jour.</p>
+          <p className="font-body text-sm text-gray-500 mb-6">Connectez cette tablette avec un compte du club pour afficher le tableau du jour.</p>
           <a href="/espace-cavalier" className="inline-block px-6 py-3 rounded-xl bg-blue-500 text-white font-body text-sm font-semibold no-underline">Se connecter</a>
         </div>
       </div>

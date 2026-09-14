@@ -11,11 +11,17 @@ export const dynamic = "force-dynamic";
  * GET /api/borne/tableau — les cours du jour avec les prénoms des cavaliers,
  * pour le « tableau du jour » de la borne (voir lib/borne-tableau).
  *
- * Réservé à une tablette connectée (comme le reste de la borne), limité en
- * débit. Lecture seule ; ne renvoie que titre, horaire, moniteur et prénoms.
+ * RÉSERVÉ AU PERSONNEL (compte administrateur ou moniteur de la tablette).
+ * Les autres routes de la borne se contentent d'un compte connecté : elles ne
+ * renvoient que des informations publiques (horaires, tarifs, places). Ce
+ * tableau nomme des enfants : ouvert à tout compte connecté, n'importe quelle
+ * famille aurait pu lire les prénoms et les poneys de toute la journée.
+ *
+ * Lecture seule, limité en débit ; ne renvoie que titre, horaire, moniteur,
+ * prénoms et poney.
  */
 export async function GET(req: NextRequest) {
-  const auth = await verifyAuth(req);
+  const auth = await verifyAuth(req, { staffOnly: true });
   if (auth instanceof NextResponse) return auth;
 
   const rl = await checkRateLimit({ uid: auth.uid, routeKey: "borne_tableau", limit: 12, windowMs: 60_000 });
