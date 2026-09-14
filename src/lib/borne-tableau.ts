@@ -11,13 +11,16 @@
  * sur la tablette quand il le souhaite.
  *
  * Ce qui sort d'ici, et rien d'autre : titre du cours, horaire, moniteur,
- * PRÉNOMS. Pas de nom de famille, pas d'identifiant, pas de famille. Les
+ * PRÉNOMS et poney affecté (celui du Montoir). Pas de nom de famille, pas
+ * d'identifiant, pas de famille. Les
  * places tenues non payées et les inscriptions annulées ne figurent pas.
  * Un cours terminé disparaît un quart d'heure après sa fin. Module pur.
  */
 
 export interface InscritBrut {
   childName?: string | null;
+  /** Poney affecté depuis le Montoir. */
+  horseName?: string | null;
   pending?: boolean | null;
   cancelled?: boolean | null;
   presence?: string | null;
@@ -45,7 +48,8 @@ export interface CarteTableau {
   fin: string;
   moniteur: string;
   etat: EtatCours;
-  prenoms: string[];
+  /** Un cavalier : son prénom et, s'il est affecté, son poney. */
+  cavaliers: { prenom: string; poney: string }[];
 }
 
 /** Un cours « bientôt » : il commence dans moins de 45 minutes. */
@@ -77,13 +81,19 @@ export function construireTableauDuJour(creneaux: CreneauBrut[], maintenantHHMM:
     const fin = minutes(c.endTime) ?? (debut != null ? debut + 60 : null);
     if (debut == null || fin == null) continue;
     if (fin + REMANENCE_MIN < now) continue;
-    const prenoms = Array.from(new Set(
-      (c.enrolled || [])
-        .filter((e) => e && !e.pending && !e.cancelled && e.presence !== "absent")
-        .map((e) => prenomAffiche(e.childName))
-        .filter(Boolean),
-    )).sort((a, b) => a.localeCompare(b, "fr"));
-    if (prenoms.length === 0) continue;
+    const vus = new Set<string>();
+    const cavaliers: { prenom: string; poney: string }[] = [];
+    for (const e of c.enrolled || []) {
+      if (!e || e.pending || e.cancelled || e.presence === "absent") continue;
+      const prenom = prenomAffiche(e.childName);
+      const poney = String(e.horseName || "").trim();
+      const cle = `${prenom}|${poney}`;
+      if (!prenom || vus.has(cle)) continue;
+      vus.add(cle);
+      cavaliers.push({ prenom, poney });
+    }
+    cavaliers.sort((a, b) => a.prenom.localeCompare(b.prenom, "fr"));
+    if (cavaliers.length === 0) continue;
     const etat: EtatCours = debut <= now ? "en_cours" : debut - now <= BIENTOT_MIN ? "bientot" : "a_venir";
     cartes.push({
       id: c.id,
@@ -93,7 +103,7 @@ export function construireTableauDuJour(creneaux: CreneauBrut[], maintenantHHMM:
       fin: String(c.endTime || ""),
       moniteur: String(c.monitor || ""),
       etat,
-      prenoms,
+      cavaliers,
     });
   }
   return cartes.sort((a, b) => a.debut.localeCompare(b.debut) || a.titre.localeCompare(b.titre, "fr"));

@@ -77,7 +77,7 @@ export default function BorneTableauPage() {
           <h1 className="font-display text-4xl md:text-5xl font-bold leading-tight">Bienvenue&nbsp;!</h1>
           <p className="font-body text-white/70 text-base mt-1 capitalize">{dateLongue}{heure ? ` · ${heure}` : ""}</p>
         </div>
-        <p className="font-body text-sm text-white/60 max-w-xs">Retrouvez votre cours et votre prénom ci-dessous. Parents : café et thé vous attendent dans la salle de club.</p>
+        <p className="font-body text-sm text-white/60 max-w-xs">Retrouvez votre cours, votre prénom et votre poney ci-dessous. Parents : café et thé vous attendent dans la salle de club.</p>
       </header>
 
       {erreur && <p className="font-body text-sm text-red-300 mb-4">{erreur}</p>}
@@ -100,8 +100,13 @@ export default function BorneTableauPage() {
                 <span className={`font-body text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full shrink-0 ${e.cls}`}>{e.texte}</span>
               </div>
               <ul className="flex flex-wrap gap-2 list-none p-0 m-0">
-                {c.prenoms.map((p) => (
-                  <li key={p} className={`font-body text-lg font-semibold px-3 py-1.5 rounded-xl ${enCours ? "bg-amber-100 text-blue-900" : "bg-white/10 text-white"}`}>{p}</li>
+                {c.cavaliers.map((r) => (
+                  <li key={`${r.prenom}|${r.poney}`} className={`font-body px-3 py-1.5 rounded-xl ${enCours ? "bg-amber-100 text-blue-900" : "bg-white/10 text-white"}`}>
+                    <span className="text-lg font-semibold">{r.prenom}</span>
+                    {r.poney
+                      ? <span className={`ml-2 text-base ${enCours ? "text-blue-900/70" : "text-white/70"}`}>🐴 {r.poney}</span>
+                      : <span className={`ml-2 text-sm italic ${enCours ? "text-blue-900/40" : "text-white/40"}`}>poney à venir</span>}
+                  </li>
                 ))}
               </ul>
             </section>
