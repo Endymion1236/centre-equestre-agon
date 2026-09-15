@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifierAccesBorne } from "@/lib/borne-acces-server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { chercherCreneauxBorneDetaille } from "@/lib/borne-creneaux";
 
@@ -18,7 +18,8 @@ export const maxDuration = 15;
  * LECTURE SEULE : données publiques uniquement (voir chercherCreneauxBorne).
  */
 export async function POST(req: NextRequest) {
-  const auth = await verifyAuth(req);
+  // Personnel du club ou compte de la borne déclaré (cf. lib/borne-acces).
+  const auth = await verifierAccesBorne(req);
   if (auth instanceof NextResponse) return auth;
 
   const rl = await checkRateLimit({

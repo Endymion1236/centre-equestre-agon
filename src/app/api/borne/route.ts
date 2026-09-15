@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifierAccesBorne } from "@/lib/borne-acces-server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { chercherCreneauxBorne } from "@/lib/borne-creneaux";
 import { bornePromptSysteme } from "@/lib/borne-prompt";
@@ -53,7 +53,8 @@ export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire : la tablette borne reste connectée avec un compte
   // dédié. Pas de route ouverte au public — les appels IA/TTS sont facturés,
   // un endpoint anonyme serait une pompe à frais.
-  const auth = await verifyAuth(req);
+  // Personnel du club ou compte de la borne déclaré (cf. lib/borne-acces).
+  const auth = await verifierAccesBorne(req);
   if (auth instanceof NextResponse) return auth;
 
   // 🚦 Rate limit : 20 questions / minute pour la borne (une conversation
