@@ -1,5 +1,23 @@
 import { titreAvecNiveau } from "./promenade-niveau";
 
+/**
+ * Renseignements publics repris de la fiche activité (Admin → Activités) :
+ * ce que « En savoir plus sur cette activité » doit montrer.
+ *
+ * Le lien du planning public renvoyait vers le catalogue des activités,
+ * choisi sur le seul TYPE du créneau : une animation ponctuelle (« Le Grand
+ * Défi d'Halloween ») y menait à la page générale, sans un mot sur elle. Le
+ * club décrit pourtant chaque activité dans son catalogue ; il suffisait
+ * d'apporter cette description jusqu'au planning.
+ */
+export interface DetailsActivitePublique {
+  description?: string;
+  ageMin?: number;
+  ageMax?: number | null;
+  galopRequired?: string | null;
+  conditionsAcces?: string | null;
+}
+
 export interface PublicPlanningSlot {
   id: string;
   activityTitle: string;
@@ -18,6 +36,50 @@ export interface PublicPlanningSlot {
   allowDayBooking?: boolean;
   /** Tarif TTC d'une journee isolee, quand l'inscription a la journee est ouverte. */
   priceTTCDay?: number;
+  /** Fiche du catalogue dont ce créneau est une séance. */
+  activityId?: string;
+  /** Renseignements publics de cette fiche, joints par l'API du planning. */
+  details?: DetailsActivitePublique;
+}
+
+/** Les seuls champs d'une fiche activité montrés au public. Rien d'autre n'en sort. */
+export function detailsActivitePublique(data: Record<string, unknown> | null | undefined): DetailsActivitePublique | undefined {
+  if (!data) return undefined;
+  const texteCourt = (v: unknown, max: number) => {
+    const t = typeof v === "string" ? v.trim() : "";
+    return t ? t.slice(0, max) : undefined;
+  };
+  const nombre = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined);
+  const details: DetailsActivitePublique = {
+    description: texteCourt(data.description, 1500),
+    ageMin: nombre(data.ageMin),
+    ageMax: nombre(data.ageMax) ?? null,
+    galopRequired: texteCourt(data.galopRequired, 60) ?? null,
+    conditionsAcces: texteCourt(data.conditionsAcces, 400) ?? null,
+  };
+  const utile = details.description || details.ageMin !== undefined || details.galopRequired || details.conditionsAcces;
+  return utile ? details : undefined;
+}
+
+/** Tranche d'âge en clair : « De 6 à 12 ans », « À partir de 6 ans », « Jusqu'à 12 ans ». */
+export function trancheAge(details: Pick<DetailsActivitePublique, "ageMin" | "ageMax">): string {
+  const min = details.ageMin;
+  const max = typeof details.ageMax === "number" ? details.ageMax : null;
+  if (min !== undefined && max !== null) return min === max ? `${min} ans` : `De ${min} à ${max} ans`;
+  if (min !== undefined && min > 0) return `À partir de ${min} ans`;
+  if (max !== null) return `Jusqu'à ${max} ans`;
+  return "";
+}
+
+/** Le contenu du panneau « En savoir plus » : un texte, et quelques repères. */
+export function renseignementsActivite(details: DetailsActivitePublique | undefined): { description: string; puces: string[] } {
+  if (!details) return { description: "", puces: [] };
+  const puces: string[] = [];
+  const age = trancheAge(details);
+  if (age) puces.push(age);
+  if (details.galopRequired) puces.push(`Niveau : ${details.galopRequired}`);
+  if (details.conditionsAcces) puces.push(details.conditionsAcces);
+  return { description: details.description || "", puces };
 }
 
 /**
@@ -101,6 +163,8 @@ export function toPublicPlanningSlot(id: string, data: Record<string, unknown>):
     maxPlaces: Math.max(0, number(data.maxPlaces)),
     enrolledCount,
     status: status || undefined,
+    // Fiche du catalogue : l'API y joint la description publique.
+    activityId: text(data.activityId) || undefined,
   };
 
   const priceTTC = optionalNumber(data.priceTTC);
