@@ -434,8 +434,13 @@ export default function FamilyCard({
                     : family.parentName || "Sans nom"
                   }
                 </div>
+                {/* Une fiche sans nom (compte créé par email et mot de passe : le
+                    fournisseur n'en donne aucun) doit se corriger d'un geste,
+                    depuis la liste, sans chercher où cliquer. */}
                 {!(family as any).lastName && estParticulier && (
-                  <span title="Nom/prénom séparés manquants" className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded cursor-default">⚠️ à compléter</span>
+                  <button type="button" title="Renseigner le nom et le prénom du responsable"
+                    onClick={(e) => { e.stopPropagation(); setIsExpanded(true); startEditFamily(); }}
+                    className="font-body text-[10px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded cursor-pointer">⚠️ à compléter</button>
                 )}
                 {family.accountType === "asso" && <span className="font-body text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">ASSO</span>}
                 {family.accountType === "collectivite" && <span className="font-body text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">COLLECTIVITÉ</span>}

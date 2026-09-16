@@ -20,7 +20,7 @@ export interface ContextePaiement {
   cart: CartItem[];
   creneaux: Creneau[];
   user: { uid: string; email?: string | null } | null | undefined;
-  family: { parentName?: string; parentEmail?: string } | null | undefined;
+  family: { parentName?: string; lastName?: string; parentEmail?: string } | null | undefined;
   reservationsFermees: boolean;
   messageFermeture: string;
   depositMode: "full" | "deposit";
@@ -48,6 +48,14 @@ export async function payerPanier(ctx: ContextePaiement, rappels: RappelsPaiemen
       "Les réservations en ligne ne sont pas encore ouvertes. Contactez le centre équestre pour toute demande.");
     return;
   }
+    // Une fiche sans nom donne une famille « Sans nom » à l'accueil et des
+    // confirmations adressées à personne : le nom se demande AVANT le
+    // paiement, pas après (cf. lib/nom-destinataire).
+    if (!String(family.lastName || family.parentName || "").trim()) {
+      toast("Avant de réserver, indiquez votre nom dans « Mon profil ».", "warning", 9000);
+      setTimeout(() => { window.location.href = "/espace-cavalier/profil"; }, 1500);
+      return;
+    }
 
   setPaying(true);
   try {

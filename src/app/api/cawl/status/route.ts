@@ -9,6 +9,7 @@ import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
 import { moyenPaiementCawl, libelleEncaissementCawl } from "@/lib/cawl-moyen-paiement";
+import { nomDestinataireOuDefaut } from "@/lib/nom-destinataire";
 import { enregistrerEchecCawl } from "@/lib/cawl-tentatives";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
@@ -453,7 +454,7 @@ export async function GET(req: NextRequest) {
             ? `Le solde de ${soldeRestant.toFixed(2)}€ sera prélevé automatiquement sur votre carte enregistrée environ une semaine avant le début du stage. Aucune action n'est requise.`
             : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
           const vars: Record<string, string | number> = hasStage ? {
-            parentName: pData.familyName || "Client",
+            parentName: nomDestinataireOuDefaut({ familyName: pData.familyName, items: pData.items }),
             // Résout {fidelite} dans le gabarit : les points ont été crédités
             // plus haut, le solde lu par le loader est donc à jour.
             familyId: familyId || pData.familyId || "",
@@ -477,7 +478,7 @@ export async function GET(req: NextRequest) {
             total: (pData.totalTTC || 0).toFixed(2),
             soldePhrase,
           } : {
-            parentName: pData.familyName || "Client",
+            parentName: nomDestinataireOuDefaut({ familyName: pData.familyName, items: pData.items }),
             familyId: familyId || pData.familyId || "",
             montant: paidAmount.toFixed(2),
             prestations: lignesDetail || prestations,

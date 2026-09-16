@@ -813,6 +813,14 @@ export default function InscriptionAnnuellePage() {
   // Crée toutes les inscriptions puis UN SEUL paiement groupé + 1 checkout CAWL.
   const handleEnrollAll = async () => {
     if (!user || !family) return;
+    // Une fiche sans nom donne une famille « Sans nom » à l'accueil et des
+    // confirmations adressées à personne : le nom se demande AVANT le
+    // paiement, pas après (cf. lib/nom-destinataire).
+    if (!String((family as any).lastName || family.parentName || "").trim()) {
+      toast("Avant de réserver, indiquez votre nom dans « Mon profil ».", "warning", 9000);
+      setTimeout(() => { window.location.href = "/espace-cavalier/profil"; }, 1500);
+      return;
+    }
     // Construire la liste finale : panier + inscription en cours (si valide)
     const items: PanierItem[] = [...panier];
     if (child && selectedSlotsData.length > 0) {

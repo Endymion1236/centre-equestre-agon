@@ -25,6 +25,7 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { lignesDetailHtml, libelleModePaiement } from "@/lib/email-prestations";
+import { nomDestinataireOuDefaut } from "@/lib/nom-destinataire";
 
 export const dynamic = "force-dynamic";
 
@@ -310,7 +311,7 @@ export async function POST(req: NextRequest) {
         const to = String(familyEmail || "").trim();
         if (to && resendKey && isRecipientAllowed(to)) {
           const { subject, html } = await loadTemplate("confirmationPaiement", {
-            parentName: familyName || "Client",
+            parentName: nomDestinataireOuDefaut({ familyName, items: itemsCommande }),
             familyId: uid,
             montant: toUse.toFixed(2),
             prestations: lignesDetailHtml(itemsCommande),

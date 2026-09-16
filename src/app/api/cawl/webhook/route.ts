@@ -9,6 +9,7 @@ import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
 import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
 import { moyenPaiementCawl, libelleEncaissementCawl } from "@/lib/cawl-moyen-paiement";
+import { nomDestinataireOuDefaut } from "@/lib/nom-destinataire";
 import { enregistrerEchecCawl } from "@/lib/cawl-tentatives";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
@@ -372,7 +373,9 @@ export async function POST(req: NextRequest) {
 
           // ── Email de confirmation ─────────────────────────────────────
           const parentEmail = pData.familyEmail || "";
-          const parentName = pData.familyName || "Client";
+          // Fiche sans nom : on s'adresse à la famille par le nom de l'enfant
+          // inscrit plutôt qu'à « Client » (cf. lib/nom-destinataire).
+          const parentName = nomDestinataireOuDefaut({ familyName: pData.familyName, items: pData.items });
           const resendKey = process.env.RESEND_API_KEY;
           const fromEmail = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";
 
