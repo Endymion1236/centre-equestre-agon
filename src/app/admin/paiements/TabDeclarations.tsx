@@ -135,6 +135,16 @@ export function TabDeclarations(props: TabDeclarationsProps) {
                       </span>
                     </div>
                     <div className="font-body text-sm text-slate-600">{declaration.activityTitle}</div>
+                    {/* Forfait et créneaux demandés : sans eux, la déclaration
+                        ne disait ni quel cours ni quel jour était réservé. */}
+                    {(declaration.detailLignes || []).map((ligne) => (
+                      <div key={ligne} className="font-body text-xs text-blue-700 bg-blue-50 rounded-md px-2 py-1 mt-1 inline-block mr-1">{ligne}</div>
+                    ))}
+                    {(declaration.familyEmail || declaration.familyPhone) && (
+                      <div className="font-body text-xs text-slate-400 mt-1">
+                        {[declaration.familyEmail, declaration.familyPhone].filter(Boolean).join(" · ")}
+                      </div>
+                    )}
                     {nbEcheances > 1 && (
                       <div className="font-body text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-2.5 py-1.5 mt-2 inline-block">
                         📅 {nbEcheances} échéances mensuelles · aucun encaissement immédiat

@@ -27,6 +27,9 @@ export type DeclarationPaiement = {
   note?: string;
   chequeRef?: string;
   activityTitle?: string;
+  /** Une ligne par enfant : forfait et créneaux demandés (inscription annuelle). */
+  detailLignes?: string[];
+  familyPhone?: string;
   dateEncaissement?: string;
   createdAt?: { seconds?: number };
   status?: string;

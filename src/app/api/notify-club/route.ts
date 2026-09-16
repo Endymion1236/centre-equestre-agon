@@ -3,7 +3,7 @@ import { verifyAuth } from "@/lib/api-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { refreshEmailMode, isRecipientAllowed, blockedLog } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
-import { emailLayout } from "@/lib/email-templates";
+import { emailLayout, emailButton } from "@/lib/email-templates";
 
 /**
  * POST /api/notify-club — notification du club par une FAMILLE.
@@ -84,12 +84,23 @@ export async function POST(req: NextRequest) {
     // Contenu STRUCTURÉ : les lignes sont échappées, aucun HTML client.
     const echappe = (s: string) =>
       String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    // Bouton vers l'écran qui traite la demande : l'adresse est construite
+    // ici, côté serveur, jamais fournie par le client.
+    const origine = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/\/$/, "");
+    const CIBLES: Record<string, { url: string; libelle: string }> = {
+      declaration_paiement: { url: "/admin/paiements?tab=declarations", libelle: "Ouvrir les déclarations" },
+      inscription_annuelle: { url: "/admin/paiements?tab=declarations", libelle: "Ouvrir les déclarations" },
+      reservation_paiement: { url: "/admin/paiements?tab=declarations", libelle: "Ouvrir les déclarations" },
+      devis_reponse: { url: "/admin/devis", libelle: "Ouvrir les devis" },
+    };
+    const cible = origine ? CIBLES[context] : null;
     const corps = emailLayout(
       `<p style="margin:0 0 12px;font-size:15px;font-weight:600;color:#1e293b;">${echappe(titre)}</p>` +
         lignes
           .slice(0, 20)
           .map((l: unknown) => `<p style="margin:0 0 6px;font-size:14px;color:#334155;">${echappe(String(l))}</p>`)
-          .join("")
+          .join("") +
+        (cible ? emailButton(cible.libelle, `${origine}${cible.url}`) : "")
     );
 
     const r = await fetch("https://api.resend.com/emails", {
