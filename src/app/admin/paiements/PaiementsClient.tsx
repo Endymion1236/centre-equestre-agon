@@ -118,6 +118,9 @@ export default function PaiementsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [declarations, setDeclarations] = useState<any[]>([]);
+  // Déclarations déjà validées, rejetées ou réglées en ligne : elles quittaient
+  // l'écran sans trace, on ne pouvait plus les retrouver.
+  const [declarationsTraitees, setDeclarationsTraitees] = useState<any[]>([]);
   // Chèques différés (pour calcul du badge de retard dans la barre d'onglets)
   const [chequesDiffresCount, setChequesDiffresCount] = useState<{ total: number; overdue: number }>({ total: 0, overdue: 0 });
 
@@ -151,6 +154,19 @@ export default function PaiementsPage() {
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
       const decls = declSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setDeclarations(decls);
+      // Historique récent, en second appel : la requête des déclarations EN
+      // ATTENTE reste sans tri ni limite, pour qu'une déclaration ancienne ou
+      // sans horodatage ne puisse jamais disparaître de la liste à traiter.
+      try {
+        const traiteesSnap = await getDocs(query(collection(db, "payment_declarations"), orderBy("createdAt", "desc"), limit(100)));
+        setDeclarationsTraitees(
+          traiteesSnap.docs
+            .map(d => ({ id: d.id, ...(d.data() as any) }))
+            .filter((d: any) => d.status !== "pending_confirmation"),
+        );
+      } catch (e) {
+        console.warn("[paiements] historique des déclarations non chargé :", e);
+      }
       // Charger les chèques différés pour le badge
       try {
         const chqSnap = await getDocs(collection(db, "cheques-differes"));
@@ -1096,6 +1112,7 @@ export default function PaiementsPage() {
         <TabDeclarations
           loading={loading} payments={payments}
           declarations={declarations} setDeclarations={setDeclarations}
+          declarationsTraitees={declarationsTraitees}
           families={families} avoirs={avoirs}
           broadcastSource={broadcastSource} setBroadcastSource={setBroadcastSource}
           broadcastRows={broadcastRows} setBroadcastRows={setBroadcastRows}

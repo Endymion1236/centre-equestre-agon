@@ -4,6 +4,7 @@ import { Card } from "@/components/ui";
 import {
   confirmerDeclarationPaiement,
   libelleModeDeclaration,
+  libelleStatutDeclaration,
   rejeterDeclarationPaiement,
   type DeclarationPaiement,
 } from "./declarations-actions";
@@ -14,6 +15,8 @@ interface TabDeclarationsProps {
   payments: any[];
   declarations: any[];
   setDeclarations: React.Dispatch<React.SetStateAction<any[]>>;
+  /** Déjà validées, rejetées ou réglées en ligne : consultation seule. */
+  declarationsTraitees?: any[];
   families: any[];
   avoirs: any[];
   broadcastSource: any | null;
@@ -44,7 +47,8 @@ function iconeMode(mode: string): string {
 }
 
 export function TabDeclarations(props: TabDeclarationsProps) {
-  const { declarations, setDeclarations, toast, refreshAll } = props;
+  const { declarations, setDeclarations, declarationsTraitees = [], toast, refreshAll } = props;
+  const [historiqueOuvert, setHistoriqueOuvert] = useState(false);
   const [confirmingDeclId, setConfirmingDeclId] = useState<string | null>(null);
 
   const retirerDeLaListe = (id: string) => {
@@ -185,6 +189,45 @@ export function TabDeclarations(props: TabDeclarationsProps) {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {/* ─── Déjà traitées ───────────────────────────────────────────────
+          Une déclaration validée, rejetée, ou réglée en ligne par la famille
+          quittait l'écran sans trace : impossible de dire si elle avait
+          existé, et ce qu'elle était devenue. */}
+      {declarationsTraitees.length > 0 && (
+        <div>
+          <button type="button" onClick={() => setHistoriqueOuvert((v) => !v)}
+            className="font-body text-xs font-semibold text-slate-500 bg-transparent border-none cursor-pointer p-0 hover:text-slate-700">
+            {historiqueOuvert ? "▾" : "▸"} Déclarations déjà traitées ({declarationsTraitees.length})
+          </button>
+          {historiqueOuvert && (
+            <div className="flex flex-col gap-1.5 mt-2">
+              {declarationsTraitees.map((brute: any) => {
+                const d = brute as DeclarationPaiement;
+                const quand = d.createdAt?.seconds ? new Date(d.createdAt.seconds * 1000) : null;
+                return (
+                  <div key={d.id} className="flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="font-body text-sm font-semibold text-slate-700 truncate">
+                        {d.familyName} · {(d.montant || 0).toFixed(2)}€ · {libelleModeDeclaration(d.mode)}
+                      </div>
+                      <div className="font-body text-xs text-slate-400 truncate">
+                        {d.activityTitle}{quand ? ` · déclarée le ${quand.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}` : ""}
+                      </div>
+                    </div>
+                    <span className={`font-body text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 border ${
+                      d.status === "confirmed" ? "bg-green-50 text-green-700 border-green-200"
+                      : d.status === "rejected" ? "bg-red-50 text-red-600 border-red-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"}`}>
+                      {libelleStatutDeclaration(d.status)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>
