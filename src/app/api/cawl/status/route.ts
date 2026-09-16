@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { encadreConditionsStage, encadreConsignesBalade, estBalade } from "@/lib/cgv-clauses";
+import { encadreConditionsStage, blocsConfirmationBalade, estBalade } from "@/lib/cgv-clauses";
 import { deciderPaiement } from "@/lib/cawl-status";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -496,7 +496,7 @@ export async function GET(req: NextRequest) {
           const estStage = items.some((i: any) => String(i.activityType || "").includes("stage"));
           // Balade : l'heure d'arrivée (30 min avant) ne figurait nulle part
           // dans la confirmation — les familles arrivaient à l'heure du départ.
-          const supplement = estStage ? encadreConditionsStage() : items.some((i: any) => estBalade(i)) ? encadreConsignesBalade() : "";
+          const supplement = estStage ? encadreConditionsStage() : items.some((i: any) => estBalade(i)) ? blocsConfirmationBalade() : "";
           const { subject, html } = await loadTemplate(templateKey, vars, supplement);
           const htmlFinal = html;
           fetch("https://api.resend.com/emails", {

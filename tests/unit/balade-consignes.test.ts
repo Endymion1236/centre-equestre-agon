@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  blocsConfirmationBalade,
   BALADE_ARRIVEE_MINUTES,
   CONSIGNE_ARRIVEE_BALADE,
   CONSIGNE_ARRIVEE_BALADE_COURTE,
@@ -57,3 +58,11 @@ test("les autres activités ne l'affichent pas", () => {
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
+
+test("la confirmation d'une balade porte les consignes ET la règle du petit comité", () => {
+  const html = blocsConfirmationBalade();
+  assert.match(html, /Avant le départ/);
+  assert.match(html, /Conditions d'annulation/);
+  assert.match(html, /nombre minimum de participants/);
+  assert.match(html, /petit comité/);
+});

@@ -189,6 +189,20 @@ export function encadreConsignesBalade(): string {
     + emailParagraphe("À prévoir : pantalon long, chaussures fermées. Bombe fournie si besoin.", 13));
 }
 
+/**
+ * Ce qu'une confirmation de balade doit porter : les consignes de départ,
+ * puis les conditions — dont la règle du petit comité.
+ *
+ * `encadreConditionsBalade` existait sans être utilisé nulle part : la
+ * clause du minimum de participants ne figurait que sur la page CGV du
+ * site. Une famille réglait sa promenade sans jamais lire, dans un email,
+ * qu'elle pouvait être maintenue en petit comité avec supplément, reportée,
+ * ou remboursée.
+ */
+export function blocsConfirmationBalade(): string {
+  return encadreConsignesBalade() + encadreConditionsBalade();
+}
+
 /** Même encadré que pour les stages, avec les clauses balades. */
 export function encadreConditionsBalade(): string {
   return emailPanneau("Conditions d'annulation",
