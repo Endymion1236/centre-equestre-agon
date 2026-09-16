@@ -35,6 +35,7 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { toLocalDateString, todayLocalString } from "@/lib/date-local";
 import type { Child } from "@/types";
+import { libelleFournisseur } from "@/lib/fournisseur-connexion";
 
 type ProfileTab = "famille" | "cavaliers" | "paiement";
 
@@ -627,7 +628,7 @@ export default function ProfilPage() {
                 <div className="font-body text-sm font-bold text-blue-800">Compte de connexion</div>
                 <div className="font-body text-xs text-gray-600 mt-0.5">{family?.parentEmail || user?.email || "—"}</div>
               </div>
-              <Badge color="blue">{family?.authProvider === "google" ? "Google" : family?.authProvider === "facebook" ? "Facebook" : "Email"}</Badge>
+              <Badge color="blue">{libelleFournisseur(family?.authProvider)}</Badge>
             </div>
           </Card>
 

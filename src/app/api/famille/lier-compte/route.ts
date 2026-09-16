@@ -37,6 +37,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { FieldValue } from "firebase-admin/firestore";
+import { fournisseurDepuisJeton } from "@/lib/fournisseur-connexion";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +73,7 @@ export async function POST(req: NextRequest) {
         parentName: auth.name || "",
         parentEmail: email,
         parentPhone: "",
-        authProvider: auth.firebase?.sign_in_provider === "google.com" ? "google" : "facebook",
+        authProvider: fournisseurDepuisJeton(auth.firebase?.sign_in_provider),
         authUid: uid,
         children: [],
         createdAt: FieldValue.serverTimestamp(),
@@ -115,7 +116,7 @@ export async function POST(req: NextRequest) {
     const fiche = {
       ...data,
       authUid: uid,
-      authProvider: auth.firebase?.sign_in_provider === "google.com" ? "google" : "facebook",
+      authProvider: fournisseurDepuisJeton(auth.firebase?.sign_in_provider),
       parentName: data.parentName || auth.name || "",
       updatedAt: FieldValue.serverTimestamp(),
     };

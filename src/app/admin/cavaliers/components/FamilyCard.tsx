@@ -19,6 +19,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import LinkChildrenModal from "./LinkChildrenModal";
 import MoveChildModal from "./MoveChildModal";
 import EmailModal from "./EmailModal";
+import { libelleFournisseur, libelleFournisseurCourt } from "@/lib/fournisseur-connexion";
 
 const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 const inputStyle = "w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400";
@@ -506,8 +507,8 @@ export default function FamilyCard({
               </a>
             )}
             <span className="hidden sm:block">
-              <Badge color={family.authProvider === "admin" ? "gray" : family.authProvider === "google" ? "blue" : "purple"}>
-                {family.authProvider === "admin" ? "Créé admin" : family.authProvider === "google" ? "Google" : "Facebook"}
+              <Badge color={family.authProvider === "admin" ? "gray" : family.authProvider === "google" ? "blue" : family.authProvider === "facebook" ? "purple" : "green"}>
+                {libelleFournisseurCourt(family.authProvider)}
               </Badge>
             </span>
             {isExpanded ? <ChevronUp size={18} className="text-slate-600"/> : <ChevronDown size={18} className="text-slate-600"/>}
@@ -702,7 +703,7 @@ export default function FamilyCard({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div><div className={labelStyle}>Email</div><div className="font-body text-sm break-all">{family.parentEmail ? <a href={`mailto:${family.parentEmail}`} className="text-blue-800 no-underline hover:underline">{family.parentEmail}</a> : "—"}</div></div>
                   <div><div className={labelStyle}>Téléphone</div><div className="font-body text-sm">{family.parentPhone ? <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline">📞 {family.parentPhone}</a> : "Non renseigné"}{(family as any).parentPhone2 ? <a href={`tel:${(family as any).parentPhone2.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline block mt-0.5">📞 {(family as any).parentPhone2}</a> : null}</div></div>
-                  <div><div className={labelStyle}>Inscription</div><div className="font-body text-sm text-blue-800">{family.authProvider === "admin" ? "Créé par l'admin" : `Via ${family.authProvider}`}</div></div>
+                  <div><div className={labelStyle}>Inscription</div><div className="font-body text-sm text-blue-800">{libelleFournisseur(family.authProvider)}</div></div>
                 </div>
                 {(family.address || family.city) && (
                   <div className="mt-2">
