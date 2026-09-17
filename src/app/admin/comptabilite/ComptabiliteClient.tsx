@@ -10,7 +10,7 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, FileText, Building2, Receipt, Calculator, Printer, Sparkles, Bot, EyeOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
-import { construireFecVentes } from "./fec-utils";
+import { analyserFecVentes } from "./fec-utils";
 import PanneauxDebug from "./PanneauxDebug";
 import OngletRemise from "./OngletRemise";
 import { useRapprochement } from "./useRapprochement";
@@ -201,7 +201,25 @@ export default function ComptabilitePage() {
     setIaAnswerLoading(false);
   };
   const generateFEC = () => {
-    const content = construireFecVentes(filteredPayments);
+    const { contenu: content, anomalies } = analyserFecVentes(filteredPayments);
+
+    // Le fichier reste équilibré quoi qu'il arrive, mais si le détail d'une
+    // facture ne retombe pas sur son total, autant le savoir avant de
+    // l'envoyer au comptable plutôt qu'à sa relecture.
+    if (anomalies.length > 0) {
+      const detail = anomalies
+        .slice(0, 8)
+        .map((a) => `• ${a.piece} — ${a.familyName} : écart de ${a.ecart.toFixed(2)} €`)
+        .join("\n");
+      const reste = anomalies.length > 8 ? `\n… et ${anomalies.length - 8} autre(s).` : "";
+      alert(
+        `${anomalies.length} facture(s) dont le détail des articles ne retombe pas ` +
+          `sur le total :\n\n${detail}${reste}\n\n` +
+          `Le FEC est quand même équilibré : l'écart apparaît sur une ligne ` +
+          `« Écart de ventilation ». À vérifier avant la clôture.`,
+      );
+    }
+
     const blob = new Blob([content], { type: "text/tab-separated-values;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
