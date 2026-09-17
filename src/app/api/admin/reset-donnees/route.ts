@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
+import { isProdEnvironment } from "@/lib/reset-guard";
+import {
+  filtrerCollectionsEffacables,
+  messageCollectionsProtegees,
+} from "@/lib/collections-comptables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -28,6 +33,13 @@ export const maxDuration = 300;
  *   - LISTE BLANCHE EXPLICITE : on n'efface QUE les collections listées dans
  *     COLLECTIONS_A_EFFACER. Toute collection non listée (= structure) est
  *     intouchée par construction, même si elle est ajoutée plus tard.
+ *   - VERROU FISCAL : en PRODUCTION, les collections à valeur fiscale
+ *     (encaissements, avoirs, clôtures de caisse, journal d'audit des
+ *     factures, registre des espèces…) sont retirées du périmètre par
+ *     construction — cf. src/lib/collections-comptables.ts. Le mot-clé
+ *     EFFACER-PROD ne les débloque pas : leur conservation est une obligation
+ *     légale (art. 286-I-3° bis du CGI, art. L102 B du LPF, art. L123-22 du
+ *     Code de commerce), pas une préférence.
  */
 
 // Collections de STRUCTURE et DONNÉES CONSERVÉES — jamais touchées par cette route.
@@ -89,15 +101,23 @@ export async function POST(req: NextRequest) {
     }, { status: 403 });
   }
 
+  // Verrou fiscal : en production, on retire les pièces à conserver.
+  const { effacables, protegees } = filtrerCollectionsEffacables(
+    COLLECTIONS_A_EFFACER,
+    isProdEnvironment(),
+  );
+
   const rapport: any = {
     projectId,
     mode: apply ? "APPLY (effacement réel)" : "DRY-RUN (comptage seul)",
     structure_conservee: COLLECTIONS_STRUCTURE,
+    collections_protegees: protegees,
+    avertissement: messageCollectionsProtegees(protegees) || undefined,
     par_collection: {} as Record<string, number>,
     total_documents: 0,
   };
 
-  for (const colName of COLLECTIONS_A_EFFACER) {
+  for (const colName of effacables) {
     try {
       if (apply) {
         const n = await deleteCollection(colName);
@@ -124,6 +144,16 @@ export async function POST(req: NextRequest) {
   // introuvables ET interdisait de refacturer les mois concernés — le mois
   // restait impayé sans que rien ne le réclame. On vide donc cet historique,
   // et lui seul : le montant, la famille et le calendrier ne bougent pas.
+  //
+  // Uniquement si les factures ont réellement été effacées. En production
+  // elles sont conservées (verrou fiscal) : vider l'historique rouvrirait des
+  // mois déjà facturés et produirait des doublons de facturation.
+  if (!effacables.includes("payments")) {
+    rapport.recurrences_historique_vide =
+      "ignoré — les factures sont conservées, l'historique de facturation reste valable";
+    return NextResponse.json(rapport);
+  }
+
   try {
     const recSnap = await adminDb.collection("recurrences").get();
     const aVider = recSnap.docs.filter((d) => ((d.data() as any).facturesGenerees || []).length > 0);
