@@ -12,6 +12,7 @@ import {
   Plus, Search, Loader2, X, Save, Wallet, CreditCard, TrendingDown, TrendingUp, Check, BadgeEuro, FileDown,
 } from "lucide-react";
 import type { Family } from "@/types";
+import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 
 // ─── Types ───
 type AvoirType = "avoir" | "avance";
@@ -112,7 +113,20 @@ export default function AvoirsPage() {
     const expiry = expiryMonths === "saison"
       ? echeanceAvoir()
       : (() => { const d = new Date(); d.setMonth(d.getMonth() + parseInt(expiryMonths)); return d; })();
-    const ref = `${avoirType === "avoir" ? "AV" : "AVA"}-${Date.now().toString(36).toUpperCase()}`;
+    // Un avoir est une facture rectificative : il prend un numéro de la
+    // séquence continue (AV-YYYY-NNNN). Une avance est un acompte reçu, pas
+    // une facture — sa référence reste une simple clé technique.
+    let ref: string;
+    try {
+      ref = avoirType === "avoir"
+        ? await demanderNumeroAvoir({ familyId: selFamily, motif: reason || "Avoir manuel" })
+        : `AVA-${Date.now().toString(36).toUpperCase()}`;
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message || "Impossible d'attribuer un numéro d'avoir.");
+      setSaving(false);
+      return;
+    }
 
     try {
       await addDoc(collection(db, "avoirs"), {

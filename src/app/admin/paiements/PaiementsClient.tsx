@@ -31,6 +31,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { LiensEnvoyes, useLiensCommande } from "./LiensEnvoyes";
 import { AlerteEncaissementsInattendus } from "./AlerteEncaissementsInattendus";
 import { enregistrerEncaissement as enregistrerEncaissementPartage } from "@/lib/encaissement";
+import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 
 
 /** Libelles des modes de remboursement, pour le journal comptable. */
@@ -479,6 +480,26 @@ export default function PaiementsPage() {
   ) => {
     {
       const isForfait = estCommandeInscriptionAnnuelle(payment);
+      const avoirAmount = Math.round(data.avoir * 100) / 100;
+
+      // Le numéro d'avoir est réservé AVANT toute écriture. S'il n'est pas
+      // attribuable, on n'annule rien : une commande passée en "annulée" sans
+      // l'avoir correspondant laisserait la famille sans contrepartie.
+      // Aucun numéro n'est consommé quand il n'y a pas d'avoir à émettre.
+      let ref = "";
+      if (avoirAmount > 0) {
+        try {
+          ref = await demanderNumeroAvoir({
+            paymentId: payment.id,
+            familyId: payment.familyId,
+            motif: `Annulation (${data.motif})`,
+          });
+        } catch (e: any) {
+          console.error(e);
+          alert(e?.message || "Impossible d'attribuer un numéro d'avoir. Rien n'a été annulé.");
+          return;
+        }
+      }
 
       // Marquer cancelled d'abord pour éviter double-traitement
       await updateDoc(doc(db, "payments", payment.id), {
@@ -511,11 +532,8 @@ export default function PaiementsPage() {
         }
       }
 
-      const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
       const expiry = new Date();
       expiry.setFullYear(expiry.getFullYear() + 1);
-
-      const avoirAmount = Math.round(data.avoir * 100) / 100;
       const MOTIF_LABEL: Record<string, string> = {
         anticipee: "annulation +3 semaines",
         certificat: "certificat médical / force majeure",
@@ -645,11 +663,27 @@ export default function PaiementsPage() {
         : `Retirer "${itemToRemove.activityTitle}" ?${hasInscription ? "\n\n⚠️ Le cavalier sera aussi désinscrit." : ""}`;
       if (!confirm(msg)) return;
 
+      // Numéro réservé avant de désinscrire : si l'attribution échoue, le
+      // cavalier reste inscrit plutôt que d'être retiré sans son avoir.
+      let ref = "";
+      if (tropPercu > 0) {
+        try {
+          ref = await demanderNumeroAvoir({
+            paymentId: payment.id,
+            familyId: payment.familyId,
+            motif: `Retrait prestation — ${itemToRemove.activityTitle}`,
+          });
+        } catch (e: any) {
+          console.error(e);
+          alert(e?.message || "Impossible d'attribuer un numéro d'avoir. Rien n'a été retiré.");
+          return;
+        }
+      }
+
       // Désinscrire l'enfant du créneau
       await unenrollPaymentItem(payment, itemToRemove);
 
       if (tropPercu > 0) {
-        const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
         const expiry = new Date();
         expiry.setFullYear(expiry.getFullYear() + 1);
         const tropPercuAmount = Math.round(tropPercu * 100) / 100;

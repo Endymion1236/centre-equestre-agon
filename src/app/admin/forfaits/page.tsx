@@ -14,6 +14,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { isForfaitActif, montantRegleForfait, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
 import { estSemaineAttendue } from "@/lib/rythme";
+import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 
 interface Forfait {
   id: string;
@@ -500,7 +501,7 @@ export default function ForfaitsPage() {
               try {
                 const expiry = new Date();
                 expiry.setMonth(expiry.getMonth() + 12); // avoir valable 12 mois
-                const refAvoir = `AV-${Date.now().toString(36).toUpperCase()}`;
+                const refAvoir = await demanderNumeroAvoir({ familyId: f.familyId, motif: "Forfait" });
                 await addDoc(collection(db, "avoirs"), {
                   familyId: f.familyId,
                   familyName: f.childName ? `${f.childName}` : "",
@@ -740,7 +741,7 @@ export default function ForfaitsPage() {
                 try {
                   const expiry = new Date();
                   expiry.setMonth(expiry.getMonth() + 12);
-                  const refAvoir = `AV-${Date.now().toString(36).toUpperCase()}`;
+                  const refAvoir = await demanderNumeroAvoir({ familyId: f.familyId, motif: "Forfait" });
                   await addDoc(collection(db, "avoirs"), {
                     familyId: f.familyId,
                     familyName: f.familyName || f.childName || "",

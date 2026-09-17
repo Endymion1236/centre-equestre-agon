@@ -11,6 +11,7 @@
  */
 
 import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
+import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
@@ -499,7 +500,11 @@ export async function createAvoir(
   sourcePaymentId?: string,
   sourceType?: string,
 ) {
-  const newRef = `AV-${Date.now().toString(36).toUpperCase()}`;
+  const newRef = await demanderNumeroAvoir({
+    paymentId: sourcePaymentId,
+    familyId,
+    motif: reason,
+  });
   const expiry = echeanceAvoir();
   const baseAmount = Math.round(montant * 100) / 100;
 

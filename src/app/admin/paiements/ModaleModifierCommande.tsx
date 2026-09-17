@@ -26,6 +26,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { fetchDiscountSettings, calculateFamilyDiscount, calculateMultiStageDiscount } from "@/lib/discounts";
 import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
 import { verrouCommande } from "./commande-verrou";
+import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 
 export interface ModaleModifierCommandeProps {
   /** La commande à modifier ; la modale n'est montée que si elle existe. */
@@ -393,9 +394,9 @@ export default function ModaleModifierCommande({
                     let avoirMsg = "";
                     if (overpayment > 0) {
                       try {
-                        // Reference + expiration cohérentes avec les autres créations d'avoir
-                        // (voir lignes 679-695 dans le même fichier pour le format de référence)
-                        const avoirRef_str = `AV-${Date.now().toString(36).toUpperCase()}`;
+                        // Référence prise sur la séquence continue des avoirs
+                        // (cf. src/lib/invoice-number.ts).
+                        const avoirRef_str = await demanderNumeroAvoir({ paymentId: payment?.id, familyId: payment?.familyId, motif: "Modification de commande" });
                         const avoirExpiry = new Date();
                         avoirExpiry.setFullYear(avoirExpiry.getFullYear() + 1);
 
