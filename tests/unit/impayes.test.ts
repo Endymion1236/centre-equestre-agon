@@ -4,6 +4,7 @@ import {
   filtrerImpayes,
   grouperImpayesParEvenement,
   listerImpayes,
+  prelevementAPreparer,
   preparerMultiEncaissements,
   resumerAttentes,
   soldeRestant,
@@ -41,15 +42,28 @@ test("le solde restant tient compte du déjà encaissé", () => {
   assert.equal(soldeRestant(p()), 80);
 });
 
-test("payés, annulés, SEPA et chèques différés sont exclus", () => {
+test("payés, annulés, prélèvements ORGANISÉS et chèques différés sont exclus", () => {
   const result = listerImpayes([
     p({ id: "ok" }),
     p({ id: "paid", status: "paid" }),
     p({ id: "cancelled", status: "cancelled" }),
-    p({ id: "sepa", paymentMode: "prelevement_sepa", status: "partial" }),
+    // Prélèvement réellement posé : échéancier chiffré, ou commande marquée à l'inscription.
+    p({ id: "sepa-planifie", paymentMode: "prelevement_sepa", status: "sepa_scheduled" }),
     p({ id: "diff", paymentMode: "cheque_differe" }),
   ], "2026-09-01");
   assert.deepEqual(result.map((x) => x.id), ["ok"]);
+});
+
+test("annoncé en prélèvement mais sans échéance posée : la somme reste réclamée", () => {
+  // Une facture de récurrence porte le mode de règlement habituel de la
+  // famille ; rien n'est prélevé tant qu'aucune échéance n'existe.
+  const result = listerImpayes([
+    p({ id: "a-preparer", paymentMode: "prelevement_sepa", status: "partial", totalTTC: 900, paidAmount: 300 }),
+  ], "2026-09-01");
+  assert.deepEqual(result.map((x) => x.id), ["a-preparer"]);
+  assert.equal(prelevementAPreparer(result[0]), true);
+  assert.equal(prelevementAPreparer(p({ paymentMode: "prelevement_sepa", status: "sepa_scheduled" })), false);
+  assert.equal(prelevementAPreparer(p({ paymentMode: "cheque" })), false);
 });
 
 test("une échéance n'est impayée que si sa date est dépassée", () => {
@@ -120,7 +134,7 @@ test("seules les familles avec au moins deux factures réglables sont proposées
     p({ id: "m1", familyId: "f1", familyName: "Martin", totalTTC: 100, paidAmount: 0 }),
     p({ id: "m2", familyId: "f1", familyName: "Martin", totalTTC: 50, paidAmount: 10 }),
     p({ id: "m3", familyId: "f2", familyName: "Durand" }),
-    p({ id: "m4", familyId: "f3", familyName: "Sepa", paymentMode: "prelevement_sepa" }),
+    p({ id: "m4", familyId: "f3", familyName: "Sepa", paymentMode: "prelevement_sepa", status: "sepa_scheduled" }),
     p({ id: "m5", familyId: "f3", familyName: "Sepa" }),
   ]);
   assert.equal(result.length, 1);
@@ -166,7 +180,8 @@ test("resumerAttentes : une commande simple impayée compte comme impayé, une a
 
 test("resumerAttentes : SEPA programmé et chèques différés sont à venir", () => {
   const payments = [
-    { id: "s1", familyId: "f1", status: "pending", totalTTC: 120, paidAmount: 0, paymentMode: "prelevement_sepa" },
+    // Prélèvement réellement posé : 120 € d'échéances à venir, pas un impayé.
+    { id: "s1", familyId: "f1", status: "pending", totalTTC: 120, paidAmount: 0, paymentMode: "prelevement_sepa", sepaRestant: 120 },
     { id: "d1", familyId: "f1", status: "pending", totalTTC: 90, paidAmount: 0, paymentMode: "cheque_differe" },
   ];
   const r = resumerAttentes(payments, ["f1"], "2026-09-02");

@@ -23,6 +23,7 @@ import {
   soldeRestant,
   duMaintenant,
   type ImpayeTypeFilter,
+  prelevementAPreparer,
 } from "./impayes-utils";
 
 interface TabImpayesProps {
@@ -291,6 +292,13 @@ export function TabImpayes({
                           {typeof p.sepaRestant === "number" && p.sepaRestant > 0.005 && (
                             <span className="font-body text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 whitespace-nowrap" title="Cette part est planifiée en prélèvement SEPA ; seul le reste est dû ici">
                               {p.sepaRestant.toFixed(2)} € en SEPA
+                            </span>
+                          )}
+                          {/* Annoncée en prélèvement, mais aucune échéance posée :
+                              rien ne sera prélevé tant que l'échéancier n'existe pas. */}
+                          {prelevementAPreparer(p) && (
+                            <span className="font-body text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap" title="Le mode de règlement annoncé est le prélèvement, mais aucune échéance n'est posée : rien ne sera prélevé tant que l'échéancier n'est pas créé dans Prélèvements SEPA.">
+                              Prélèvement à préparer
                             </span>
                           )}
                           <a

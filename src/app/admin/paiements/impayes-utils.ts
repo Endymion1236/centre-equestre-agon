@@ -1,4 +1,4 @@
-import { resteHorsSepa } from "@/lib/sepa-remise";
+import { prelevementPlanifie, resteHorsSepa } from "@/lib/sepa-remise";
 export type ImpayeTypeFilter = "all" | "invoice" | "echeance";
 
 export interface ImpayeFilters {
@@ -22,8 +22,14 @@ export interface MultiEncaissementFamille {
   total: number;
 }
 
+/** Réglé par prélèvement, organisé ou non. Pour l'affichage ; les règles de suivi passent par `prelevementPlanifie`. */
 export function estPaiementSepa(payment: any): boolean {
   return payment?.paymentMode === "prelevement_sepa" || payment?.status === "sepa_scheduled";
+}
+
+/** Facture annoncée en prélèvement, mais dont aucune échéance n'est encore posée. */
+export function prelevementAPreparer(payment: any): boolean {
+  return estPaiementSepa(payment) && !prelevementPlanifie(payment);
 }
 
 export function soldeRestant(payment: any): number {
@@ -44,10 +50,12 @@ export function listerImpayes(payments: any[], today: string): any[] {
   return payments.filter((payment) => {
     if (payment?.status === "cancelled" || payment?.status === "paid") return false;
     if (duMaintenant(payment) <= 0.005) return false;
-    // Commande SEPA : elle ne reste ici que pour la part NON couverte par
-    // l'échéancier (`sepaRestant` connu) ; sans ce champ, elle est
-    // considérée entièrement prélevée, comme avant.
-    if (estPaiementSepa(payment) && typeof payment?.sepaRestant !== "number") return false;
+    // Commande dont le prélèvement est ORGANISÉ : elle ne reste ici que pour
+    // la part non couverte par l'échéancier (`sepaRestant`). Le seul mode de
+    // paiement « SEPA », sans échéance posée — le cas d'une facture de
+    // récurrence — ne fait plus disparaître ce qui est dû
+    // (cf. prelevementPlanifie).
+    if (prelevementPlanifie(payment) && typeof payment?.sepaRestant !== "number") return false;
     if (payment?.paymentMode === "cheque_differe") return false;
     if (Number(payment?.echeancesTotal || 0) > 1) {
       return Boolean(payment?.echeanceDate && payment.echeanceDate < today);
@@ -146,7 +154,7 @@ export function preparerMultiEncaissements(unpaid: any[]): MultiEncaissementFami
   for (const payment of unpaid) {
     const reglable =
       payment?.paymentMode !== "cheque_differe" &&
-      !estPaiementSepa(payment) &&
+      !prelevementPlanifie(payment) &&
       Number(payment?.echeancesTotal || 0) <= 1 &&
       soldeRestant(payment) > 0.005;
     if (!reglable) continue;
