@@ -8,6 +8,7 @@ import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, Che
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { calculerForfaitAnnuel, type ForfaitTarifs, type FamilyDiscountRule } from "@/lib/forfait-pricing";
+import { nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import {
   emailLayout, emailPanneau, emailTitre, emailParagraphe as P,
   emailSignature, emailCouleurs as CE,
@@ -202,9 +203,7 @@ export default function DevisPage() {
       ? (families.find(f => f.firestoreId === d.familyId)?.parentName || d.familyName)
       : d.familyName;
   const child = fam?.children?.find((c: any) => c.id === selChild);
-  const servicesFacturables: string[] = Array.isArray((fam as any)?.services)
-    ? (fam as any).services.filter(Boolean)
-    : [];
+  const servicesFacturables: string[] = nomsServices((fam as any)?.services);
 
   // Déduit -18/+18 de la date de naissance de l'enfant sélectionné
   useEffect(() => {

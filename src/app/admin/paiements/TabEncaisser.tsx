@@ -19,6 +19,7 @@ import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 import { CATEGORIES_COMPTABLES } from "@/lib/categories-comptables";
+import { nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import {
   emailLayout, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature, emailCouleurs as CE,
@@ -116,9 +117,7 @@ export function TabEncaisser({
   const selectedFam = families.find((f) => f.firestoreId === selectedFamily);
   const children = selectedFam?.children || [];
   // Sites facturables du client (collectivité réglant pour plusieurs centres).
-  const servicesFacturables: string[] = Array.isArray((selectedFam as any)?.services)
-    ? (selectedFam as any).services.filter(Boolean)
-    : [];
+  const servicesFacturables: string[] = nomsServices((selectedFam as any)?.services);
 
   const filteredFamilies = familySearch
     ? families.filter((f) => {
@@ -553,6 +552,28 @@ export function TabEncaisser({
             <p className="font-body text-[10px] text-slate-500 mt-1">
               Apparaîtra sur la facture sous le nom du client. La liste se règle sur la fiche du client.
             </p>
+            {/* Coordonnées propres au site : sans elles, la facture part à
+                l'adresse de la structure, pour tous ses centres à la fois. */}
+            {(() => {
+              const site = serviceParNom((selectedFam as any)?.services, serviceFacture);
+              if (!site) return null;
+              const lignes = [
+                site.contact,
+                site.email,
+                site.telephone,
+                [site.adresse, [site.codePostal, site.ville].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "",
+                site.codeService ? `Code service : ${site.codeService}` : "",
+                site.numeroEngagement ? `Engagement : ${site.numeroEngagement}` : "",
+              ].filter(Boolean);
+              if (lignes.length === 0) {
+                return <p className="font-body text-[10px] text-amber-700 mt-1">Ce site n&apos;a pas de coordonnées : la facture portera celles de la structure.</p>;
+              }
+              return (
+                <div className="mt-1.5 rounded-lg bg-blue-50/60 border border-blue-100 px-2.5 py-1.5 font-body text-[11px] text-blue-900">
+                  {lignes.map((l) => <div key={l}>{l}</div>)}
+                </div>
+              );
+            })()}
           </div>
         )}
         {selectedFam && children.length > 0 && (

@@ -20,6 +20,7 @@ import LinkChildrenModal from "./LinkChildrenModal";
 import MoveChildModal from "./MoveChildModal";
 import EmailModal from "./EmailModal";
 import { libelleFournisseur, libelleFournisseurCourt } from "@/lib/fournisseur-connexion";
+import { normaliserServices, type ServiceEtablissement } from "@/lib/services-etablissement";
 
 const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 const inputStyle = "w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400";
@@ -93,7 +94,9 @@ export default function FamilyCard({
   const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "", siren: "", accountType: "particulier", raisonSociale: "", structureParente: "" });
   const [editTags, setEditTags] = useState<string[]>([]);
   /** Sites facturables d'un établissement (plusieurs centres de loisirs d'une même collectivité). */
-  const [editServices, setEditServices] = useState<string[]>([]);
+  const [editServices, setEditServices] = useState<ServiceEtablissement[]>([]);
+  // Service dont les coordonnées sont dépliées (une à la fois, la liste reste lisible).
+  const [serviceOuvert, setServiceOuvert] = useState<number | null>(null);
 
   const startEditFamily = () => {
     setEditingFamily(true);
@@ -113,7 +116,8 @@ export default function FamilyCard({
       structureParente: (family as any).structureParente || "",
     });
     setEditTags(family.tags || []);
-    setEditServices(Array.isArray((family as any).services) ? (family as any).services : []);
+    setEditServices(normaliserServices((family as any).services));
+    setServiceOuvert(null);
   };
 
   const handleSaveFamily = async () => {
@@ -144,11 +148,10 @@ export default function FamilyCard({
       const tagsFinaux = estEtablissement
         ? Array.from(new Set([...editTags, "etablissement"]))
         : editTags.filter(t => t !== "etablissement");
-      // Lignes vides ignorées, doublons écartés : la liste sert de menu
-      // déroulant à la facturation, elle doit rester propre.
-      const servicesFinaux = estEtablissement
-        ? Array.from(new Set(editServices.map(s => s.trim()).filter(Boolean)))
-        : [];
+      // Lignes vides ignorées, doublons écartés, champs rognés : la liste sert
+      // de menu déroulant à la facturation, elle doit rester propre
+      // (cf. lib/services-etablissement).
+      const servicesFinaux = estEtablissement ? normaliserServices(editServices) : [];
 
       const newEmail = editForm.parentEmail.trim().toLowerCase();
       const oldEmail = (family.parentEmail || "").trim().toLowerCase();
@@ -582,18 +585,54 @@ export default function FamilyCard({
                         Les sites de cette structure. À la facturation, un menu déroulant
                         permet de choisir lequel apparaît sur la facture.
                       </p>
-                      {editServices.map((s, i) => (
-                        <div key={i} className="flex gap-2 mb-1.5">
-                          <input value={s}
-                            onChange={e => setEditServices(prev => prev.map((v, j) => j === i ? e.target.value : v))}
-                            placeholder="Ex: Centre de loisirs de Saint-Sauveur" className={inputStyle}/>
-                          <button type="button" onClick={() => setEditServices(prev => prev.filter((_, j) => j !== i))}
-                            className="shrink-0 w-9 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
-                            <Trash2 size={14}/>
-                          </button>
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setEditServices(prev => [...prev, ""])}
+                      {editServices.map((s, i) => {
+                        const maj = (champ: keyof ServiceEtablissement, valeur: string) =>
+                          setEditServices(prev => prev.map((v, j) => j === i ? { ...v, [champ]: valeur } : v));
+                        const ouvert = serviceOuvert === i;
+                        const renseigne = !!(s.contact || s.email || s.telephone || s.adresse || s.codeService || s.numeroEngagement);
+                        return (
+                          <div key={i} className="mb-2 rounded-lg border border-gray-200 bg-gray-50/60 p-2">
+                            <div className="flex gap-2">
+                              <input value={s.nom} onChange={e => maj("nom", e.target.value)}
+                                placeholder="Ex: Centre de loisirs de Saint-Sauveur" className={inputStyle}/>
+                              <button type="button" onClick={() => setEditServices(prev => prev.filter((_, j) => j !== i))}
+                                title="Supprimer ce service"
+                                className="shrink-0 w-9 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
+                                <Trash2 size={14}/>
+                              </button>
+                            </div>
+                            <button type="button" onClick={() => setServiceOuvert(ouvert ? null : i)}
+                              className="font-body text-[11px] text-blue-500 bg-transparent border-none cursor-pointer p-0 mt-1.5">
+                              {ouvert ? "▾" : "▸"} Coordonnées de ce site{renseigne && !ouvert ? " · renseignées" : ""}
+                            </button>
+                            {ouvert && (
+                              <div className="mt-2 flex flex-col gap-1.5">
+                                <p className="font-body text-[10px] text-slate-500 m-0">
+                                  Ce qui reste vide est repris de la structure : c&apos;est son adresse et son email qui servent alors.
+                                </p>
+                                <input value={s.contact || ""} onChange={e => maj("contact", e.target.value)} placeholder="Contact (ex : Mme Leroy, directrice)" className={inputStyle}/>
+                                <div className="flex gap-1.5">
+                                  <input value={s.email || ""} onChange={e => maj("email", e.target.value)} placeholder="Email du site" className={inputStyle}/>
+                                  <input value={s.telephone || ""} onChange={e => maj("telephone", e.target.value)} placeholder="Téléphone" className={inputStyle}/>
+                                </div>
+                                <input value={s.adresse || ""} onChange={e => maj("adresse", e.target.value)} placeholder="Adresse de facturation du site" className={inputStyle}/>
+                                <div className="flex gap-1.5">
+                                  <input value={s.codePostal || ""} onChange={e => maj("codePostal", e.target.value)} placeholder="Code postal" className={inputStyle}/>
+                                  <input value={s.ville || ""} onChange={e => maj("ville", e.target.value)} placeholder="Ville" className={inputStyle}/>
+                                </div>
+                                <p className="font-body text-[10px] text-slate-500 m-0 mt-1">
+                                  Facturation publique : le code du service destinataire et le numéro d&apos;engagement du bon de commande.
+                                </p>
+                                <div className="flex gap-1.5">
+                                  <input value={s.codeService || ""} onChange={e => maj("codeService", e.target.value)} placeholder="Code service" className={inputStyle}/>
+                                  <input value={s.numeroEngagement || ""} onChange={e => maj("numeroEngagement", e.target.value)} placeholder="N° d'engagement" className={inputStyle}/>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <button type="button" onClick={() => { setEditServices(prev => [...prev, { nom: "" }]); setServiceOuvert(editServices.length); }}
                         className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-1">
                         <UserPlus size={13}/> Ajouter un service
                       </button>
