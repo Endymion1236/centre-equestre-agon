@@ -82,7 +82,7 @@ export function PanneauJoursSupplementaires({ showAddDays, setShowAddDays, famil
                           const totalDaysNow = showAddDays.joursInscrits + 1;
                           const totalJoursStage = showAddDays.totalJoursStage || 1;
                           const cr = showAddDays.creneauRef as any;
-                          const prixComplet = (cr.priceTTC || (cr.priceHT || 0) * (1 + (cr.tvaTaux || 5.5) / 100)) || 0;
+                          const prixComplet = (cr.priceTTC || (cr.priceHT || 0) * (1 + (cr.tvaTaux ?? 5.5) / 100)) || 0;
                           // Prix jour défini dans le stage (price1day), brut.
                           // Fallback prorata seulement si non configuré.
                           const prixJour = (cr.price1day && cr.price1day > 0)

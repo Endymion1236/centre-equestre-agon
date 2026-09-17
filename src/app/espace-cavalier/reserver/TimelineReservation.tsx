@@ -197,7 +197,7 @@ export default function TimelineReservation({
     children.every((child) => (creneau.enrolled || []).some((entry: any) => entry.childId === child.id));
 
   const price = (creneau: Creneau) =>
-    creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+    creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux ?? 5.5) / 100);
 
   const filterOptions: { id: FilterId; label: string; icon: string }[] = [
     { id: "pour_moi", label: "Pour vous", icon: "✨" },

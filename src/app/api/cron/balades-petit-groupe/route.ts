@@ -131,7 +131,7 @@ export async function GET(req: NextRequest) {
         : 0;
       const priceTTC = typeof c.priceTTC === "number" && c.priceTTC > 0
         ? c.priceTTC
-        : Math.round((c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100) * 100) / 100;
+        : Math.round((c.priceHT || 0) * (1 + (c.tvaTaux ?? 5.5) / 100) * 100) / 100;
 
       // Regrouper les inscrits confirmés par famille
       const parFamille = new Map<string, { familyName: string; children: { childId: string; childName: string }[] }>();

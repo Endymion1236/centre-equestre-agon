@@ -158,7 +158,7 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
       if (!slot.activityId) continue;
       const act = activities.find(a => a.id === slot.activityId);
       if (!act) continue;
-      const actPriceTTC = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
+      const actPriceTTC = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux ?? 5.5) / 100);
       for (const period of periods) {
         if (!period.startDate || !period.endDate) continue;
         const cur = new Date(period.startDate);
@@ -170,8 +170,8 @@ function PeriodGenerator({ activities, onGenerate, onCancel }: { activities: Act
               activityId: slot.activityId, activityTitle: act.title, activityType: act.type,
               date: fmtDate(cur), startTime: slot.startTime, endTime: slot.endTime,
               monitor: slot.monitor, maxPlaces: slot.maxPlaces, enrolledCount: 0, enrolled: [],
-              status: "planned", priceHT: actPriceTTC / (1 + (act.tvaTaux || 5.5) / 100),
-              priceTTC: actPriceTTC, tvaTaux: act.tvaTaux || 5.5,
+              status: "planned", priceHT: actPriceTTC / (1 + (act.tvaTaux ?? 5.5) / 100),
+              priceTTC: actPriceTTC, tvaTaux: act.tvaTaux ?? 5.5,
               // Tarifs multi-jours (stages)
               ...((act as any).price1day ? { price1day: (act as any).price1day } : {}),
               ...((act as any).price2days ? { price2days: (act as any).price2days } : {}),

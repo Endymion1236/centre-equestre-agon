@@ -163,7 +163,7 @@ export function TabEncaisser({
     if (!selectedActivity) return;
     const act = activities.find((a) => a.firestoreId === selectedActivity);
     if (!act) return;
-    const priceTTC = (act as any).priceTTC || ((act.priceHT || 0) * (1 + ((act as any).tvaTaux || 5.5) / 100));
+    const priceTTC = (act as any).priceTTC || ((act.priceHT || 0) * (1 + ((act as any).tvaTaux ?? 5.5) / 100));
     const fam = families.find(f => f.firestoreId === selectedFamily);
     const child = (fam?.children || []).find((c: any) => c.id === selectedChild);
     const childName = (child as any)?.firstName || selectedChild || "—";
@@ -175,8 +175,8 @@ export function TabEncaisser({
       childName,
       activityType: (act as any).type || "",
       description: act.title,
-      priceHT: priceTTC / (1 + ((act as any).tvaTaux || 5.5) / 100),
-      tva: (act as any).tvaTaux || 5.5,
+      priceHT: priceTTC / (1 + ((act as any).tvaTaux ?? 5.5) / 100),
+      tva: (act as any).tvaTaux ?? 5.5,
       priceTTC,
     }]);
   };
@@ -953,7 +953,7 @@ export function TabEncaisser({
                 {/* Pastille sélection active */}
                 {selected && !activityDropdownOpen && (
                   <div className="mt-1.5 inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 font-body text-xs px-2.5 py-1 rounded-lg">
-                    ✓ {selected.title} — <span className="font-semibold">{(((selected as any).priceTTC) || (selected.priceHT || 0) * (1 + (selected.tvaTaux || 5.5) / 100)).toFixed(2)}€</span>
+                    ✓ {selected.title} — <span className="font-semibold">{(((selected as any).priceTTC) || (selected.priceHT || 0) * (1 + (selected.tvaTaux ?? 5.5) / 100)).toFixed(2)}€</span>
                   </div>
                 )}
                 {/* Liste déroulante filtrée */}
@@ -963,7 +963,7 @@ export function TabEncaisser({
                       <div className="px-3 py-4 text-center font-body text-xs text-slate-400">Aucune activité ne correspond à "{activitySearch}"</div>
                     ) : (
                       filtered.map((a, idx) => {
-                        const ttc = (a as any).priceTTC || (a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100);
+                        const ttc = (a as any).priceTTC || (a.priceHT || 0) * (1 + (a.tvaTaux ?? 5.5) / 100);
                         const isSelected = selectedActivity === a.firestoreId;
                         return (
                           <button type="button"

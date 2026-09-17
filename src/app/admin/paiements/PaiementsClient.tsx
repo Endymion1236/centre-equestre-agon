@@ -766,7 +766,7 @@ export default function PaiementsPage() {
       activityType: item.activityType || "",
       description: item.description || item.activityTitle || "",
       priceHT: safeNumber(item.priceHT),
-      tva: safeNumber(item.tva || item.tvaTaux || 5.5),
+      tva: safeNumber(item.tva ?? item.tvaTaux ?? 5.5),
       priceTTC: safeNumber(item.priceTTC),
       creneauId: "",
     }));
@@ -877,7 +877,7 @@ export default function PaiementsPage() {
         const items = row.items.map((item: any, idx: number) => {
           const overrideTTC = row.overrides[idx];
           if (overrideTTC !== undefined) {
-            const tva = safeNumber(item.tva || item.tvaTaux || 5.5);
+            const tva = safeNumber(item.tva ?? item.tvaTaux ?? 5.5);
             return { ...item, priceTTC: overrideTTC, priceHT: round2(overrideTTC / (1 + tva / 100)) };
           }
           return item;

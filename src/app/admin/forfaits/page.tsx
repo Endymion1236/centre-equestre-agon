@@ -177,7 +177,7 @@ export default function ForfaitsPage() {
           startTime: c.startTime, endTime: c.endTime,
           monitor: c.monitor, maxPlaces: c.maxPlaces,
           totalSessions: 0, avgEnrolled: 0, spotsAvailable: 0, creneauIds: [],
-          priceTTC: c.priceTTC || ((c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100)),
+          priceTTC: c.priceTTC || ((c.priceHT || 0) * (1 + (c.tvaTaux ?? 5.5) / 100)),
         };
       }
       map[key].totalSessions++;

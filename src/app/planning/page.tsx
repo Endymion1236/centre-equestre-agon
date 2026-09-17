@@ -43,7 +43,7 @@ function getMonday(date: Date) {
 
 function priceOf(slot: Creneau) {
   if (typeof slot.priceTTC === "number") return slot.priceTTC;
-  if (typeof slot.priceHT === "number") return Math.round(slot.priceHT * (1 + (slot.tvaTaux || 5.5) / 100) * 100) / 100;
+  if (typeof slot.priceHT === "number") return Math.round(slot.priceHT * (1 + (slot.tvaTaux ?? 5.5) / 100) * 100) / 100;
   return null;
 }
 

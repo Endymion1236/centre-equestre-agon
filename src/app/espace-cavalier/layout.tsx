@@ -430,7 +430,7 @@ function EspaceCavalierLayoutInner({ children }: { children: React.ReactNode }) 
         activitiesSnapshot.docs.forEach((item) => {
           const activity: any = item.data();
           if (!activity.title || activity.priceHT === undefined) return;
-          const total = Math.round(activity.priceHT * (1 + (activity.tvaTaux || 5.5) / 100) * 100) / 100;
+          const total = Math.round(activity.priceHT * (1 + (activity.tvaTaux ?? 5.5) / 100) * 100) / 100;
           prices[activity.title] = `${total}€${activity.type === "cours" ? "/séance" : ""}`;
         });
 

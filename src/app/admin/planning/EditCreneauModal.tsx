@@ -76,14 +76,14 @@ export default function EditCreneauModal({
     if (!id) return;
     const a = activities.find(x => x.id === id);
     if (!a) return;
-    const ttc = (a as any).priceTTC ?? ((a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100));
+    const ttc = (a as any).priceTTC ?? ((a.priceHT || 0) * (1 + (a.tvaTaux ?? 5.5) / 100));
     onFormChange({
       ...form,
       activityId: a.id,
       activityType: a.type,
       activityTitle: a.title,
       priceTTC: ttc,
-      tvaTaux: a.tvaTaux || 5.5,
+      tvaTaux: a.tvaTaux ?? 5.5,
     });
   };
   const activityChanged = !!form.activityId && form.activityId !== (creneau as any).activityId;

@@ -168,7 +168,7 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
     if (!form.title) return;
     setSaving(true);
     const priceTTC = form.priceTTC || 0;
-    const tvaTaux = form.tvaTaux || 5.5;
+    const tvaTaux = form.tvaTaux ?? 5.5;
     const priceHT = priceTTC / (1 + tvaTaux / 100);
     await onSave({ ...form, priceHT: Math.round(priceHT * 100) / 100, priceTTC });
     setSaving(false);
@@ -298,7 +298,7 @@ function ActivityForm({ initial, subcatOptions, onSave, onCancel }: {
           </div>
           <div className="flex-1 min-w-[90px]">
             <label className="font-body text-xs font-semibold text-blue-800 block mb-1">TVA (%)</label>
-            <select value={form.tvaTaux || 5.5} onChange={e => update("tvaTaux", parseFloat(e.target.value))} className={inp}>
+            <select value={form.tvaTaux ?? 5.5} onChange={e => update("tvaTaux", parseFloat(e.target.value))} className={inp}>
               <option value={5.5}>5,5%</option>
               <option value={10}>10%</option>
               <option value={20}>20%</option>

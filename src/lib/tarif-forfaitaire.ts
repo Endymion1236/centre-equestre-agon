@@ -19,6 +19,8 @@
  * participants.
  */
 
+import { tauxTva, ttcDepuisHt } from "@/lib/tva-taux";
+
 export interface CreneauTarifable {
   priceTTC?: number | null;
   priceHT?: number | null;
@@ -37,7 +39,7 @@ export function prixCreneauTTC(creneau: CreneauTarifable): number {
   if (ttc > 0) return Math.round(ttc * 100) / 100;
   const ht = Number(creneau?.priceHT) || 0;
   if (ht <= 0) return 0;
-  return Math.round(ht * (1 + (Number(creneau?.tvaTaux) || 5.5) / 100) * 100) / 100;
+  return ttcDepuisHt(ht, tauxTva(creneau?.tvaTaux));
 }
 
 /**

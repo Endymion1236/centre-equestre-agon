@@ -86,7 +86,7 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setShowCart } = rappel
   const enfantsAAjouter = childIdsParam ?? selectedChildren;
   if (enfantsAAjouter.length === 0) return;
   const first = stageCreneaux[0];
-  const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
+  const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux ?? 5.5) / 100);
   const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
   const isJourMode = allowDay && stageBookingMode === "jour";
 
@@ -305,7 +305,7 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
   }
   // ── fin règle d'âge ────────────────────────────────────────────────
 
-  const priceTTC = (creneau as any).priceTTC || creneau.priceHT * (1 + (creneau.tvaTaux || 5.5) / 100);
+  const priceTTC = (creneau as any).priceTTC || creneau.priceHT * (1 + (creneau.tvaTaux ?? 5.5) / 100);
   // Prénom ET nom : le planning n'affichait que « Loucia », impossible de
   // savoir de quelle famille il s'agit quand deux cavaliers partagent un
   // prénom. L'inscription depuis l'administration, elle, écrit « Prénom Nom ».

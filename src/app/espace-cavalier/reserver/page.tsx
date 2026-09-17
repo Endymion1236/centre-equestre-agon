@@ -838,7 +838,7 @@ export default function ReserverPage() {
                     return `Semaine du ${f(mon, !sameMonth)} au ${f(sun, true)}`;
                   })();
                   const first = stageCreneaux[0];
-                  const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux || 5.5) / 100);
+                  const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux ?? 5.5) / 100);
                   // `spots` = places pour la SEMAINE COMPLÈTE (le jour le plus
                   // plein fait foi) : 0 dès qu'UN jour est plein. Ça ne veut PAS
                   // dire que le stage est plein — sur un stage ouvert à la
@@ -1320,7 +1320,7 @@ export default function ReserverPage() {
                   <div className="font-body text-xs font-semibold text-gray-600 uppercase mb-2">{new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</div>
                   <div className="flex flex-col gap-2">
                     {cs.map(c => {
-                      const prix = (c as any).priceTTC || c.priceHT * (1 + (c.tvaTaux || 5.5) / 100);
+                      const prix = (c as any).priceTTC || c.priceHT * (1 + (c.tvaTaux ?? 5.5) / 100);
                       const spots = spotsLeft(c);
                       const tl = typeLabels[c.activityType] || { label: c.activityType, color: "#666" };
                       const isSelected = selectedCreneau?.id === c.id;

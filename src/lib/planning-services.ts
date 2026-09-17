@@ -352,7 +352,7 @@ export async function createReservation(
   child: EnrolledChild,
   creneau: any,
 ) {
-  const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+  const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux ?? 5.5) / 100);
   await addDoc(collection(db, "reservations"), {
     familyId: child.familyId,
     familyName: child.familyName,
@@ -648,7 +648,7 @@ export async function duplicateWeekCreneaux(creneaux: any[], nbWeeks: number) {
         status: "planned",
         priceHT: c.priceHT || 0,
         priceTTC: c.priceTTC || 0,
-        tvaTaux: c.tvaTaux || 5.5,
+        tvaTaux: c.tvaTaux ?? 5.5,
         ...(c.price1day ? { price1day: c.price1day } : {}),
         ...(c.price2days ? { price2days: c.price2days } : {}),
         ...(c.price3days ? { price3days: c.price3days } : {}),

@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
         <td>${item.activityTitle || item.label || "—"}</td>
         <td>${item.childName || "—"}</td>
         <td>${(item.priceHT || 0).toFixed(2)}€</td>
-        <td>${item.tva || 5.5}%</td>
+        <td>${item.tva ?? 5.5}%</td>
         <td>${(item.priceTTC || 0).toFixed(2)}€</td>
       </tr>
     `).join("")}

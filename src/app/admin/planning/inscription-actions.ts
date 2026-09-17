@@ -128,8 +128,8 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
 
     // Inscription offerte → créer un paiement à 0€ avec motif (traçabilité)
     if (options?.freeReason) {
-      const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100);
-      const priceHT = priceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+      const priceTTC = c.priceTTC || (c.priceHT || 0) * (1 + (c.tvaTaux ?? 5.5) / 100);
+      const priceHT = priceTTC / (1 + (c.tvaTaux ?? 5.5) / 100);
       // Cas "Établissement" : ce n'est PAS une séance offerte (elle est payée
       // par l'établissement, facturé à part). On la marque institutionnelle
       // pour la sortir des stats de gratuités, tout en gardant la trace.
@@ -141,7 +141,7 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
           activityTitle: c.activityTitle, childId: child.childId, childName: child.childName,
           creneauId: cid, activityType: c.activityType, date: c.date,
           startTime: c.startTime, endTime: c.endTime,
-          priceHT: 0, tva: c.tvaTaux || 5.5, priceTTC: 0,
+          priceHT: 0, tva: c.tvaTaux ?? 5.5, priceTTC: 0,
           originalPriceTTC: Math.round(priceTTC * 100) / 100,
         }],
         totalTTC: 0, paidAmount: 0,
@@ -233,7 +233,7 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
           childId: child.childId, childName: child.childName,
           creneauId: cid, activityType: c.activityType, date: c.date,
           startTime: c.startTime, endTime: c.endTime,
-          priceHT: 0, tva: c.tvaTaux || 5.5, priceTTC: 0,
+          priceHT: 0, tva: c.tvaTaux ?? 5.5, priceTTC: 0,
           originalPriceTTC: 0,
         }],
         totalTTC: 0, paidAmount: 0,
@@ -327,7 +327,7 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
       excludeCreneauId: cid, // la résa vient juste d'être créée pour ce créneau
     });
     const finalPriceTTC = discountResult.finalPriceTTC;
-    const finalPriceHT = finalPriceTTC / (1 + (c.tvaTaux || 5.5) / 100);
+    const finalPriceHT = finalPriceTTC / (1 + (c.tvaTaux ?? 5.5) / 100);
     // ─── FIN CALCUL RÉDUCTIONS ───
 
     const priceHT = finalPriceHT;
@@ -342,7 +342,7 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
       startTime: c.startTime,
       endTime: c.endTime,
       priceHT: Math.round(finalPriceHT * 100) / 100,
-      tva: c.tvaTaux || 5.5,
+      tva: c.tvaTaux ?? 5.5,
       priceTTC: Math.round(finalPriceTTC * 100) / 100,
     };
     if (discountResult.discountPercent > 0) {

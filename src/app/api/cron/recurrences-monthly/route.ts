@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Création du paiement pending
-      const tvaRate = r.tvaRate || 5.5;
+      const tvaRate = r.tvaRate ?? 5.5;
       const montantTTC = r.montantTTC || 0;
       const priceHT = Math.round((montantTTC / (1 + tvaRate / 100)) * 100) / 100;
 

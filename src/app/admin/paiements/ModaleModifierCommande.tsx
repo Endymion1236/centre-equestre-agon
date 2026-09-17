@@ -122,7 +122,7 @@ export default function ModaleModifierCommande({
                       disabled={isInvoiced}
                       onChange={e => {
                         const v = parseFloat(e.target.value) || 0;
-                        setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, priceTTC: v, priceHT: Math.round(v / (1 + (it.tva || 5.5) / 100) * 100) / 100 } : it));
+                        setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, priceTTC: v, priceHT: Math.round(v / (1 + (it.tva ?? 5.5) / 100) * 100) / 100 } : it));
                       }}
                       className={`w-20 px-2 py-1.5 rounded-lg border border-gray-200 font-body text-sm text-right focus:outline-none focus:border-blue-500 ${isInvoiced ? "opacity-50 cursor-not-allowed bg-gray-100" : ""}`}
                     />
@@ -173,7 +173,7 @@ export default function ModaleModifierCommande({
                     setEditItems(prev => prev.map(it => {
                       const part = total > 0 ? (it.priceTTC || 0) / total : 0;
                       const newPrice = Math.max(0, Math.round((it.priceTTC - remise * part) * 100) / 100);
-                      return { ...it, priceTTC: newPrice, priceHT: Math.round(newPrice / (1 + (it.tva || 5.5) / 100) * 100) / 100 };
+                      return { ...it, priceTTC: newPrice, priceHT: Math.round(newPrice / (1 + (it.tva ?? 5.5) / 100) * 100) / 100 };
                     }));
                     setEditRemisePct(""); setEditRemiseEuros("");
                   }}
@@ -293,7 +293,7 @@ export default function ModaleModifierCommande({
                           return {
                             ...it,
                             priceTTC: newPrice,
-                            priceHT: Math.round((newPrice / (1 + (it.tva || 5.5) / 100)) * 100) / 100,
+                            priceHT: Math.round((newPrice / (1 + (it.tva ?? 5.5) / 100)) * 100) / 100,
                             activityTitle: newTitle,
                           };
                         });

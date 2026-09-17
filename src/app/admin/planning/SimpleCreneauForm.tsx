@@ -113,7 +113,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
       }
     }
     setSaving(true);
-    const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux || 5.5) / 100);
+    const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux ?? 5.5) / 100);
     // Mode simple : date principale + dates supplémentaires choisies au
     // calendrier (dédupliquées). Mode stage : suite de jours générée.
     let dates = multiDay
@@ -138,8 +138,8 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         status: "planned",
         ...(act.type === "balade" && niveauADefinir ? { niveauADefinir: true, niveauFixe: null } : {}),
         ...(color ? { color } : {}),
-        priceHT: ttc / (1 + (act.tvaTaux || 5.5) / 100),
-        priceTTC: ttc, tvaTaux: act.tvaTaux || 5.5,
+        priceHT: ttc / (1 + (act.tvaTaux ?? 5.5) / 100),
+        priceTTC: ttc, tvaTaux: act.tvaTaux ?? 5.5,
         ...((act as any).price1day  ? { price1day:  (act as any).price1day  } : {}),
         ...((act as any).price2days ? { price2days: (act as any).price2days } : {}),
         ...((act as any).price3days ? { price3days: (act as any).price3days } : {}),

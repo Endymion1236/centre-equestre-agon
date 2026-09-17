@@ -141,7 +141,25 @@ export async function POST(request: NextRequest) {
       paymentDetails, // [{ mode, modeLabel, montant, date }] — sinon reconstruit via paymentId
       paymentId,
       remise,
+      documentType, // "avoir" | "proforma" ; déduit du préfixe sinon
     } = body;
+
+    // Le titre était écrit en dur : un avoir comme un devis proforma
+    // s'imprimaient tous deux « FACTURE ». Un avoir annule une vente, un
+    // proforma n'est pas une pièce comptable et n'ouvre aucun droit à
+    // déduction de TVA — les trois ne peuvent pas porter le même titre.
+    // Le type explicite prime ; à défaut, le préfixe du numéro fait foi
+    // (AV-YYYY-NNNN pour la séquence des avoirs, PF-xxxxxx pour un proforma).
+    const numeroTexte = String(invoiceNumber || "");
+    const estAvoir = documentType === "avoir" || /^AV-/i.test(numeroTexte);
+    const estProforma =
+      !estAvoir && (documentType === "proforma" || /^PF-/i.test(numeroTexte));
+    const titreDocument = estAvoir
+      ? "AVOIR"
+      : estProforma
+        ? "FACTURE PROFORMA"
+        : "FACTURE";
+    const nomFichier = estAvoir ? "avoir" : estProforma ? "proforma" : "facture";
 
     const isPaid = (paidAmount || 0) >= (totalTTC || 0);
     const resteDu = Math.max(0, (totalTTC || 0) - (paidAmount || 0));
@@ -152,7 +170,7 @@ export async function POST(request: NextRequest) {
     // uniquement si la facture n'est pas réglée ET qu'il reste un montant > 0.
     // Le client peut scanner avec son app bancaire pour pré-remplir le virement.
     const sepaLibelle = `${invoiceNumber} ${familyName || ""}`.trim().slice(0, 70);
-    const qrSEPAResult = (!isPaid && resteDu > 0)
+    const qrSEPAResult = (!estAvoir && !isPaid && resteDu > 0)
       ? await generateSEPAQR(resteDu, sepaLibelle, "pdf")
       : null;
     const qrSEPADataUrl = qrSEPAResult?.dataUrl || null;
@@ -190,7 +208,7 @@ export async function POST(request: NextRequest) {
       paymentDetails: resolvedDetails,
     });
 
-    const doc = React.createElement(Document, { title: `Facture ${invoiceNumber}`, author: CLUB.nom },
+    const doc = React.createElement(Document, { title: `${estAvoir ? "Avoir" : estProforma ? "Facture proforma" : "Facture"} ${invoiceNumber}`, author: CLUB.nom },
       React.createElement(Page, { size: "A4", style: s.page },
 
         // ── En-tête ──────────────────────────────────────────────────────
@@ -209,8 +227,11 @@ export async function POST(request: NextRequest) {
             ),
           ),
           React.createElement(View, {},
-            React.createElement(Text, { style: s.invTitle }, "FACTURE"),
+            React.createElement(Text, { style: estProforma ? [s.invTitle, { fontSize: 15 }] : s.invTitle }, titreDocument),
             React.createElement(Text, { style: s.invMeta }, `N° ${invoiceNumber}`),
+            estProforma
+              ? React.createElement(Text, { style: s.invMeta }, "Document non comptable — ne vaut pas facture")
+              : null,
             React.createElement(Text, { style: s.invMeta }, `Émise le : ${date}`),
             prestationDate
               ? React.createElement(Text, { style: s.invMeta }, `Prestation du : ${prestationDate}`)
@@ -371,7 +392,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="facture-${invoiceNumber}.pdf"`,
+        "Content-Disposition": `attachment; filename="${nomFichier}-${invoiceNumber}.pdf"`,
         "Content-Length": buffer.length.toString(),
       },
     });

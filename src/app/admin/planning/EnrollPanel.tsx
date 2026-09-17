@@ -353,7 +353,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     return () => { document.body.style.overflow = ""; };
   }, []);
   const spots = creneau.maxPlaces - enrolled.length; const color = typeColors[creneau.activityType] || "#666";
-  const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+  const priceTTC = (creneau as any).priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux ?? 5.5) / 100);
   // Prix affiché dans l'en-tête : pour les stages, utiliser le tarif configuré si dispo
   const displayPrice = useMemo(() => prixAffiche(creneau, isStage, priceTTC, stageDaysCount), [isStage, priceTTC, creneau, stageDaysCount]);
   // ── Place tenue pour une famille en liste d'attente ──────────────────
