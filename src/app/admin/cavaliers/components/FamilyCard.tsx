@@ -750,6 +750,39 @@ export default function FamilyCard({
                     <div className="font-body text-sm text-blue-800">{family.address}{family.address && (family.zipCode || family.city) ? ", " : ""}{family.zipCode} {family.city}</div>
                   </div>
                 )}
+                {/* Sites facturables : ils n'étaient visibles qu'en ouvrant le
+                    formulaire de modification. Pour une collectivité, savoir
+                    quels centres sont enregistrés est une lecture courante,
+                    pas une modification. */}
+                {(() => {
+                  const sites = normaliserServices((family as any).services);
+                  if (sites.length === 0) return null;
+                  return (
+                    <div className="mt-2">
+                      <div className={labelStyle}>Sites facturables ({sites.length})</div>
+                      <ul className="flex flex-col gap-1 list-none p-0 m-0">
+                        {sites.map((site) => {
+                          const detail = [
+                            site.contact,
+                            site.email,
+                            site.telephone,
+                            [site.adresse, [site.codePostal, site.ville].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+                            site.codeService ? `Code service ${site.codeService}` : "",
+                            site.numeroEngagement ? `Engagement ${site.numeroEngagement}` : "",
+                          ].filter(Boolean).join(" · ");
+                          return (
+                            <li key={site.nom} className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5">
+                              <div className="font-body text-sm text-blue-800">{site.nom}</div>
+                              {detail
+                                ? <div className="font-body text-xs text-slate-500">{detail}</div>
+                                : <div className="font-body text-xs text-amber-700">Pas de coordonnées propres : facturé à l&apos;adresse de la structure.</div>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })()}
                 {/* Solde client */}
                 <div className="mt-3 space-y-2">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
