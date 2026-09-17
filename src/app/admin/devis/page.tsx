@@ -8,7 +8,7 @@ import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, Che
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { calculerForfaitAnnuel, type ForfaitTarifs, type FamilyDiscountRule } from "@/lib/forfait-pricing";
-import { nomsServices, serviceParNom } from "@/lib/services-etablissement";
+import { coordonneesFacturation, nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import {
   emailLayout, emailPanneau, emailTitre, emailParagraphe as P,
   emailSignature, emailCouleurs as CE,
@@ -230,7 +230,10 @@ export default function DevisPage() {
         numero: genNumero(),
         familyId: selFamily,
         familyName: fam.parentName || "",
-        familyEmail: (fam as any).parentEmail || "",
+        // Un site facturable a ses propres coordonnées : le devis d'un centre
+        // de loisirs part à son adresse, pas à celle de la collectivité — qui
+        // n'en a parfois aucune, d'où le « pas d'email pour cette famille ».
+        familyEmail: coordonneesFacturation(fam as any, serviceParNom((fam as any).services, serviceFacture)).email,
         ...(serviceFacture ? { serviceFacture } : {}),
         items: items.filter(i => i.label),
         totalTTC: Math.round(totalTTC * 100) / 100,
@@ -272,7 +275,17 @@ export default function DevisPage() {
   };
 
   const handleSend = async (d: Devis) => {
-    if (!d.familyEmail) { alert("Pas d'email pour cette famille."); return; }
+    // Devis enregistré avant que le site ait ses coordonnées : on relit la
+    // fiche au moment de l'envoi plutôt que de refuser.
+    if (!d.familyEmail) {
+      const fiche = families.find(f => f.firestoreId === d.familyId);
+      const repli = coordonneesFacturation(fiche as any, serviceParNom((fiche as any)?.services, d.serviceFacture)).email;
+      if (!repli) {
+        alert("Aucune adresse email : ni sur la fiche du client, ni sur le site facturé.\nRenseignez-la dans Cavaliers, puis réessayez.");
+        return;
+      }
+      d = { ...d, familyEmail: repli };
+    }
     setSendingId(d.id!);
     try {
       // Le devis part sous le nom actuel de la fiche, et c'est celui-là qui est
@@ -448,6 +461,17 @@ export default function DevisPage() {
                   Apparaîtra sur le devis et sera repris sur la facture à la conversion.
                   La liste se règle sur la fiche du client.
                 </p>
+                {(() => {
+                  const c = coordonneesFacturation(fam as any, serviceParNom((fam as any)?.services, serviceFacture));
+                  if (!c.email) {
+                    return <p className="font-body text-[11px] text-amber-700 mt-1">Aucune adresse email connue : le devis ne pourra pas être envoyé.</p>;
+                  }
+                  return (
+                    <p className="font-body text-[11px] text-blue-700 mt-1">
+                      Sera envoyé à {c.email}{c.duService ? " (adresse du site)" : " (adresse de la structure)"}.
+                    </p>
+                  );
+                })()}
               </div>
             )}
 
