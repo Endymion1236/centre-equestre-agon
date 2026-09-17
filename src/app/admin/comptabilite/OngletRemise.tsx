@@ -23,6 +23,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Printer } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
+import { createEncaissement } from "@/lib/compta-encaissement";
 
 export interface OngletRemiseProps {
   payments: any[];
@@ -744,11 +745,14 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
                           const montantReel = parseFloat((pointageMontantReel || String(r.total || 0)).replace(",", "."));
                           if (!isNaN(montantReel) && montantReel > 0) {
                             const dateVers = pointeeDate ? new Date(pointeeDate) : new Date();
-                            await addDoc(collection(db, "encaissements"), {
+                            // createEncaissement pose l'empreinte et chaîne le
+                            // mouvement ; une écriture directe le laisserait
+                            // hors de la chaîne d'intégrité.
+                            await createEncaissement({
                               mode: "especes",
                               modeLabel: "Versement banque",
                               montant: -Math.abs(montantReel),
-                              date: dateVers,
+                              explicitDate: dateVers,
                               familyName: "—",
                               activityTitle: "Versement en banque",
                               raison: `Versement auto pour remise du ${new Date(r.date.seconds * 1000).toLocaleDateString("fr-FR")}`

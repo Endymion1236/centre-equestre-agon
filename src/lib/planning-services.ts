@@ -14,6 +14,7 @@ import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { createEncaissement } from "@/lib/compta-encaissement";
 
 // ═══ TYPES ═══
 export interface EnrolledChild {
@@ -592,7 +593,7 @@ export async function createAvoir(
   // Trace dans le journal des encaissements (montant négatif = avoir)
   // Note : on n'enregistre QUE le baseAmount (la part vraiment nouvelle),
   // pas le total fusionné. Les anciens avaient déjà été journalisés.
-  await addDoc(collection(db, "encaissements"), {
+  await createEncaissement({
     paymentId: sourcePaymentId || "",
     familyId,
     familyName,
@@ -601,7 +602,6 @@ export async function createAvoir(
     modeLabel: `Avoir (${sourceType || "désinscription"})`,
     ref: newRef,
     activityTitle: reason,
-    date: serverTimestamp(),
     isAvoir: true,
     avoirRef: newRef,
   });

@@ -200,6 +200,27 @@ export default function ComptabilitePage() {
     } catch (e: any) { setIaAnswer(`Erreur : ${e.message}`); }
     setIaAnswerLoading(false);
   };
+  const [verifChaine, setVerifChaine] = useState<{ enCours: boolean; rapport: any | null }>({
+    enCours: false,
+    rapport: null,
+  });
+
+  /**
+   * Contrôle d'intégrité de la chaîne d'empreintes des encaissements.
+   * Lecture seule : rien n'est modifié, c'est l'écran à présenter en cas de
+   * contrôle pour montrer que les recettes n'ont pas été retouchées.
+   */
+  const verifierIntegrite = async () => {
+    setVerifChaine({ enCours: true, rapport: null });
+    try {
+      const res = await authFetch("/api/admin/verifier-chaine");
+      const data = await res.json();
+      setVerifChaine({ enCours: false, rapport: res.ok ? data : { erreur: data?.error || "Erreur" } });
+    } catch (e: any) {
+      setVerifChaine({ enCours: false, rapport: { erreur: e?.message || "Erreur réseau" } });
+    }
+  };
+
   const generateFEC = () => {
     const { contenu: content, anomalies } = analyserFecVentes(filteredPayments);
 
@@ -569,6 +590,52 @@ export default function ComptabilitePage() {
                 ${filteredPayments.length === 0 ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
               <Download size={16} /> Télécharger le FEC — {period}
             </button>
+          </Card>
+
+          <Card padding="md">
+            <div className="font-body text-sm font-semibold text-blue-800 mb-1">
+              Contrôle d'intégrité des recettes
+            </div>
+            <div className="font-body text-xs text-slate-500 leading-relaxed mb-3">
+              Chaque encaissement porte une empreinte qui inclut celle du précédent.
+              Ce contrôle les recalcule toutes et signale la moindre écriture modifiée
+              ou manquante. Rien n'est modifié : c'est une lecture.
+            </div>
+            <button onClick={verifierIntegrite} disabled={verifChaine.enCours}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all
+                ${verifChaine.enCours ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
+              {verifChaine.enCours ? "Vérification en cours…" : "Vérifier l'intégrité"}
+            </button>
+            {verifChaine.rapport && (
+              <div className="mt-3 font-body text-xs leading-relaxed">
+                {verifChaine.rapport.erreur ? (
+                  <div className="text-red-600">{verifChaine.rapport.erreur}</div>
+                ) : (
+                  <>
+                    <div className={verifChaine.rapport.conforme ? "text-green-700 font-semibold" : "text-red-600 font-semibold"}>
+                      {verifChaine.rapport.conforme ? "✅ " : "⚠️ "}{verifChaine.rapport.resume}
+                    </div>
+                    {[
+                      { titre: "Écritures modifiées après enregistrement", liste: verifChaine.rapport.empreintesInvalides },
+                      { titre: "Maillons rompus", liste: verifChaine.rapport.chainonsRompus },
+                      { titre: "Écritures sans empreinte", liste: verifChaine.rapport.sansEmpreinte },
+                    ].filter((b) => (b.liste || []).length > 0).map((b) => (
+                      <div key={b.titre} className="mt-2">
+                        <div className="font-semibold text-slate-600">{b.titre} ({b.liste.length})</div>
+                        <ul className="mt-1 pl-4 text-slate-500">
+                          {b.liste.slice(0, 10).map((a: any) => (
+                            <li key={a.id}>
+                              {(a.dateIso || "").slice(0, 10)} — {a.familyName || "—"} — {Number(a.montant).toFixed(2)}€
+                            </li>
+                          ))}
+                          {b.liste.length > 10 && <li>… et {b.liste.length - 10} autre(s).</li>}
+                        </ul>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </Card>
 
           <Card padding="md" className="bg-blue-50 border-blue-500/8">

@@ -81,10 +81,19 @@ async function getLastEncaissementHashServer(): Promise<string | null> {
 }
 
 /**
- * Crée un encaissement signé + chaîné (server-side).
- * Retourne l'ID Firestore du document créé.
+ * Prépare le document d'un encaissement — empreinte et chaînage compris —
+ * sans l'écrire.
+ *
+ * Sert aux chemins qui doivent inscrire l'encaissement DANS une transaction
+ * déjà ouverte : Firestore impose que toutes les lectures y précèdent toutes
+ * les écritures, or le chaînage a besoin de lire le maillon précédent. La
+ * lecture se fait donc avant d'ouvrir la transaction, et le document préparé
+ * part ensuite dans un tx.set(). Sans cela, ces chemins écrivaient un
+ * encaissement nu, hors de la chaîne d'intégrité.
  */
-export async function createEncaissementServer(data: ServerEncaissement): Promise<string> {
+export async function preparerEncaissementServer(
+  data: ServerEncaissement,
+): Promise<Record<string, any>> {
   const previousHash = await getLastEncaissementHashServer();
 
   const dateForHash = data.explicitDate || new Date();
@@ -111,7 +120,7 @@ export async function createEncaissementServer(data: ServerEncaissement): Promis
   }
 
   const { explicitDate, ...rest } = data;
-  const payload: any = {
+  const payload: Record<string, any> = {
     ...rest,
     date: explicitDate ? Timestamp.fromDate(explicitDate) : FieldValue.serverTimestamp(),
     dateIso,
@@ -120,7 +129,16 @@ export async function createEncaissementServer(data: ServerEncaissement): Promis
     payload.hash = hash;
     payload.previousHash = previousHash;
   }
+  return payload;
+}
 
+/**
+ * Crée un encaissement signé + chaîné (server-side).
+ * Retourne l'ID Firestore du document créé.
+ */
+export async function createEncaissementServer(data: ServerEncaissement): Promise<string> {
+  const payload = await preparerEncaissementServer(data);
   const ref = await adminDb.collection("encaissements").add(payload);
   return ref.id;
 }
+

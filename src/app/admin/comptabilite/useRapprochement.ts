@@ -21,7 +21,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { collection, addDoc, updateDoc, doc, getDoc, setDoc, deleteDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, updateDoc, doc, getDoc, setDoc, deleteDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import {
@@ -32,6 +32,7 @@ import {
   parserCsvBancaire,
 } from "./rapprochement-utils";
 import { rapprocherReleve } from "./rapprochement-matching";
+import { createEncaissement } from "@/lib/compta-encaissement";
 
 /** Une ligne du relevé bancaire, telle qu'affichée et telle qu'enregistrée. */
 export interface LigneBancaire {
@@ -435,11 +436,14 @@ export function useRapprochement({
           const bankDateObj = p1
             ? new Date(`${p1[3]}-${p1[2].padStart(2, "0")}-${p1[1].padStart(2, "0")}T12:00:00`)
             : new Date();
-          await addDoc(collection(db, "encaissements"), {
+          // Via createEncaissement, comme tout mouvement de caisse : c'est
+          // lui qui pose l'empreinte et le chaînage. Un encaissement écrit en
+          // direct sort de la chaîne, et une chaîne trouée ne prouve rien.
+          await createEncaissement({
             mode: "especes",
             modeLabel: "Versement banque",
             montant: -Math.abs(bl.amount),
-            date: bankDateObj,
+            explicitDate: bankDateObj,
             familyName: "—",
             activityTitle: "Versement en banque",
             raison: `Versement bancaire auto (rapprochement du ${bl.date})`,

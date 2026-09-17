@@ -26,6 +26,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { lignesDetailHtml, libelleModePaiement } from "@/lib/email-prestations";
 import { nomDestinataireOuDefaut } from "@/lib/nom-destinataire";
+import { preparerEncaissementServer } from "@/lib/compta-encaissement-server";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,21 @@ export async function POST(req: NextRequest) {
 
     // ── Transaction atomique : tout ou rien ────────────────────────────────
     const payRef = adminDb.collection("payments").doc();
+
+    // L'encaissement est préparé AVANT d'ouvrir la transaction : le chaînage
+    // doit lire le maillon précédent, et Firestore interdit une lecture après
+    // une écriture dans une transaction. Ce règlement par avoir écrivait
+    // jusqu'ici un encaissement sans empreinte, donc hors de la chaîne.
+    const encaissementPayload = await preparerEncaissementServer({
+      paymentId: payRef.id,
+      familyId: uid,
+      familyName,
+      montant: toUse,
+      mode: "avoir",
+      modeLabel: "Avoir",
+      ref: "",
+      activityTitle: cart.map((i) => i.activityTitle).join(", "),
+    });
     // Lignes de la commande, gardées pour l'email de confirmation.
     let itemsCommande: any[] = [];
 
@@ -201,19 +217,9 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // 3. Créer l'encaissement
+      // 3. Créer l'encaissement (signé et chaîné, cf. préparation ci-dessus)
       const encRef = adminDb.collection("encaissements").doc();
-      tx.set(encRef, {
-        paymentId: payRef.id,
-        familyId: uid,
-        familyName,
-        montant: toUse,
-        mode: "avoir",
-        modeLabel: "Avoir",
-        ref: "",
-        activityTitle: cart.map((i) => i.activityTitle).join(", "),
-        date: FieldValue.serverTimestamp(),
-      });
+      tx.set(encRef, encaissementPayload);
 
       // 4. Inscrire dans les créneaux (lecture + ajout dans enrolled)
       // Note: ces lectures/écritures sont dans la même transaction pour éviter
