@@ -9,9 +9,10 @@ import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { calculerForfaitAnnuel, type ForfaitTarifs, type FamilyDiscountRule } from "@/lib/forfait-pricing";
 import { coordonneesFacturation, nomsServices, serviceParNom } from "@/lib/services-etablissement";
+import { estClientEtablissement, nouveauJetonDevis } from "@/lib/devis-reponse";
 import {
   emailLayout, emailPanneau, emailTitre, emailParagraphe as P,
-  emailSignature, emailCouleurs as CE,
+  emailSignature, emailCouleurs as CE, emailButton,
 } from "@/lib/email-templates";
 
 const POLICE_DEVIS = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
@@ -44,6 +45,8 @@ interface Devis {
   familyName: string;
   /** Site facturé quand le client est une structure à plusieurs services. */
   serviceFacture?: string;
+  /** Jeton du lien de réponse par email, pour les clients sans espace client. */
+  token?: string;
   familyEmail: string;
   items: DevisItem[];
   totalTTC: number;
@@ -235,6 +238,9 @@ export default function DevisPage() {
         // n'en a parfois aucune, d'où le « pas d'email pour cette famille ».
         familyEmail: coordonneesFacturation(fam as any, serviceParNom((fam as any).services, serviceFacture)).email,
         ...(serviceFacture ? { serviceFacture } : {}),
+        // Lien de réponse : un établissement n'a pas d'espace client, il
+        // valide depuis l'email (cf. lib/devis-reponse).
+        token: nouveauJetonDevis(),
         items: items.filter(i => i.label),
         totalTTC: Math.round(totalTTC * 100) / 100,
         status: "draft",
@@ -292,6 +298,22 @@ export default function DevisPage() {
       // figé : ce que le client reçoit doit être ce que le devis conservera.
       const nomEnvoi = nomClient(d);
       d = { ...d, familyName: nomEnvoi };
+
+      // Client sans espace : la validation passe par un lien à jeton. Les
+      // devis enregistrés avant cette mécanique en reçoivent un maintenant.
+      const fiche = families.find(f => f.firestoreId === d.familyId);
+      let lienReponse = "";
+      if (estClientEtablissement(fiche as any)) {
+        let jeton = d.token || "";
+        if (!jeton) {
+          jeton = nouveauJetonDevis();
+          try {
+            await updateDoc(doc(db, "devis", d.id!), { token: jeton });
+            d = { ...d, token: jeton };
+          } catch (e) { console.warn("[devis] jeton non enregistré :", e); jeton = ""; }
+        }
+        if (jeton) lienReponse = `${window.location.origin}/devis/${jeton}`;
+      }
       // Générer le HTML du devis
       const lignesHtml = d.items.map(i => `
         <tr>
@@ -319,7 +341,13 @@ export default function DevisPage() {
         </table>`,
         d.note ? emailPanneau("Note", P(d.note, 13)) : "",
         P(`Ce devis est valable jusqu'au <strong>${d.validUntil ? new Date(d.validUntil).toLocaleDateString("fr-FR") : "30 jours"}</strong>.`, 14),
-        P("Pour accepter ou refuser ce devis, rendez-vous dans votre espace famille, rubrique Paiements. Pour toute question, appelez-nous au centre équestre.", 14),
+        ...(lienReponse ? [
+          P("Vous pouvez accepter ou refuser ce devis directement depuis ce message, sans créer de compte.", 14),
+          emailButton("Accepter ou refuser ce devis", lienReponse),
+          P(`Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur :<br/><span style="font-size:11px;color:${CE.gris};">${lienReponse}</span>`, 12),
+        ] : [
+          P("Pour accepter ou refuser ce devis, rendez-vous dans votre espace famille, rubrique Paiements. Pour toute question, appelez-nous au centre équestre.", 14),
+        ]),
         emailSignature(),
       ].join("\n"), `Devis ${d.numero} — ${d.totalTTC.toFixed(2).replace(".", ",")} €`);
 
