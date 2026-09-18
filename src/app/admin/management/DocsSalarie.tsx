@@ -8,7 +8,7 @@ import { useToast } from "@/components/ui/Toast";
 import { FolderLock, Loader2, Trash2, Upload, X, Download } from "lucide-react";
 import type { Salarie } from "./types";
 import DossierInterne from "./DossierInterne";
-import { TYPES_DOC_SALARIE, labelTypeDoc, emojiTypeDoc, labelPeriode, type DocSalarie, type TypeDocSalarie } from "@/lib/docs-salaries";
+import { TYPES_DOC_SALARIE, estDocMensuel, labelTypeDoc, emojiTypeDoc, labelPeriode, type DocSalarie, type TypeDocSalarie } from "@/lib/docs-salaries";
 
 interface Props {
   salarie: Salarie;
@@ -18,7 +18,8 @@ interface Props {
 const MAX_MO = 10;
 
 /**
- * Coffre à documents d'un salarié (fiches de paie, attestations…).
+ * Coffre à documents d'un salarié (fiches de paie, attestations, diplômes,
+ * registres des horaires…).
  *
  * L'email est la clé d'accès : c'est lui qui donne au collaborateur le droit
  * de lire ses documents dans Admin → Mes documents. Il est prérempli depuis
@@ -87,7 +88,7 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
   }, [salarie.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const titreParDefaut = () => {
-    if (type === "fiche_paie") return `Fiche de paie — ${labelPeriode(periode) || periode}`;
+    if (estDocMensuel(type)) return `${labelTypeDoc(type)} — ${labelPeriode(periode) || periode}`;
     return labelTypeDoc(type);
   };
 
@@ -115,7 +116,7 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
           email: emailClean,
           type,
           titre: files.length > 1 ? `${titreBase} (page ${index + 1}/${files.length})` : titreBase,
-          ...(type === "fiche_paie" && periode ? { periode } : {}),
+          ...(estDocMensuel(type) && periode ? { periode } : {}),
           fileName: f.name,
           url,
           storagePath,
@@ -174,7 +175,7 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
       </div>
 
       <p className="font-body text-[11px] text-sky-800/80">
-        Fiches de paie, attestations France Travail, contrats… Chaque document n'est visible que par
+        Fiches de paie, attestations France Travail, contrats, diplômes, registres des horaires… Chaque document n'est visible que par
         l'admin et par le salarié connecté avec l'email ci-dessous (menu « Mes documents » de son espace).
       </p>
 
@@ -219,7 +220,7 @@ export default function DocsSalarie({ salarie, onClose }: Props) {
                   {TYPES_DOC_SALARIE.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}
                 </select>
               </label>
-              {type === "fiche_paie" && (
+              {estDocMensuel(type) && (
                 <label className="flex flex-col gap-1 text-slate-600">Mois concerné
                   <input type="month" value={periode} onChange={e => setPeriode(e.target.value)}
                     className="border border-gray-200 rounded-lg px-2 py-1.5" />
