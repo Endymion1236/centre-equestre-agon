@@ -145,6 +145,11 @@ export function analyserCoherence(d: DonneesCoherence): Anomalie[] {
   // comme passée et absente des séances à venir.
   for (const r of d.reservations || []) {
     if (r?.status === "cancelled") continue;
+    // Une réservation annuelle (forfait 1×, 2×, 3×/semaine) représente tout le
+    // contrat : elle porte la liste des créneaux de la saison, pas une date.
+    // La signaler « sans date » était un faux positif — dix lignes pour une
+    // seule inscription en ligne, sans rien à corriger.
+    if (r?.type === "annual") continue;
     const c = r?.creneauId ? creneauxParId.get(r.creneauId) : null;
     if (!r?.date) {
       anomalies.push({

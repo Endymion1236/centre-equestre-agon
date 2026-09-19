@@ -21,6 +21,8 @@
  *   3. virement, prélèvement et remise SEPA, par nom puis par montant —
  *      le libellé est lu sans accents, car le Crédit Agricole écrit
  *      « Avis de prélèvement emis PREL ECH DU … » pour une remise SEPA ;
+ *      un virement peut aussi couvrir la somme de plusieurs écritures d'une
+ *      même famille (deux enfants, deux commandes, un seul versement) ;
  *   4. remise de chèques ou d'espèces, par bordereau puis par sous-ensemble.
  */
 
@@ -36,6 +38,42 @@ import {
   trouverSousEnsembleMontant,
 } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
+
+/**
+ * Un virement qui règle plusieurs écritures d'une même famille : la grand-mère
+ * qui verse 100 € pour deux petits-enfants inscrits sur deux commandes, la
+ * famille qui paie deux stages d'un coup. On regroupe les encaissements par
+ * famille et l'on cherche, famille par famille, la combinaison d'au moins deux
+ * écritures qui retombe sur le montant de la ligne.
+ *
+ * Renvoie une entrée par famille dont une combinaison tombe juste : à l'appelant
+ * de décider quoi faire quand plusieurs familles sont possibles.
+ */
+export function combinaisonsParFamille(
+  encaissements: any[],
+  montant: number,
+): { famille: string; encs: any[] }[] {
+  const cible = Math.round(montant * 100);
+  const parFamille = new Map<string, any[]>();
+  for (const e of encaissements) {
+    const cle = String(e.familyId || e.familyName || "").trim();
+    if (!cle) continue;
+    parFamille.set(cle, [...(parFamille.get(cle) || []), e]);
+  }
+  const resultats: { famille: string; encs: any[] }[] = [];
+  for (const encs of parFamille.values()) {
+    if (encs.length < 2) continue;
+    const combinaison = trouverSousEnsembleMontant(encs, cible);
+    if (combinaison && combinaison.length >= 2) {
+      resultats.push({ famille: combinaison[0].familyName || "Famille", encs: combinaison });
+    }
+  }
+  return resultats;
+}
+
+/** « 50,00 + 50,00 » pour lire d'un coup d'œil ce que la ligne regroupe. */
+const detailCombinaison = (encs: any[]) =>
+  encs.map((e) => (e.montant || 0).toFixed(2)).join(" + ");
 
 export interface EtatRecettes {
   encaissementsCompta: any[];
@@ -305,6 +343,18 @@ export function rapprocherReleve(
         usedEncIds.add(encNameAmount.id);
         return { ...bl, matched: true, matchType: "Virement", matchDetail: `Virement ${encNameAmount.familyName}`, matchedEncs: [encaissementEnDetail(encNameAmount)] };
       }
+      // Nom + SOMME de plusieurs écritures de cette famille : un virement qui
+      // règle deux commandes d'un coup (deux enfants, deux stages).
+      const combinaisonNom = combinaisonsParFamille(encNameMatches.filter(inWindow), bl.amount);
+      if (combinaisonNom.length === 1) {
+        const { famille, encs } = combinaisonNom[0];
+        encs.forEach(e => usedEncIds.add(e.id));
+        return {
+          ...bl, matched: true, matchType: "Virement",
+          matchDetail: `Virement ${famille} — ${encs.length} écritures (${detailCombinaison(encs)})`,
+          matchedEncs: encs.map(encaissementEnDetail),
+        };
+      }
 
       // b.2) Parmi les PAIEMENTS virement en attente (pending/partial), match par nom
       //      Une facture créée à la main en attendant le virement n'a pas de mode
@@ -369,6 +419,26 @@ export function rapprocherReleve(
         };
       }
       // Si plusieurs encaissements de même montant → ambigu, on laisse au pointage manuel
+
+      // c bis) Aucune écriture seule ne fait le montant : une SOMME d'écritures
+      //    d'une même famille le fait-elle ? C'est le virement de la grand-mère
+      //    dont le nom n'est pas celui de la famille : 100 € reçus, 50 € + 50 €
+      //    encaissés sur les deux commandes des petits-enfants. Une seule
+      //    famille candidate, sinon on laisse la main à Nicolas ; et comme le
+      //    nom manque, la ligne reste « à vérifier ».
+      if (amountMatches.length === 0) {
+        const combinaisons = combinaisonsParFamille(virEncs.filter(inWindow), bl.amount);
+        if (combinaisons.length === 1) {
+          const { famille, encs } = combinaisons[0];
+          encs.forEach(e => usedEncIds.add(e.id));
+          return {
+            ...bl, matched: true, matchType: "Virement",
+            matchDetail: `Virement ${famille} — ${encs.length} écritures (${detailCombinaison(encs)}) (montant seul)`,
+            matchedEncs: encs.map(encaissementEnDetail),
+            uncertain: true, // nom absent du libellé → à vérifier
+          };
+        }
+      }
 
       // d) Match par montant exact sur les paiements virement EN ATTENTE uniquement
       const pendingVirPayments = payments.filter(p =>

@@ -12,13 +12,13 @@
  * résultat et recueille les décisions prises à la main.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Upload, Search, Sparkles, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
-import { encaissementEnDetail, encaissementsDeRemiseSepa, parserDetailCa } from "./rapprochement-utils";
+import { encaissementEnDetail, encaissementsDeRemiseSepa, parserDateBancaire, parserDetailCa } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 
 export interface OngletRapprochementProps {
@@ -56,6 +56,10 @@ export default function OngletRapprochement({
   const [showManualMatch, setShowManualMatch] = useState<number | null>(null);
   const [expandedBankLine, setExpandedBankLine] = useState<number | null>(null);
   const [manualSearch, setManualSearch] = useState("");
+  // Écritures virement cochées dans la fenêtre de pointage : une ligne
+  // bancaire peut en couvrir plusieurs (un virement pour deux commandes).
+  const [manualEncSelection, setManualEncSelection] = useState<Set<string>>(new Set());
+  useEffect(() => { setManualEncSelection(new Set()); }, [showManualMatch]);
   const [relanceEnCours, setRelanceEnCours] = useState(false);
   // Saisie du détail d'une remise collé depuis le site Crédit Agricole
   const [showCADetailModal, setShowCADetailModal] = useState<number | null>(null);
@@ -146,7 +150,7 @@ export default function OngletRapprochement({
 
           <Card padding="md" className="bg-blue-50 border-blue-500/8">
             <div className="font-body text-sm text-blue-800">
-              Importez votre relevé bancaire au format CSV pour rapprocher les mouvements avec vos encaissements. Les virements sont également matchés par nom de famille dans le libellé, et les prélèvements SEPA par le total de la remise. Cliquez sur "Pointer" pour les lignes non rapprochées : la fenêtre propose les factures en attente de règlement, les remises SEPA et les factures du mois.
+              Importez votre relevé bancaire au format CSV pour rapprocher les mouvements avec vos encaissements. Les virements sont également matchés par nom de famille dans le libellé, et les prélèvements SEPA par le total de la remise. Cliquez sur "Pointer" pour les lignes non rapprochées : la fenêtre propose les virements déjà encaissés (une ou plusieurs écritures pour une même ligne), les factures en attente de règlement, les remises SEPA et les factures du mois.
               <br />
               Une facture en attente pointée sur un virement est <b>encaissée</b> (écriture au journal, numéro de facture) à la date du relevé. Si tu as créé une facture ou déposé une remise après l'import, "Relancer le rapprochement" refait le calcul sans réimporter le CSV.
             </div>
@@ -822,12 +826,115 @@ export default function OngletRapprochement({
                   setShowManualMatch(null);
                 };
 
+                // 4. Écritures virement DÉJÀ passées au journal et pas encore
+                //    rapprochées : le virement encaissé à la main depuis
+                //    Impayés, avant l'arrivée du relevé. Les pointer ici relie
+                //    la ligne à l'écriture existante — rien n'est ré-encaissé,
+                //    contrairement au pointage d'une facture. Plusieurs cases
+                //    peuvent être cochées : un seul virement pour deux commandes.
+                const dateLigne = parserDateBancaire(ligne.date);
+                const encsVirement = (encaissementsCompta || [])
+                  .filter((e: any) => (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && !e.reconciledByBank)
+                  .filter((e: any) => {
+                    if (!dateLigne || !e.date?.seconds) return true;
+                    const ecart = Math.abs(dateLigne.getTime() - e.date.seconds * 1000) / 86_400_000;
+                    return ecart <= 45;
+                  })
+                  .filter((e: any) => {
+                    if (!q) return true;
+                    return (e.familyName || "").toLowerCase().includes(q)
+                      || (e.montant || 0).toFixed(2).includes(q)
+                      || (e.activityTitle || "").toLowerCase().includes(q)
+                      || (e.ref || "").toLowerCase().includes(q);
+                  })
+                  .sort((a: any, b: any) => {
+                    const ea = montantProche(a.montant) ? 0 : 1;
+                    const eb = montantProche(b.montant) ? 0 : 1;
+                    if (ea !== eb) return ea - eb;
+                    return (b.date?.seconds || 0) - (a.date?.seconds || 0);
+                  })
+                  .slice(0, 40);
+                const encsCoches = encsVirement.filter((e: any) => manualEncSelection.has(e.id));
+                const totalCoche = Math.round(encsCoches.reduce((s: number, e: any) => s + (e.montant || 0), 0) * 100) / 100;
+                const basculerEnc = (id: string) => {
+                  const suivant = new Set(manualEncSelection);
+                  if (suivant.has(id)) suivant.delete(id); else suivant.add(id);
+                  setManualEncSelection(suivant);
+                };
+
+                const pointerEncaissements = async () => {
+                  if (encsCoches.length === 0) return;
+                  if (!montantProche(totalCoche)) {
+                    const ok = window.confirm(
+                      `La ligne bancaire fait ${ligne.amount.toFixed(2)}€ et les écritures cochées totalisent ${totalCoche.toFixed(2)}€.\n\nPointer quand même ?`,
+                    );
+                    if (!ok) return;
+                  }
+                  const familles = [...new Set(encsCoches.map((e: any) => e.familyName || "—"))].join(", ");
+                  const updated = [...bankLines];
+                  updated[showManualMatch!] = {
+                    ...updated[showManualMatch!],
+                    matched: true,
+                    matchType: "Manuel",
+                    matchDetail: encsCoches.length === 1
+                      ? `Virement ${familles} — écriture du ${encaissementEnDetail(encsCoches[0]).date} (${totalCoche.toFixed(2)}€)`
+                      : `Virement ${familles} — ${encsCoches.length} écritures (${encsCoches.map((e: any) => (e.montant || 0).toFixed(2)).join(" + ")} = ${totalCoche.toFixed(2)}€)`,
+                    matchedEncs: encsCoches.map(encaissementEnDetail),
+                    // Pas de facture pointée : la synchronisation ne doit rien
+                    // encaisser, l'argent est déjà au journal.
+                    manualPaymentId: undefined,
+                    remiseSepaId: undefined,
+                    uncertain: false,
+                  };
+                  await updateAndSaveBankLines(updated);
+                  setShowManualMatch(null);
+                };
+
                 const titre = (t: string) => (
                   <div className="font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider mt-3 mb-1.5 first:mt-0">{t}</div>
                 );
 
                 return (
                   <div className="flex flex-col gap-1.5">
+                    {encsVirement.length > 0 && titre(`Virements déjà encaissés, à relier (${encsVirement.length})`)}
+                    {encsVirement.length > 0 && (
+                      <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
+                        Cochez une ou plusieurs écritures : un virement peut régler deux commandes d'un coup. Rien n'est ré-encaissé.
+                      </p>
+                    )}
+                    {encsVirement.map((e: any) => {
+                      const coche = manualEncSelection.has(e.id);
+                      const amountMatch = montantProche(e.montant);
+                      const d = encaissementEnDetail(e).date;
+                      return (
+                        <label key={e.id}
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${coche ? "border-blue-400 bg-blue-50/50" : amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}>
+                          <input type="checkbox" checked={coche} onChange={() => basculerEnc(e.id)} className="cursor-pointer" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-body text-sm font-semibold text-blue-800 truncate">🏦 {e.familyName || "—"}</div>
+                            <div className="font-body text-xs text-slate-500 truncate">
+                              {d} · {e.activityTitle || "—"}{e.ref ? ` · ${e.ref}` : ""}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-blue-500"}`}>{(e.montant || 0).toFixed(2)}€</div>
+                            {amountMatch && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
+                          </div>
+                        </label>
+                      );
+                    })}
+                    {encsCoches.length > 0 && (
+                      <div className="sticky bottom-0 flex items-center justify-between gap-3 bg-white border border-blue-200 rounded-lg px-3 py-2 shadow-sm">
+                        <div className="font-body text-xs text-slate-600">
+                          {encsCoches.length} écriture{encsCoches.length > 1 ? "s" : ""} · <strong className={montantProche(totalCoche) ? "text-green-600" : "text-orange-500"}>{totalCoche.toFixed(2)}€</strong> / {ligne.amount.toFixed(2)}€
+                        </div>
+                        <button type="button" onClick={pointerEncaissements}
+                          className="font-body text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg border-none cursor-pointer">
+                          Pointer {encsCoches.length > 1 ? "ces écritures" : "cette écriture"}
+                        </button>
+                      </div>
+                    )}
+
                     {enAttente.length > 0 && titre(`Factures en attente de règlement (${enAttente.length})`)}
                     {enAttente.map((p: any) => {
                       const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
@@ -897,8 +1004,8 @@ export default function OngletRapprochement({
                       );
                     })}
 
-                    {enAttente.length === 0 && remisesCandidates.length === 0 && duMois.length === 0 && (
-                      <div className="font-body text-sm text-slate-500 text-center py-6">Aucune facture ni remise ne correspond à cette recherche.</div>
+                    {encsVirement.length === 0 && enAttente.length === 0 && remisesCandidates.length === 0 && duMois.length === 0 && (
+                      <div className="font-body text-sm text-slate-500 text-center py-6">Aucune écriture, facture ni remise ne correspond à cette recherche.</div>
                     )}
                   </div>
                 );

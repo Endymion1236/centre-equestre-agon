@@ -310,6 +310,53 @@ console.log("\n✓ Écritures couvertes par une ligne pointée sur une facture :
     encaissementsCouvertsParLigne(ligne("01/09/2026", "VIR ENAUX", 300), [nee, { id: "autre", montant: 300 }]).map(e => e.id).join() === "v1");
 }
 
+console.log("\n✓ Un virement pour deux commandes d'une même famille :");
+{
+  // La grand-mère GRENIER vire 100 € pour ses deux petits-enfants ; Nicolas a
+  // encaissé 50 € sur chacune des deux commandes de la famille. Le libellé
+  // porte le nom de la grand-mère, pas celui de la famille.
+  const encaissements = [
+    { ...enc("g1", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("g2", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("x1", 40, "virement", "2026-09-18", "Dupont"), familyId: "famD" },
+  ];
+  const r = rapprocherReleve(
+    [ligne("19/09/2026", "VIR DE MME LEGRAND ODILE", 100)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  const l = r.finalMatched[0];
+  assert("la ligne est rapprochée", l.matched, l.matchDetail);
+  assert("les deux écritures de la famille sont consommées", r.usedEncIds.has("g1") && r.usedEncIds.has("g2") && !r.usedEncIds.has("x1"), [...r.usedEncIds].join(","));
+  assert("le détail explique la somme", l.matchDetail.includes("50.00 + 50.00"), l.matchDetail);
+  assert("nom absent du libellé : la ligne reste à vérifier", l.uncertain === true);
+  assert("aucune facture n'est pointée (rien ne sera ré-encaissé)", !l.manualPaymentId);
+
+  // Même virement, mais cette fois le libellé porte le nom de la famille :
+  // la correspondance est sûre.
+  const r2 = rapprocherReleve(
+    [ligne("19/09/2026", "VIR DE MME GRENIER MATHILDE", 100)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("nom présent : rapprochée sans doute", r2.finalMatched[0].matched && !r2.finalMatched[0].uncertain, r2.finalMatched[0].matchDetail);
+  assert("les deux écritures GRENIER consommées", r2.usedEncIds.has("g1") && r2.usedEncIds.has("g2"));
+}
+
+console.log("\n✓ Deux familles pourraient faire la somme : on laisse la main :");
+{
+  const encaissements = [
+    { ...enc("a1", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("a2", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("b1", 60, "virement", "2026-09-18", "Dupont"), familyId: "famD" },
+    { ...enc("b2", 40, "virement", "2026-09-18", "Dupont"), familyId: "famD" },
+  ];
+  const r = rapprocherReleve(
+    [ligne("19/09/2026", "VIR DE M INCONNU", 100)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("ambigu : la ligne reste à pointer", !r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("rien n'est consommé", r.usedEncIds.size === 0);
+}
+
 console.log("\n✓ Relevé vide :");
 {
   const r = rapprocherReleve([], etatVide);

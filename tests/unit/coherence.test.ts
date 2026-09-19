@@ -104,10 +104,16 @@ console.log("\n✓ Réservation mal datée (cas ROZIER, promenade d'octobre au 3
     reservations: [
       { id: "r1", childName: "Loucia", familyName: "Rozier", activityTitle: "Promenade", creneauId: "cr1", date: "2026-08-31" },
       { id: "r2", childName: "Sans date", creneauId: "cr1" },
+      // Le cas GRENIER : une inscription annuelle prise en ligne n'a pas de
+      // date propre — ses créneaux sont listés dans creneauIds.
+      { id: "r3", childName: "Léance", familyName: "Grenier", activityTitle: "Cours débutant 10-16 ans", type: "annual", creneauIds: ["cr1"], status: "pending_validation" },
     ],
   });
   assert("date incohérente signalée", codes(a).includes("reservation-date-incoherente"), codes(a).join(", "));
   assert("réservation sans date signalée", codes(a).includes("reservation-sans-date"), codes(a).join(", "));
+  assert("une seule réservation sans date : l'annuelle n'est pas comptée",
+    a.filter((x) => x.code === "reservation-sans-date").length === 1,
+    a.filter((x) => x.code === "reservation-sans-date").map((x) => x.detail).join(" | "));
 
   const incoherente = a.find((x) => x.code === "reservation-date-incoherente")!;
   assert("la réparation est proposée", incoherente.action === "corriger-date-reservation", String(incoherente.action));
