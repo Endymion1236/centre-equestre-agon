@@ -18,7 +18,14 @@ export interface ImpayeFilters {
   familyFilter?: string;
   typeFilter?: ImpayeTypeFilter;
   natureFilter?: NatureImpaye | "all";
+  /** « Rien réglé » : ne garder que les commandes sans le moindre encaissement. */
+  rienRegle?: boolean;
   search?: string;
+}
+
+/** Aucun centime encaissé sur la commande — ni acompte, ni règlement partiel. */
+export function rienRegle(payment: any): boolean {
+  return Number(payment?.paidAmount || 0) < 0.005;
 }
 
 const TYPES_STAGE = new Set(["stage", "stage_journee"]);
@@ -126,6 +133,7 @@ export function filtrerImpayes(unpaid: any[], filters: ImpayeFilters): any[] {
     if (typeFilter === "echeance" && !isEcheance) return false;
 
     if (filters.natureFilter && filters.natureFilter !== "all" && natureCommande(payment) !== filters.natureFilter) return false;
+    if (filters.rienRegle && !rienRegle(payment)) return false;
 
     if (!search) return true;
     const inName = String(payment?.familyName || "").toLowerCase().includes(search);

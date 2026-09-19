@@ -4,6 +4,7 @@ import {
   compterParNature,
   filtrerImpayes,
   natureCommande,
+  rienRegle,
   grouperImpayesParEvenement,
   listerImpayes,
   prelevementAPreparer,
@@ -131,6 +132,20 @@ test("le filtre par nature et ses compteurs", () => {
   assert.deepEqual(filtrerImpayes(lot, { natureFilter: "stage" }).map((x) => x.id), ["s"]);
   assert.deepEqual(filtrerImpayes(lot, { natureFilter: "all" }).map((x) => x.id), ["s", "b", "c", "f"]);
   assert.deepEqual(compterParNature(lot), { stage: 1, balade: 1, seance: 1, forfait: 1, autre: 0 });
+});
+
+test("« Rien réglé » écarte les acomptes et règlements partiels", () => {
+  const lot = [
+    p({ id: "zero", paidAmount: 0 }),
+    p({ id: "absent", paidAmount: undefined }),
+    p({ id: "acompte", paidAmount: 30 }),
+    p({ id: "centime", paidAmount: 0.01 }),
+  ];
+  assert.equal(rienRegle(lot[0]), true);
+  assert.equal(rienRegle(lot[1]), true);
+  assert.equal(rienRegle(lot[2]), false);
+  assert.deepEqual(filtrerImpayes(lot, { rienRegle: true }).map((x) => x.id), ["zero", "absent"]);
+  assert.deepEqual(filtrerImpayes(lot, { rienRegle: false }).map((x) => x.id), ["zero", "absent", "acompte", "centime"]);
 });
 
 console.log("\n── Totaux et regroupements ──");

@@ -19,6 +19,7 @@ import {
   calculerResumeImpayes,
   compterParNature,
   filtrerImpayes,
+  rienRegle,
   type NatureImpaye,
   grouperImpayesParEvenement,
   listerImpayes,
@@ -119,15 +120,20 @@ export function TabImpayes({
   const [typeFilter, setTypeFilter] = useState<ImpayeTypeFilter>("all");
   // Par activité : stages, promenades, séances, forfaits annuels.
   const [natureFilter, setNatureFilter] = useState<NatureImpaye | "all">("all");
+  // « Rien réglé » : les commandes sans aucun encaissement, ni acompte ni partiel.
+  const [seulementRienRegle, setSeulementRienRegle] = useState(false);
 
   const todayStr = new Date().toISOString().split("T")[0];
   const unpaid = useMemo(() => listerImpayes(payments, todayStr), [payments, todayStr]);
   const filtered = useMemo(
-    () => filtrerImpayes(unpaid, { familyFilter, typeFilter, natureFilter, search: impayesSearch }),
-    [unpaid, familyFilter, typeFilter, natureFilter, impayesSearch],
+    () => filtrerImpayes(unpaid, { familyFilter, typeFilter, natureFilter, rienRegle: seulementRienRegle, search: impayesSearch }),
+    [unpaid, familyFilter, typeFilter, natureFilter, seulementRienRegle, impayesSearch],
   );
   const parNature = useMemo(() => compterParNature(unpaid), [unpaid]);
   const naturesPresentes = NATURES_IMPAYES.filter(n => parNature[n.id] > 0);
+  const nbRienRegle = useMemo(() => unpaid.filter(rienRegle).length, [unpaid]);
+  // La pastille n'a de sens que si elle sépare quelque chose.
+  const proposerRienRegle = nbRienRegle > 0 && nbRienRegle < unpaid.length;
   const groups = useMemo(() => grouperImpayesParEvenement(filtered), [filtered]);
   const multiEncaissements = useMemo(() => preparerMultiEncaissements(unpaid), [unpaid]);
   const { totalDue, totalFiltre, nbInvoice, nbEcheance } = useMemo(
@@ -246,11 +252,11 @@ export function TabImpayes({
         </div>
       )}
 
-      {naturesPresentes.length >= 2 && (
+      {(naturesPresentes.length >= 2 || proposerRienRegle) && (
         <div className="flex gap-2 mb-4 flex-wrap" data-testid="impaye-nature-filter">
-          <button type="button" onClick={() => setNatureFilter("all")}
-            className={`px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${natureFilter === "all" ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
-            Toutes activités
+          <button type="button" onClick={() => { setNatureFilter("all"); setSeulementRienRegle(false); }}
+            className={`px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${natureFilter === "all" && !seulementRienRegle ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
+            Tout
           </button>
           {naturesPresentes.map(n => (
             <button type="button" key={n.id} onClick={() => setNatureFilter(natureFilter === n.id ? "all" : n.id)}
@@ -258,6 +264,13 @@ export function TabImpayes({
               {n.emoji} {n.label} <span className={`px-1.5 py-0.5 rounded text-[10px] ${natureFilter === n.id ? "bg-white/20" : "bg-slate-100"}`}>{parNature[n.id]}</span>
             </button>
           ))}
+          {proposerRienRegle && (
+            <button type="button" data-testid="impaye-rien-regle" onClick={() => setSeulementRienRegle(v => !v)}
+              title="Ne garder que les commandes sans aucun encaissement (ni acompte, ni partiel)"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${seulementRienRegle ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-200 hover:bg-red-50"}`}>
+              💸 Rien réglé <span className={`px-1.5 py-0.5 rounded text-[10px] ${seulementRienRegle ? "bg-white/20" : "bg-red-50"}`}>{nbRienRegle}</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -265,6 +278,8 @@ export function TabImpayes({
         <p className="font-body text-sm text-slate-500 text-center py-8">
           {search ? `Aucun résultat pour "${search}"` :
             familyFilter ? `Aucun impayé pour ${familyFilterLabel}.` :
+            seulementRienRegle && natureFilter !== "all" ? `Aucune commande « ${NATURES_IMPAYES.find(n => n.id === natureFilter)?.label} » sans rien de réglé.` :
+            seulementRienRegle ? "Toutes les commandes en attente ont au moins un acompte." :
             natureFilter !== "all" ? `Aucun impayé pour « ${NATURES_IMPAYES.find(n => n.id === natureFilter)?.label} ».` :
             typeFilter === "invoice" ? "Aucune facture impayée." :
             typeFilter === "echeance" ? "Aucune échéance en retard." :
