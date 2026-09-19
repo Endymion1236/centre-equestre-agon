@@ -1,10 +1,60 @@
 import { prelevementPlanifie, resteHorsSepa } from "@/lib/sepa-remise";
+import { estBalade } from "@/lib/cgv-clauses";
+import { estCommandeInscriptionAnnuelle } from "@/lib/inscription-annuelle-paiement";
 export type ImpayeTypeFilter = "all" | "invoice" | "echeance";
+
+/** Ce que la commande vend : de quoi trier les impayés par activité. */
+export type NatureImpaye = "stage" | "balade" | "seance" | "forfait" | "autre";
+
+export const NATURES_IMPAYES: { id: NatureImpaye; label: string; emoji: string }[] = [
+  { id: "stage", label: "Stages", emoji: "🏕️" },
+  { id: "balade", label: "Promenades", emoji: "🌲" },
+  { id: "seance", label: "Séances", emoji: "🐴" },
+  { id: "forfait", label: "Forfaits annuels", emoji: "📅" },
+  { id: "autre", label: "Autres", emoji: "📎" },
+];
 
 export interface ImpayeFilters {
   familyFilter?: string;
   typeFilter?: ImpayeTypeFilter;
+  natureFilter?: NatureImpaye | "all";
   search?: string;
+}
+
+const TYPES_STAGE = new Set(["stage", "stage_journee"]);
+const TYPES_SEANCE = new Set(["cours", "cours_collectif", "cours_particulier", "competition"]);
+
+/**
+ * La nature d'une commande, lue sur ses lignes. Le type d'activité est la
+ * référence ; le libellé sert de repli pour les commandes anciennes ou saisies
+ * au bureau, qui n'en portent pas toujours. Un forfait annuel prime : il
+ * contient souvent une ligne « cours » qui ne doit pas le faire passer pour
+ * une séance.
+ */
+export function natureCommande(payment: any): NatureImpaye {
+  if (estCommandeInscriptionAnnuelle(payment)) return "forfait";
+  const items: any[] = Array.isArray(payment?.items) ? payment.items : [];
+  const type = (item: any) => String(item?.activityType || "").toLowerCase();
+  if (payment?.type === "stage"
+    || items.some((item) => TYPES_STAGE.has(type(item))
+      || (Array.isArray(item?.stageDates) && item.stageDates.length > 0)
+      || /\bstage\b/i.test(String(item?.activityTitle || "")))) {
+    return "stage";
+  }
+  if (items.some((item) => estBalade(item))) return "balade";
+  if (items.some((item) => TYPES_SEANCE.has(type(item))
+    || item?.creneauId
+    || (Array.isArray(item?.creneauIds) && item.creneauIds.length > 0)
+    || item?.date)) {
+    return "seance";
+  }
+  return "autre";
+}
+
+export function compterParNature(unpaid: any[]): Record<NatureImpaye, number> {
+  const compte: Record<NatureImpaye, number> = { stage: 0, balade: 0, seance: 0, forfait: 0, autre: 0 };
+  for (const payment of unpaid) compte[natureCommande(payment)]++;
+  return compte;
 }
 
 export interface ImpayeGroup {
@@ -74,6 +124,8 @@ export function filtrerImpayes(unpaid: any[], filters: ImpayeFilters): any[] {
     const isEcheance = Number(payment?.echeancesTotal || 0) > 1;
     if (typeFilter === "invoice" && isEcheance) return false;
     if (typeFilter === "echeance" && !isEcheance) return false;
+
+    if (filters.natureFilter && filters.natureFilter !== "all" && natureCommande(payment) !== filters.natureFilter) return false;
 
     if (!search) return true;
     const inName = String(payment?.familyName || "").toLowerCase().includes(search);

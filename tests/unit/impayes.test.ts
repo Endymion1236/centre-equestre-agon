@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
   calculerResumeImpayes,
+  compterParNature,
   filtrerImpayes,
+  natureCommande,
   grouperImpayesParEvenement,
   listerImpayes,
   prelevementAPreparer,
@@ -95,6 +97,40 @@ test("la recherche couvre famille, activité et enfant", () => {
   assert.deepEqual(filtrerImpayes(unpaid, { search: "durand" }).map((x) => x.id), ["b", "c"]);
   assert.deepEqual(filtrerImpayes(unpaid, { search: "balade" }).map((x) => x.id), ["b"]);
   assert.deepEqual(filtrerImpayes(unpaid, { search: "eliot" }).map((x) => x.id), ["a"]);
+});
+
+console.log("\n── Nature des commandes ──");
+
+test("la nature se lit sur le type d'activité, le libellé en repli", () => {
+  assert.equal(natureCommande(p({ items: [{ activityType: "stage", activityTitle: "Galop de bronze 6/7 ans", stageDates: [{ date: "2026-10-20" }] }] })), "stage");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Stage galop de bronze 6/7 ans — 20 au 24 oct." }] })), "stage");
+  assert.equal(natureCommande(p({ items: [{ activityType: "balade", activityTitle: "Balade en forêt" }] })), "balade");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Promenade du dimanche", date: "2026-10-04" }] })), "balade");
+  assert.equal(natureCommande(p({ items: [{ activityType: "cours", activityTitle: "Adultes G1 à G4", creneauId: "cr1", date: "2026-10-02" }] })), "seance");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Cours débutant", date: "2026-10-02" }] })), "seance");
+});
+
+test("un forfait annuel prime sur ses lignes de cours, adhésion seule est « autre »", () => {
+  assert.equal(natureCommande(p({ items: [
+    { activityTitle: "Adhésion annuelle (enfant 1)" },
+    { activityTitle: "Licence FFE -18 ans" },
+    { activityType: "cours", activityTitle: "Forfait 1×/semaine" },
+  ] })), "forfait");
+  assert.equal(natureCommande(p({ type: "inscription_annuelle", items: [{ activityType: "cours", activityTitle: "Cours débutant 10-16 ans" }] })), "forfait");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Adhésion annuelle" }] })), "autre");
+});
+
+test("le filtre par nature et ses compteurs", () => {
+  const lot = [
+    p({ id: "s", items: [{ activityType: "stage", activityTitle: "Stage", date: "2026-10-20" }] }),
+    p({ id: "b", items: [{ activityTitle: "Promenade", date: "2026-10-04" }] }),
+    p({ id: "c", items: [{ activityType: "cours", activityTitle: "Adultes G1 à G4", creneauId: "cr1", date: "2026-10-02" }] }),
+    p({ id: "f", items: [{ activityTitle: "Forfait 1×/semaine" }] }),
+  ];
+  assert.deepEqual(filtrerImpayes(lot, { natureFilter: "seance" }).map((x) => x.id), ["c"]);
+  assert.deepEqual(filtrerImpayes(lot, { natureFilter: "stage" }).map((x) => x.id), ["s"]);
+  assert.deepEqual(filtrerImpayes(lot, { natureFilter: "all" }).map((x) => x.id), ["s", "b", "c", "f"]);
+  assert.deepEqual(compterParNature(lot), { stage: 1, balade: 1, seance: 1, forfait: 1, autre: 0 });
 });
 
 console.log("\n── Totaux et regroupements ──");

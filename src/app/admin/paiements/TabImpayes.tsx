@@ -15,8 +15,11 @@ import { useConfirm } from "@/components/ui/Confirm";
 import { estCompteProfessionnel } from "@/lib/facturx";
 import { echeanceParDefaut } from "./facturx-depot-utils";
 import {
+  NATURES_IMPAYES,
   calculerResumeImpayes,
+  compterParNature,
   filtrerImpayes,
+  type NatureImpaye,
   grouperImpayesParEvenement,
   listerImpayes,
   preparerMultiEncaissements,
@@ -114,13 +117,17 @@ export function TabImpayes({
   const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<ImpayeTypeFilter>("all");
+  // Par activité : stages, promenades, séances, forfaits annuels.
+  const [natureFilter, setNatureFilter] = useState<NatureImpaye | "all">("all");
 
   const todayStr = new Date().toISOString().split("T")[0];
   const unpaid = useMemo(() => listerImpayes(payments, todayStr), [payments, todayStr]);
   const filtered = useMemo(
-    () => filtrerImpayes(unpaid, { familyFilter, typeFilter, search: impayesSearch }),
-    [unpaid, familyFilter, typeFilter, impayesSearch],
+    () => filtrerImpayes(unpaid, { familyFilter, typeFilter, natureFilter, search: impayesSearch }),
+    [unpaid, familyFilter, typeFilter, natureFilter, impayesSearch],
   );
+  const parNature = useMemo(() => compterParNature(unpaid), [unpaid]);
+  const naturesPresentes = NATURES_IMPAYES.filter(n => parNature[n.id] > 0);
   const groups = useMemo(() => grouperImpayesParEvenement(filtered), [filtered]);
   const multiEncaissements = useMemo(() => preparerMultiEncaissements(unpaid), [unpaid]);
   const { totalDue, totalFiltre, nbInvoice, nbEcheance } = useMemo(
@@ -239,10 +246,26 @@ export function TabImpayes({
         </div>
       )}
 
+      {naturesPresentes.length >= 2 && (
+        <div className="flex gap-2 mb-4 flex-wrap" data-testid="impaye-nature-filter">
+          <button type="button" onClick={() => setNatureFilter("all")}
+            className={`px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${natureFilter === "all" ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
+            Toutes activités
+          </button>
+          {naturesPresentes.map(n => (
+            <button type="button" key={n.id} onClick={() => setNatureFilter(natureFilter === n.id ? "all" : n.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${natureFilter === n.id ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
+              {n.emoji} {n.label} <span className={`px-1.5 py-0.5 rounded text-[10px] ${natureFilter === n.id ? "bg-white/20" : "bg-slate-100"}`}>{parNature[n.id]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {filtered.length === 0 && (
         <p className="font-body text-sm text-slate-500 text-center py-8">
           {search ? `Aucun résultat pour "${search}"` :
             familyFilter ? `Aucun impayé pour ${familyFilterLabel}.` :
+            natureFilter !== "all" ? `Aucun impayé pour « ${NATURES_IMPAYES.find(n => n.id === natureFilter)?.label} ».` :
             typeFilter === "invoice" ? "Aucune facture impayée." :
             typeFilter === "echeance" ? "Aucune échéance en retard." :
             "Aucun impayé."}
@@ -525,7 +548,33 @@ export function TabImpayes({
                               }} className="font-body text-[10px] text-orange-600 bg-orange-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-orange-100 flex items-center gap-1"><Receipt size={10}/> → Facture définitive</button>
                             )}
                             <button type="button" onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
-                            {(p.items||[]).some((i:any) => i.activityType === "cours" || i.activityTitle?.includes("Forfait")) && (
+                            {/* Séance, promenade ou stage réservés sur des créneaux précis :
+                                on REPLACE le cavalier sur ces créneaux-là (la place tenue
+                                a pu expirer faute de paiement), jamais sur toutes les
+                                semaines à venir — c'est le rôle du bouton forfait ci-dessous. */}
+                            {(p.items||[]).some((i:any) => (i.creneauId || (Array.isArray(i.creneauIds) && i.creneauIds.length > 0)) && !i.activityTitle?.includes("Forfait")) && (
+                              <button type="button" onClick={async () => {
+                                try {
+                                  const res = await authFetch("/api/admin/confirmer-places", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ paymentId: p.id }),
+                                  });
+                                  const json = await res.json().catch(() => ({}));
+                                  if (!res.ok) throw new Error(json?.error || "Échec");
+                                  const n = Number(json?.reinscrites || 0) + Number(json?.confirmees || 0);
+                                  toast(n > 0
+                                    ? `✅ ${p.familyName} replacé(e) au planning (${n} place${n > 1 ? "s" : ""}).`
+                                    : "Déjà au planning : rien à replacer.", n > 0 ? "success" : "info");
+                                } catch (e: any) {
+                                  console.error(e);
+                                  toast(e?.message || "Impossible de replacer au planning", "error");
+                                }
+                              }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
+                                📅 Replacer au planning
+                              </button>
+                            )}
+                            {(p.items||[]).some((i:any) => i.activityTitle?.includes("Forfait")) && (
                               <button type="button" onClick={async () => {
                                 let paymentToUse = p;
                                 if (p.sourcePaymentId) {
@@ -539,7 +588,7 @@ export function TabImpayes({
                                 const n = await enrollChildInForfait(paymentToUse, p.familyId);
                                 toast(n > 0 ? `✅ ${n} séance(s) inscrite(s)` : "⚠️ Aucune séance inscrite — vérifiez le planning", n > 0 ? "success" : "error");
                               }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
-                                📅 Inscrire créneaux
+                                📅 Inscrire créneaux de l'année
                               </button>
                             )}
                           </div>
