@@ -68,6 +68,52 @@ export function apparierEnfants(enfantsConserves: any[], enfantsAbsorbes: any[])
   return { correspondances, aAjouter };
 }
 
+/** Une fiche candidate au rattachement, telle qu'on a besoin de la juger. */
+export interface FicheCandidate {
+  id: string;
+  status?: string | null;
+  children?: any[] | null;
+}
+
+/**
+ * Parmi les fiches portant l'adresse d'un compte, laquelle lui appartient ?
+ *
+ * Sa propre fiche ne compte pas, une fiche déjà absorbée non plus. Une fiche
+ * avec des cavaliers l'emporte sur une fiche vide : c'est celle du bureau,
+ * celle qu'on cherche. Deux fiches avec des cavaliers à la même adresse, on
+ * ne tranche pas — donner les enfants d'une famille à une autre serait pire
+ * que de ne rien faire, et l'écran des comptes orphelins le signalera.
+ */
+export function choisirFicheARattacher<T extends FicheCandidate>(candidates: T[], uid: string): T | null {
+  const utiles = (candidates || []).filter((f) => f && f.id !== uid && f.status !== "merged");
+  const avecCavaliers = utiles.filter((f) => Array.isArray(f.children) && f.children.length > 0);
+  if (avecCavaliers.length === 1) return avecCavaliers[0];
+  if (avecCavaliers.length > 1) return null;
+  return utiles.length === 1 ? utiles[0] : null;
+}
+
+const champVide = (v: unknown) =>
+  v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+
+/**
+ * Le contenu d'une fiche rattachée à un compte.
+ *
+ * La fiche du bureau fait foi : c'est elle qui porte les cavaliers, l'adresse
+ * postale, le téléphone. Mais ce que la famille avait saisi de son côté, sur
+ * la fiche vide créée à sa première connexion, n'est pas perdu pour autant :
+ * tout champ que le bureau n'a pas rempli garde la valeur du compte.
+ */
+export function fusionnerChampsFiche(
+  ficheDuCompte: Record<string, any>,
+  ficheDuBureau: Record<string, any>,
+): Record<string, any> {
+  const resultat: Record<string, any> = { ...(ficheDuCompte || {}) };
+  for (const [cle, valeur] of Object.entries(ficheDuBureau || {})) {
+    if (!champVide(valeur) || champVide(resultat[cle])) resultat[cle] = valeur;
+  }
+  return resultat;
+}
+
 export interface ApercuFusion {
   keep: { id: string; name: string; email: string };
   merge: { id: string; name: string; email: string; existe: boolean };

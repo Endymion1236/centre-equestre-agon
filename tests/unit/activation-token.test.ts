@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import { randomBytes } from "node:crypto";
 import ts from "typescript";
+import * as fusionFamilles from "../../src/lib/fusion-familles";
 
 function charger(path: string, dependencies: Record<string, unknown>, globals: Record<string, unknown> = {}) {
   const source = readFileSync(resolve(path), "utf8");
@@ -164,8 +165,12 @@ async function main() {
       "@/lib/firebase-admin": { adminDb: { collection: () => query } },
       "@/lib/api-auth": { verifyAuth: async () => ({ uid: "fixture-uid", email: "parent@example.test", email_verified: false }) },
       "@/lib/fournisseur-connexion": { fournisseurDepuisJeton: () => "mot-de-passe" },
-      // La fusion de l'ancienne fiche ne doit JAMAIS être atteinte sur un refus.
-      "@/lib/fusion-familles": { fusionnerFamilles: async () => { throw new Error("fusion appelée malgré le refus"); } },
+      // Vraies règles de sélection de la fiche ; seule la fusion est simulée,
+      // car elle ne doit JAMAIS être atteinte sur un refus.
+      "@/lib/fusion-familles": {
+        ...fusionFamilles,
+        fusionnerFamilles: async () => { throw new Error("fusion appelée malgré le refus"); },
+      },
       "firebase-admin/firestore": { FieldValue: {} },
     });
     const response = await route.POST({});

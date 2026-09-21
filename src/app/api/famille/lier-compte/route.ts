@@ -1,9 +1,8 @@
 /**
  * POST /api/famille/lier-compte
  *
- * Rattache le compte Firebase qui appelle à une fiche famille pré-créée par
- * l'admin (même adresse email), et copie cette fiche sous l'identifiant du
- * compte.
+ * Rattache le compte Firebase qui appelle à sa fiche famille — celle que le
+ * bureau a saisie, retrouvée sur l'adresse du jeton.
  *
  * ── Pourquoi côté serveur ────────────────────────────────────────────────
  *
@@ -26,9 +25,23 @@
  *    une fiche vierge, sans ses enfants. L'Admin SDK ignore les règles : la
  *    recherche aboutit toujours.
  *
+ * ── Le compte orphelin, et pourquoi il ne se réparait jamais ─────────────
+ *
+ * Une fiche vierge créée ici lors d'une connexion où rien ne correspondait
+ * enfermait la famille pour de bon : au passage suivant, la route trouvait
+ * cette fiche sous l'uid, la renvoyait, et ne cherchait plus jamais la vraie
+ * fiche par l'adresse. Le bureau pouvait bien renseigner l'adresse ensuite,
+ * la famille revenait indéfiniment sur son espace vide. Vingt-quatre comptes
+ * dans ce cas au 21/09/2026, tous connectés une seule fois.
+ *
+ * Une fiche sous l'uid n'arrête donc la recherche que si elle porte des
+ * cavaliers. Vide, elle est traitée comme une absence : on cherche la vraie
+ * fiche, et si on la trouve, on la recopie ici et on lui fait passer le
+ * relais — commandes, réservations, places au planning.
+ *
  * Réponse :
  *   { lie: true,  family }  → fiche rattachée (ou déjà rattachée)
- *   { lie: false }          → aucune fiche à cette adresse, au client de créer
+ *   { lie: true, cree: true, family } → aucune fiche connue, fiche vierge créée
  *   403 EMAIL_NON_VERIFIE   → une fiche existe, mais l'adresse du jeton n'a
  *                             pas été confirmée : rattachement refusé.
  */
@@ -38,9 +51,11 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { fournisseurDepuisJeton } from "@/lib/fournisseur-connexion";
-import { fusionnerFamilles } from "@/lib/fusion-familles";
+import { choisirFicheARattacher, fusionnerChampsFiche, fusionnerFamilles } from "@/lib/fusion-familles";
 
 export const dynamic = "force-dynamic";
+
+const aDesCavaliers = (d: any) => Array.isArray(d?.children) && d.children.length > 0;
 
 export async function POST(req: NextRequest) {
   const auth = await verifyAuth(req);
@@ -50,24 +65,34 @@ export async function POST(req: NextRequest) {
   const email: string = (auth.email || "").toLowerCase().trim();
 
   try {
-    // Déjà rattaché : rien à faire.
-    const propre = await adminDb.collection("families").doc(uid).get();
-    if (propre.exists) {
-      return NextResponse.json({ lie: true, family: { id: uid, ...propre.data() } });
+    // Fiche portant déjà l'identifiant du compte. Avec des cavaliers, le
+    // rattachement est fait : rien à chercher. Vide, elle ne prouve rien —
+    // c'est justement la fiche orpheline à réparer, et on continue.
+    const propreSnap = await adminDb.collection("families").doc(uid).get();
+    const propre = propreSnap.exists ? (propreSnap.data() as Record<string, any>) : null;
+    if (propre && aDesCavaliers(propre)) {
+      return NextResponse.json({ lie: true, family: { id: uid, ...propre } });
     }
 
-    // Fiche pré-créée par l'admin, retrouvée sur l'adresse DU JETON — jamais
-    // sur une adresse fournie par l'appelant.
+    // Fiches portant l'adresse DU JETON — jamais une adresse fournie par
+    // l'appelant. La sienne, et les fiches déjà absorbées, ne comptent pas.
     const snap = email
-      ? await adminDb.collection("families")
-          .where("parentEmail", "==", email)
-          .limit(1)
-          .get()
+      ? await adminDb.collection("families").where("parentEmail", "==", email).get()
       : null;
+    const candidates: (Record<string, any> & { id: string })[] =
+      (snap?.docs || []).map((d) => ({ ...(d.data() as Record<string, any>), id: d.id }));
+    const ancienne = choisirFicheARattacher(candidates, uid);
 
-    if (!snap || snap.empty) {
-      // Aucune fiche pré-existante → on crée la fiche vierge ICI plutôt que
-      // dans le navigateur. Les règles n'autorisent plus une famille à écrire
+    if (!ancienne) {
+      if (candidates.filter((f) => f.id !== uid && f.status !== "merged").length > 1) {
+        console.warn(`[lier-compte] ${email} : plusieurs fiches à cette adresse, rattachement laissé à l'admin`);
+      }
+      // La fiche vide existe déjà : on la rend telle quelle plutôt que d'en
+      // récrire une par-dessus. Elle reste signalée dans les comptes orphelins.
+      if (propre) return NextResponse.json({ lie: true, family: { id: uid, ...propre } });
+
+      // Aucune fiche connue → fiche vierge créée ICI plutôt que dans le
+      // navigateur. Les règles n'autorisent plus une famille à écrire
       // `parentEmail`, `authUid` ni `authProvider` : ces champs identifient le
       // compte, ils ne peuvent pas être déclarés par lui.
       const nouvelle = {
@@ -84,8 +109,6 @@ export async function POST(req: NextRequest) {
       console.log(`[lier-compte] nouvelle fiche pour ${email || uid}`);
       return NextResponse.json({ lie: true, cree: true, family: { id: uid, ...nouvelle } });
     }
-
-    const ancienne = snap.docs[0];
 
     // ── Adresse vérifiée exigée pour REPRENDRE une fiche existante ─────────
     //
@@ -112,13 +135,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const data = ancienne.data() as Record<string, unknown>;
-
+    const { id: _idAncienne, ...donneesAncienne } = ancienne as Record<string, any>;
+    // La fiche du bureau fait foi ; ce que la famille avait saisi sur sa
+    // fiche vide comble les champs que le bureau a laissés vides. `status`
+    // n'est pas repris : la fiche rattachée est vivante, pas absorbée.
+    // (`FieldValue.delete()` est interdit dans un `set()` sans fusion ; on
+    // retire donc la clé plutôt que de demander sa suppression.)
+    const { status: _statusIgnore, ...champs } = fusionnerChampsFiche(propre || {}, donneesAncienne);
     const fiche = {
-      ...data,
+      ...champs,
       authUid: uid,
       authProvider: fournisseurDepuisJeton(auth.firebase?.sign_in_provider),
-      parentName: data.parentName || auth.name || "",
+      parentEmail: email,
+      parentName: donneesAncienne.parentName || propre?.parentName || auth.name || "",
       updatedAt: FieldValue.serverTimestamp(),
     };
 
@@ -126,10 +155,10 @@ export async function POST(req: NextRequest) {
 
     // L'ancienne fiche passe le relais : tout ce qu'elle porte encore —
     // commandes, réservations, places au planning, cartes, mandats — est
-    // repointé vers la nouvelle, et elle est marquée fusionnée (pas
-    // supprimée). Jusqu'au 21/09/2026 elle était effacée telle quelle : les
-    // acomptes de stage payés le matin même restaient sur un identifiant
-    // mort, et la fiche du parent affichait Facturé 0 / Payé 0.
+    // repointé vers celle-ci, et elle est marquée fusionnée (pas supprimée).
+    // Jusqu'au 21/09/2026 elle était effacée telle quelle : les acomptes de
+    // stage payés le matin même restaient sur un identifiant mort, et la
+    // fiche du parent affichait Facturé 0 / Payé 0.
     if (ancienne.id !== uid) {
       try {
         const { apercu } = await fusionnerFamilles({ keepId: uid, mergeId: ancienne.id, mergedBy: "system:lier-compte" });
@@ -139,8 +168,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log(`[lier-compte] ${email} → uid ${uid}`);
-    return NextResponse.json({ lie: true, family: { id: uid, ...fiche } });
+    console.log(`[lier-compte] ${email} → uid ${uid}${propre ? " (fiche orpheline réparée)" : ""}`);
+    const finale = await adminDb.collection("families").doc(uid).get();
+    return NextResponse.json({ lie: true, family: { id: uid, ...(finale.data() || fiche) } });
   } catch (e) {
     console.error("[lier-compte]", e);
     return NextResponse.json({ error: "Erreur interne" }, { status: 500 });
