@@ -33,9 +33,12 @@ export interface Anomalie {
   /** Écran où le traiter. */
   lien?: string;
   /** Réparation proposée par l'écran, quand elle existe. */
-  action?: "replacer-au-planning" | "attribuer-numero" | "corriger-date-reservation";
+  action?: "replacer-au-planning" | "attribuer-numero" | "corriger-date-reservation" | "rejouer-fusion";
   /** Réservation visée par la réparation, quand l'anomalie en concerne une. */
   reservationId?: string;
+  /** Fusion à rejouer : la fiche absorbée et la fiche conservée. */
+  familleId?: string;
+  familleCibleId?: string;
 }
 
 export interface DonneesCoherence {
@@ -45,6 +48,9 @@ export interface DonneesCoherence {
   encaissements: any[];
   echeancesSepa: any[];
   cartes: any[];
+  /** Fiches famille (id, status, mergedInto) — facultatif : sans elles, la
+   *  règle « commande sur une fiche fusionnée » ne s'applique pas. */
+  familles?: any[];
   /** Horodatage de référence — injecté pour rendre les tests déterministes. */
   maintenant?: Date;
 }
@@ -113,6 +119,45 @@ export function analyserCoherence(d: DonneesCoherence): Anomalie[] {
         lien: "/admin/paiements?tab=historique",
         action: "replacer-au-planning",
       });
+    }
+  }
+
+  // ── 2 bis. Commande posée sur une fiche fusionnée ou disparue ────────────
+  // Le cas AMIARD : deux fiches pour la même famille, fusionnées ; puis une
+  // inscription au stage prise depuis le planning sur la fiche ABSORBÉE, qui
+  // y était encore proposée. Acompte au journal, enfant au planning, et la
+  // fiche conservée affiche Facturé 0 / Payé 0. La fusion se rejoue : elle
+  // repointe commandes, réservations et inscriptions vers la fiche gardée.
+  if (Array.isArray(d.familles) && d.familles.length > 0) {
+    const famillesParId = new Map<string, any>(d.familles.map((f: any) => [f.id, f]));
+    for (const p of paiements) {
+      if (!p?.familyId) continue;
+      const f = famillesParId.get(p.familyId);
+      if (!f) {
+        anomalies.push({
+          code: "commande-famille-introuvable",
+          gravite: "attention",
+          titre: "Commande rattachée à une fiche famille disparue",
+          detail: `${p.familyName || "Famille"} — ${eur(p.totalTTC)} (${eur(p.paidAmount)} réglés) : la fiche n'existe plus, la commande n'apparaît sur aucun dossier.`,
+          famille: p.familyName,
+          paymentId: p.id,
+          lien: "/admin/paiements?tab=historique",
+        });
+        continue;
+      }
+      if (f.status === "merged") {
+        const cible = f.mergedInto ? famillesParId.get(f.mergedInto) : null;
+        anomalies.push({
+          code: "commande-famille-fusionnee",
+          gravite: "attention",
+          titre: "Commande rattachée à une fiche fusionnée",
+          detail: `${p.familyName || "Famille"} — ${eur(p.totalTTC)} (${eur(p.paidAmount)} réglés) : posée sur une fiche absorbée${cible ? ` par « ${cible.parentName || cible.id} »` : ""}. Invisible sur le dossier conservé tant que la fusion n'est pas rejouée.`,
+          famille: p.familyName,
+          paymentId: p.id,
+          lien: cible ? `/admin/cavaliers?id=${cible.id}` : "/admin/cavaliers",
+          ...(f.mergedInto ? { action: "rejouer-fusion", familleId: f.id, familleCibleId: f.mergedInto } : {}),
+        });
+      }
     }
   }
 

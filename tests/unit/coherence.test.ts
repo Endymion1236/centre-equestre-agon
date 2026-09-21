@@ -201,6 +201,38 @@ console.log("\n✓ Une commande annulée est hors du champ :");
   assert("rien n'est signalé", a.length === 0, codes(a).join(", "));
 }
 
+console.log("\n✓ Commande posée sur une fiche fusionnée (cas AMIARD) :");
+{
+  const a = analyserCoherence({
+    ...vide,
+    familles: [
+      { id: "famGoogle", parentName: "Raphaël AMIARD", status: "active" },
+      { id: "famAdmin", parentName: "AMIARD", status: "merged", mergedInto: "famGoogle" },
+    ],
+    paiements: [
+      { id: "p1", familyId: "famAdmin", familyName: "AMIARD", status: "partial", totalTTC: 180, paidAmount: 30, items: [] },
+      { id: "p2", familyId: "famGoogle", familyName: "Raphaël AMIARD", status: "paid", totalTTC: 26, paidAmount: 26, invoiceNumber: "F-2026-0300", items: [] },
+      { id: "p3", familyId: "famDisparue", familyName: "Fantôme", status: "pending", totalTTC: 50, paidAmount: 0, items: [] },
+    ],
+  });
+  assert("la commande sur la fiche absorbée est signalée", codes(a).includes("commande-famille-fusionnee"), codes(a).join(", "));
+  const fusion = a.find((x) => x.code === "commande-famille-fusionnee")!;
+  assert("la réparation propose de rejouer la fusion", fusion.action === "rejouer-fusion", String(fusion.action));
+  assert("elle sait quelle fiche absorber et laquelle garder", fusion.familleId === "famAdmin" && fusion.familleCibleId === "famGoogle");
+  assert("le détail nomme la fiche conservée", fusion.detail.includes("Raphaël AMIARD"), fusion.detail);
+  assert("la commande de la fiche conservée n'est pas signalée", !a.some((x) => x.paymentId === "p2"));
+  assert("une fiche disparue est signalée sans réparation automatique", a.some((x) => x.code === "commande-famille-introuvable" && x.paymentId === "p3" && !x.action));
+}
+
+console.log("\n✓ Sans la liste des familles, la règle se tait :");
+{
+  const a = analyserCoherence({
+    ...vide,
+    paiements: [{ id: "p1", familyId: "inconnue", familyName: "X", status: "pending", totalTTC: 50, paidAmount: 0, items: [] }],
+  });
+  assert("aucune anomalie de fiche", !codes(a).some((c) => c.startsWith("commande-famille")), codes(a).join(", "));
+}
+
 console.log(`\n──────────────────────────────────────────────────────────────`);
 console.log(`  ${passed} réussis, ${failed} échoués`);
 if (failed > 0) {

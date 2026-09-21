@@ -175,7 +175,11 @@ export default function PlanningPage() {
     try {
       const [aS, fS, pS, cartesS, forfaitsS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments")), getDocs(collection(db, "cartes")), getDocs(query(collection(db, "forfaits"), where("status", "==", "actif")))]);
       setActivities(aS.docs.map(d => ({ id: d.id, ...d.data() })) as Activity[]);
-      setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
+      // Une fiche absorbée par une fusion reste en base (réversible) mais ne
+      // doit plus recevoir d'inscription : une commande posée dessus est
+      // invisible sur la fiche conservée — Facturé 0, Payé 0, alors que
+      // l'acompte est au journal (cas AMIARD, 21/09/2026).
+      setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })).filter((f: any) => f.status !== "merged") as any);
       setPayments(pS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllCartes(cartesS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllForfaits(forfaitsS.docs.map(d => ({ id: d.id, ...d.data() })));
