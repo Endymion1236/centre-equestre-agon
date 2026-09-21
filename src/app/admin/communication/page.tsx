@@ -21,7 +21,20 @@ import { authFetch } from "@/lib/auth-fetch";
 import { db } from "@/lib/firebase";
 import EmailRestrictedToggle from "@/components/admin/EmailRestrictedToggle";
 
-type CommunicationTab = "newsletter" | "historique";
+type CommunicationTab = "newsletter" | "rentree" | "historique";
+
+type PreparationRentree = {
+  saisonDebut: string;
+  finSemaine: string;
+  creneaux: number;
+  familles: { email: string; parentName: string; familyId: string; slots: { title: string; jour: string; horaire: string; moniteur: string; enfants: string[] }[] }[];
+  sansEmail: number;
+  dejaEnvoye: { sentAt: string; families: number; emailsSent: number; sentBy?: string } | null;
+  saisonDebutParDefaut?: string;
+  emailsSent?: number;
+  errors?: number;
+  blocked?: number;
+};
 
 type SendResult = {
   ok: number;
@@ -46,6 +59,63 @@ export default function CommunicationPage() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [relanceBusy, setRelanceBusy] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
+
+  // ── Mail de rentrée (envoi à la main) ──────────────────────────────────
+  // Le robot du soir l'envoie la veille de SAISON_DEBUT_DATE ; cet onglet sert
+  // quand le réglage manquait ou que la veille est passée. Aperçu d'abord,
+  // envoi ensuite, jamais l'inverse.
+  const [rentreeDate, setRentreeDate] = useState("");
+  const [rentreePrep, setRentreePrep] = useState<PreparationRentree | null>(null);
+  const [rentreeBusy, setRentreeBusy] = useState<"apercu" | "envoi" | null>(null);
+  const [rentreeForce, setRentreeForce] = useState(false);
+  const [rentreeError, setRentreeError] = useState("");
+  const [rentreeResult, setRentreeResult] = useState<PreparationRentree | null>(null);
+  const [rentreeOuvert, setRentreeOuvert] = useState<string | null>(null);
+
+  const preparerRentree = async (date?: string) => {
+    setRentreeBusy("apercu"); setRentreeError(""); setRentreeResult(null); setRentreeForce(false);
+    try {
+      const q = date || rentreeDate ? `?saisonDebut=${encodeURIComponent(date || rentreeDate)}` : "";
+      const res = await authFetch(`/api/admin/rappel-saison${q}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (json?.saisonDebutParDefaut && !rentreeDate) setRentreeDate(json.saisonDebutParDefaut);
+        throw new Error(json?.error || "Aperçu impossible");
+      }
+      setRentreePrep(json);
+      if (!rentreeDate) setRentreeDate(json.saisonDebut);
+    } catch (e: any) {
+      setRentreePrep(null);
+      setRentreeError(e?.message || "Aperçu impossible");
+    }
+    setRentreeBusy(null);
+  };
+
+  const envoyerRentree = async () => {
+    if (!rentreePrep) return;
+    const nb = rentreePrep.familles.length;
+    const ok = window.confirm(
+      `Envoyer le mail de rentrée à ${nb} famille${nb > 1 ? "s" : ""} ?\n\n`
+      + `Reprise annoncée : ${new Date(`${rentreePrep.saisonDebut}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}.`
+      + (rentreePrep.dejaEnvoye ? "\n\n⚠️ Ce mail a DÉJÀ été envoyé pour cette rentrée : les familles le recevront une seconde fois." : ""),
+    );
+    if (!ok) return;
+    setRentreeBusy("envoi"); setRentreeError("");
+    try {
+      const res = await authFetch("/api/admin/rappel-saison", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ saisonDebut: rentreePrep.saisonDebut, force: rentreeForce }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Envoi impossible");
+      setRentreeResult(json);
+      setRentreePrep(null);
+    } catch (e: any) {
+      setRentreeError(e?.message || "Envoi impossible");
+    }
+    setRentreeBusy(null);
+  };
 
   const loadData = async () => {
     try {
@@ -386,11 +456,12 @@ export default function CommunicationPage() {
       <div className="mb-6 inline-flex rounded-2xl border border-gray-200 bg-white p-1.5 shadow-[0_5px_24px_rgba(12,26,46,0.035)]">
         {([
           ["newsletter", "Nouvelle campagne", Mail],
+          ["rentree", "Mail de rentrée", Sparkles],
           ["historique", "Historique", History],
         ] as const).map(([id, label, Icon]) => (
           <button type="button"
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => { setTab(id); if (id === "rentree" && !rentreePrep && !rentreeResult && rentreeBusy === null) preparerRentree(); }}
             className={`flex items-center gap-2 rounded-xl border-none px-4 py-2.5 font-body text-sm font-semibold transition-colors ${
               tab === id ? "bg-blue-600 text-white shadow-sm" : "bg-transparent text-gray-500 hover:bg-blue-50 hover:text-blue-700"
             }`}
@@ -696,6 +767,131 @@ export default function CommunicationPage() {
             </div>
           </Card>
         </div>
+      )}
+
+      {tab === "rentree" && (
+        <Card padding="md" className="mx-auto max-w-3xl !rounded-2xl">
+          <h2 className="font-display text-lg font-bold text-blue-800">Mail de reprise des cours</h2>
+          <p className="mt-1 font-body text-sm text-gray-500">
+            Un seul email par famille, listant ses créneaux réguliers de la première semaine de cours avec le prénom
+            de chaque enfant. Les stages ne sont pas concernés. Le robot du soir l'envoie tout seul la veille de la date de
+            rentrée réglée sur Vercel ; cet écran sert à l'envoyer à la main quand ce n'est pas arrivé.
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 font-body text-xs font-semibold text-blue-800">
+              Jour de reprise des cours
+              <input type="date" value={rentreeDate} onChange={(e) => setRentreeDate(e.target.value)}
+                className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 font-body text-sm font-normal text-slate-700 focus:border-blue-400 focus:outline-none" />
+            </label>
+            <button type="button" onClick={() => preparerRentree()} disabled={rentreeBusy !== null || !rentreeDate}
+              className="flex items-center gap-2 rounded-xl border-none bg-blue-600 px-4 py-2.5 font-body text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer">
+              {rentreeBusy === "apercu" ? <Loader2 size={15} className="animate-spin" /> : <Users size={15} />} Préparer l'aperçu
+            </button>
+          </div>
+          <p className="mt-2 font-body text-[11px] text-slate-400">
+            Les créneaux retenus vont de ce jour au 6e jour suivant : c'est la semaine type que chaque famille recevra.
+          </p>
+
+          {rentreeError && (
+            <div className="mt-4 flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 font-body text-sm text-orange-800">
+              <AlertTriangle size={16} className="mt-0.5 shrink-0" /> {rentreeError}
+            </div>
+          )}
+
+          {rentreeResult && (
+            <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-body text-sm text-green-800">
+              <div className="flex items-center gap-2 font-semibold"><CheckCircle2 size={16} /> Envoi terminé</div>
+              <div className="mt-1">
+                {rentreeResult.emailsSent} email{(rentreeResult.emailsSent || 0) > 1 ? "s" : ""} envoyé{(rentreeResult.emailsSent || 0) > 1 ? "s" : ""}
+                {rentreeResult.blocked ? ` · ${rentreeResult.blocked} bloqué${rentreeResult.blocked > 1 ? "s" : ""} par le mode restreint` : ""}
+                {rentreeResult.errors ? ` · ${rentreeResult.errors} en erreur (voir le journal des emails)` : ""}.
+              </div>
+            </div>
+          )}
+
+          {rentreePrep && (
+            <div className="mt-5">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="rounded-xl bg-blue-50 px-3 py-2.5 text-center">
+                  <div className="font-display text-xl font-bold text-blue-800">{rentreePrep.familles.length}</div>
+                  <div className="font-body text-[11px] font-semibold text-blue-900">familles à prévenir</div>
+                </div>
+                <div className="rounded-xl bg-blue-50 px-3 py-2.5 text-center">
+                  <div className="font-display text-xl font-bold text-blue-800">{rentreePrep.creneaux}</div>
+                  <div className="font-body text-[11px] font-semibold text-blue-900">créneaux de cours</div>
+                </div>
+                <div className={`rounded-xl px-3 py-2.5 text-center ${rentreePrep.sansEmail ? "bg-orange-50" : "bg-blue-50"}`}>
+                  <div className={`font-display text-xl font-bold ${rentreePrep.sansEmail ? "text-orange-600" : "text-blue-800"}`}>{rentreePrep.sansEmail}</div>
+                  <div className="font-body text-[11px] font-semibold text-blue-900">inscriptions sans email</div>
+                </div>
+              </div>
+              <p className="mt-2 font-body text-xs text-slate-500">
+                Semaine du {new Date(`${rentreePrep.saisonDebut}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} au {new Date(`${rentreePrep.finSemaine}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}.
+              </p>
+
+              {rentreePrep.dejaEnvoye && (
+                <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 font-body text-sm text-orange-800">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                    <div>
+                      Ce mail a déjà été envoyé pour cette rentrée le{" "}
+                      <strong>{new Date(rentreePrep.dejaEnvoye.sentAt).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })}</strong>
+                      {" "}({rentreePrep.dejaEnvoye.emailsSent} email{rentreePrep.dejaEnvoye.emailsSent > 1 ? "s" : ""}
+                      {rentreePrep.dejaEnvoye.sentBy === "system" ? ", par le robot" : rentreePrep.dejaEnvoye.sentBy ? `, par ${rentreePrep.dejaEnvoye.sentBy}` : ""}).
+                      Vérifiez le journal des emails avant de recommencer.
+                    </div>
+                  </div>
+                  <label className="mt-2 flex items-center gap-2 font-body text-xs font-semibold cursor-pointer">
+                    <input type="checkbox" checked={rentreeForce} onChange={(e) => setRentreeForce(e.target.checked)} />
+                    Renvoyer quand même à toutes les familles
+                  </label>
+                </div>
+              )}
+
+              {rentreePrep.familles.length > 0 && (
+                <div className="mt-4 max-h-80 overflow-y-auto rounded-xl border border-gray-100">
+                  {rentreePrep.familles.map((f) => (
+                    <div key={f.email} className="border-b border-gray-100 last:border-b-0">
+                      <button type="button" onClick={() => setRentreeOuvert(rentreeOuvert === f.email ? null : f.email)}
+                        className="flex w-full items-center justify-between gap-3 bg-white px-3 py-2 text-left border-none cursor-pointer hover:bg-slate-50">
+                        <div className="min-w-0">
+                          <div className="truncate font-body text-sm font-semibold text-blue-800">{f.parentName || "—"}</div>
+                          <div className="truncate font-body text-[11px] text-slate-400">{f.email}</div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 font-body text-xs text-slate-500">
+                          {f.slots.length} créneau{f.slots.length > 1 ? "x" : ""} <ChevronRight size={14} className={`transition-transform ${rentreeOuvert === f.email ? "rotate-90" : ""}`} />
+                        </div>
+                      </button>
+                      {rentreeOuvert === f.email && (
+                        <ul className="m-0 list-none bg-slate-50 px-4 py-2 font-body text-xs text-slate-600">
+                          {f.slots.map((s, i) => (
+                            <li key={i} className="py-0.5">
+                              <span className="capitalize">{s.jour}</span> {s.horaire} · {s.title}{s.moniteur ? ` · ${s.moniteur}` : ""}
+                              {s.enfants.length > 0 && <span className="text-slate-400"> — {s.enfants.join(", ")}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
+                <span className="font-body text-xs text-slate-400">
+                  Chaque envoi est tracé dans Plus → Journal des emails (contexte « Mail de rentrée »).
+                </span>
+                <button type="button" onClick={envoyerRentree}
+                  disabled={rentreeBusy !== null || rentreePrep.familles.length === 0 || (Boolean(rentreePrep.dejaEnvoye) && !rentreeForce)}
+                  className="flex items-center gap-2 rounded-xl border-none bg-green-600 px-5 py-3 font-body text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50 cursor-pointer">
+                  {rentreeBusy === "envoi" ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+                  Envoyer à {rentreePrep.familles.length} famille{rentreePrep.familles.length > 1 ? "s" : ""}
+                </button>
+              </div>
+            </div>
+          )}
+        </Card>
       )}
 
       {tab === "historique" && (
