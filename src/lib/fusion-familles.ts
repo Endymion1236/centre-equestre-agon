@@ -92,9 +92,6 @@ export function choisirFicheARattacher<T extends FicheCandidate>(candidates: T[]
   return utiles.length === 1 ? utiles[0] : null;
 }
 
-const champVide = (v: unknown) =>
-  v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
-
 /**
  * Le contenu d'une fiche rattachée à un compte.
  *
@@ -112,6 +109,40 @@ export function fusionnerChampsFiche(
     if (!champVide(valeur) || champVide(resultat[cle])) resultat[cle] = valeur;
   }
   return resultat;
+}
+
+const champVide = (v: unknown) =>
+  v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0);
+
+/**
+ * Champs jamais recopiés d'une fiche absorbée : ils désignent le compte, ou
+ * sont gérés ailleurs dans la fusion.
+ */
+const CHAMPS_NON_TRANSFERABLES = new Set([
+  "id", "authUid", "authProvider", "parentEmail", "children",
+  "status", "mergedInto", "mergedAt", "createdAt", "updatedAt",
+]);
+
+/**
+ * Ce que la fiche absorbée peut apporter à la fiche conservée : le téléphone,
+ * l'adresse postale, la civilité — tout ce que le bureau avait saisi et que
+ * l'espace créé par la famille n'a pas.
+ *
+ * Uniquement les TROUS : un champ déjà rempli côté conservé n'est jamais
+ * écrasé. « Conserver » doit vouloir dire quelque chose.
+ */
+export function champsACompleter(
+  ficheConservee: Record<string, any>,
+  ficheAbsorbee: Record<string, any>,
+): Record<string, any> {
+  const patch: Record<string, any> = {};
+  for (const [cle, valeur] of Object.entries(ficheAbsorbee || {})) {
+    if (CHAMPS_NON_TRANSFERABLES.has(cle)) continue;
+    if (champVide(valeur)) continue;
+    if (!champVide((ficheConservee || {})[cle])) continue;
+    patch[cle] = valeur;
+  }
+  return patch;
 }
 
 export interface ApercuFusion {
@@ -210,9 +241,17 @@ export async function fusionnerFamilles(params: {
   await commitInBatches(reassignOps);
   await commitInBatches(creneauOps);
 
-  if (aAjouter.length > 0) {
+  // Cavaliers de la fiche absorbée, et ce qu'elle seule savait : téléphone,
+  // adresse postale, civilité. L'espace créé par une famille n'a souvent que
+  // son adresse email ; sans cela, la fusion lui ferait perdre le reste.
+  const complements = champsACompleter(keep, merge);
+  if (aAjouter.length > 0 || Object.keys(complements).length > 0) {
     await adminDb.collection("families").doc(keepId).set(
-      { children: [...(keep.children || []), ...aAjouter] }, { merge: true },
+      {
+        ...complements,
+        ...(aAjouter.length > 0 ? { children: [...(keep.children || []), ...aAjouter] } : {}),
+      },
+      { merge: true },
     );
   }
   // Continuité de connexion : si le conservé n'a pas d'auth et l'absorbé oui,

@@ -38,7 +38,8 @@ import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { emailValide } from "@/lib/utils";
 import {
-  nomsSeCorrespondent, proposerAdresses, type SourceAdresse,
+  nomsSeCorrespondent, normaliserEmail, proposerAdresses,
+  type FicheProprietaire, type SourceAdresse,
 } from "@/lib/adresses-manquantes";
 
 export const dynamic = "force-dynamic";
@@ -175,12 +176,18 @@ export async function GET(req: NextRequest) {
       .filter((f) => f.nbEnfants > 0)
       .filter((f) => !emailValide(f.parentEmail));
 
-    // Les adresses déjà portées par une AUTRE fiche : les recopier créerait
-    // deux fiches à la même adresse, donc un rattachement ambigu. On les
-    // propose quand même, mais signalées — c'est une fusion qu'il faut.
-    const dejaPrises = fiches
-      .filter((f) => f.status !== "merged" && emailValide(f.parentEmail))
-      .map((f) => f.parentEmail);
+    // Qui porte déjà quelle adresse. Une adresse tenue par une fiche SANS
+    // cavalier est celle de l'espace que la famille s'est créé : il ne faut
+    // pas la recopier mais y verser les cavaliers. Tenue par une fiche avec
+    // des cavaliers, c'est un vrai doublon, à arbitrer.
+    const proprietaires = new Map<string, FicheProprietaire>();
+    for (const f of fiches) {
+      if (f.status === "merged" || !emailValide(f.parentEmail)) continue;
+      const cle = normaliserEmail(f.parentEmail);
+      if (!proprietaires.has(cle)) {
+        proprietaires.set(cle, { id: f.id, parentName: f.parentName, nbEnfants: f.nbEnfants });
+      }
+    }
 
     // Ce que l'application sait déjà de ces familles : ce qu'on a facturé,
     // ce qu'on leur a écrit. Lecture par lots, sur ces fiches seulement.
@@ -243,7 +250,7 @@ export async function GET(req: NextRequest) {
         nbEnfants: f.nbEnfants,
         adressePresente: !!f.parentEmail, // présente mais mal formée
         accountType: f.accountType,
-        propositions: proposerAdresses(sourcesParFamille.get(f.id) || [], dejaPrises),
+        propositions: proposerAdresses(sourcesParFamille.get(f.id) || [], proprietaires),
       }))
       .sort((a, b) => {
         // Les fiches qu'on peut régler tout de suite en premier.

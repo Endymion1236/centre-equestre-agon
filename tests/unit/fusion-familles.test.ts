@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  apparierEnfants, choisirFicheARattacher, fusionnerChampsFiche,
+  apparierEnfants, champsACompleter, choisirFicheARattacher, fusionnerChampsFiche,
   COLLECTIONS_SUIVANT_LA_FAMILLE, nomCavalier,
 } from "../../src/lib/fusion-familles";
 
@@ -111,6 +111,38 @@ test("un champ vide des deux côtés reste vide, et rien n'est inventé", () => 
   assert.equal(r.parentPhone, "");
   assert.equal(r.city, "Agon");
   assert.equal(Object.keys(r).length, 2);
+});
+
+console.log("\n── Ce que la fiche absorbée apporte à la fiche conservée ──");
+
+test("le téléphone et l'adresse du bureau rejoignent l'espace de la famille", () => {
+  // Le cas THEVENOT : l'espace créé par la famille n'a que son email ; la
+  // fiche du bureau a le téléphone et l'adresse postale.
+  const patch = champsACompleter(
+    { parentName: "Emilia Thevenot", parentEmail: "emilia@ex.fr", parentPhone: "", children: [] },
+    { parentName: "THEVENOT", parentPhone: "0662361492", address: "3 rue du Moulin", city: "Gratot" },
+  );
+  assert.equal(patch.parentPhone, "0662361492");
+  assert.equal(patch.address, "3 rue du Moulin");
+  assert.equal(patch.city, "Gratot");
+  assert.equal("parentName" in patch, false, "un champ déjà rempli côté conservé n'est jamais écrasé");
+});
+
+test("l'identité du compte n'est jamais recopiée depuis la fiche absorbée", () => {
+  const patch = champsACompleter(
+    { parentEmail: "compte@ex.fr", authUid: "uid", children: [] },
+    {
+      parentEmail: "bureau@ex.fr", authUid: "autre-uid", authProvider: "admin",
+      status: "merged", mergedInto: "x", children: [{ id: "k1" }],
+      createdAt: "hier", updatedAt: "hier", parentPhone: "0600000000",
+    },
+  );
+  assert.deepEqual(Object.keys(patch), ["parentPhone"]);
+});
+
+test("rien à compléter quand la fiche absorbée n'apporte rien", () => {
+  assert.deepEqual(champsACompleter({ parentPhone: "06" }, { parentPhone: "07" }), {});
+  assert.deepEqual(champsACompleter({}, {}), {});
 });
 
 console.log(process.exitCode ? "\n❌ des tests ont échoué" : `\n✅ ${passes} tests passés`);

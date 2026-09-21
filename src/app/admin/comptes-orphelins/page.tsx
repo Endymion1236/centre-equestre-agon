@@ -44,7 +44,8 @@ interface PropositionAdresse {
   detail: string;
   occurrences: number;
   derniereDate: string | null;
-  dejaPrise: boolean;
+  proprietaire: { id: string; parentName: string; nbEnfants: number } | null;
+  action: "ecrire" | "rattacher-au-compte" | "fusion-a-arbitrer";
 }
 
 interface SansAdresse {
@@ -117,6 +118,40 @@ export default function ComptesOrphelinsPage() {
       setError(e?.message || String(e));
     } finally {
       setCsvLoading(false);
+    }
+  };
+
+  /**
+   * L'adresse appartient déjà à l'espace que la famille s'est créé : on ne la
+   * recopie pas, on verse les cavaliers de la fiche du bureau dans celle du
+   * compte. L'écran des doublons ne voit pas ces paires — une fiche de compte
+   * n'a ni téléphone, ni cavalier, ni le même nom — d'où l'action ici même.
+   */
+  const rattacherAuCompte = async (fiche: SansAdresse, p: PropositionAdresse) => {
+    if (!user || !p.proprietaire || rattachEnCours) return;
+    const ok = window.confirm(
+      `Verser les cavaliers de la fiche « ${fiche.parentName || "sans nom"} » dans l'espace de « ${p.proprietaire.parentName || p.email} » ?\n\n`
+      + `${fiche.nbEnfants} cavalier${fiche.nbEnfants > 1 ? "s" : ""}, ainsi que les commandes, réservations et places au planning, suivront.\n`
+      + `La famille les retrouvera en se connectant avec ${p.email}.`
+      + (p.origine === "compte" ? "\n\n⚠️ Ce rapprochement vient du NOM du compte : vérifiez qu'il s'agit bien de cette famille." : ""),
+    );
+    if (!ok) return;
+    setRattachEnCours(fiche.id);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch("/api/admin/doublons-merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ keepId: p.proprietaire.id, mergeId: fiche.id, confirm: true }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      setRattachees(prev => ({ ...prev, [fiche.id]: p.email }));
+      setSansAdresse(prev => prev.filter(x => x.id !== fiche.id));
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setRattachEnCours(null);
     }
   };
 
@@ -334,13 +369,33 @@ export default function ComptesOrphelinsPage() {
                                 {ORIGINE[p.origine].libelle} · {p.detail}
                                 {p.occurrences > 1 && ` · ${p.occurrences} fois`}
                               </div>
+                              {p.action === "rattacher-au-compte" && (
+                                <div className="font-body text-[11px] text-green-700">
+                                  Cette famille a déjà un espace à cette adresse, mais vide : ses cavaliers l&apos;y rejoindront.
+                                </div>
+                              )}
+                              {p.action === "fusion-a-arbitrer" && (
+                                <div className="font-body text-[11px] text-purple-700">
+                                  « {p.proprietaire?.parentName || "une autre fiche"} » porte déjà cette adresse et {p.proprietaire?.nbEnfants} cavalier(s).
+                                </div>
+                              )}
                             </div>
-                            {p.dejaPrise ? (
+                            {p.action === "fusion-a-arbitrer" ? (
                               <Link href="/admin/doublons"
-                                title="Cette adresse est déjà sur une autre fiche : c'est un doublon à fusionner, pas une adresse à recopier"
+                                title={`« ${p.proprietaire?.parentName} » porte déjà cette adresse ET ${p.proprietaire?.nbEnfants} cavalier(s) : deux vraies familles, à départager`}
                                 className="shrink-0 font-body text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg no-underline border border-purple-200">
-                                Déjà sur une autre fiche · fusionner
+                                Doublon à arbitrer
                               </Link>
+                            ) : p.action === "rattacher-au-compte" ? (
+                              <button type="button"
+                                onClick={() => rattacherAuCompte(f, p)}
+                                disabled={rattachEnCours === f.id}
+                                title={`Verser les cavaliers dans l'espace déjà créé par « ${p.proprietaire?.parentName || p.email} »`}
+                                className="shrink-0 font-body text-[11px] font-semibold text-white bg-green-600 hover:bg-green-700 border border-green-600 px-2.5 py-1 rounded-lg cursor-pointer disabled:opacity-50">
+                                {rattachEnCours === f.id
+                                  ? <Loader2 size={11} className="animate-spin" />
+                                  : "Rattacher à ce compte"}
+                              </button>
                             ) : (
                               <button type="button"
                                 onClick={() => rattacher(f.id, p.email, `piste-${p.origine}`)}

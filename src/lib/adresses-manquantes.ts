@@ -45,6 +45,32 @@ export interface SourceAdresse {
   date?: string | null;
 }
 
+/** La fiche qui porte déjà cette adresse. */
+export interface FicheProprietaire {
+  id: string;
+  parentName: string;
+  nbEnfants: number;
+}
+
+/**
+ * Ce qu'il reste à faire une fois l'adresse reconnue.
+ *
+ *  - `ecrire` : personne ne l'utilise, on la pose sur la fiche.
+ *  - `rattacher-au-compte` : elle appartient à une fiche SANS cavalier, donc
+ *    à l'espace que la famille s'est créé. Recopier l'adresse ferait deux
+ *    fiches identiques ; il faut verser les cavaliers dans celle du compte.
+ *    C'est la meilleure issue : la famille retrouve ses cavaliers en ligne.
+ *  - `fusion-a-arbitrer` : deux fiches avec des cavaliers se disputent
+ *    l'adresse. Là seulement, un humain doit trancher.
+ */
+export type ActionAdresse = "ecrire" | "rattacher-au-compte" | "fusion-a-arbitrer";
+
+const RANG_ACTION: Record<ActionAdresse, number> = {
+  "rattacher-au-compte": 0,
+  ecrire: 1,
+  "fusion-a-arbitrer": 2,
+};
+
 export interface PropositionAdresse {
   email: string;
   origine: OrigineAdresse;
@@ -52,12 +78,13 @@ export interface PropositionAdresse {
   /** Combien de fois cette adresse apparaît, toutes sources confondues. */
   occurrences: number;
   derniereDate: string | null;
-  /**
-   * L'adresse est déjà celle d'une AUTRE fiche. L'y recopier créerait deux
-   * fiches à la même adresse, ce qui rendrait le rattachement automatique
-   * ambigu : c'est une fusion de doublons qu'il faut, pas une copie.
-   */
-  dejaPrise: boolean;
+  proprietaire: FicheProprietaire | null;
+  action: ActionAdresse;
+}
+
+function actionPour(proprietaire: FicheProprietaire | null): ActionAdresse {
+  if (!proprietaire) return "ecrire";
+  return proprietaire.nbEnfants > 0 ? "fusion-a-arbitrer" : "rattacher-au-compte";
 }
 
 export const normaliserEmail = (v: unknown) => String(v ?? "").trim().toLowerCase();
@@ -69,10 +96,10 @@ export const normaliserEmail = (v: unknown) => String(v ?? "").trim().toLowerCas
  */
 export function proposerAdresses(
   sources: SourceAdresse[],
-  adressesDejaPrises: Iterable<string> = [],
+  /** Adresse normalisée → fiche qui la porte déjà. */
+  proprietaires: Map<string, FicheProprietaire> = new Map(),
   maximum = 4,
 ): PropositionAdresse[] {
-  const prises = new Set([...adressesDejaPrises].map(normaliserEmail).filter(Boolean));
   const parEmail = new Map<string, PropositionAdresse>();
 
   for (const s of sources || []) {
@@ -81,13 +108,15 @@ export function proposerAdresses(
     const date = s.date || null;
     const existant = parEmail.get(email);
     if (!existant) {
+      const proprietaire = proprietaires.get(email) || null;
       parEmail.set(email, {
         email,
         origine: s.origine,
         detail: s.detail || LIBELLE_ORIGINE[s.origine],
         occurrences: 1,
         derniereDate: date,
-        dejaPrise: prises.has(email),
+        proprietaire,
+        action: actionPour(proprietaire),
       });
       continue;
     }
@@ -107,8 +136,9 @@ export function proposerAdresses(
 
   return [...parEmail.values()]
     .sort((a, b) => {
-      // Une adresse déjà prise descend : ce n'est pas la bonne action.
-      if (a.dejaPrise !== b.dejaPrise) return a.dejaPrise ? 1 : -1;
+      // Rattacher au compte règle tout d'un coup ; arbitrer un doublon
+      // demande un jugement, donc passe en dernier.
+      if (RANG_ACTION[a.action] !== RANG_ACTION[b.action]) return RANG_ACTION[a.action] - RANG_ACTION[b.action];
       if (RANG_ORIGINE[a.origine] !== RANG_ORIGINE[b.origine]) return RANG_ORIGINE[a.origine] - RANG_ORIGINE[b.origine];
       if (a.occurrences !== b.occurrences) return b.occurrences - a.occurrences;
       return String(b.derniereDate || "").localeCompare(String(a.derniereDate || ""));
