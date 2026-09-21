@@ -221,7 +221,32 @@ console.log("\n✓ Commande posée sur une fiche fusionnée (cas AMIARD) :");
   assert("elle sait quelle fiche absorber et laquelle garder", fusion.familleId === "famAdmin" && fusion.familleCibleId === "famGoogle");
   assert("le détail nomme la fiche conservée", fusion.detail.includes("Raphaël AMIARD"), fusion.detail);
   assert("la commande de la fiche conservée n'est pas signalée", !a.some((x) => x.paymentId === "p2"));
-  assert("une fiche disparue est signalée sans réparation automatique", a.some((x) => x.code === "commande-famille-introuvable" && x.paymentId === "p3" && !x.action));
+  assert("une fiche disparue sans équivalent est signalée sans réparation automatique", a.some((x) => x.code === "commande-famille-introuvable" && x.paymentId === "p3" && !x.action));
+}
+
+console.log("\n✓ Fiche supprimée au rattachement du compte, copie retrouvée par l'email (cas HEKIMIAN) :");
+{
+  const a = analyserCoherence({
+    ...vide,
+    familles: [
+      { id: "uidGoogle", parentName: "HEKIMIAN", parentEmail: "Parent@Exemple.fr", status: "active" },
+      { id: "autre", parentName: "DURAND", parentEmail: "durand@exemple.fr" },
+      { id: "homonyme1", parentName: "MARTIN", parentEmail: "m1@exemple.fr" },
+      { id: "homonyme2", parentName: "MARTIN", parentEmail: "m2@exemple.fr" },
+    ],
+    paiements: [
+      { id: "p1", familyId: "ancienneFiche", familyName: "HEKIMIAN", familyEmail: "parent@exemple.fr", status: "partial", totalTTC: 511.2, paidAmount: 90, items: [] },
+      { id: "p2", familyId: "ancienne2", familyName: "Hékimian", status: "pending", totalTTC: 10, paidAmount: 0, items: [] },
+      { id: "p3", familyId: "ancienne3", familyName: "MARTIN", status: "pending", totalTTC: 10, paidAmount: 0, items: [] },
+    ],
+  });
+  const p1 = a.find((x) => x.paymentId === "p1")!;
+  assert("retrouvée par l'email : réparation proposée", p1.action === "rattacher-famille" && p1.familleCibleId === "uidGoogle", JSON.stringify(p1));
+  assert("le bouton nomme la fiche cible", p1.familleCibleNom === "HEKIMIAN");
+  const p2 = a.find((x) => x.paymentId === "p2")!;
+  assert("sans email, retrouvée par le nom (accents et casse ignorés)", p2.action === "rattacher-famille" && p2.familleCibleId === "uidGoogle", JSON.stringify(p2));
+  const p3 = a.find((x) => x.paymentId === "p3")!;
+  assert("deux homonymes : on ne tranche pas", !p3.action, JSON.stringify(p3));
 }
 
 console.log("\n✓ Sans la liste des familles, la règle se tait :");

@@ -101,12 +101,14 @@ export default function CoherencePage() {
     setReparation("");
   };
 
-  const rejouerFusion = async (a: { familleId?: string; familleCibleId?: string; famille?: string }) => {
+  const rejouerFusion = async (a: { familleId?: string; familleCibleId?: string; familleCibleNom?: string; famille?: string; action?: string }) => {
     if (!a.familleId || !a.familleCibleId) return;
-    if (!window.confirm(
-      `Rejouer la fusion de « ${a.famille || "cette famille"} » ?\n\n`
-      + "Toutes les commandes, réservations et inscriptions encore rattachées à la fiche absorbée seront repointées vers la fiche conservée. Le journal des encaissements n'est pas modifié (il suit les commandes).",
-    )) return;
+    const message = a.action === "rattacher-famille"
+      ? `Rattacher tout ce qui reste sur l'ancienne fiche de « ${a.famille || "cette famille"} » à la fiche « ${a.familleCibleNom || a.familleCibleId} » ?\n\n`
+        + "Commandes, réservations, inscriptions au planning, cartes et mandats encore rattachés à l'identifiant disparu seront repointés. Le journal des encaissements n'est pas modifié (il suit les commandes)."
+      : `Rejouer la fusion de « ${a.famille || "cette famille"} » ?\n\n`
+        + "Toutes les commandes, réservations et inscriptions encore rattachées à la fiche absorbée seront repointées vers la fiche conservée. Le journal des encaissements n'est pas modifié (il suit les commandes).";
+    if (!window.confirm(message)) return;
     setReparation(a.familleId);
     try {
       const res = await authFetch("/api/admin/doublons-merge", {
@@ -253,6 +255,17 @@ export default function CoherencePage() {
                                 ? <Loader2 size={11} className="animate-spin" />
                                 : <CalendarCheck size={11} />}
                               Rejouer la fusion
+                            </button>
+                          )}
+                          {a.action === "rattacher-famille" && a.familleId && (
+                            <button type="button" onClick={() => rejouerFusion(a)}
+                              disabled={reparation === a.familleId}
+                              title={`Repointer vers « ${a.familleCibleNom || a.familleCibleId} » tout ce qui reste sur l'identifiant disparu`}
+                              className="inline-flex items-center gap-1 font-body text-[11px] font-semibold text-white bg-purple-600 px-2 py-1 rounded-md border-none cursor-pointer hover:bg-purple-500 disabled:opacity-50">
+                              {reparation === a.familleId
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <CalendarCheck size={11} />}
+                              Rattacher à {a.familleCibleNom || "la fiche"}
                             </button>
                           )}
                           {a.action === "attribuer-numero" && a.paymentId && (

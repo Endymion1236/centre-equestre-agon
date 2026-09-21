@@ -164,6 +164,8 @@ async function main() {
       "@/lib/firebase-admin": { adminDb: { collection: () => query } },
       "@/lib/api-auth": { verifyAuth: async () => ({ uid: "fixture-uid", email: "parent@example.test", email_verified: false }) },
       "@/lib/fournisseur-connexion": { fournisseurDepuisJeton: () => "mot-de-passe" },
+      // La fusion de l'ancienne fiche ne doit JAMAIS être atteinte sur un refus.
+      "@/lib/fusion-familles": { fusionnerFamilles: async () => { throw new Error("fusion appelée malgré le refus"); } },
       "firebase-admin/firestore": { FieldValue: {} },
     });
     const response = await route.POST({});

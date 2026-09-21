@@ -38,6 +38,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { fournisseurDepuisJeton } from "@/lib/fournisseur-connexion";
+import { fusionnerFamilles } from "@/lib/fusion-familles";
 
 export const dynamic = "force-dynamic";
 
@@ -123,13 +124,18 @@ export async function POST(req: NextRequest) {
 
     await adminDb.collection("families").doc(uid).set(fiche);
 
-    // L'ancienne fiche ferait doublon dans toutes les listes admin. On ne la
-    // supprime que si elle portait bien un autre identifiant.
+    // L'ancienne fiche passe le relais : tout ce qu'elle porte encore —
+    // commandes, réservations, places au planning, cartes, mandats — est
+    // repointé vers la nouvelle, et elle est marquée fusionnée (pas
+    // supprimée). Jusqu'au 21/09/2026 elle était effacée telle quelle : les
+    // acomptes de stage payés le matin même restaient sur un identifiant
+    // mort, et la fiche du parent affichait Facturé 0 / Payé 0.
     if (ancienne.id !== uid) {
       try {
-        await ancienne.ref.delete();
+        const { apercu } = await fusionnerFamilles({ keepId: uid, mergeId: ancienne.id, mergedBy: "system:lier-compte" });
+        console.log(`[lier-compte] ancienne fiche ${ancienne.id} fusionnée dans ${uid} :`, apercu.reassign, `créneaux=${apercu.creneauxTouches}`);
       } catch (e) {
-        console.warn(`[lier-compte] ancienne fiche ${ancienne.id} non supprimée (sera ignorée)`, e);
+        console.error(`[lier-compte] fusion de l'ancienne fiche ${ancienne.id} impossible — elle reste en doublon, à fusionner depuis Cavaliers`, e);
       }
     }
 

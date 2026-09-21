@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       adminDb.collection("encaissements").get(),
       adminDb.collection("echeances-sepa").get(),
       adminDb.collection("cartes").get(),
-      adminDb.collection("families").select("parentName", "status", "mergedInto").get(),
+      adminDb.collection("families").select("parentName", "parentEmail", "status", "mergedInto").get(),
     ]);
 
     const lire = (snap: FirebaseFirestore.QuerySnapshot) =>

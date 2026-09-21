@@ -33,12 +33,14 @@ export interface Anomalie {
   /** Écran où le traiter. */
   lien?: string;
   /** Réparation proposée par l'écran, quand elle existe. */
-  action?: "replacer-au-planning" | "attribuer-numero" | "corriger-date-reservation" | "rejouer-fusion";
+  action?: "replacer-au-planning" | "attribuer-numero" | "corriger-date-reservation" | "rejouer-fusion" | "rattacher-famille";
   /** Réservation visée par la réparation, quand l'anomalie en concerne une. */
   reservationId?: string;
   /** Fusion à rejouer : la fiche absorbée et la fiche conservée. */
   familleId?: string;
   familleCibleId?: string;
+  /** Nom de la fiche conservée, pour le bouton de réparation. */
+  familleCibleNom?: string;
 }
 
 export interface DonneesCoherence {
@@ -130,18 +132,34 @@ export function analyserCoherence(d: DonneesCoherence): Anomalie[] {
   // repointe commandes, réservations et inscriptions vers la fiche gardée.
   if (Array.isArray(d.familles) && d.familles.length > 0) {
     const famillesParId = new Map<string, any>(d.familles.map((f: any) => [f.id, f]));
+    const normaliser = (s: unknown) => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    const vivantes = d.familles.filter((f: any) => f.status !== "merged");
+    // Fiche disparue : le rattachement de compte (avant le 21/09/2026)
+    // supprimait la fiche créée au club une fois copiée sous le compte du
+    // parent. La copie porte la même adresse et le même nom : c'est elle
+    // qu'on propose, par l'adresse d'abord, par le nom exact sinon.
+    const candidatePour = (p: any) => {
+      const email = normaliser(p.familyEmail);
+      const parEmail = email ? vivantes.filter((f: any) => normaliser(f.parentEmail) === email) : [];
+      if (parEmail.length === 1) return parEmail[0];
+      const nom = normaliser(p.familyName);
+      const parNom = nom ? vivantes.filter((f: any) => normaliser(f.parentName) === nom) : [];
+      return parNom.length === 1 ? parNom[0] : null;
+    };
     for (const p of paiements) {
       if (!p?.familyId) continue;
       const f = famillesParId.get(p.familyId);
       if (!f) {
+        const cible = candidatePour(p);
         anomalies.push({
           code: "commande-famille-introuvable",
           gravite: "attention",
           titre: "Commande rattachée à une fiche famille disparue",
-          detail: `${p.familyName || "Famille"} — ${eur(p.totalTTC)} (${eur(p.paidAmount)} réglés) : la fiche n'existe plus, la commande n'apparaît sur aucun dossier.`,
+          detail: `${p.familyName || "Famille"} — ${eur(p.totalTTC)} (${eur(p.paidAmount)} réglés) : la fiche n'existe plus, la commande n'apparaît sur aucun dossier.${cible ? ` Fiche du même ${normaliser(cible.parentEmail) && normaliser(cible.parentEmail) === normaliser(p.familyEmail) ? "email" : "nom"} : « ${cible.parentName || cible.id} ».` : ""}`,
           famille: p.familyName,
           paymentId: p.id,
-          lien: "/admin/paiements?tab=historique",
+          lien: cible ? `/admin/cavaliers?id=${cible.id}` : "/admin/paiements?tab=historique",
+          ...(cible ? { action: "rattacher-famille", familleId: p.familyId, familleCibleId: cible.id, familleCibleNom: cible.parentName || "" } : {}),
         });
         continue;
       }
