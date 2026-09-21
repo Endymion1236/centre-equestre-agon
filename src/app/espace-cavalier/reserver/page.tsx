@@ -111,7 +111,7 @@ export default function ReserverPage() {
     }).catch(() => { creneauRouvert.current = true; });
   }, [creneaux]);
   // Mode paiement dans le panier
-  const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement" | "avoir">("cb");
+  const [cartPayMode, setCartPayMode] = useState<"cb" | "cheque" | "especes" | "virement" | "avoir" | "bon_cadeau">("cb");
   // Acceptation des conditions d'annulation (stages uniquement).
   const [cgvAccepted, setCgvAccepted] = useState(false);
   const [cartPaySuccess, setCartPaySuccess] = useState(false);

@@ -2,7 +2,8 @@
  * POST /api/pay-with-avoir
  *
  * Permet à un cavalier connecté de régler son panier en utilisant
- * son solde d'avoirs. Toute la logique d'écriture (payments, encaissements,
+ * son solde d'avoirs — ou, avec `bonCadeauCode`, un bon cadeau : même
+ * circuit (crédit consommé, écriture « avoir »), seule la source change. Toute la logique d'écriture (payments, encaissements,
  * avoirs, reservations, creneaux) passe par adminDb côté serveur — le client
  * n'a plus accès en écriture directe à ces collections.
  *
@@ -27,6 +28,8 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { lignesDetailHtml, libelleModePaiement } from "@/lib/email-prestations";
 import { nomDestinataireOuDefaut } from "@/lib/nom-destinataire";
 import { preparerEncaissementServer } from "@/lib/compta-encaissement-server";
+import { normaliserCodeBon, verifierBonCadeau, type BonCadeauLu } from "@/lib/bon-cadeau-application";
+import { attribuerNumeroFacture } from "@/lib/invoice-number";
 
 export const dynamic = "force-dynamic";
 
@@ -83,24 +86,30 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Montant invalide" }, { status: 400 });
     }
 
-    // ── Charger les avoirs actifs de la famille ─────────────────────────────
-    const avoirsSnap = await adminDb
-      .collection("avoirs")
-      .where("familyId", "==", uid)
-      .get();
-
-    const activeAvoirs = avoirsSnap.docs
-      .map((d) => ({ id: d.id, ref: d.ref, data: d.data() }))
-      .filter((a) => a.data.status === "actif" && (a.data.remainingAmount || 0) > 0);
-
-    const totalAvoir = activeAvoirs.reduce(
-      (s, a) => s + (a.data.remainingAmount || 0),
-      0
-    );
+    // ── Source du crédit : un bon cadeau (par code) ou les avoirs actifs ──
+    const bonCode = normaliserCodeBon(body.bonCadeauCode);
+    let bon: BonCadeauLu | null = null;
+    let activeAvoirs: { id: string; ref: any; data: any }[] = [];
+    let totalAvoir = 0;
+    if (bonCode) {
+      const v = await verifierBonCadeau(bonCode);
+      if (!v.ok) return NextResponse.json({ error: v.raison }, { status: 400 });
+      bon = v.bon;
+      totalAvoir = bon.solde;
+    } else {
+      const avoirsSnap = await adminDb
+        .collection("avoirs")
+        .where("familyId", "==", uid)
+        .get();
+      activeAvoirs = avoirsSnap.docs
+        .map((d) => ({ id: d.id, ref: d.ref, data: d.data() }))
+        .filter((a) => a.data.status === "actif" && (a.data.remainingAmount || 0) > 0);
+      totalAvoir = activeAvoirs.reduce((s, a) => s + (a.data.remainingAmount || 0), 0);
+    }
 
     if (totalAvoir <= 0) {
       return NextResponse.json(
-        { error: "Aucun avoir disponible" },
+        { error: bon ? "Ce bon est épuisé." : "Aucun avoir disponible" },
         { status: 400 }
       );
     }
@@ -121,9 +130,10 @@ export async function POST(req: NextRequest) {
       familyName,
       montant: toUse,
       mode: "avoir",
-      modeLabel: "Avoir",
-      ref: "",
+      modeLabel: bon ? "Bon cadeau" : "Avoir",
+      ref: bon ? bon.code : "",
       activityTitle: cart.map((i) => i.activityTitle).join(", "),
+      ...(bon ? { raison: `Bon cadeau ${bon.code}`, bonCadeauId: bon.id, isAvoir: true } : {}),
     });
     // Lignes de la commande, gardées pour l'email de confirmation.
     let itemsCommande: any[] = [];
@@ -182,15 +192,31 @@ export async function POST(req: NextRequest) {
         totalTTC: cartTotal,
         paidAmount: toUse,
         paymentMode: "avoir",
-        paymentRef: "",
+        paymentRef: bon ? bon.code : "",
+        ...(bon ? { bonCadeauCode: bon.code } : {}),
         status,
         source: "client",
         date: FieldValue.serverTimestamp(),
         createdAt: FieldValue.serverTimestamp(),
       });
 
-      // 2. Déduire des avoirs (dans l'ordre)
-      let remaining = toUse;
+      // 2. Déduire le crédit : le bon cadeau, ou les avoirs dans l'ordre
+      if (bon) {
+        const newSolde = Math.round((bon.solde - toUse) * 100) / 100;
+        tx.update(adminDb.collection("bons-cadeaux").doc(bon.id), {
+          solde: newSolde,
+          statut: newSolde <= 0.005 ? "utilise" : "actif",
+          usedFamilyId: uid,
+          utilisations: FieldValue.arrayUnion({
+            date: new Date().toISOString(),
+            paymentId: payRef.id,
+            montant: toUse,
+            par: `famille:${uid}`,
+          }),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+      let remaining = bon ? 0 : toUse;
       for (const a of activeAvoirs) {
         if (remaining <= 0) break;
         const available = a.data.remainingAmount || 0;
@@ -296,6 +322,18 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    // ── Numéro de facture séquentiel : une commande soldée en est une ──────
+    // (le circuit CB le fait au retour CAWL ; le règlement par crédit
+    // s'arrêtait avant, et la facture restait sans numéro).
+    if (status === "paid") {
+      try {
+        const { invoiceNumber } = await attribuerNumeroFacture({ paymentId: payRef.id, attributedBy: `famille:${uid}` });
+        await payRef.update({ invoiceNumber, invoiceDate: FieldValue.serverTimestamp() });
+      } catch (e) {
+        console.error("[pay-with-avoir] numéro de facture non attribué (non bloquant) :", e);
+      }
+    }
+
     // ── Attribution des points de fidélité (hors transaction, non-bloquant) ─
     await awardLoyaltyPointsServer({
       familyId: uid,
@@ -321,7 +359,7 @@ export async function POST(req: NextRequest) {
             familyId: uid,
             montant: toUse.toFixed(2),
             prestations: lignesDetailHtml(itemsCommande),
-            mode: libelleModePaiement("avoir"),
+            mode: bon ? `Bon cadeau ${bon.code}` : libelleModePaiement("avoir"),
           });
           const r = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -366,7 +404,7 @@ export async function POST(req: NextRequest) {
     const msg: string = error?.message || "Erreur interne";
     if (msg.startsWith("COMPLET:")) {
       return NextResponse.json(
-        { error: `Créneau complet : ${msg.slice("COMPLET:".length)}. Aucun avoir n'a été utilisé.` },
+        { error: `Créneau complet : ${msg.slice("COMPLET:".length)}. Aucun crédit n'a été utilisé.` },
         { status: 409 }
       );
     }

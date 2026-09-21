@@ -18,6 +18,7 @@ import { ACOMPTE_PAR_ENFANT, type TotauxPanier } from "@/lib/panier-reservation"
 import { Loader2, X, ShoppingCart, CreditCard } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/components/ui/Toast";
+import { useState } from "react";
 
 export interface ModalePanierProps {
   cart: any[];
@@ -30,7 +31,7 @@ export interface ModalePanierProps {
   totaux: TotauxPanier;
   familyAvoirs: any[];
   depositMode: "full" | "deposit";
-  cartPayMode: "cb" | "cheque" | "especes" | "virement" | "avoir";
+  cartPayMode: "cb" | "cheque" | "especes" | "virement" | "avoir" | "bon_cadeau";
   setCartPayMode: (m: any) => void;
   cgvAccepted: boolean;
   setCgvAccepted: (v: boolean) => void;
@@ -61,6 +62,24 @@ export default function ModalePanier({
   const contientCarte = cart.some(i => i.cardId);
   const toutSurCarte = cart.length > 0 && cart.every(i => i.cardId);
   const modeEffectif: string = toutSurCarte ? "carte" : cartPayMode;
+
+  // Bon cadeau : le code, et ce que le serveur en dit une fois vérifié.
+  const [bonCode, setBonCode] = useState("");
+  const [bonInfo, setBonInfo] = useState<{ code: string; solde: number } | null>(null);
+  const [bonErr, setBonErr] = useState("");
+  const [bonChecking, setBonChecking] = useState(false);
+  const verifierBon = async () => {
+    const code = bonCode.trim().toUpperCase();
+    if (!code) return;
+    setBonChecking(true); setBonErr(""); setBonInfo(null);
+    try {
+      const res = await authFetch(`/api/bon-cadeau/verifier?code=${encodeURIComponent(code)}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Bon refusé");
+      setBonInfo({ code: json.code, solde: Number(json.solde) || 0 });
+    } catch (e: any) { setBonErr(e?.message || "Bon refusé"); }
+    setBonChecking(false);
+  };
 
   return (
       <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center" onClick={() => setShowCart(false)}>
@@ -156,6 +175,13 @@ export default function ModalePanier({
                       mêle séances sur carte et séances à payer : le règlement
                       par avoir passe par une autre route, qui ne connaît pas
                       les cartes. */}
+                  {/* Bon cadeau : même route que l'avoir, la source du crédit change. */}
+                  {!contientCarte && (
+                    <button type="button" onClick={() => setCartPayMode("bon_cadeau")}
+                      className={`w-full mt-2 py-2.5 rounded-xl font-body text-sm font-semibold border cursor-pointer transition-all ${cartPayMode === "bon_cadeau" ? "border-emerald-500 bg-emerald-50 text-emerald-700" : "border-gray-200 bg-white text-emerald-700 hover:border-emerald-300"}`}>
+                      🎁 J'ai un bon cadeau
+                    </button>
+                  )}
                   {familyAvoirs.length > 0 && !contientCarte && (() => {
                     const totalAvoir = familyAvoirs.reduce((s, a) => s + (a.remainingAmount || 0), 0);
                     return (
@@ -282,7 +308,77 @@ export default function ModalePanier({
                     </>
                   );
                 })()}
-                {modeEffectif !== "cb" && modeEffectif !== "avoir" && modeEffectif !== "carte" && (
+                {modeEffectif === "bon_cadeau" && (
+                  cartPaySuccess ? (
+                    <div className="text-center py-4">
+                      <div className="text-4xl mb-2">🎁</div>
+                      <p className="font-body text-base font-semibold text-green-700">Bon cadeau utilisé !</p>
+                      <p className="font-body text-xs text-slate-500 mt-1">
+                        {bonInfo && bonInfo.solde >= cartTotal ? "Votre bon a couvert la totalité : vos réservations sont confirmées." : "Le centre équestre vous contactera pour le complément."}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Code du bon cadeau</label>
+                      <div className="flex gap-2 mb-2">
+                        <input value={bonCode} onChange={e => { setBonCode(e.target.value.toUpperCase()); setBonInfo(null); setBonErr(""); }}
+                          onBlur={verifierBon} placeholder="BON-XXXX" autoCapitalize="characters"
+                          className="flex-1 px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm bg-white focus:border-emerald-400 focus:outline-none uppercase" />
+                        <button type="button" onClick={verifierBon} disabled={bonChecking || !bonCode.trim()}
+                          className="px-3 py-2 rounded-xl font-body text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 cursor-pointer disabled:opacity-50">
+                          {bonChecking ? <Loader2 size={13} className="animate-spin" /> : "Vérifier"}
+                        </button>
+                      </div>
+                      {bonErr && <p className="font-body text-xs text-red-600 mb-2">❌ {bonErr}</p>}
+                      {bonInfo && (
+                        <div className={`rounded-xl p-3 mb-3 border ${bonInfo.solde >= cartTotal ? "bg-emerald-50 border-emerald-200" : "bg-orange-50 border-orange-200"}`}>
+                          <p className={`font-body text-xs ${bonInfo.solde >= cartTotal ? "text-emerald-800" : "text-orange-700"}`}>
+                            Bon <strong>{bonInfo.code}</strong> · solde {bonInfo.solde.toFixed(2)}€.
+                            {bonInfo.solde >= cartTotal
+                              ? ` Il couvre votre panier (${cartTotal.toFixed(2)}€)${bonInfo.solde - cartTotal > 0.005 ? ` ; il vous restera ${(bonInfo.solde - cartTotal).toFixed(2)}€ dessus.` : "."}`
+                              : ` Il ne couvre pas tout (${cartTotal.toFixed(2)}€) : le reste, ${(cartTotal - bonInfo.solde).toFixed(2)}€, sera à régler séparément.`}
+                          </p>
+                        </div>
+                      )}
+                      <button type="button" disabled={paying || !bonInfo} onClick={async () => {
+                        if (!user || !family || !bonInfo) return;
+                        setPaying(true);
+                        try {
+                          const res = await authFetch("/api/pay-with-avoir", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              bonCadeauCode: bonInfo.code,
+                              cart: cart.map(i => ({
+                                activityTitle: i.activityTitle,
+                                childId: i.childId,
+                                childName: i.childName,
+                                creneauIds: i.creneauIds,
+                                prixFinal: i.prixFinal,
+                                isStage: i.isStage,
+                                ...((i as any).sourceFamilyId ? { sourceFamilyId: (i as any).sourceFamilyId } : {}),
+                              })),
+                            }),
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.error || "Erreur serveur");
+                          setCart([]);
+                          setCartPaySuccess(true);
+                        } catch (e: any) {
+                          console.error(e);
+                          alert(`Erreur lors du paiement par bon cadeau${e?.message ? ` : ${e.message}` : ""}.`);
+                        }
+                        setPaying(false);
+                      }}
+                        className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-body text-base font-semibold border-none cursor-pointer ${paying || !bonInfo ? "bg-gray-200 text-gray-600" : "bg-emerald-600 text-white hover:bg-emerald-500"}`}>
+                        {paying ? <Loader2 size={18} className="animate-spin" /> : null}
+                        {paying ? "En cours..." : bonInfo ? (bonInfo.solde >= cartTotal ? `Payer avec mon bon (${cartTotal.toFixed(2)}€)` : `Utiliser ${bonInfo.solde.toFixed(2)}€ du bon`) : "Vérifiez d'abord votre bon"}
+                      </button>
+                    </>
+                  )
+                )}
+
+                {modeEffectif !== "cb" && modeEffectif !== "avoir" && modeEffectif !== "carte" && modeEffectif !== "bon_cadeau" && (
                   cartPaySuccess ? (
                     <div className="text-center py-4">
                       <div className="text-4xl mb-2">✅</div>

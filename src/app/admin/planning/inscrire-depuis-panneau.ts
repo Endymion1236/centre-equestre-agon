@@ -340,6 +340,31 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
 
   // Mode stage : inscription multi-enfants
   if (isStage && selectedChildren.length > 0 && fam) {
+    // Acompte réglé par bon cadeau : le code est indispensable, et il vaut
+    // mieux le savoir AVANT d'avoir inscrit les enfants et créé la commande.
+    if (showAcompte && acompteReglement === "sur_place" && acompteMode === "bon_cadeau" && !String(acompteRef || "").trim()) {
+      panelToast("Saisissez le code du bon cadeau qui règle l'acompte.", "error");
+      return;
+    }
+    // L'acompte au comptoir : même écriture que la caisse ; par bon cadeau,
+    // c'est le serveur qui applique le crédit (lib/bon-cadeau-application).
+    const encaisserAcompte = async (paymentId: string, paymentData: any) => {
+      if (acompteMode === "bon_cadeau") {
+        const res = await authFetch("/api/admin/bon-cadeau", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: String(acompteRef || "").trim().toUpperCase(), paymentId, montant: stageAcompte }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || "Bon cadeau refusé");
+        const applique = Number(json.applique) || 0;
+        if (applique + 0.005 < stageAcompte) {
+          panelToast(`Le bon ne couvrait que ${applique.toFixed(2)}€ sur les ${Number(stageAcompte).toFixed(2)}€ d'acompte — le reste sera demandé avec le solde.`, "warning");
+        }
+        return;
+      }
+      await enregistrerEncaissement(paymentId, paymentData, stageAcompte, acompteMode, acompteRef, `Acompte ${creneau.activityTitle}`);
+    };
     setEnrolling(true);
     try {
       // Trouver les créneaux à inscrire selon le mode choisi
@@ -540,13 +565,9 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
         // Acompte réglé au comptoir : même écriture comptable que la caisse,
         // et même confirmation d'acompte que lorsqu'il est payé en ligne.
         if (showAcompte && acompteReglement === "sur_place") {
-          await enregistrerEncaissement(
+          await encaisserAcompte(
             openOrder.id,
             { ...existingData, items: mergedItems, totalTTC: Math.round(mergedTotal * 100) / 100 },
-            stageAcompte,
-            acompteMode,
-            acompteRef,
-            `Acompte ${creneau.activityTitle}`,
           );
           authFetch("/api/admin/stage-acompte-recu", {
             method: "POST",
@@ -575,19 +596,12 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
 
         // Acompte réglé au comptoir : on encaisse ici, sans lien de paiement.
         if (showAcompte && acompteReglement === "sur_place") {
-          await enregistrerEncaissement(
-            newPayRef.id,
-            {
-              familyId: fam.firestoreId,
-              familyName: fam.parentName || "",
-              items: newItems,
-              totalTTC: stageTotalTTC,
-            },
-            stageAcompte,
-            acompteMode,
-            acompteRef,
-            `Acompte ${creneau.activityTitle}`,
-          );
+          await encaisserAcompte(newPayRef.id, {
+            familyId: fam.firestoreId,
+            familyName: fam.parentName || "",
+            items: newItems,
+            totalTTC: stageTotalTTC,
+          });
           // Confirmation d'acompte — le pendant du webhook CAWL, qui ne se
           // déclenche pas quand l'argent est reçu au comptoir.
           authFetch("/api/admin/stage-acompte-recu", {

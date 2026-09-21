@@ -1460,7 +1460,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                               {/* Mêmes moyens qu'à la caisse — les chèques-vacances
                                   sont acceptés par le centre (cf. CGV) et manquaient ici. */}
                               <div className="grid grid-cols-2 gap-2">
-                                {([["cb_terminal", "💳 CB"], ["cheque", "📝 Chèque"], ["especes", "💶 Espèces"], ["cheque_vacances", "🎫 Chèques vacances"]] as const).map(([id, label]) => (
+                                {([["cb_terminal", "💳 CB"], ["cheque", "📝 Chèque"], ["especes", "💶 Espèces"], ["cheque_vacances", "🎫 Chèques vacances"], ["bon_cadeau", "🎁 Bon cadeau"]] as const).map(([id, label]) => (
                                   <button key={id} onClick={() => setAcompteMode(id)}
                                     className={`py-1.5 px-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${acompteMode === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                                     {label}
@@ -1471,6 +1471,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                                 <input value={acompteRef} onChange={e => setAcompteRef(e.target.value)}
                                   placeholder="N° de chèque (facultatif)"
                                   className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-xs bg-white focus:outline-none focus:border-blue-400"/>
+                              )}
+                              {acompteMode === "bon_cadeau" && (
+                                <>
+                                  <input value={acompteRef} onChange={e => setAcompteRef(e.target.value.toUpperCase())}
+                                    placeholder="Code du bon cadeau (BON-XXXX) — obligatoire"
+                                    className="w-full px-3 py-2 rounded-lg border border-emerald-300 font-body text-xs bg-white focus:outline-none focus:border-emerald-500 uppercase"/>
+                                  <p className="font-body text-[10px] text-slate-500">Le bon règle l'acompte (crédit déjà payé). S'il ne le couvre pas entièrement, le reste sera demandé avec le solde.</p>
+                                </>
                               )}
                             </div>
                           )}

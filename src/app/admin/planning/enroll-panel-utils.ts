@@ -14,6 +14,7 @@ import type { Creneau } from "./types";
 
 /** Libellé lisible d'un moyen de règlement d'acompte, aligné sur la caisse. */
 export function libelleModeAcompte(mode: string): string {
+  if (mode === "bon_cadeau") return "Bon cadeau";
   return paymentModes.find(m => m.id === mode)?.label || mode;
 }
 

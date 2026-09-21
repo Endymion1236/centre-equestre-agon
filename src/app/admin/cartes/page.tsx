@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { reglementCarte } from "@/lib/carte-reglement";
 import { Card, Badge } from "@/components/ui";
 import { createEncaissement } from "@/lib/compta-encaissement";
+import { authFetch } from "@/lib/auth-fetch";
 import { Plus, Minus, Search, Loader2, Ticket, X, Check, History } from "lucide-react";
 import type { Family } from "@/types";
 
@@ -39,6 +40,7 @@ const payModes = [
   { id: "cheque", label: "Chèque", icon: "📝" },
   { id: "especes", label: "Espèces", icon: "💶" },
   { id: "cb_online", label: "CB en ligne", icon: "🌐" },
+  { id: "bon_cadeau", label: "Bon cadeau", icon: "🎁" },
 ];
 
 export default function CartesPage() {
@@ -63,6 +65,7 @@ export default function CartesPage() {
   const [unitPriceTTC, setUnitPriceTTC] = useState("15.83");
   const [payMode, setPayMode] = useState("cb_terminal");
   const [encaisserMaintenant, setEncaisserMaintenant] = useState(true);
+  const [bonCode, setBonCode] = useState("");
   const [selActivityType, setSelActivityType] = useState<"cours" | "balade">("cours");
   const [carteFamiliale, setCarteFamiliale] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -115,6 +118,10 @@ export default function CartesPage() {
   const handleCreate = async () => {
     if (!selFamily || !family) return;
     if (!carteFamiliale && !selChild) return; // enfant requis si pas familiale
+    // Réglée par bon cadeau : la commande naît impayée, puis le bon s'applique
+    // par la même porte que la caisse (écriture « avoir », facture numérotée).
+    const parBon = encaisserMaintenant && payMode === "bon_cadeau";
+    if (parBon && !bonCode.trim()) { alert("Saisissez le code du bon cadeau (BON-XXXX)."); return; }
     setCreating(true);
     const child = children.find((c: any) => c.id === selChild);
     // Bénéficiaire affiché partout : un enfant, ou la famille entière.
@@ -156,16 +163,37 @@ export default function CartesPage() {
         priceTTC: Math.round(totalTTC * 100) / 100,
       }],
       totalTTC: Math.round(totalTTC * 100) / 100,
-      paymentMode: encaisserMaintenant ? payMode : "impaye",
+      paymentMode: encaisserMaintenant && !parBon ? payMode : parBon ? "" : "impaye",
       paymentRef: "",
-      status: encaisserMaintenant ? "paid" : "pending",
-      paidAmount: encaisserMaintenant ? Math.round(totalTTC * 100) / 100 : 0,
+      status: encaisserMaintenant && !parBon ? "paid" : "pending",
+      paidAmount: encaisserMaintenant && !parBon ? Math.round(totalTTC * 100) / 100 : 0,
       cardId: cardRef.id,
       date: serverTimestamp(),
     });
 
+    if (parBon) {
+      try {
+        const res = await authFetch("/api/admin/bon-cadeau", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: bonCode.trim().toUpperCase(), paymentId: payRef.id }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || "Bon cadeau refusé");
+        const reste = Number(json.resteAPayer) || 0;
+        alert(
+          `🎁 ${Number(json.applique || 0).toFixed(2)}€ réglés avec le bon ${bonCode.trim().toUpperCase()}.`
+          + (reste > 0 ? `\n\nIl reste ${reste.toFixed(2)}€ à régler : la commande apparaît dans Paiements → Impayés.` : "\n\nCarte entièrement réglée.")
+          + (Number(json.soldeRestantBon) > 0 ? `\nSolde restant sur le bon : ${Number(json.soldeRestantBon).toFixed(2)}€.` : ""),
+        );
+      } catch (e: any) {
+        alert(`${e?.message || "Bon cadeau refusé"}\n\nLa carte est créée et sa commande reste en impayé : encaissez-la depuis Paiements → Impayés.`);
+      }
+      setBonCode("");
+    }
+
     // Créer l'encaissement uniquement si paiement immédiat
-    if (encaisserMaintenant) {
+    if (encaisserMaintenant && !parBon) {
       await createEncaissement({
         paymentId: payRef.id,
         familyId: selFamily,
@@ -491,6 +519,12 @@ export default function CartesPage() {
                 <select value={payMode} onChange={e => setPayMode(e.target.value)} className={inp}>
                   {payModes.map(m => <option key={m.id} value={m.id}>{m.icon} {m.label}</option>)}
                 </select>
+                {payMode === "bon_cadeau" && (
+                  <div className="mt-2">
+                    <input value={bonCode} onChange={e => setBonCode(e.target.value.toUpperCase())} placeholder="Code du bon cadeau (BON-XXXX)" className={`${inp} uppercase`} />
+                    <p className="font-body text-[10px] text-slate-400 mt-1">Si le bon ne couvre pas toute la carte, le reste apparaîtra dans les impayés.</p>
+                  </div>
+                )}
               </div>
             )}
 

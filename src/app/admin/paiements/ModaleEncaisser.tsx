@@ -60,6 +60,23 @@ export default function ModaleEncaisser({
   const [quickRepartir, setQuickRepartir] = useState(false);
   const [quickMandatId2, setQuickMandatId2] = useState<string>("");
   const [quickMontant2, setQuickMontant2] = useState<string>("");
+  // Bon cadeau : le code saisi, et ce que le serveur en dit (solde, validité).
+  const [quickBonCode, setQuickBonCode] = useState("");
+  const [quickBon, setQuickBon] = useState<{ code: string; solde: number; validUntil: string | null } | null>(null);
+  const [quickBonErr, setQuickBonErr] = useState("");
+  const [quickBonChecking, setQuickBonChecking] = useState(false);
+  const verifierBon = async () => {
+    const code = quickBonCode.trim().toUpperCase();
+    if (!code) return;
+    setQuickBonChecking(true); setQuickBonErr(""); setQuickBon(null);
+    try {
+      const res = await authFetch(`/api/admin/bon-cadeau?code=${encodeURIComponent(code)}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Bon refusé");
+      setQuickBon(json.bon);
+    } catch (e: any) { setQuickBonErr(e?.message || "Bon refusé"); }
+    setQuickBonChecking(false);
+  };
   const [quickChequesDiffres, setQuickChequesDiffres] = useState<
     { numero: string; banque: string; montant: string; dateEncaissementPrevue: string }[]
   >([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
@@ -74,6 +91,7 @@ export default function ModaleEncaisser({
     setQuickDate(new Date().toISOString().split("T")[0]);
     setQuickRef("");
     setQuickMode("cheque");
+    setQuickBonCode(""); setQuickBon(null); setQuickBonErr("");
   }, [payment?.id]);
 
   // ═══ ENCAISSEMENT RAPIDE DEPUIS L'ONGLET IMPAYÉS ═══
@@ -398,6 +416,34 @@ export default function ModaleEncaisser({
         return;
       }
 
+      // ── Mode BON CADEAU : crédit consommé, pas de nouvelle recette ──
+      // Tout se fait côté serveur (lib/bon-cadeau-application) : écriture
+      // « avoir », numéro de facture si soldée, places confirmées, solde du bon.
+      if (quickMode === "bon_cadeau") {
+        const code = quickBonCode.trim().toUpperCase();
+        if (!code) { toast("Saisissez le code du bon cadeau.", "warning"); setQuickSaving(false); return; }
+        const res = await authFetch("/api/admin/bon-cadeau", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, paymentId: p.id, montant }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) { toast(json?.error || "Bon cadeau refusé.", "error"); setQuickSaving(false); return; }
+        const applique = Number(json.applique) || 0;
+        toast(
+          `🎁 ${applique.toFixed(2)}€ réglés avec le bon ${code} pour ${p.familyName}`
+          + (json.facturePayee ? " — Tout réglé !" : ` — Reste : ${Number(json.resteAPayer || 0).toFixed(2)}€`)
+          + (Number(json.soldeRestantBon) > 0 ? ` · il reste ${Number(json.soldeRestantBon).toFixed(2)}€ sur le bon` : " · bon épuisé"),
+          "success",
+        );
+        onClose();
+        setQuickMontant(""); setQuickRef(""); setQuickBonCode(""); setQuickBon(null);
+        setQuickDate(new Date().toISOString().split("T")[0]);
+        await refreshAll([p.id]);
+        setQuickSaving(false);
+        return;
+      }
+
       // ── Encaissement normal (CB, chèque, espèces, etc.) ──
       // Utiliser la fonction centralisée qui gère points fidélité + invoiceNumber
       await enregistrerEncaissement(
@@ -463,6 +509,7 @@ export default function ModaleEncaisser({
                   { id: "pass_sport", label: "Pass'Sport", icon: "🤸" },
                   { id: "prelevement_sepa", label: "SEPA", icon: "🏦" },
                   { id: "cheque_differe", label: "Chèques différés", icon: "📅" },
+                  { id: "bon_cadeau", label: "Bon cadeau", icon: "🎁" },
                 ].map(m => {
                   const isSepa = m.id === "prelevement_sepa";
                   const sepaBlocked = isSepa && quickMandatActif === false;
@@ -482,6 +529,28 @@ export default function ModaleEncaisser({
                 })}
               </div>
             </div>
+            {quickMode === "bon_cadeau" && (
+              <div>
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Code du bon cadeau</label>
+                <div className="flex gap-2">
+                  <input value={quickBonCode} onChange={e => { setQuickBonCode(e.target.value.toUpperCase()); setQuickBon(null); setQuickBonErr(""); }}
+                    onBlur={verifierBon} placeholder="BON-XXXX" autoCapitalize="characters"
+                    className="flex-1 px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none uppercase"/>
+                  <button type="button" onClick={verifierBon} disabled={quickBonChecking || !quickBonCode.trim()}
+                    className="px-3 py-2 rounded-xl font-body text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 cursor-pointer disabled:opacity-50">
+                    {quickBonChecking ? <Loader2 size={13} className="animate-spin"/> : "Vérifier"}
+                  </button>
+                </div>
+                {quickBon && (
+                  <p className="font-body text-[11px] text-emerald-700 mt-1">
+                    ✅ Bon valide · solde <strong>{quickBon.solde.toFixed(2)}€</strong>{quickBon.validUntil ? ` · valable jusqu'au ${new Date(`${quickBon.validUntil}T12:00:00`).toLocaleDateString("fr-FR")}` : ""}.
+                    {quickBon.solde + 0.005 < (parseFloat(quickMontant) || 0) ? ` Il ne couvre pas tout : ${quickBon.solde.toFixed(2)}€ seront appliqués, le reste restera dû.` : ""}
+                  </p>
+                )}
+                {quickBonErr && <p className="font-body text-[11px] text-red-600 mt-1">❌ {quickBonErr}</p>}
+                <p className="font-body text-[10px] text-slate-400 mt-1">Le bon est un crédit déjà payé : l'écriture passe en « avoir », le solde du bon diminue d'autant.</p>
+              </div>
+            )}
             {/* Compte à débiter — affiché dès qu'un mandat existe, et
                 OBLIGATOIREMENT choisi quand la famille en a plusieurs
                 (compte du père / de la mère, ou RIB renouvelé). */}
@@ -701,7 +770,7 @@ export default function ModaleEncaisser({
               );
             })()}
             {/* Date (masquée en mode cheque_differe : chaque chèque a sa propre date) */}
-            {quickMode !== "cheque_differe" && (
+            {quickMode !== "cheque_differe" && quickMode !== "bon_cadeau" && (
               <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Date d'encaissement</label>
                 <input type="date" value={quickDate} onChange={e => setQuickDate(e.target.value)}
@@ -713,7 +782,7 @@ export default function ModaleEncaisser({
                 chèque) ET en mode SEPA, où ce même champ porte le NOMBRE
                 d'échéances : y écrire un texte libre effaçait le compte et
                 ne créait alors aucune échéance. */}
-            {quickMode !== "cheque_differe" && quickMode !== "prelevement_sepa" && (
+            {quickMode !== "cheque_differe" && quickMode !== "prelevement_sepa" && quickMode !== "bon_cadeau" && (
               <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Référence (optionnel)</label>
                 <input value={quickRef} onChange={e => setQuickRef(e.target.value)}
@@ -723,7 +792,7 @@ export default function ModaleEncaisser({
             )}
             <div className="flex gap-3 pt-1">
               <button type="button" onClick={() => onClose()} className="px-5 py-3 rounded-xl font-body text-sm text-slate-500 bg-gray-100 border-none cursor-pointer">Annuler</button>
-              <button type="button" onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant || (quickMode === "prelevement_sepa" && quickMandatActif !== true)}
+              <button type="button" onClick={handleQuickEncaisser} disabled={quickSaving || !quickMontant || (quickMode === "prelevement_sepa" && quickMandatActif !== true) || (quickMode === "bon_cadeau" && !quickBonCode.trim())}
                 className="flex-1 py-3 rounded-xl font-body text-sm font-semibold text-white bg-green-600 hover:bg-green-700 border-none cursor-pointer disabled:opacity-50">
                 {quickSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : (quickMode === "cheque_differe" ? "📅 " : "💶 ")}
                 {quickMode === "cheque_differe"
