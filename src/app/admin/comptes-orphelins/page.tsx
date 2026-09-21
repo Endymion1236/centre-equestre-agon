@@ -155,6 +155,54 @@ export default function ComptesOrphelinsPage() {
     }
   };
 
+  /**
+   * Rattacher un compte orphelin à la fiche du bureau qui lui correspond.
+   *
+   * Deux situations, deux gestes — et aucun des deux ne passe par l'écran des
+   * doublons, qui ne voit pas ces paires : une fiche créée par une connexion
+   * n'a ni téléphone, ni cavalier, ni le même nom, et la fiche du bureau n'a
+   * souvent pas d'adresse. Rien à rapprocher pour lui.
+   *
+   *  - le compte a déjà une fiche, vide : on y verse la fiche du bureau ;
+   *  - le compte n'a pas de fiche : on donne son adresse à la fiche du
+   *    bureau, et le rattachement se fera tout seul à sa prochaine connexion.
+   */
+  const rattacherOrphelin = async (o: Orphelin, r: Rapprochement) => {
+    if (!user || rattachEnCours) return;
+    const cavaliers = `${r.nbEnfants} cavalier${r.nbEnfants > 1 ? "s" : ""}`;
+    const message = o.ficheVide
+      ? `Verser la fiche « ${r.parentName || "sans nom"} » (${cavaliers}) dans l'espace de ${o.displayName || o.email} ?\n\n`
+        + "Les cavaliers, commandes, réservations et places au planning suivront. "
+        + `La famille les retrouvera en se connectant avec ${o.email}.`
+      : `Donner l'adresse ${o.email} à la fiche « ${r.parentName || "sans nom"} » (${cavaliers}) ?\n\n`
+        + "Le compte y sera rattaché tout seul à sa prochaine connexion.";
+    if (!window.confirm(message + (r.memeEmail ? "" : "\n\n⚠️ Rapprochement par le nom : vérifiez qu'il s'agit bien de cette famille."))) return;
+
+    setRattachEnCours(o.uid);
+    try {
+      const token = await user.getIdToken();
+      const res = o.ficheVide
+        ? await fetch("/api/admin/doublons-merge", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ keepId: o.uid, mergeId: r.id, confirm: true }),
+          })
+        : await fetch("/api/admin/rattacher-emails", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ action: "appliquer", familyId: r.id, email: o.email, source: "compte-orphelin" }),
+          });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      setOrphelins(prev => prev.filter(x => x.uid !== o.uid));
+      setSansAdresse(prev => prev.filter(x => x.id !== r.id));
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setRattachEnCours(null);
+    }
+  };
+
   const rattacher = async (familyId: string, email: string, source = "export-csv-ancien-logiciel") => {
     if (!user || rattachEnCours) return;
     setRattachEnCours(familyId);
@@ -430,8 +478,10 @@ export default function ComptesOrphelinsPage() {
             </h2>
             <p className="font-body text-sm text-slate-600 mb-3">
               Comptes de connexion sans cavalier, sur {nbComptes} compte{nbComptes > 1 ? "s" : ""} famille.
-              Quand une fiche du bureau correspond, elle est proposée ci-dessous : le
-              rapprochement se fait à la main, par fusion de fiches ou changement d&apos;adresse.
+              Quand une fiche du bureau correspond, elle est proposée ci-dessous, avec le
+              bouton qui la rattache. Ces paires n&apos;apparaissent pas dans l&apos;écran des
+              doublons : une fiche créée par une connexion n&apos;a ni téléphone, ni cavalier,
+              ni le même nom, donc rien à rapprocher pour lui.
             </p>
             {orphelins.length === 0 ? (
               <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 font-body text-sm text-green-700 flex items-center gap-2">
@@ -470,16 +520,33 @@ export default function ComptesOrphelinsPage() {
                                 <span className="text-slate-500"> · {r.nbEnfants} cavalier{r.nbEnfants > 1 ? "s" : ""}</span>
                                 {r.memeEmail && <span className="text-emerald-600"> · même adresse</span>}
                               </div>
-                              <Link href={`/admin/cavaliers?id=${r.id}`}
-                                className="shrink-0 font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 no-underline">
-                                Ouvrir
-                              </Link>
+                              <span className="shrink-0 flex items-center gap-1.5">
+                                <button type="button"
+                                  onClick={() => rattacherOrphelin(o, r)}
+                                  disabled={rattachEnCours === o.uid || (!o.ficheVide && !o.email)}
+                                  title={o.ficheVide
+                                    ? "Verser cette fiche dans l'espace du compte"
+                                    : "Donner l'adresse du compte à cette fiche : le rattachement se fera à la prochaine connexion"}
+                                  className={`font-body text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-pointer disabled:opacity-50 ${
+                                    r.memeEmail
+                                      ? "text-white bg-green-600 hover:bg-green-700 border-green-600"
+                                      : "text-slate-700 bg-white hover:bg-slate-50 border-slate-300"}`}>
+                                  {rattachEnCours === o.uid
+                                    ? <Loader2 size={12} className="animate-spin" />
+                                    : r.memeEmail ? "Rattacher" : "Rattacher, à vérifier"}
+                                </button>
+                                <Link href={`/admin/cavaliers?id=${r.id}`}
+                                  className="font-body text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 no-underline">
+                                  Ouvrir
+                                </Link>
+                              </span>
                             </div>
                           ))}
                         </div>
                         <p className="font-body text-[11px] text-slate-400 mt-2">
-                          Pour rattacher : <Link href="/admin/doublons" className="text-blue-500">fusionner les fiches</Link>,
-                          ou donner l&apos;adresse du compte à la fiche du bureau depuis sa fiche client.
+                          {o.ficheVide
+                            ? "« Rattacher » verse la fiche du bureau dans l'espace de ce compte : cavaliers, commandes, réservations et places au planning suivent."
+                            : "« Rattacher » donne l'adresse de ce compte à la fiche du bureau ; le compte s'y rattachera tout seul à sa prochaine connexion."}
                         </p>
                       </div>
                     )}

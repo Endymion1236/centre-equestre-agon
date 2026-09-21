@@ -11,6 +11,7 @@ interface FamInfo {
 interface Paire { score: number; motifs: string[]; a: FamInfo; b: FamInfo; }
 
 const MOTIF: Record<string, { label: string; icon: any; cls: string }> = {
+  email: { label: "Même adresse email", icon: Mail, cls: "bg-emerald-100 text-emerald-700" },
   phone: { label: "Même téléphone", icon: Phone, cls: "bg-emerald-100 text-emerald-700" },
   enfant: { label: "Enfant commun", icon: Baby, cls: "bg-emerald-100 text-emerald-700" },
   nom: { label: "Même nom", icon: Type, cls: "bg-amber-100 text-amber-700" },
