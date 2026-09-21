@@ -790,12 +790,31 @@ export default function FamilyCard({
                       { label: "Facturé", val: totalFacture, cls: "bg-gray-50 text-blue-500" },
                       { label: "Payé", val: totalPaye, cls: "bg-green-50 text-green-600" },
                       { label: "Reste dû", val: resteDu, cls: resteDu > 0 ? "bg-red-50 text-red-500" : "bg-green-50 text-green-600" },
-                    ].map(({ label, val, cls }) => (
-                      <div key={label} className={`rounded-xl p-3 text-center ${cls.split(" ")[0]}`}>
-                        <div className="font-body text-[10px] text-slate-600 uppercase">{label}</div>
-                        <div className={`font-body text-lg font-bold ${cls.split(" ")[1]}`}>{val.toFixed(2)}€</div>
-                      </div>
-                    ))}
+                    ].map(({ label, val, cls }) => {
+                      const contenu = (
+                        <>
+                          <div className="font-body text-[10px] text-slate-600 uppercase">{label}</div>
+                          <div className={`font-body text-lg font-bold ${cls.split(" ")[1]}`}>{val.toFixed(2)}€</div>
+                        </>
+                      );
+                      // La case rouge mène aux impayés de la famille : même
+                      // destination que le bouton dessous, un geste de moins.
+                      if (label === "Reste dû" && resteDu > 0) {
+                        return (
+                          <a key={label} href={`/admin/paiements?tab=impayes&family=${fid}`}
+                            title="Ouvrir les impayés de cette famille"
+                            className={`rounded-xl p-3 text-center no-underline ring-1 ring-red-200 hover:ring-red-400 hover:bg-red-100 transition-colors ${cls.split(" ")[0]}`}>
+                            {contenu}
+                            <div className="font-body text-[10px] text-red-400 mt-0.5">voir les impayés →</div>
+                          </a>
+                        );
+                      }
+                      return (
+                        <div key={label} className={`rounded-xl p-3 text-center ${cls.split(" ")[0]}`}>
+                          {contenu}
+                        </div>
+                      );
+                    })}
                     {totalAvoir > 0 && (
                       <div className="bg-purple-50 rounded-xl p-3 text-center">
                         <div className="font-body text-[10px] text-purple-600 uppercase">Avoir</div>
