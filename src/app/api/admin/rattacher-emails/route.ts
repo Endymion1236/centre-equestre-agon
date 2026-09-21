@@ -17,7 +17,7 @@
  *       le nom des ENFANTS d'abord (le plus fiable : l'export est une liste
  *       de cavaliers), puis par le nom du parent. Chaque proposition dit d'où
  *       elle vient. Les ambiguïtés sont rendues comme telles, jamais tranchées.
- *   { action: "appliquer", familyId, email }
+ *   { action: "appliquer", familyId, email, source? }
  *     → écrit l'adresse sur la fiche, UNIQUEMENT si elle n'a toujours pas
  *       d'adresse valide (jamais d'écrasement), avec trace de la source.
  *
@@ -146,10 +146,15 @@ export async function POST(req: NextRequest) {
           { status: 409 },
         );
       }
+      // D'où vient l'adresse : l'export de l'ancien logiciel, ou l'une des
+      // pistes internes de l'écran des comptes orphelins. La trace doit dire
+      // laquelle — c'est ce qui permet, plus tard, de comprendre un doute.
+      const source = String(body.source || "").trim().slice(0, 60) || "export-csv-ancien-logiciel";
       await ref.update({
         parentEmail: email,
         emailRattacheLe: FieldValue.serverTimestamp(),
-        emailRattacheSource: "export-csv-ancien-logiciel",
+        emailRattacheSource: source,
+        emailRattachePar: (auth as any)?.email || "admin",
         updatedAt: FieldValue.serverTimestamp(),
       });
       return NextResponse.json({ ok: true });

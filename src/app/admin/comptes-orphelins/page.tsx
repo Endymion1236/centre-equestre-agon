@@ -38,6 +38,15 @@ interface Orphelin {
   rapprochements: Rapprochement[];
 }
 
+interface PropositionAdresse {
+  email: string;
+  origine: "commande" | "journal" | "compte";
+  detail: string;
+  occurrences: number;
+  derniereDate: string | null;
+  dejaPrise: boolean;
+}
+
 interface SansAdresse {
   id: string;
   parentName: string;
@@ -45,7 +54,16 @@ interface SansAdresse {
   nbEnfants: number;
   adressePresente: boolean;
   accountType: string;
+  /** Adresses que l'application connaît déjà pour cette famille. */
+  propositions: PropositionAdresse[];
 }
+
+/** Ce que vaut une piste, dit en clair. */
+const ORIGINE: Record<PropositionAdresse["origine"], { libelle: string; emoji: string; sur: boolean }> = {
+  commande: { libelle: "facturé à cette adresse", emoji: "🧾", sur: true },
+  journal: { libelle: "email déjà envoyé ici", emoji: "✉️", sur: true },
+  compte: { libelle: "compte créé à ce nom", emoji: "👤", sur: false },
+};
 
 interface CandidatEmail {
   email: string;
@@ -102,7 +120,7 @@ export default function ComptesOrphelinsPage() {
     }
   };
 
-  const rattacher = async (familyId: string, email: string) => {
+  const rattacher = async (familyId: string, email: string, source = "export-csv-ancien-logiciel") => {
     if (!user || rattachEnCours) return;
     setRattachEnCours(familyId);
     try {
@@ -110,7 +128,7 @@ export default function ComptesOrphelinsPage() {
       const res = await fetch("/api/admin/rattacher-emails", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ action: "appliquer", familyId, email }),
+        body: JSON.stringify({ action: "appliquer", familyId, email, source }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d?.error || "Erreur");
@@ -185,6 +203,17 @@ export default function ComptesOrphelinsPage() {
               fabriquera un compte orphelin à la première connexion de la famille.
               À compléter <strong>avant</strong> d&apos;envoyer le mail de pré-inscription.
             </p>
+            {(() => {
+              const avecPiste = sansAdresse.filter(f => f.propositions.length > 0).length;
+              if (avecPiste === 0) return null;
+              return (
+                <p className="font-body text-sm text-green-800 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 mb-3">
+                  <strong>{avecPiste} fiche{avecPiste > 1 ? "s" : ""} sur {sansAdresse.length}</strong> ont une adresse
+                  retrouvée dans l&apos;application : une commande, un email déjà envoyé, ou un compte au même nom.
+                  Un clic suffit. Les autres demandent l&apos;export de l&apos;ancien logiciel, ou un coup de fil.
+                </p>
+              );
+            })()}
             {/* ── Croiser avec l'export CSV de l'ancien logiciel ── */}
             {sansAdresse.length > 0 && (
               <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50/50 px-4 py-3">
@@ -271,24 +300,67 @@ export default function ComptesOrphelinsPage() {
             ) : propositions ? null : (
               <div className="flex flex-col gap-2">
                 {sansAdresse.map(f => (
-                  <div key={f.id} className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50/50 px-4 py-2.5">
-                    <div className="min-w-0">
-                      <div className="font-body font-semibold text-slate-800 truncate">
-                        {f.parentName || "— sans nom —"}
-                        {f.accountType !== "particulier" && (
-                          <span className="ml-2 font-normal text-xs text-slate-500">🏫 établissement</span>
-                        )}
+                  <div key={f.id} className="rounded-xl border border-orange-200 bg-orange-50/50 px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-body font-semibold text-slate-800 truncate">
+                          {f.parentName || "— sans nom —"}
+                          {f.accountType !== "particulier" && (
+                            <span className="ml-2 font-normal text-xs text-slate-500">🏫 établissement</span>
+                          )}
+                        </div>
+                        <div className="font-body text-xs text-slate-500 flex flex-wrap items-center gap-3 mt-0.5">
+                          <span className="inline-flex items-center gap-1"><Baby size={11} />{f.nbEnfants} cavalier{f.nbEnfants > 1 ? "s" : ""}</span>
+                          {f.parentPhone && <span className="inline-flex items-center gap-1"><Phone size={11} />{f.parentPhone}</span>}
+                          {f.adressePresente && <span className="text-orange-600">adresse présente mais mal formée</span>}
+                        </div>
                       </div>
-                      <div className="font-body text-xs text-slate-500 flex flex-wrap items-center gap-3 mt-0.5">
-                        <span className="inline-flex items-center gap-1"><Baby size={11} />{f.nbEnfants} cavalier{f.nbEnfants > 1 ? "s" : ""}</span>
-                        {f.parentPhone && <span className="inline-flex items-center gap-1"><Phone size={11} />{f.parentPhone}</span>}
-                        {f.adressePresente && <span className="text-orange-600">adresse présente mais mal formée</span>}
-                      </div>
+                      <Link href={`/admin/cavaliers?id=${f.id}`}
+                        className="shrink-0 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg no-underline">
+                        Ouvrir la fiche
+                      </Link>
                     </div>
-                    <Link href={`/admin/cavaliers?id=${f.id}`}
-                      className="shrink-0 font-body text-xs font-semibold text-white bg-orange-500 hover:bg-orange-600 px-3 py-1.5 rounded-lg no-underline">
-                      Ouvrir la fiche
-                    </Link>
+
+                    {/* Ce que l'application sait déjà de cette famille. */}
+                    {f.propositions.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-1.5 border-t border-orange-200/70 pt-2">
+                        {f.propositions.map(p => (
+                          <div key={p.email} className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-body text-xs font-semibold text-slate-800 truncate">
+                                {ORIGINE[p.origine].emoji} {p.email}
+                              </div>
+                              <div className="font-body text-[11px] text-slate-500 truncate">
+                                {ORIGINE[p.origine].libelle} · {p.detail}
+                                {p.occurrences > 1 && ` · ${p.occurrences} fois`}
+                              </div>
+                            </div>
+                            {p.dejaPrise ? (
+                              <Link href="/admin/doublons"
+                                title="Cette adresse est déjà sur une autre fiche : c'est un doublon à fusionner, pas une adresse à recopier"
+                                className="shrink-0 font-body text-[11px] font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg no-underline border border-purple-200">
+                                Déjà sur une autre fiche · fusionner
+                              </Link>
+                            ) : (
+                              <button type="button"
+                                onClick={() => rattacher(f.id, p.email, `piste-${p.origine}`)}
+                                disabled={rattachEnCours === f.id}
+                                title={ORIGINE[p.origine].sur
+                                  ? "Écrire cette adresse sur la fiche"
+                                  : "Rapprochement par le nom : vérifiez qu'il s'agit bien de cette famille"}
+                                className={`shrink-0 font-body text-[11px] font-semibold px-2.5 py-1 rounded-lg border cursor-pointer disabled:opacity-50 ${
+                                  ORIGINE[p.origine].sur
+                                    ? "text-white bg-green-600 hover:bg-green-700 border-green-600"
+                                    : "text-slate-700 bg-white hover:bg-slate-50 border-slate-300"}`}>
+                                {rattachEnCours === f.id
+                                  ? <Loader2 size={11} className="animate-spin" />
+                                  : ORIGINE[p.origine].sur ? "Utiliser" : "Utiliser, à vérifier"}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
