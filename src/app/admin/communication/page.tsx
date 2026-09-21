@@ -29,6 +29,9 @@ type PreparationRentree = {
   creneaux: number;
   familles: { email: string; parentName: string; familyId: string; slots: { title: string; jour: string; horaire: string; moniteur: string; enfants: string[] }[] }[];
   sansEmail: number;
+  famillesSansEmail: { familyId: string; familyName: string; enfants: string[]; raison: "adresse_vide" | "fiche_introuvable" | "sans_famille" }[];
+  modeRestreint: boolean;
+  bloquees: number;
   dejaEnvoye: { sentAt: string; families: number; emailsSent: number; sentBy?: string } | null;
   saisonDebutParDefaut?: string;
   emailsSent?: number;
@@ -71,6 +74,12 @@ export default function CommunicationPage() {
   const [rentreeError, setRentreeError] = useState("");
   const [rentreeResult, setRentreeResult] = useState<PreparationRentree | null>(null);
   const [rentreeOuvert, setRentreeOuvert] = useState<string | null>(null);
+  const [rentreeSansEmailOuvert, setRentreeSansEmailOuvert] = useState(false);
+  const RAISON_SANS_EMAIL: Record<string, string> = {
+    adresse_vide: "fiche sans adresse email",
+    fiche_introuvable: "fiche famille introuvable",
+    sans_famille: "inscription sans famille rattachée",
+  };
 
   const preparerRentree = async (date?: string) => {
     setRentreeBusy("apercu"); setRentreeError(""); setRentreeResult(null); setRentreeForce(false);
@@ -821,11 +830,41 @@ export default function CommunicationPage() {
                   <div className="font-display text-xl font-bold text-blue-800">{rentreePrep.creneaux}</div>
                   <div className="font-body text-[11px] font-semibold text-blue-900">créneaux de cours</div>
                 </div>
-                <div className={`rounded-xl px-3 py-2.5 text-center ${rentreePrep.sansEmail ? "bg-orange-50" : "bg-blue-50"}`}>
+                <button type="button" onClick={() => setRentreeSansEmailOuvert((v) => !v)} disabled={!rentreePrep.sansEmail}
+                  className={`rounded-xl px-3 py-2.5 text-center border-none cursor-pointer ${rentreePrep.sansEmail ? "bg-orange-50 hover:bg-orange-100" : "bg-blue-50 cursor-default"}`}>
                   <div className={`font-display text-xl font-bold ${rentreePrep.sansEmail ? "text-orange-600" : "text-blue-800"}`}>{rentreePrep.sansEmail}</div>
-                  <div className="font-body text-[11px] font-semibold text-blue-900">inscriptions sans email</div>
-                </div>
+                  <div className="font-body text-[11px] font-semibold text-blue-900">famille{rentreePrep.sansEmail > 1 ? "s" : ""} sans email{rentreePrep.sansEmail ? " · voir" : ""}</div>
+                </button>
               </div>
+
+              {rentreeSansEmailOuvert && rentreePrep.famillesSansEmail?.length > 0 && (
+                <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50/60 px-4 py-3">
+                  <div className="font-body text-xs font-semibold text-orange-800 mb-1.5">
+                    Ces familles ont un cavalier au planning mais ne recevront rien. Complétez l'adresse dans Cavaliers, ou prévenez-les autrement.
+                  </div>
+                  <ul className="m-0 list-none font-body text-xs text-slate-700 flex flex-col gap-1">
+                    {rentreePrep.famillesSansEmail.map((f, i) => (
+                      <li key={`${f.familyId}-${i}`} className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0 truncate">
+                          <strong>{f.familyName || "Famille sans nom"}</strong>
+                          {f.enfants.length > 0 && <span className="text-slate-500"> — {f.enfants.join(", ")}</span>}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-orange-700">{RAISON_SANS_EMAIL[f.raison] || f.raison}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {rentreePrep.modeRestreint && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-body text-sm text-red-800">
+                  <AlertTriangle size={16} className="mt-0.5 shrink-0" />
+                  <div>
+                    <strong>Mode restreint des emails actif</strong> : {rentreePrep.bloquees} famille{rentreePrep.bloquees > 1 ? "s" : ""} sur {rentreePrep.familles.length} ne recevrai{rentreePrep.bloquees > 1 ? "ent" : "t"} rien.
+                    Désactivez le mode restreint en haut de cette page avant d'envoyer, puis relancez l'aperçu.
+                  </div>
+                </div>
+              )}
               <p className="mt-2 font-body text-xs text-slate-500">
                 Semaine du {new Date(`${rentreePrep.saisonDebut}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} au {new Date(`${rentreePrep.finSemaine}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}.
               </p>
@@ -839,7 +878,9 @@ export default function CommunicationPage() {
                       <strong>{new Date(rentreePrep.dejaEnvoye.sentAt).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })}</strong>
                       {" "}({rentreePrep.dejaEnvoye.emailsSent} email{rentreePrep.dejaEnvoye.emailsSent > 1 ? "s" : ""}
                       {rentreePrep.dejaEnvoye.sentBy === "system" ? ", par le robot" : rentreePrep.dejaEnvoye.sentBy ? `, par ${rentreePrep.dejaEnvoye.sentBy}` : ""}).
-                      Vérifiez le journal des emails avant de recommencer.
+                      {rentreePrep.dejaEnvoye.emailsSent === 0
+                        ? " Aucun email n'est réellement parti : le garde-fou des emails a tout bloqué. Personne n'a reçu le mail, vous pouvez le renvoyer sans risque de doublon."
+                        : " Vérifiez le journal des emails avant de recommencer."}
                     </div>
                   </div>
                   <label className="mt-2 flex items-center gap-2 font-body text-xs font-semibold cursor-pointer">

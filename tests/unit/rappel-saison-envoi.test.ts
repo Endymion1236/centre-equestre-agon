@@ -41,16 +41,23 @@ const creneau = (id: string, date: string, extra: Record<string, any>) => ({
   id, date, activityTitle: "Cours débutant", startTime: "17:00", endTime: "18:00", monitor: "Emeline", activityType: "cours", ...extra,
 });
 
-function fixture(opts: { creneaux?: any[]; flag?: any; resendOk?: boolean } = {}) {
+function fixture(opts: { creneaux?: any[]; flag?: any; resendOk?: boolean; restreint?: boolean } = {}) {
   const envois: any[] = [];
   const logs: any[] = [];
+  const refreshes: number[] = [];
   let flag: any = opts.flag ?? null;
   const familles: Record<string, any> = {
     famA: { parentEmail: "A@Exemple.fr", parentName: "Famille A" },
     famB: { parentEmail: "", parentName: "Famille sans email" },
   };
   const creneaux = opts.creneaux ?? [
-    creneau("c1", "2026-09-21", { enrolled: [{ familyId: "famA", childId: "k1", childName: "Léa" }, { familyId: "famB", childId: "k9", childName: "Zoé" }] }),
+    creneau("c1", "2026-09-21", { enrolled: [
+      { familyId: "famA", childId: "k1", childName: "Léa" },
+      { familyId: "famB", childId: "k9", childName: "Zoé" },
+      { familyId: "famB", childId: "k10", childName: "Max" },     // même famille sans email : comptée une fois
+      { familyId: "famX", childId: "k11", childName: "Fantôme" }, // fiche disparue
+      { childId: "k12", childName: "Orphelin" },                  // sans famille
+    ] }),
     creneau("c2", "2026-09-23", { enrolled: [{ familyId: "famA", childId: "k2", childName: "Tom", familyEmail: "a@exemple.fr", familyName: "Famille A" }] }),
     creneau("c3", "2026-09-28", { enrolled: [{ familyId: "famA", childId: "k1", childName: "Léa" }] }), // semaine suivante : hors fenêtre
     creneau("s1", "2026-09-22", { activityType: "stage", enrolled: [{ familyId: "famA", childId: "k1", childName: "Léa" }] }),
@@ -79,14 +86,19 @@ function fixture(opts: { creneaux?: any[]; flag?: any; resendOk?: boolean } = {}
   const api = charger("src/lib/rappel-saison-envoi.ts", {
     "@/lib/firebase-admin": { adminDb },
     "@/lib/email-log": { logEmail: async (e: any) => { logs.push(e); } },
-    "@/lib/email-guard": { isRecipientAllowed: (to: string) => !to.includes("bloque"), blockedLog: () => "" },
+    "@/lib/email-guard": {
+      refreshEmailMode: async () => { refreshes.push(1); },
+      isEmailRestricted: () => opts.restreint === true,
+      isRecipientAllowed: (to: string) => opts.restreint !== true || to.includes("admin"),
+      blockedLog: () => "",
+    },
     "@/lib/date-local": dateLocal,
     "@/lib/email-templates": emailTemplates,
     "@/lib/rappel-saison": rappelSaison,
   }, {
     fetch: async (_url: string, init: any) => { envois.push(JSON.parse(init.body)); return { ok: opts.resendOk !== false, status: 500, text: async () => "boom" }; },
   });
-  return { api, envois, logs, flag: () => flag };
+  return { api, envois, logs, refreshes, flag: () => flag };
 }
 
 let passed = 0;
@@ -107,10 +119,27 @@ async function main() {
     assert.equal(prep.familles[0].email, "a@exemple.fr", "email normalisé en minuscules, une seule entrée pour la famille");
     assert.equal(prep.familles[0].slots.length, 2);
     assert.equal(JSON.stringify(prep.familles[0].slots.map((s: any) => s.enfants)), JSON.stringify([["Léa"], ["Tom"]]));
-    assert.equal(prep.sansEmail, 1);
+    assert.equal(prep.sansEmail, 3, "trois familles distinctes, pas quatre inscriptions");
+    assert.equal(JSON.stringify(prep.famillesSansEmail.map((x: any) => [x.raison, x.enfants.join("+")])),
+      JSON.stringify([["adresse_vide", "Zoé+Max"], ["fiche_introuvable", "Fantôme"], ["sans_famille", "Orphelin"]]));
+    assert.equal(prep.modeRestreint, false);
+    assert.equal(prep.bloquees, 0);
     assert.equal(prep.dejaEnvoye, null);
     assert.equal(f.envois.length, 0);
     assert.equal(f.flag(), null);
+    assert.ok(f.refreshes.length >= 1, "le mode des emails est relu avant toute décision");
+  });
+
+  await test("mode restreint : l'aperçu annonce les bloquées et l'envoi n'écrit rien vers elles", async () => {
+    const f = fixture({ restreint: true });
+    const prep = await f.api.preparerRappelSaison("2026-09-21");
+    assert.equal(prep.modeRestreint, true);
+    assert.equal(prep.bloquees, 1);
+    const r = await f.api.envoyerRappelSaison({ saisonDebut: "2026-09-21", sentBy: "system", context: "cron_saison_rappel" });
+    assert.equal(r.blocked, 1);
+    assert.equal(r.emailsSent, 0);
+    assert.equal(f.envois.length, 0);
+    assert.equal(f.flag().emailsSent, 0, "le marqueur garde la trace d'un envoi à zéro");
   });
 
   await test("l'envoi écrit un email par famille, journalise et pose le marqueur", async () => {

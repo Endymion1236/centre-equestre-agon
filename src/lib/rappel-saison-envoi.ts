@@ -17,7 +17,7 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
-import { isRecipientAllowed, blockedLog } from "@/lib/email-guard";
+import { isRecipientAllowed, isEmailRestricted, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { addDaysParis } from "@/lib/date-local";
 import { emailLayout, emailSignature } from "@/lib/email-templates";
 import { ajouterEnfantAuCreneau, cleCreneauSaison, corpsRappelSaison, type CreneauSaison } from "@/lib/rappel-saison";
@@ -39,6 +39,14 @@ export interface MarqueurRappelSaison {
   sentBy?: string;
 }
 
+export interface FamilleSansEmail {
+  familyId: string;
+  familyName: string;
+  enfants: string[];
+  /** Pourquoi on ne peut pas la prévenir. */
+  raison: "adresse_vide" | "fiche_introuvable" | "sans_famille";
+}
+
 export interface PreparationRappelSaison {
   saisonDebut: string;
   /** Dernier jour de la première semaine (rentrée + 6). */
@@ -46,8 +54,15 @@ export interface PreparationRappelSaison {
   /** Créneaux de cours retenus (stages et créneaux fermés exclus). */
   creneaux: number;
   familles: FamilleRappelSaison[];
-  /** Inscriptions dont la famille n'a pas d'adresse : personne à prévenir. */
+  /** Familles distinctes qu'on ne peut pas prévenir (fiche sans adresse,
+   *  fiche disparue, inscription sans famille). */
   sansEmail: number;
+  famillesSansEmail: FamilleSansEmail[];
+  /** Mode restreint des emails actif : seules les adresses de la liste
+   *  blanche recevront le mail, les autres seront comptées « bloquées ». */
+  modeRestreint: boolean;
+  /** Familles qui seraient bloquées par le mode restreint si on envoyait maintenant. */
+  bloquees: number;
   dejaEnvoye: MarqueurRappelSaison | null;
 }
 
@@ -69,6 +84,11 @@ export async function preparerRappelSaison(saisonDebut: string): Promise<Prepara
   const debutDate = new Date(`${saisonDebut}T12:00:00`);
   const finSemaine = addDaysParis(6, debutDate);
 
+  // Sans cet appel, le garde-fou des emails se considère en mode restreint
+  // (fail-safe) et bloque TOUT envoi sans rien journaliser : c'est ce qui
+  // explique un marqueur « 0 email » alors que 56 familles étaient à prévenir.
+  await refreshEmailMode();
+
   const flagSnap = await marqueurRef(saisonDebut).get();
   const dejaEnvoye = flagSnap.exists ? (flagSnap.data() as MarqueurRappelSaison) : null;
 
@@ -80,30 +100,46 @@ export async function preparerRappelSaison(saisonDebut: string): Promise<Prepara
   // Regrouper par famille → créneaux récurrents distincts (jour + heure +
   // titre), chacun avec le prénom du ou des enfants.
   const famSeason = new Map<string, { parentName: string; familyId: string; slots: Map<string, CreneauSaison> }>();
-  const emailsFamilles = new Map<string, { email: string; parentName: string }>();
-  let sansEmail = 0;
+  const emailsFamilles = new Map<string, { email: string; parentName: string; existe: boolean }>();
+  const sansEmailParFamille = new Map<string, FamilleSansEmail>();
+  const noterSansEmail = (cle: string, base: Omit<FamilleSansEmail, "enfants">, enfant: string) => {
+    const entree = sansEmailParFamille.get(cle) || { ...base, enfants: [] };
+    const prenom = String(enfant || "").trim();
+    if (prenom && !entree.enfants.includes(prenom)) entree.enfants.push(prenom);
+    sansEmailParFamille.set(cle, entree);
+  };
   for (const c of seasonCreneaux) {
     const [yy, mm, dd] = String(c.date).split("-").map(Number);
     const jourLabel = new Date(yy, mm - 1, dd, 12).toLocaleDateString("fr-FR", { weekday: "long" });
     for (const e of (c.enrolled || [])) {
-      if (!e.familyId) continue;
+      if (!e.familyId) {
+        // Inscription posée sans famille (ancien import, saisie à la main) :
+        // personne à prévenir, mais on le dit.
+        noterSansEmail(`sans-famille:${e.childName || e.childId || "?"}`, { familyId: "", familyName: String(e.familyName || ""), raison: "sans_famille" }, e.childName);
+        continue;
+      }
       let famEmail = String(e.familyEmail || "");
       let parentName = String(e.familyName || "");
+      let ficheExiste = true;
       if (!famEmail) {
         const connu = emailsFamilles.get(e.familyId);
-        if (connu) { famEmail = connu.email; parentName = parentName || connu.parentName; }
+        if (connu) { famEmail = connu.email; parentName = parentName || connu.parentName; ficheExiste = connu.existe; }
         else {
           try {
             const fs = await adminDb.collection("families").doc(e.familyId).get();
+            ficheExiste = Boolean(fs.exists);
             if (fs.exists) {
               famEmail = String(fs.data()!.parentEmail || "");
               parentName = parentName || String(fs.data()!.parentName || "");
             }
           } catch {}
-          emailsFamilles.set(e.familyId, { email: famEmail, parentName });
+          emailsFamilles.set(e.familyId, { email: famEmail, parentName, existe: ficheExiste });
         }
       }
-      if (!famEmail) { sansEmail++; continue; }
+      if (!famEmail) {
+        noterSansEmail(e.familyId, { familyId: e.familyId, familyName: parentName, raison: ficheExiste ? "adresse_vide" : "fiche_introuvable" }, e.childName);
+        continue;
+      }
       const cle = famEmail.trim().toLowerCase();
       if (!famSeason.has(cle)) famSeason.set(cle, { parentName, familyId: e.familyId, slots: new Map() });
       ajouterEnfantAuCreneau(famSeason.get(cle)!.slots, cleCreneauSaison(c.activityTitle, jourLabel, c.startTime), {
@@ -117,7 +153,16 @@ export async function preparerRappelSaison(saisonDebut: string): Promise<Prepara
     .map(([email, f]) => ({ email, parentName: f.parentName, familyId: f.familyId, slots: [...f.slots.values()] }))
     .sort((a, b) => a.parentName.localeCompare(b.parentName, "fr"));
 
-  return { saisonDebut, finSemaine, creneaux: seasonCreneaux.length, familles, sansEmail, dejaEnvoye };
+  const famillesSansEmail = [...sansEmailParFamille.values()]
+    .sort((a, b) => (a.familyName || "zzz").localeCompare(b.familyName || "zzz", "fr"));
+  const modeRestreint = isEmailRestricted();
+  const bloquees = modeRestreint ? familles.filter((f) => !isRecipientAllowed(f.email)).length : 0;
+
+  return {
+    saisonDebut, finSemaine, creneaux: seasonCreneaux.length, familles,
+    sansEmail: famillesSansEmail.length, famillesSansEmail,
+    modeRestreint, bloquees, dejaEnvoye,
+  };
 }
 
 export async function envoyerRappelSaison(params: {
