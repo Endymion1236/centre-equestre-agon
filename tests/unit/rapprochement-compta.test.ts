@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   analyserPeriodeCsv,
+  apparierRemiseCarte,
   candidatsRemiseCarte,
   cleLigneBancaire,
   estEncaissementCarte,
@@ -189,22 +190,65 @@ test("les autres moyens de paiement restent hors remise carte", () => {
   }
 });
 
-test("à montant égal, le ticket du terminal passe avant le paiement en ligne", () => {
+test("le vivier garde les cartes dans leur ordre et écarte les autres modes", () => {
   const pool = candidatsRemiseCarte([
     { id: "enLigne", mode: "cb_online" },
     { id: "cheque", mode: "cheque" },
     { id: "terminal", mode: "cb_terminal" },
   ]);
-  assert.deepEqual(pool.map((e) => e.id), ["terminal", "enLigne"], "le chèque est écarté");
+  assert.deepEqual(pool.map((e) => e.id), ["enLigne", "terminal"], "le chèque est écarté");
 });
 
-test("l'ordre d'origine est préservé entre paiements de même canal", () => {
-  const pool = candidatsRemiseCarte([
-    { id: "a", mode: "cb_online" },
-    { id: "b", mode: "cb_online" },
-    { id: "c", mode: "cb_terminal" },
+console.log("\n── Appariement d'une remise carte ──");
+
+test("une remise d'e-commerce se lit dans les paiements en ligne", () => {
+  // Remise du 20/09/2026 : 150 € = 60 € (VASAK) + 90 € (HEKIMIAN), tous deux
+  // encaissés en ligne. Les tickets du terminal du même jour ne doivent pas
+  // être consommés à leur place.
+  const resultat = apparierRemiseCarte([60, 90], [
+    { id: "t1", montant: 60, mode: "cb_terminal" },
+    { id: "e1", montant: 60, mode: "cb_online" },
+    { id: "e2", montant: 90, mode: "cb_cawl" },
   ]);
-  assert.deepEqual(pool.map((e) => e.id), ["c", "a", "b"]);
+  assert.equal(resultat.canal, "en-ligne");
+  assert.deepEqual(resultat.trouves.map((t) => t.encaissement.id), ["e1", "e2"]);
+  assert.deepEqual(resultat.manquants, []);
+});
+
+test("une remise du terminal reste servie par le terminal", () => {
+  const resultat = apparierRemiseCarte([60], [
+    { id: "e1", montant: 60, mode: "cb_online" },
+    { id: "t1", montant: 60, mode: "cb_terminal" },
+  ]);
+  assert.equal(resultat.canal, "terminal");
+  assert.deepEqual(resultat.trouves.map((t) => t.encaissement.id), ["t1"]);
+});
+
+test("un même montant n'est jamais servi deux fois", () => {
+  const resultat = apparierRemiseCarte([50, 50], [
+    { id: "a", montant: 50, mode: "cb_terminal" },
+  ]);
+  assert.equal(resultat.trouves.length, 1);
+  assert.deepEqual(resultat.manquants, [50]);
+});
+
+test("quand aucun canal n'explique tout, on mélange plutôt que de rendre zéro", () => {
+  const resultat = apparierRemiseCarte([40, 70], [
+    { id: "t", montant: 40, mode: "cb_terminal" },
+    { id: "e", montant: 70, mode: "cb_online" },
+  ]);
+  assert.equal(resultat.canal, null, "aucun canal seul ne suffit");
+  assert.deepEqual(resultat.trouves.map((t) => t.encaissement.id), ["t", "e"]);
+  assert.deepEqual(resultat.manquants, []);
+});
+
+test("les chèques et espèces ne servent jamais une remise carte", () => {
+  const resultat = apparierRemiseCarte([30], [
+    { id: "c", montant: 30, mode: "cheque" },
+    { id: "x", montant: 30, mode: "especes" },
+  ]);
+  assert.deepEqual(resultat.trouves, []);
+  assert.deepEqual(resultat.manquants, [30]);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

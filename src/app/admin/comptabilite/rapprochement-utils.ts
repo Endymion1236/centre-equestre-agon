@@ -303,16 +303,71 @@ export const estEncaissementCarte = (mode: unknown) =>
   (MODES_CARTE as readonly string[]).includes(String(mode ?? ""));
 
 /**
- * Les encaissements carte candidats à une remise, le terminal d'abord.
+ * Les deux canaux d'encaissement par carte, et les modes qui les composent.
  *
- * À montant égal, un ticket du terminal reste le candidat le plus probable
- * pour une remise carte ; le paiement en ligne ne vient qu'ensuite. Le tri
- * préserve donc le comportement d'avant quand les deux existent.
+ * Le club a quatre contrats monétiques chez le Crédit Agricole : trois de
+ * « paiement de proximité » (le terminal, dont le sans-contact) et un
+ * « e-commerce de CAWL » (les paiements en ligne). Chacun produit ses propres
+ * remises, et la banque les nomme toutes « Remise carte ».
  */
+export const CANAUX_REMISE_CARTE = [
+  { cle: "terminal", libelle: "CB Terminal", modes: ["cb_terminal"] },
+  { cle: "en-ligne", libelle: "CB en ligne", modes: ["cb_online", "cb_cawl"] },
+] as const;
+
+export type CanalRemiseCarte = (typeof CANAUX_REMISE_CARTE)[number]["cle"];
+
+/** Les encaissements carte candidats à une remise, tous canaux confondus. */
 export function candidatsRemiseCarte<T extends { mode?: string | null }>(encaissements: T[]): T[] {
-  return encaissements
-    .filter((e) => estEncaissementCarte(e?.mode))
-    .sort((a, b) => Number(a.mode !== "cb_terminal") - Number(b.mode !== "cb_terminal"));
+  return (encaissements || []).filter((e) => estEncaissementCarte(e?.mode));
+}
+
+export interface AppariementRemise<T> {
+  trouves: { encaissement: T; montant: number }[];
+  manquants: number[];
+  /** Canal qui explique la remise, ou null quand il a fallu les mélanger. */
+  canal: CanalRemiseCarte | null;
+}
+
+/** Associe chaque montant à un encaissement libre du vivier, sans réemploi. */
+function apparier<T extends { montant?: number }>(montants: number[], pool: T[]): AppariementRemise<T> {
+  const pris = new Set<number>();
+  const trouves: { encaissement: T; montant: number }[] = [];
+  const manquants: number[] = [];
+  for (const montant of montants) {
+    const i = pool.findIndex((e, idx) => !pris.has(idx) && Math.abs((e?.montant || 0) - montant) < 0.02);
+    if (i >= 0) { pris.add(i); trouves.push({ encaissement: pool[i], montant }); }
+    else manquants.push(montant);
+  }
+  return { trouves, manquants, canal: null };
+}
+
+/**
+ * Le détail d'une remise carte, apparié aux encaissements du journal.
+ *
+ * Une remise ne mélange jamais les canaux : elle vient d'UN contrat, donc du
+ * terminal ou de l'e-commerce. On essaie donc chaque canal séparément et on
+ * garde celui qui explique TOUS les montants. Sans cela, il faudrait
+ * reconnaître le numéro de contrat dans le libellé, qui change d'un club à
+ * l'autre — le contenu suffit à trancher.
+ *
+ * Si aucun canal ne suffit, on retombe sur le vivier complet : mieux vaut
+ * proposer une association partielle que rien du tout, la validation reste
+ * à l'écran.
+ */
+export function apparierRemiseCarte<T extends { montant?: number; mode?: string | null }>(
+  montants: number[],
+  encaissements: T[],
+): AppariementRemise<T> {
+  const candidats = candidatsRemiseCarte(encaissements);
+  for (const canal of CANAUX_REMISE_CARTE) {
+    const pool = candidats.filter((e) => (canal.modes as readonly string[]).includes(String(e?.mode ?? "")));
+    const essai = apparier(montants, pool);
+    if (essai.manquants.length === 0 && essai.trouves.length > 0) {
+      return { ...essai, canal: canal.cle };
+    }
+  }
+  return apparier(montants, candidats);
 }
 
 /**

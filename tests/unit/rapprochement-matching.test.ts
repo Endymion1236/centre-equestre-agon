@@ -71,6 +71,48 @@ console.log("\n✓ Remise CB terminal : le total de la journée :");
   assert("les trois CB de la journée sont consommées", r.usedEncIds.size === 3, `${r.usedEncIds.size}`);
 }
 
+console.log("\n✓ Remise carte d'e-commerce : lue dans les paiements en ligne :");
+{
+  // Cas vécu le 20/09/2026 : « Remise carte CARTE 8067954 » de 150 €, qui est
+  // le contrat E-COMMERCE DE CAWL — donc deux paiements en ligne (60 + 90) du
+  // 19. Le rapprochement ne cherchait que le terminal : la remise ressortait
+  // « à traiter » et le détail collé depuis la banque ne trouvait rien.
+  const encaissements = [
+    enc("v1", 60, "cb_online", "2026-09-19"),
+    enc("h1", 90, "cb_online", "2026-09-19"),
+  ];
+  const r = rapprocherReleve(
+    [ligne("20/09/2026", "Remise carte CARTE 8067954 001 172955 20/09", 150)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("la remise est rapprochée", r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("reconnue comme CB en ligne", r.finalMatched[0].matchType === "CB en ligne", r.finalMatched[0].matchType);
+  assert("les deux paiements sont consommés", r.usedEncIds.size === 2, `${r.usedEncIds.size}`);
+}
+
+console.log("\n✓ Les deux canaux ne se mélangent pas dans une même journée :");
+{
+  // Même jour : 150 € en ligne (60 + 90) et 80 € au terminal. Deux remises
+  // distinctes le lendemain. Chacune doit prendre son canal — un total
+  // journalier « toutes cartes confondues » (230 €) ne correspondrait à rien.
+  const encaissements = [
+    enc("v1", 60, "cb_online", "2026-09-19"),
+    enc("h1", 90, "cb_online", "2026-09-19"),
+    enc("t1", 80, "cb_terminal", "2026-09-19"),
+  ];
+  const r = rapprocherReleve(
+    [
+      ligne("20/09/2026", "Remise carte CARTE 8067954", 150),
+      ligne("20/09/2026", "Remise carte CARTE 1535124", 80),
+    ],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("la remise e-commerce est rapprochée", r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("la remise du terminal est rapprochée", r.finalMatched[1].matched, r.finalMatched[1].matchDetail);
+  assert("la seconde est bien le terminal", r.finalMatched[1].matchType === "CB Terminal", r.finalMatched[1].matchType);
+  assert("les trois écritures sont consommées", r.usedEncIds.size === 3, `${r.usedEncIds.size}`);
+}
+
 console.log("\n✓ Remise CB partielle : volontairement laissée à traiter :");
 {
   // Même journée, mais la banque ne remet que 300 : le compte n'y est pas.

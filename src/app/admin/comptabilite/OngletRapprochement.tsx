@@ -19,9 +19,11 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Upload, Search, Sparkles, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
 import {
-  candidatsRemiseCarte, encaissementEnDetail, encaissementsDeRemiseSepa,
+  apparierRemiseCarte, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
+  encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
 } from "./rapprochement-utils";
+import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 
 export interface OngletRapprochementProps {
@@ -67,7 +69,7 @@ export default function OngletRapprochement({
   // Saisie du détail d'une remise collé depuis le site Crédit Agricole
   const [showCADetailModal, setShowCADetailModal] = useState<number | null>(null);
   const [caDetailText, setCaDetailText] = useState("");
-  const [caDetailPreview, setCaDetailPreview] = useState<{ found: any[]; missing: number[]; total: number } | null>(null);
+  const [caDetailPreview, setCaDetailPreview] = useState<{ found: any[]; missing: number[]; total: number; canal: CanalRemiseCarte | null } | null>(null);
 
   // Lignes volontairement écartées du rapprochement : leur nombre sert à la
   // fois d'onglet et de rappel en tête de liste.
@@ -1103,21 +1105,15 @@ export default function OngletRapprochement({
             return true;
           });
 
-          // Pour chaque montant, trouve le meilleur candidat (sans réutilisation)
-          const used = new Set<string>();
-          const found: any[] = [];
-          const missing: number[] = [];
-          for (const amount of amounts) {
-            const candidate = cbPool.find(e => !used.has(e.id) && Math.abs((e.montant || 0) - amount) < 0.02);
-            if (candidate) {
-              used.add(candidate.id);
-              found.push({ ...candidate, _amount: amount });
-            } else {
-              missing.push(amount);
-            }
-          }
+          // Une remise ne mélange pas les canaux : elle vient d'un seul contrat
+          // monétique, le terminal du club ou l'e-commerce CAWL. On essaie donc
+          // chaque canal séparément et on garde celui qui explique tous les
+          // montants (cf. apparierRemiseCarte).
+          const appariement = apparierRemiseCarte(amounts, cbPool);
+          const found = appariement.trouves.map(t => ({ ...t.encaissement, _amount: t.montant }));
+          const missing = appariement.manquants;
           const total = amounts.reduce((s, a) => s + a, 0);
-          setCaDetailPreview({ found, missing, total });
+          setCaDetailPreview({ found, missing, total, canal: appariement.canal });
         };
 
         const blAmount = bl.amount;
@@ -1170,7 +1166,14 @@ export default function OngletRapprochement({
                     {caDetailPreview && (
                       <div className="mt-3 grid grid-cols-2 gap-3">
                         <div>
-                          <div className="font-body text-xs font-semibold text-green-700 mb-1">✓ Trouvés ({caDetailPreview.found.length})</div>
+                          <div className="font-body text-xs font-semibold text-green-700 mb-1">
+                            ✓ Trouvés ({caDetailPreview.found.length})
+                            {caDetailPreview.canal && (
+                              <span className="font-normal text-slate-500">
+                                {" — "}{CANAUX_REMISE_CARTE.find(c => c.cle === caDetailPreview.canal)?.libelle}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
                             {caDetailPreview.found.map((e, idx) => (
                               <div key={idx} className="bg-green-50 rounded px-2 py-1 font-body text-[11px]">
@@ -1184,7 +1187,7 @@ export default function OngletRapprochement({
                           <div className="flex flex-col gap-1 max-h-48 overflow-y-auto">
                             {caDetailPreview.missing.map((amount, idx) => (
                               <div key={idx} className="bg-orange-50 rounded px-2 py-1 font-body text-[11px]">
-                                <strong>{amount.toFixed(2)}€</strong> — pas d'encaissement CB correspondant
+                                <strong>{amount.toFixed(2)}€</strong> — pas d'encaissement carte correspondant (terminal ni en ligne)
                               </div>
                             ))}
                             {caDetailPreview.missing.length === 0 && (
@@ -1219,7 +1222,10 @@ export default function OngletRapprochement({
                         montant: e.montant || 0,
                         date: e.date?.seconds ? new Date(e.date.seconds * 1000).toLocaleDateString("fr-FR") : "",
                         activityTitle: e.activityTitle || "",
-                        mode: "CB Terminal",
+                        // Le vrai mode de l'écriture : une remise carte peut
+                        // porter des paiements en ligne, les afficher tous en
+                        // « CB Terminal » rendait le détail faux.
+                        mode: modeLabels[e.mode] || e.mode || "CB",
                       })),
                       // Stocker les manquants pour les afficher au survol sur l'écran principal
                       missingAmounts: caDetailPreview.missing.length > 0 ? caDetailPreview.missing : undefined,

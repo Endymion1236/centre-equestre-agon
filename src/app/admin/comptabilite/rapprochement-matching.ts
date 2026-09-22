@@ -17,7 +17,9 @@
  *
  * Les cas traités, dans l'ordre où ils sont tentés :
  *   1. versement CAWL (CB en ligne), net de commission ;
- *   2. remise CB terminal, par total de la journée puis par sous-ensemble ;
+ *   2. remise carte, par total de la journée, canal par canal : le terminal
+ *      du club et l'e-commerce CAWL ont des contrats distincts mais le même
+ *      libellé « Remise carte », et une remise ne mélange jamais les deux ;
  *   3. virement, prélèvement et remise SEPA, par nom puis par montant —
  *      le libellé est lu sans accents, car le Crédit Agricole écrit
  *      « Avis de prélèvement emis PREL ECH DU … » pour une remise SEPA ;
@@ -27,6 +29,7 @@
  */
 
 import {
+  CANAUX_REMISE_CARTE,
   cleLigneBancaire,
   encaissementEnDetail,
   encaissementsDeRemiseSepa,
@@ -215,39 +218,63 @@ export function rapprocherReleve(
 
     // ── 2. CB terminal — matching agrégat par jour ───────────────────
     // La banque remet en 1 virement le total CB d'une journée (J-1, J-2, etc.)
-    if (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE")) {
-      // Pool élargi : un virement de remise CB du 3 novembre peut concerner des CB du 30 octobre
-      const cbEncs = periodEncExtended.filter(e => e.mode === "cb_terminal");
+    // « REMISE CHQ N°100 » et « PRLV SEPA REMISE 2 » contiennent REMISE : sans
+    // cette exclusion, une remise de chèques ou un prélèvement entrerait dans
+    // le bloc carte. Tant qu'on n'y cherchait que le terminal, ces lignes n'y
+    // trouvaient rien et retombaient sur leur bloc ; en ouvrant le bloc aux
+    // paiements en ligne, elles s'y feraient servir à tort.
+    const libelleNonCarte = label.includes("CHQ") || label.includes("CHEQUE")
+      || label.includes("ESP") || label.includes("VERSEMENT")
+      || libellePrelevement;
 
-      // a) Grouper les encaissements CB par jour
-      const cbByDay: Record<string, { total: number; count: number; encs: any[] }> = {};
-      for (const e of cbEncs) {
-        const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
-        if (!d) continue;
-        const dayKey = d.toISOString().split("T")[0];
-        if (!cbByDay[dayKey]) cbByDay[dayKey] = { total: 0, count: 0, encs: [] };
-        cbByDay[dayKey].total += (e.montant || 0);
-        cbByDay[dayKey].count++;
-        cbByDay[dayKey].encs.push(e);
-      }
+    if (!libelleNonCarte
+      && (label.includes("REMISE") || label.includes("CB") || label.includes("TPE") || label.includes("CARTE"))) {
+      // Pool élargi : un virement de remise CB du 3 novembre peut concerner des CB du 30 octobre.
+      //
+      // Une remise vient d'UN contrat monétique : le club en a quatre au
+      // Crédit Agricole — trois « paiement de proximité » (le terminal) et un
+      // « e-commerce de CAWL » (les paiements en ligne) — et la banque les
+      // libelle tous « Remise carte ». On traite donc chaque canal
+      // séparément : mélanger terminal et en ligne fausserait les totaux
+      // journaliers, qui sont justement la clé du rapprochement ici.
+      const poolCanal = (canal: typeof CANAUX_REMISE_CARTE[number]) =>
+        periodEncExtended.filter(e => (canal.modes as readonly string[]).includes(String(e.mode ?? "")));
+      // Le libellé du détail : « CB » pour le terminal, comme avant, et
+      // « CB en ligne » pour l'e-commerce, pour qu'on voie d'où vient la remise.
+      const motCanal = (canal: typeof CANAUX_REMISE_CARTE[number]) =>
+        canal.cle === "terminal" ? "CB" : canal.libelle;
 
-      // b) Chercher un jour dont le total CB = montant de la remise (dans une fenêtre J-3)
-      for (const [dayKey, dayData] of Object.entries(cbByDay)) {
-        const dayTotal = Math.round(dayData.total * 100) / 100;
-        if (Math.abs(dayTotal - bl.amount) < 0.02) {
-          // Vérifier que ce jour est dans la fenêtre (la remise arrive J+1 ou J+2 après les CB)
-          if (bankDate) {
-            const encDay = new Date(dayKey);
-            const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
-            if (diff < -1 || diff > 5) continue; // la remise doit être APRÈS les CB (J+0 à J+5)
+      // a) Grouper les encaissements du canal par jour, b) chercher un jour
+      //    dont le total = montant de la remise (dans une fenêtre J+0 à J+5).
+      for (const canal of CANAUX_REMISE_CARTE) {
+        const cbByDay: Record<string, { total: number; count: number; encs: any[] }> = {};
+        for (const e of poolCanal(canal)) {
+          const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
+          if (!d) continue;
+          const dayKey = d.toISOString().split("T")[0];
+          if (!cbByDay[dayKey]) cbByDay[dayKey] = { total: 0, count: 0, encs: [] };
+          cbByDay[dayKey].total += (e.montant || 0);
+          cbByDay[dayKey].count++;
+          cbByDay[dayKey].encs.push(e);
+        }
+
+        for (const [dayKey, dayData] of Object.entries(cbByDay)) {
+          const dayTotal = Math.round(dayData.total * 100) / 100;
+          if (Math.abs(dayTotal - bl.amount) < 0.02) {
+            // Vérifier que ce jour est dans la fenêtre (la remise arrive J+1 ou J+2 après les CB)
+            if (bankDate) {
+              const encDay = new Date(dayKey);
+              const diff = (bankDate.getTime() - encDay.getTime()) / (1000 * 60 * 60 * 24);
+              if (diff < -1 || diff > 5) continue; // la remise doit être APRÈS les CB (J+0 à J+5)
+            }
+            const dayLabel = dayKey.split("-").reverse().join("/");
+            dayData.encs.forEach(e => usedEncIds.add(e.id));
+            return {
+              ...bl, matched: true, matchType: canal.libelle,
+              matchDetail: `${dayData.count} transaction(s) ${motCanal(canal)} du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
+              matchedEncs: dayData.encs.map(encaissementEnDetail),
+            };
           }
-          const dayLabel = dayKey.split("-").reverse().join("/");
-          dayData.encs.forEach(e => usedEncIds.add(e.id));
-          return {
-            ...bl, matched: true, matchType: "CB Terminal",
-            matchDetail: `${dayData.count} transaction(s) CB du ${dayLabel} = ${dayTotal.toFixed(2)}€`,
-            matchedEncs: dayData.encs.map(encaissementEnDetail),
-          };
         }
       }
 
@@ -273,11 +300,14 @@ export function rapprocherReleve(
       //    Combinait 2-3 jours consécutifs pour matcher une remise.
       //    Risque similaire de mélange entre remises bancaires.
 
-      // d) Dernier recours : match exact montant unitaire
-      const exactCB = cbEncs.filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
-      if (exactCB) {
-        usedEncIds.add(exactCB.id);
-        return { ...bl, matched: true, matchType: "CB Terminal", matchDetail: `CB ${exactCB.familyName} — ${exactCB.activityTitle || ""}`, matchedEncs: [encaissementEnDetail(exactCB)] };
+      // d) Dernier recours : match exact montant unitaire, canal par canal
+      //    (le terminal d'abord, comme avant l'ouverture aux paiements en ligne).
+      for (const canal of CANAUX_REMISE_CARTE) {
+        const exactCB = poolCanal(canal).filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
+        if (exactCB) {
+          usedEncIds.add(exactCB.id);
+          return { ...bl, matched: true, matchType: canal.libelle, matchDetail: `${motCanal(canal)} ${exactCB.familyName} — ${exactCB.activityTitle || ""}`, matchedEncs: [encaissementEnDetail(exactCB)] };
+        }
       }
     }
 
