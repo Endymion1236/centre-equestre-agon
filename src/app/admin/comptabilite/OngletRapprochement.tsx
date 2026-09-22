@@ -18,7 +18,10 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Upload, Search, Sparkles, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
-import { encaissementEnDetail, encaissementsDeRemiseSepa, parserDateBancaire, parserDetailCa } from "./rapprochement-utils";
+import {
+  candidatsRemiseCarte, encaissementEnDetail, encaissementsDeRemiseSepa,
+  parserDateBancaire, parserDetailCa,
+} from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 
 export interface OngletRapprochementProps {
@@ -1077,8 +1080,11 @@ export default function OngletRapprochement({
           // On accumule les "consommations" de triplets au fur et à mesure pour
           // exclure correctement les encs en surplus quand il y a des doublons légitimes.
           const tripletConsumed = new Map<string, number>();
-          const cbPool = encaissementsCompta.filter(e => {
-            if (e.mode !== "cb_terminal") return false;
+          // Terminal ET paiements en ligne : une remise carte du Crédit
+          // Agricole règle aussi les transactions CAWL, qui est Crédit
+          // Agricole Worldline (cf. candidatsRemiseCarte). Le terminal reste
+          // servi en premier à montant égal.
+          const cbPool = candidatsRemiseCarte(encaissementsCompta).filter(e => {
             if (e.remiseId) return false; // déjà dans une remise
             const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
             if (!d) return false;

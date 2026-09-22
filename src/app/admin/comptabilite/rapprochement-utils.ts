@@ -287,6 +287,35 @@ export function estLibelleVirement(label: string) {
 }
 
 /**
+ * Les modes d'encaissement réglés par carte, tous canaux confondus.
+ *
+ * Une remise carte du Crédit Agricole ne contient pas que les tickets du
+ * terminal du club : CAWL, c'est Crédit Agricole Worldline, et les paiements
+ * en ligne des familles sont remis sur le même compte, sous un libellé
+ * « Remise carte » identique. Le rapprochement ne cherchait que le mode
+ * `cb_terminal` : une remise composée de paiements en ligne ressortait donc
+ * intégralement « pas d'encaissement CB correspondant », alors que les
+ * écritures existaient au journal (remise du 20/09/2026, 150 € = 60 € + 90 €).
+ */
+export const MODES_CARTE = ["cb_terminal", "cb_online", "cb_cawl"] as const;
+
+export const estEncaissementCarte = (mode: unknown) =>
+  (MODES_CARTE as readonly string[]).includes(String(mode ?? ""));
+
+/**
+ * Les encaissements carte candidats à une remise, le terminal d'abord.
+ *
+ * À montant égal, un ticket du terminal reste le candidat le plus probable
+ * pour une remise carte ; le paiement en ligne ne vient qu'ensuite. Le tri
+ * préserve donc le comportement d'avant quand les deux existent.
+ */
+export function candidatsRemiseCarte<T extends { mode?: string | null }>(encaissements: T[]): T[] {
+  return encaissements
+    .filter((e) => estEncaissementCarte(e?.mode))
+    .sort((a, b) => Number(a.mode !== "cb_terminal") - Number(b.mode !== "cb_terminal"));
+}
+
+/**
  * Les écritures du journal produites par une remise SEPA.
  *
  * La remise porte les échéances qu'elle contient (`echeanceIds`) ; chaque

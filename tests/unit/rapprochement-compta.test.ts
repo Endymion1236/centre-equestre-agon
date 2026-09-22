@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import {
   analyserPeriodeCsv,
+  candidatsRemiseCarte,
   cleLigneBancaire,
+  estEncaissementCarte,
   encaissementEnDetail,
   estDansFenetreBancaire,
   parserCsvBancaire,
@@ -168,6 +170,41 @@ test("la recherche tolère deux centimes mais refuse les cibles impossibles", ()
 test("les lots supérieurs à vingt-cinq lignes ne lancent pas la recherche", () => {
   const lot = Array.from({ length: 26 }, () => ({ montant: 1 }));
   assert.equal(trouverSousEnsembleMontant(lot, 100), null);
+});
+
+console.log("\n── Encaissements candidats à une remise carte ──");
+
+test("le paiement en ligne compte, pas seulement le terminal", () => {
+  // CAWL, c'est Crédit Agricole Worldline : ses transactions arrivent sur le
+  // compte du club dans une « Remise carte » ordinaire (remise du 20/09/2026,
+  // 150 € = 60 € + 90 €, tous deux encaissés en CB en ligne).
+  assert.equal(estEncaissementCarte("cb_terminal"), true);
+  assert.equal(estEncaissementCarte("cb_online"), true);
+  assert.equal(estEncaissementCarte("cb_cawl"), true);
+});
+
+test("les autres moyens de paiement restent hors remise carte", () => {
+  for (const mode of ["cheque", "especes", "virement", "avoir", "prelevement_sepa", "", null, undefined]) {
+    assert.equal(estEncaissementCarte(mode), false, String(mode));
+  }
+});
+
+test("à montant égal, le ticket du terminal passe avant le paiement en ligne", () => {
+  const pool = candidatsRemiseCarte([
+    { id: "enLigne", mode: "cb_online" },
+    { id: "cheque", mode: "cheque" },
+    { id: "terminal", mode: "cb_terminal" },
+  ]);
+  assert.deepEqual(pool.map((e) => e.id), ["terminal", "enLigne"], "le chèque est écarté");
+});
+
+test("l'ordre d'origine est préservé entre paiements de même canal", () => {
+  const pool = candidatsRemiseCarte([
+    { id: "a", mode: "cb_online" },
+    { id: "b", mode: "cb_online" },
+    { id: "c", mode: "cb_terminal" },
+  ]);
+  assert.deepEqual(pool.map((e) => e.id), ["c", "a", "b"]);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
