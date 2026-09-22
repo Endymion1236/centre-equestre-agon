@@ -156,14 +156,42 @@ async function main() {
     assert.equal(typeof api.applyDiscounts, "function");
   });
 
-  await test("un enfant déjà inscrit n'a pas la réduction famille : seul le multi-stages joue", async () => {
-    // Règle en place : la réduction famille récompense un NOUVEL enfant.
+  await test("un 2ème enfant qui enchaîne cumule les deux réductions", async () => {
+    // Le rang dans la famille reste acquis : Juliette est arrivée après
+    // Alice, elle est 2ème enfant sur toute la période, y compris à son
+    // 2ème stage. Auparavant elle perdait sa réduction famille.
     const r = await prixDe(
       [resa("alice", "2026-10-19"), resa("juliette", "2026-10-19")],
       "juliette",
     );
-    assert.equal(JSON.stringify(r.reasons), JSON.stringify(["2ème stage (-10%)"]), "pas de ligne famille");
+    assert.equal(r.nthFamille, 2);
+    assert.equal(r.nthMultiStage, 2);
+    assert.equal(
+      JSON.stringify(r.reasons),
+      JSON.stringify(["2ème stage (-10%)", "2ème enfant famille (-6%)", "(plafond au prix plancher 160€)"]),
+    );
+    // 180 × 0,90 × 0,94 = 152,28 €, sous le plancher de 160 €.
+    assert.equal(r.finalPriceTTC, 160);
+  });
+
+  await test("le 1er enfant garde son rang : jamais de réduction famille pour lui", async () => {
+    const r = await prixDe(
+      [resa("alice", "2026-10-19"), resa("juliette", "2026-10-19")],
+      "alice",
+    );
+    assert.equal(r.nthFamille, 1);
+    assert.equal(JSON.stringify(r.reasons), JSON.stringify(["2ème stage (-10%)"]));
     assert.equal(r.finalPriceTTC, 162);
+  });
+
+  await test("l'ordre d'arrivée fait le rang, pas l'ordre des inscriptions en base", async () => {
+    // Juliette a commencé la semaine du 19, Alice n'arrive que le 26 :
+    // Juliette reste la 1ère de la famille.
+    const r = await prixDe(
+      [resa("juliette", "2026-10-19"), resa("alice", "2026-10-26")],
+      "alice",
+    );
+    assert.equal(r.nthFamille, 2, "Alice est la 2ème arrivée");
   });
 
   await test("un nouvel enfant de la famille a la réduction famille, sans multi-stages", async () => {

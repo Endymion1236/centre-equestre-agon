@@ -22,6 +22,8 @@
 //   3. Famille + multi-stages sont CUMULABLES, EN CASCADE : le multi-stages
 //      s'applique d'abord, la réduction famille ensuite sur le prix déjà
 //      réduit. Les taux ne s'additionnent pas (-10 % puis -6 % = -15,4 %).
+//      Le cumul vaut aussi pour un enfant qui enchaîne : son rang dans la
+//      famille lui reste sur tous ses stages de la période.
 //
 //   4. Fusion d'impayé : on ajoute une inscription à un payment
 //      existant UNIQUEMENT si son status === "pending" ET qu'il
@@ -206,18 +208,20 @@ export async function fetchFamilyStagesInPeriod(
 // ─── Calcul des réductions ──────────────────────────────────────────
 
 /**
- * Calcule la réduction famille pour une nouvelle inscription stage,
- * en tenant compte des inscriptions existantes de la même famille
- * dans la même période.
+ * Réduction famille d'une inscription stage, selon le rang de l'enfant
+ * parmi les enfants de la famille inscrits sur la même période.
  *
- * Règle : on compte le nombre d'ENFANTS DISTINCTS déjà inscrits
- * dans la période. Si ce nombre est N, la nouvelle inscription
- * (pour un enfant non encore inscrit) est considérée comme la
- * (N+1)ème — la règle du barème pour nth=N+1 s'applique.
+ * Le rang se prend dans l'ordre où les enfants sont arrivés : le premier
+ * inscrit de la période est le 1er, le suivant le 2ème, et ce rang LUI RESTE
+ * pour tous ses stages de la période.
  *
- * Si l'enfant qu'on inscrit est DÉJÀ inscrit ailleurs dans la même
- * période, on ne compte pas de nouvelle réduction famille
- * (il est déjà compté dans son enfant existant).
+ * Auparavant, un enfant déjà inscrit perdait sa réduction famille dès son
+ * deuxième stage : elle ne récompensait que la première inscription. L'écran
+ * des paramètres annonçait pourtant le cumul des deux barèmes. C'est le
+ * cumul qui fait foi (décision de Nicolas, 22/09/2026) : un 2ème enfant à
+ * son 2ème stage a les deux réductions.
+ *
+ * Un enfant pas encore inscrit prend le rang suivant : il arrive en dernier.
  *
  * @returns pourcentage de réduction famille (0 si pas applicable)
  */
@@ -228,19 +232,20 @@ export function calculateFamilyDiscount(
 ): { percent: number; nth: number } {
   if (!familyRules || familyRules.length === 0) return { percent: 0, nth: 0 };
 
-  // Compter les enfants distincts déjà inscrits
-  const distinctChildren = new Set(existingStages.map((s) => s.childId));
+  // Ordre d'arrivée des enfants sur la période : par date de stage, puis par
+  // ordre d'apparition (le tri de JavaScript est stable, ce qui préserve
+  // l'ordre d'une sélection en cours).
+  const parDate = [...existingStages].sort(
+    (a, b) => String(a.stageDate || "").localeCompare(String(b.stageDate || "")),
+  );
+  const ordre: string[] = [];
+  for (const s of parDate) {
+    if (s.childId && !ordre.includes(s.childId)) ordre.push(s.childId);
+  }
+  // Pas encore inscrit : il arrive en dernier.
+  if (!ordre.includes(newChildId)) ordre.push(newChildId);
 
-  // Est-ce que le nouvel enfant est déjà inscrit ?
-  const alreadyInscribed = distinctChildren.has(newChildId);
-
-  // Si oui : on ne lui applique PAS la réduction famille sur cette
-  // nouvelle inscription — il est déjà le même "enfant".
-  // Par contre il pourrait bénéficier du multi-stages (voir autre fonction).
-  if (alreadyInscribed) return { percent: 0, nth: 0 };
-
-  // Sinon : le nouvel enfant sera le (N+1)ème enfant distinct
-  const nth = distinctChildren.size + 1;
+  const nth = ordre.indexOf(newChildId) + 1;
 
   // 1er enfant = pas de réduction
   if (nth < 2) return { percent: 0, nth };
