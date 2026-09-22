@@ -45,7 +45,8 @@ function charger(reservations: any[]) {
 
 const PERIODE = { id: "toussaint", name: "Toussaint 2026", startDate: "2026-10-17", endDate: "2026-11-02" };
 const BAREME = {
-  // Le barème réel du club au 22/09/2026.
+  // Barème de test, volontairement figé : ces cas pinnent le CALCUL, pas les
+  // réglages du club, qui changent au gré de sa politique tarifaire.
   multiStageDiscount: [{ nth: 2, discount: 10 }, { nth: 3, discount: 15 }, { nth: 4, discount: 20 }],
   familyDiscount: [{ nth: 2, discount: 6 }, { nth: 3, discount: 10 }, { nth: 4, discount: 15 }],
   prixPlancherStage: 160,
@@ -169,6 +170,30 @@ async function main() {
     const r = await prixDe([resa("alice", "2026-10-19")], "juliette");
     assert.equal(JSON.stringify(r.reasons), JSON.stringify(["2ème enfant famille (-6%)"]));
     assert.equal(r.finalPriceTTC, 169.2);
+  });
+
+  await test("deux enfants inscrits d'un coup : le second a bien le rang 2", async () => {
+    // Sans les inscriptions en attente d'écriture, chacun repartait du rang 1
+    // et le second enfant perdait sa réduction famille.
+    const api = charger([]);
+    const commun = {
+      familyId: "fam", stageDate: "2026-10-19", stageType: "stage",
+      originalPriceTTC: 180, settings: BAREME, periods: [PERIODE], excludeCreneauId: "c1",
+    };
+    const premier = await api.applyDiscounts({ ...commun, newChildId: "alice" });
+    assert.equal(premier.finalPriceTTC, 180, "le premier enfant paie plein tarif");
+
+    const second = await api.applyDiscounts({
+      ...commun,
+      newChildId: "bastien",
+      stagesSupplementaires: [{
+        childId: "alice", childName: "Alice", familyId: "fam",
+        stageDate: "2026-10-19", stageTitle: "Stage galop d'or (5j)", creneauId: "c1", priceTTC: 180,
+      }],
+    });
+    assert.equal(second.nthFamille, 2);
+    assert.equal(JSON.stringify(second.reasons), JSON.stringify(["2ème enfant famille (-6%)"]));
+    assert.equal(second.finalPriceTTC, 169.2);
   });
 
   await test("hors vacances scolaires, prix plein", async () => {

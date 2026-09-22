@@ -79,9 +79,12 @@ export interface StageInscription {
 export interface DiscountResult {
   originalPriceTTC: number;
   finalPriceTTC: number;
-  discountPercent: number; // total cumulé
+  discountPercent: number; // remise effective, après plancher
   discountAmount: number; // en €
-  reasons: string[]; // ex: ["2ème enfant famille (-20%)", "3ème stage consécutif (-15%)"]
+  reasons: string[]; // ex: ["2ème stage (-6%)", "2ème enfant famille (-6%)"]
+  /** Rangs retenus, pour l'affichage — 0 quand la règle ne s'applique pas. */
+  nthFamille: number;
+  nthMultiStage: number;
 }
 
 export type PaymentStatus = "paid" | "pending" | "partial" | "refunded";
@@ -333,6 +336,12 @@ export async function applyDiscounts(params: {
   settings: DiscountSettings;
   periods: VacationPeriod[];
   excludeCreneauId?: string; // créneau en cours d'inscription à exclure du comptage
+  /**
+   * Inscriptions pas encore écrites en base : les enfants déjà traités dans
+   * la même sélection. Sans elles, inscrire deux enfants d'un coup donnait à
+   * chacun le rang du premier.
+   */
+  stagesSupplementaires?: StageInscription[];
 }): Promise<DiscountResult> {
   const {
     familyId,
@@ -352,6 +361,8 @@ export async function applyDiscounts(params: {
     discountPercent: 0,
     discountAmount: 0,
     reasons: [],
+    nthFamille: 0,
+    nthMultiStage: 0,
   };
 
   // 1. Ne s'applique qu'aux stages
@@ -366,7 +377,10 @@ export async function applyDiscounts(params: {
 
   // 3. Charger les inscriptions existantes de la famille dans la période
   //    (en excluant la résa qu'on vient juste de créer pour le créneau courant)
-  const existingStages = await fetchFamilyStagesInPeriod(familyId, period, excludeCreneauId);
+  const existingStages = [
+    ...(await fetchFamilyStagesInPeriod(familyId, period, excludeCreneauId)),
+    ...(params.stagesSupplementaires || []),
+  ];
 
   // 4. Calculer les deux types de réduction
   const family = calculateFamilyDiscount(
@@ -433,6 +447,8 @@ export async function applyDiscounts(params: {
     discountPercent: effectivePercent,
     discountAmount,
     reasons,
+    nthFamille: family.nth,
+    nthMultiStage: multi.nth,
   };
 }
 
