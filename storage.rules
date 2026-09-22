@@ -18,14 +18,20 @@ service firebase.storage {
     }
 
     // ── Documents internes (terrain) ──────────────────────────────────────
-    // Fiches équidés et plans de séance : lecture staff (admin/moniteur), écriture admin.
+    // Fiches équidés et plans de séance : lecture ET écriture staff
+    // (admin/moniteur). Ces documents se produisent SUR LE TERRAIN, depuis un
+    // téléphone : la monitrice photographie son plan de séance avant le cours,
+    // la fiche d'un équidé au box. L'écriture était réservée à l'admin, si
+    // bien que le dépôt échouait avec « storage/unauthorized » alors que les
+    // deux écrans sont ouverts aux moniteurs et que les règles Firestore les
+    // autorisent déjà (cf. `creneaux` : allow update if isStaff()).
     match /equides/{allPaths=**} {
       allow read: if request.auth != null && (request.auth.token.admin == true || request.auth.token.moniteur == true);
-      allow write: if request.auth != null && request.auth.token.admin == true;
+      allow write: if request.auth != null && (request.auth.token.admin == true || request.auth.token.moniteur == true);
     }
     match /plans-seance/{allPaths=**} {
       allow read: if request.auth != null && (request.auth.token.admin == true || request.auth.token.moniteur == true);
-      allow write: if request.auth != null && request.auth.token.admin == true;
+      allow write: if request.auth != null && (request.auth.token.admin == true || request.auth.token.moniteur == true);
     }
 
     // ── Photos des cavaliers ──────────────────────────────────────────────
