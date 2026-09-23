@@ -3,7 +3,40 @@ import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
-import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check, FileText, X, Eye, ZoomIn, ZoomOut } from "lucide-react";
+import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check, FileText, X, Eye, ZoomIn, ZoomOut, Sparkles } from "lucide-react";
+import { LIBELLES_ALERTE, prenomSeul, type AnalyseNoteSeance } from "@/lib/analyse-note-seance";
+
+/** L'analyse IA d'une note, telle qu'affichée sous la note et dans le journal. */
+function AnalyseNote({ analyse }: { analyse: AnalyseNoteSeance }) {
+  const bloc = (titre: string, items: string[], cls: string) => items.length > 0 && (
+    <div>
+      <div className={`font-body text-[11px] font-semibold ${cls}`}>{titre}</div>
+      <ul className="list-disc pl-4 font-body text-xs text-slate-700">{items.map((t, i) => <li key={i}>{t}</li>)}</ul>
+    </div>
+  );
+  return (
+    <div className="space-y-1.5">
+      {analyse.alertes.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
+          {analyse.alertes.map((a, i) => (
+            <div key={i} className="font-body text-xs text-red-800">⚠️ <b>{LIBELLES_ALERTE[a.type]}</b> : {a.texte}</div>
+          ))}
+        </div>
+      )}
+      {analyse.resume && <p className="font-body text-xs text-slate-700 italic">{analyse.resume}</p>}
+      {bloc("✅ Ce qui a marché", analyse.pointsPositifs, "text-green-700")}
+      {bloc("🔧 Difficultés", analyse.difficultes, "text-orange-700")}
+      {bloc("🔁 À retravailler", analyse.aRetravailler, "text-blue-700")}
+      {analyse.cavaliers.length > 0 && (
+        <div>
+          <div className="font-body text-[11px] font-semibold text-purple-700">👤 Par cavalier</div>
+          <ul className="list-disc pl-4 font-body text-xs text-slate-700">{analyse.cavaliers.map((c, i) => <li key={i}><b>{c.prenom}</b> : {c.observation}</li>)}</ul>
+        </div>
+      )}
+      {analyse.prochaineSeance && <p className="font-body text-xs text-teal-800">🎯 <b>Prochaine séance :</b> {analyse.prochaineSeance}</p>}
+    </div>
+  );
+}
 
 interface Props {
   creneau: any;
@@ -25,6 +58,18 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  // Analyse IA de la note de fin de séance, lancée après la dictée.
+  // `analyseSource` retient le texte analysé : si la note est retouchée
+  // ensuite, l'analyse n'est plus la sienne et n'est pas enregistrée avec.
+  const [analyse, setAnalyse] = useState<AnalyseNoteSeance | null>(null);
+  const [analyseSource, setAnalyseSource] = useState("");
+  const [analysing, setAnalysing] = useState(false);
+  const [analyseErr, setAnalyseErr] = useState("");
+  const [journalOuvert, setJournalOuvert] = useState<string | null>(null);
+  // Texte courant de la note, lisible depuis la fin de dictée (callback
+  // asynchrone du micro, qui ne voit pas l'état à jour).
+  const finRef = useRef(fin);
+  useEffect(() => { finRef.current = fin; }, [fin]);
 
   // Plan de séance (fichier joint sur le créneau)
   const [lightbox, setLightbox] = useState(false);
@@ -79,7 +124,13 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
           const fd = new FormData(); fd.append("audio", file);
           const res = await authFetch("/api/whisper", { method: "POST", body: fd });
           const data = await res.json();
-          if (data.success) setFin(prev => (prev ? prev.trim() + " " : "") + data.text);
+          if (data.success) {
+            const avant = finRef.current.trim();
+            const complet = (avant ? avant + " " : "") + data.text;
+            setFin(complet);
+            // La dictée terminée, l'analyse part d'elle-même sur la note entière.
+            void analyser(complet);
+          }
           else alert("Erreur transcription : " + (data.error || "inconnue"));
         } catch (e: any) { alert("Erreur transcription : " + e.message); }
         setTranscribing(false);
@@ -92,6 +143,33 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
   const stopRec = () => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
     setRecording(false);
+  };
+
+  const analyser = async (texte: string) => {
+    const t = texte.trim();
+    if (t.length < 5) return;
+    setAnalysing(true); setAnalyseErr("");
+    try {
+      const res = await authFetch("/api/ia/note-seance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          texte: t,
+          seance: {
+            activityTitle: creneau.activityTitle, date: creneau.date, startTime: creneau.startTime,
+            monitor: creneau.monitor, themeStage: creneau.themeStage || "", notePreparation: creneau.notePreparation || "",
+            cavaliers: (creneau.enrolled || []).map((e: any) => ({
+              prenom: prenomSeul(e.childName), poney: e.horseName || "",
+              absent: e.presence === "absent" || e.presence === "absent_nonjustified",
+            })),
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || `Erreur ${res.status}`);
+      setAnalyse(data.analyse); setAnalyseSource(t);
+    } catch (e: any) { setAnalyseErr(e?.message || "Analyse indisponible"); }
+    setAnalysing(false);
   };
 
   const saveFin = async () => {
@@ -111,8 +189,10 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
         creneauDate: creneau.date,
         creneauActivityTitle: creneau.activityTitle,
         creneauMonitor: creneau.monitor,
+        ...(analyse && analyseSource === texte ? { analyseIa: analyse, analyseIaAt: new Date().toISOString() } : {}),
       });
       setFin("");
+      setAnalyse(null); setAnalyseSource(""); setAnalyseErr("");
       loadJournal();
       onChanged?.();
     } catch (e) { console.error("saveFin:", e); alert("Erreur lors de l'enregistrement de la note."); }
@@ -212,12 +292,30 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
                 {recording ? <><MicOff size={13} /> Arrêter la dictée</> : <><Mic size={13} /> Dicter</>}
               </button>
               {transcribing && <span className="font-body text-xs text-slate-500 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Transcription…</span>}
+              <button type="button" onClick={() => analyser(fin)} disabled={analysing || transcribing || fin.trim().length < 5}
+                title="Analyse IA de la note : ce qui a marché, les difficultés, à retravailler, les alertes"
+                className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50">
+                {analysing ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                {analysing ? "Analyse…" : analyse && analyseSource === fin.trim() ? "Réanalyser" : "Analyser"}
+              </button>
               <button type="button" onClick={saveFin} disabled={finSaving || !fin.trim()}
                 className="font-body text-xs font-semibold text-white bg-blue-600 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-500 disabled:opacity-50">
                 {finSaving ? "Enregistrement…" : "Enregistrer la note"}
               </button>
             </div>
           </div>
+
+          {/* Analyse IA de la note en cours */}
+          {analyseErr && <p className="font-body text-xs text-red-600">{analyseErr}</p>}
+          {analyse && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/40 p-3">
+              <div className="font-body text-[11px] font-semibold text-purple-700 uppercase tracking-wider mb-1.5 flex items-center gap-1"><Sparkles size={12} /> Analyse de la note</div>
+              {analyseSource !== fin.trim() && fin.trim() && (
+                <p className="font-body text-[11px] text-amber-700 mb-1.5">La note a changé depuis l&apos;analyse : « Réanalyser » pour la mettre à jour, sinon elle ne sera pas enregistrée avec.</p>
+              )}
+              <AnalyseNote analyse={analyse} />
+            </div>
+          )}
 
           {/* Journal des notes de fin de séance */}
           {journal.length > 0 && (
@@ -229,6 +327,15 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
                     <div className="flex-1 min-w-0">
                       <p className="font-body text-sm text-slate-700 whitespace-pre-wrap">{n.texte}</p>
                       <span className="font-body text-[10px] text-slate-400">{fmtDate(n.createdAt)}{n.createdByName ? ` · ${n.createdByName}` : ""}</span>
+                      {n.analyseIa && (
+                        <div className="mt-1">
+                          <button type="button" onClick={() => setJournalOuvert(journalOuvert === n.id ? null : n.id)}
+                            className="flex items-center gap-1 font-body text-[11px] font-semibold text-purple-700 bg-transparent border-none cursor-pointer p-0">
+                            <Sparkles size={11} /> {journalOuvert === n.id ? "Masquer l'analyse" : `Voir l'analyse${n.analyseIa.alertes?.length ? ` · ⚠️ ${n.analyseIa.alertes.length} alerte(s)` : ""}`}
+                          </button>
+                          {journalOuvert === n.id && <div className="mt-1.5"><AnalyseNote analyse={n.analyseIa} /></div>}
+                        </div>
+                      )}
                     </div>
                     <button type="button" onClick={() => deleteJournal(n.id)} className="text-slate-300 hover:text-red-500 bg-transparent border-none cursor-pointer flex-shrink-0"><Trash2 size={14} /></button>
                   </div>
