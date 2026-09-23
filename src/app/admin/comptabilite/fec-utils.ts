@@ -21,7 +21,20 @@ export interface PaiementFec {
     priceHT: number;
     priceTTC: number;
     tva: number;
+    /** Indices de ventilation, lus par compteDeLigne (lib/ventilation-comptable). */
+    compteComptable?: string;
+    category?: string;
+    activityType?: string;
   }>;
+}
+
+export type ItemFec = NonNullable<PaiementFec["items"]>[number];
+
+export interface OptionsFecVentes {
+  /** Compte de produit d'une ligne. Absent : le compte historique unique. */
+  compteProduit?: (item: ItemFec) => { compte: string; libelle: string };
+  /** Premier numéro d'écriture, pour enchaîner plusieurs journaux dans un fichier. */
+  premierNumero?: number;
 }
 
 /** Anomalie rencontrée à la construction, à montrer avant l'envoi au comptable. */
@@ -120,10 +133,12 @@ function ligne(champs: {
 export function analyserFecVentes(
   paiements: PaiementFec[],
   maintenant: Date = new Date(),
-): { contenu: string; anomalies: AnomalieFec[] } {
+  options: OptionsFecVentes = {},
+): { contenu: string; anomalies: AnomalieFec[]; nbEcritures: number; lignes: string[] } {
   const lignes: string[] = [];
   const anomalies: AnomalieFec[] = [];
-  let numeroEcriture = 1;
+  const premier = options.premierNumero && options.premierNumero > 0 ? Math.floor(options.premierNumero) : 1;
+  let numeroEcriture = premier;
 
   paiements.forEach((paiement, index) => {
     const date = paiement.date?.seconds
@@ -146,7 +161,7 @@ export function analyserFecVentes(
           ligne({
             numero,
             dateEcriture,
-            compte: COMPTE_PRODUIT,
+            compte: options.compteProduit ? options.compteProduit(item) : COMPTE_PRODUIT,
             piece,
             libelle: item.activityTitle,
             credit: htCentimes,
@@ -225,7 +240,7 @@ export function analyserFecVentes(
     numeroEcriture++;
   });
 
-  return { contenu: ENTETE_FEC + "\n" + lignes.join("\n"), anomalies };
+  return { contenu: ENTETE_FEC + "\n" + lignes.join("\n"), anomalies, nbEcritures: numeroEcriture - premier, lignes };
 }
 
 /**

@@ -3,14 +3,15 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, getDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, FileText, Building2, Receipt, Calculator, Printer, Sparkles, Bot, EyeOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
-import { analyserFecVentes } from "./fec-utils";
+import { construireFecComplet, nomFichierFec } from "@/lib/fec-complet";
+import { encaissementsDuMois } from "@/lib/envoi-comptable-utils";
 import PanneauxDebug from "./PanneauxDebug";
 import OngletRemise from "./OngletRemise";
 import { useRapprochement } from "./useRapprochement";
@@ -112,6 +113,14 @@ export default function ComptabilitePage() {
   };
 
   useEffect(() => { fetchData(); }, []);
+  // SIRET du club (Paramètres → Identité) : le FEC téléchargé prend le nom
+  // réglementaire SIREN + FEC + fin de mois, comme celui envoyé au cabinet.
+  const [siretClub, setSiretClub] = useState("");
+  useEffect(() => {
+    getDoc(doc(db, "settings", "centre"))
+      .then((snap) => setSiretClub(String((snap.data() as any)?.siret || "")))
+      .catch(() => setSiretClub(""));
+  }, []);
 
   // Le rapprochement bancaire — lecture du relevé, rapprochement automatique
   // et report dans la base — vit dans son propre hook (useRapprochement.ts).
@@ -259,30 +268,29 @@ export default function ComptabilitePage() {
   };
 
   const generateFEC = () => {
-    const { contenu: content, anomalies } = analyserFecVentes(filteredPayments);
+    // Le même FEC que celui envoyé au cabinet : ventes (VE) et règlements
+    // clients (RG) du mois, cf. lib/fec-complet.
+    const numeros = new Map<string, string>(payments.filter((p: any) => p?.id && p?.invoiceNumber).map((p: any) => [String(p.id), String(p.invoiceNumber)]));
+    const { contenu: content, anomalies } = construireFecComplet({
+      factures: filteredPayments as any,
+      encaissements: encaissementsDuMois(encaissementsCompta, period),
+      numeroFactureDe: (id) => numeros.get(id),
+    });
 
-    // Le fichier reste équilibré quoi qu'il arrive, mais si le détail d'une
-    // facture ne retombe pas sur son total, autant le savoir avant de
-    // l'envoyer au comptable plutôt qu'à sa relecture.
+    // Le fichier reste équilibré quoi qu'il arrive ; ce qui mérite un regard
+    // (écart de ventilation, prestation ou mode de règlement non reconnu)
+    // est dit avant l'envoi plutôt qu'à la relecture du cabinet.
     if (anomalies.length > 0) {
-      const detail = anomalies
-        .slice(0, 8)
-        .map((a) => `• ${a.piece} — ${a.familyName} : écart de ${a.ecart.toFixed(2)} €`)
-        .join("\n");
+      const detail = anomalies.slice(0, 8).map((a) => `• ${a}`).join("\n");
       const reste = anomalies.length > 8 ? `\n… et ${anomalies.length - 8} autre(s).` : "";
-      alert(
-        `${anomalies.length} facture(s) dont le détail des articles ne retombe pas ` +
-          `sur le total :\n\n${detail}${reste}\n\n` +
-          `Le FEC est quand même équilibré : l'écart apparaît sur une ligne ` +
-          `« Écart de ventilation ». À vérifier avant la clôture.`,
-      );
+      alert(`${anomalies.length} point(s) à regarder dans le FEC :\n\n${detail}${reste}\n\nLe fichier est quand même équilibré et téléchargé.`);
     }
 
     const blob = new Blob([content], { type: "text/tab-separated-values;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `FEC_${period.replace("-", "")}.txt`;
+    a.download = nomFichierFec(siretClub, period);
     a.click();
     URL.revokeObjectURL(url);
   };

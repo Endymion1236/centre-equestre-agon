@@ -391,10 +391,10 @@ export default function ParametresPage() {
             </p>
             <div className="flex flex-col gap-3">
               <div>
-                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Email de la comptable</label>
-                <input type="email" value={(centreParams as any).emailComptable || ""}
-                  onChange={e => setCentreParams(prev => ({ ...prev, emailComptable: e.target.value.trim() }))}
-                  placeholder="cabinet@exemple.fr"
+                <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Email(s) de la comptable</label>
+                <input type="text" value={(centreParams as any).emailComptable || ""}
+                  onChange={e => setCentreParams(prev => ({ ...prev, emailComptable: e.target.value }))}
+                  placeholder="alexandra@cabinet.fr, expert@cabinet.fr"
                   className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none" />
               </div>
               <label className="flex items-center gap-2 font-body text-sm text-blue-800 cursor-pointer">

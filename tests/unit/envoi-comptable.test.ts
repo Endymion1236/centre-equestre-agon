@@ -7,6 +7,7 @@
  */
 import assert from "node:assert/strict";
 import {
+  adressesComptable,
   construireColisComptable,
   corpsEmailComptable,
   facturesDuMois,
@@ -66,7 +67,15 @@ test("le résumé compte ce qui part", () => {
     nbFactures: 1, totalTTC: 300, totalHT: 250,
     nbEncaissements: 2, totalEncaisse: 250,
     nbDepenses: 1, totalDepenses: 420.5,
+    // Le FEC : la facture Enaux (VE) et ses deux règlements du mois (RG),
+    // virement et contre-passation, tous deux au compte bancaire du cabinet.
+    fec: { fichier: "FEC_202609.txt", ecrituresVentes: 1, ecrituresReglements: 2, anomalies: [], nbAnomalies: 0, comptesAConfirmer: [] },
   });
+});
+
+test("avec le SIRET, le FEC prend son nom réglementaire", () => {
+  const avecSiret = construireColisComptable({ mois: "2026-09", payments, encaissements, depenses, siret: "50756918400017" });
+  assert.ok(avecSiret.pieces.some((p) => p.filename === "507569184FEC20260930.txt"));
 });
 
 test("cinq pièces sont préparées, nommées par mois, CSV avec BOM", () => {
@@ -113,6 +122,13 @@ test("le FEC ne contient que les factures du mois", () => {
   const fec = colis.pieces.find((p) => p.filename === "FEC_202609.txt")!.contenu;
   assert.match(fec, /Enaux/);
   assert.doesNotMatch(fec, /Durand/);
+});
+
+console.log("\n── Destinataires ──");
+test("plusieurs adresses dans un seul champ, sans doublon, les fausses signalées", () => {
+  assert.deepEqual(adressesComptable("Alexandra@cabinet.fr, expert@cabinet.fr ; alexandra@cabinet.fr"), { valides: ["alexandra@cabinet.fr", "expert@cabinet.fr"], invalides: [] });
+  assert.deepEqual(adressesComptable("alexandra@cabinet.fr cabinet"), { valides: ["alexandra@cabinet.fr"], invalides: ["cabinet"] });
+  assert.deepEqual(adressesComptable(""), { valides: [], invalides: [] });
 });
 
 console.log("\n── Email ──");

@@ -20,7 +20,7 @@ import {
   construireExportEncaissements,
   construireExportFactures,
 } from "@/app/admin/comptabilite/exports-csv-utils";
-import { construireFecVentes } from "@/app/admin/comptabilite/fec-utils";
+import { construireFecComplet, nomFichierFec } from "@/lib/fec-complet";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
 
 import { bilanVentilationAchats, construireExportVentilationAchats } from "@/lib/ventilation-achats";
@@ -49,6 +49,8 @@ export interface ResumeColis {
    * l'application, elles sont dans les écritures importées. Montants en euros.
    */
   celeris?: { nombre: number; ht: number; tva: number; ttc: number };
+  /** Le FEC joint : ventes (VE) et règlements clients (RG). */
+  fec?: { fichier: string; ecrituresVentes: number; ecrituresReglements: number; anomalies: string[]; nbAnomalies: number; comptesAConfirmer: { compte: string; libelle: string }[] };
 }
 
 /** Une écriture importée de Céleris, montants en centimes (lib/import-comptable-celeris). */
@@ -103,6 +105,8 @@ export function construireColisComptable(params: {
   lignesJustificatifs?: LigneMois[];
   /** Écritures importées de Céleris pour ce mois, s'il a été tenu dans l'ancien logiciel. */
   celeris?: { lignes: EcritureCelerisColis[]; totaux: { ht: number; tva: number; ttc: number } } | null;
+  /** SIRET du club : le FEC prend le nom réglementaire SIREN + FEC + fin de mois. */
+  siret?: string;
 }): ColisComptable {
   const { mois, maintenant = new Date() } = params;
   const lignesJustificatifs = params.lignesJustificatifs?.filter(l => (l.mois || l.dateOperation?.slice(0, 7)) === mois);
@@ -133,6 +137,18 @@ export function construireColisComptable(params: {
     resume.celeris = { nombre: celeris.lignes.length, ht: arrondi(celeris.totaux.ht / 100), tva: arrondi(celeris.totaux.tva / 100), ttc: arrondi(celeris.totaux.ttc / 100) };
   }
 
+  const numeros = new Map<string, string>(params.payments.filter((p) => p?.id && p?.invoiceNumber).map((p) => [String(p.id), String(p.invoiceNumber)]));
+  const fec = construireFecComplet({ factures, encaissements, numeroFactureDe: (id) => numeros.get(id), maintenant });
+  const fichierFec = nomFichierFec(params.siret, mois);
+  resume.fec = {
+    fichier: fichierFec,
+    ecrituresVentes: fec.resume.ventes.ecritures,
+    ecrituresReglements: fec.resume.reglements.ecritures,
+    anomalies: fec.anomalies.slice(0, 10),
+    nbAnomalies: fec.anomalies.length,
+    comptesAConfirmer: fec.resume.comptesAConfirmer,
+  };
+
   const csv = "text/csv; charset=utf-8";
   const bom = "\uFEFF";
   const pieces: PieceJointe[] = [
@@ -140,7 +156,7 @@ export function construireColisComptable(params: {
     { filename: `ventes_${mois}.csv`, contenu: bom + construireExportComptable("ventes", factures, params.payments), contentType: csv },
     { filename: `encaissements_${mois}.csv`, contenu: bom + construireExportEncaissements(encaissements), contentType: csv },
     { filename: `depenses_${mois}.csv`, contenu: bom + construireExportDepenses(depenses), contentType: csv },
-    { filename: `FEC_${mois.replace("-", "")}.txt`, contenu: construireFecVentes(factures, maintenant), contentType: "text/tab-separated-values; charset=utf-8" },
+    { filename: fichierFec, contenu: fec.contenu, contentType: "text/tab-separated-values; charset=utf-8" },
     ...(lignesJustificatifs ? [
       { filename: `justificatifs_${mois}.csv`, contenu: bom + construireExportJustificatifs(lignesJustificatifs), contentType: csv },
       { filename: `tva_${mois}.csv`, contenu: bom + construireExportTva(lignesJustificatifs), contentType: csv },
@@ -183,12 +199,32 @@ export function corpsEmailComptable(params: {
       ${resume.celeris ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventes tenues dans Céleris</td><td style="padding:4px 0;"><b>${resume.celeris.nombre}</b> écritures importées — ${eur(resume.celeris.ttc)} TTC, dont ${eur(resume.celeris.tva)} de TVA collectée</td></tr>` : ""}
       ${resume.completude ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Justificatifs</td><td style="padding:4px 0;"><b>${resume.completude.justifies}/${resume.completude.total}</b> dépenses justifiées${resume.completude.sansPiece ? ` — <span style="color:#b45309;">${eur(resume.completude.montantSansPiece)} sans pièce sur ${resume.completude.sansPiece} ligne(s)</span>` : ""}${resume.completude.perdues ? ` — ${resume.completude.perdues} pièce(s) déclarée(s) perdue(s), relevé conservé (${eur(resume.completude.montantPerdues || 0)}, motif dans le CSV justificatifs, sans TVA déduite)` : ""}</td></tr>` : ""}
       ${resume.tvaDeductibleJustifiee != null ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">TVA documentée — paiements uniques</td><td style="padding:4px 0;"><b>${eur(resume.tvaDeductibleJustifiee)}</b>${resume.tvaAVerifier?.nb ? ` — ${resume.tvaAVerifier.nb} ligne(s) à vérifier (${eur(resume.tvaAVerifier.ttc)} TTC)` : ""}</td></tr>` : ""}
+      ${resume.fec ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">FEC</td><td style="padding:4px 0;"><b>${resume.fec.fichier}</b> — ${resume.fec.ecrituresVentes} écriture(s) de ventes (VE), ${resume.fec.ecrituresReglements} de règlements clients (RG)${resume.fec.nbAnomalies ? ` — <span style="color:#b45309;">${resume.fec.nbAnomalies} point(s) à regarder, ci-dessous</span>` : ""}</td></tr>` : ""}
       ${resume.ventilationAchats ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventilation des achats</td><td>${resume.ventilationAchats.total} opérations, <b>${resume.ventilationAchats.aVentiler} à ventiler</b> (${eur(resume.ventilationAchats.montantAVentiler)}). Comptes proposés à valider.</td></tr>` : ""}
     </table>
     ${resume.tvaDeductibleJustifiee != null ? "<p>Les paiements fractionnés et les factures partagées restent à vérifier, hors total TVA automatique. La TVA totale de la facture ne doit pas être cumulée entre paiements.</p>" : ""}
+    ${resume.fec?.comptesAConfirmer.length ? `<p style="font-size:13px;color:#374151;"><b>Comptes de règlement à valider</b> (plan comptable général, faute de numéro dans votre plan) : ${resume.fec.comptesAConfirmer.map((c) => `${c.compte} ${c.libelle}`).join(" · ")}. Dites-nous s'il faut en changer : le fichier suivra.</p>` : ""}
+    ${resume.fec?.nbAnomalies ? `<p style="font-size:13px;color:#b45309;"><b>Points à regarder dans le FEC :</b><br/>${resume.fec.anomalies.map((a) => `• ${a.replace(/&/g, "&amp;").replace(/</g, "&lt;")}`).join("<br/>")}${resume.fec.nbAnomalies > resume.fec.anomalies.length ? `<br/>… et ${resume.fec.nbAnomalies - resume.fec.anomalies.length} autre(s).` : ""}</p>` : ""}
     ${archive ? `<p style="font-size:13px;color:#374151;">L'archive des pièces contient <b>${archive.nb}</b> justificatif(s), nommés « date - fournisseur - montant ».${archive.nonJointes ? ` <span style="color:#b45309;">${archive.nonJointes} pièce(s) n'ont pas pu être jointes (taille) : elles restent consultables dans l'application.</span>` : ""}</p>` : ""}
     <p style="font-size:13px;color:#374151;"><b>Pièces jointes :</b><br/>${pieces.map((p) => `• ${p}`).join("<br/>")}</p>
-    <p style="font-size:12px;color:#6b7280;">Le journal des encaissements est celui du logiciel de caisse (écritures inaltérables, chaînées). Les CSV sont en point-virgule, encodés UTF-8. Le FEC couvre les ventes du mois.</p>
+    <p style="font-size:12px;color:#6b7280;">Le journal des encaissements est celui du logiciel de caisse (écritures inaltérables, chaînées). Les CSV sont en point-virgule, encodés UTF-8. Le FEC réunit les ventes (VE) et les règlements clients (RG) du mois ; les achats sont à saisir sur les pièces de l'archive.</p>
     <p>Bien cordialement,<br/>${nomCentre}</p>
   </div>`;
+}
+
+/**
+ * Adresses de la comptable, saisies d'un seul champ : « alexandra@…, cabinet@… ».
+ * Le cabinet demande l'envoi à sa collaboratrice ET en copie à l'expert
+ * (septembre 2026) : un champ, plusieurs adresses, séparées par une virgule,
+ * un point-virgule ou un espace. Renvoie les adresses valides, sans doublon,
+ * et celles qui ne ressemblent pas à une adresse.
+ */
+export function adressesComptable(saisie: string): { valides: string[]; invalides: string[] } {
+  const morceaux = String(saisie || "").split(/[,;\s]+/).map((a) => a.trim().toLowerCase()).filter(Boolean);
+  const valides: string[] = [], invalides: string[] = [];
+  for (const a of morceaux) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a)) invalides.push(a);
+    else if (!valides.includes(a)) valides.push(a);
+  }
+  return { valides, invalides };
 }

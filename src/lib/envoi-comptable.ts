@@ -20,7 +20,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { genererPdfSyntheseCompta } from "@/lib/compta-synthese-pdf";
-import { construireColisComptable, corpsEmailComptable, nomMoisLong } from "@/lib/envoi-comptable-utils";
+import { adressesComptable, construireColisComptable, corpsEmailComptable, nomMoisLong } from "@/lib/envoi-comptable-utils";
 import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -80,14 +80,19 @@ export async function envoyerEcrituresComptable(params: {
 }): Promise<{ ok: true; to: string; copie: string[]; pieces: string[]; resume: any } | { ok: false; error: string; code: "adresse" | "restreint" | "resend" | "vide" | "donnees" }> {
   const { mois, declenche } = params;
   const reglages = await reglagesEnvoiComptable();
-  const to = (params.destinataire || reglages.emailComptable).trim();
-  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
-    return { ok: false, code: "adresse", error: "Aucune adresse de comptable valide — renseigne-la dans Paramètres → Identité du centre." };
+  // Une ou plusieurs adresses (la collaboratrice du cabinet, l'expert en copie).
+  const { valides: destinataires, invalides } = adressesComptable(params.destinataire || reglages.emailComptable);
+  if (destinataires.length === 0 || invalides.length > 0) {
+    return { ok: false, code: "adresse", error: invalides.length
+      ? `Adresse(s) de comptable invalide(s) : ${invalides.join(", ")} — corrige-les dans Paramètres → Identité du centre.`
+      : "Aucune adresse de comptable valide — renseigne-la dans Paramètres → Identité du centre." };
   }
+  const to = destinataires.join(", ");
 
   await refreshEmailMode();
-  if (!isRecipientAllowed(to)) {
-    return { ok: false, code: "restreint", error: `Les emails sont en mode restreint : « ${to} » n'est pas dans la liste blanche. Ajoute l'adresse à EMAIL_ALLOWLIST (Vercel) ou passe EMAIL_RESTRICTED_MODE à off.` };
+  const bloquees = destinataires.filter((a) => !isRecipientAllowed(a));
+  if (bloquees.length) {
+    return { ok: false, code: "restreint", error: `Les emails sont en mode restreint : « ${bloquees.join(", ")} » n'est pas dans la liste blanche. Ajoute l'adresse à EMAIL_ALLOWLIST (Vercel) ou passe EMAIL_RESTRICTED_MODE à off.` };
   }
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, code: "resend", error: "Clé d'envoi d'email absente (RESEND_API_KEY)." };
@@ -111,7 +116,7 @@ export async function envoyerEcrituresComptable(params: {
     ? { lignes: celerisDoc.lignes, totaux: { ht: Number(celerisDoc.totaux.ht) || 0, tva: Number(celerisDoc.totaux.tva) || 0, ttc: Number(celerisDoc.totaux.ttc) || 0 } }
     : null;
 
-  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris });
+  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret });
   if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0 && !colis.resume.ventilationAchats?.total && !colis.resume.celeris) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
   }
@@ -130,7 +135,7 @@ export async function envoyerEcrituresComptable(params: {
   // elle est réglée. Sans ça, l'envoi ne laissait aucune trace dans la boîte
   // du centre — le gérant ne pouvait ni le relire ni le retrouver.
   const copie = [...new Set([params.declenchePar?.email || "", process.env.RESEND_BCC_EMAIL || ""]
-    .map((a) => a.trim().toLowerCase()).filter((a) => a && a !== to.toLowerCase()))];
+    .map((a) => a.trim().toLowerCase()).filter((a) => a && !destinataires.includes(a)))];
   const subject = `${club.nom} — écritures comptables ${nomMoisLong(mois)}`;
   const sentBy = params.declenchePar?.uid || (declenche === "auto" ? "system" : "admin");
 
@@ -138,7 +143,7 @@ export async function envoyerEcrituresComptable(params: {
   const envoi = await resend.emails.send({
     from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
     replyTo: REPLY_TO,
-    to,
+    to: destinataires,
     ...(copie.length ? { bcc: copie } : {}),
     subject,
     html: corpsEmailComptable({ mois, resume: colis.resume, pieces: nomsPieces, nomCentre: club.nom, message: params.message, archive: archive ? { nb: archive.nb, nonJointes: archive.nonJointes } : undefined }),
@@ -149,7 +154,7 @@ export async function envoyerEcrituresComptable(params: {
     return { ok: false, code: "resend", error: `Envoi refusé par Resend : ${envoi.error.message || String(envoi.error)}` };
   }
   // Journal des emails : le colis y figure comme n'importe quel envoi.
-  await logEmail({ to: copie.length ? [to, ...copie] : to, subject, context: "envoi_comptable", template: "ecrituresComptables", status: "sent", sentBy });
+  await logEmail({ to: [...destinataires, ...copie], subject, context: "envoi_comptable", template: "ecrituresComptables", status: "sent", sentBy });
 
   await adminDb.collection("envois-comptable").doc(mois).set({
     mois, to, copie, declenche,
