@@ -80,9 +80,11 @@ export function construireEcheancier(params: {
   totalTTC: number;
   items: ItemEcheance[];
   paymentPlan?: string;
+  /** Nombre d'échéances libre (2 à 12) ; sinon déduit de paymentPlan. */
+  nombre?: number;
   dateDepart: string;
 }): EcheanceConstruite[] {
-  const nombre = nombreEcheances(params.paymentPlan);
+  const nombre = params.nombre && params.nombre >= 1 ? Math.min(36, Math.floor(params.nombre)) : nombreEcheances(params.paymentPlan);
   const totalCentimes = enCentimes(params.totalTTC);
   const itemsSource = params.items.length > 0
     ? params.items

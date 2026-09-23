@@ -16,7 +16,7 @@
 
 import { useState, useEffect } from "react";
 import {
-  collection, addDoc, updateDoc, doc, getDocs, query, where, serverTimestamp,
+  collection, addDoc, updateDoc, setDoc, doc, getDocs, query, where, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
@@ -27,6 +27,7 @@ import { paymentModes } from "./types";
 import { Loader2, X } from "lucide-react";
 import { montantsEcheances, repartirEntreDeuxMandats, resteHorsSepa } from "@/lib/sepa-remise";
 import { maskIban } from "@/lib/sepa-validation";
+import { preparerEcheancierCb } from "./echeancier-cb-utils";
 
 export interface ModaleEncaisserProps {
   /** La commande à encaisser ; la modale n'est montée que si elle existe. */
@@ -50,6 +51,11 @@ export default function ModaleEncaisser({
   const [quickMontant, setQuickMontant] = useState("");
   const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [quickRef, setQuickRef] = useState("");
+  // CB en plusieurs fois : nombre d'échéances, 1re encaissée tout de suite,
+  // rappel de fin de mois pour envoyer les liens de paiement.
+  const [cbNombre, setCbNombre] = useState(10);
+  const [cbPremiereMaintenant, setCbPremiereMaintenant] = useState(false);
+  const [cbRappelLien, setCbRappelLien] = useState(true);
   const [quickSaving, setQuickSaving] = useState(false);
   const [quickMandatActif, setQuickMandatActif] = useState<boolean | null>(null);
   const [quickMandats, setQuickMandats] = useState<any[]>([]);
@@ -215,6 +221,45 @@ export default function ModaleEncaisser({
         setQuickDate(new Date().toISOString().split("T")[0]);
         setQuickChequesDiffres([{ numero: "", banque: "", montant: "", dateEncaissementPrevue: new Date().toISOString().split("T")[0] }]);
         await refreshAll();
+        setQuickSaving(false);
+        return;
+      }
+
+      // ── CB en plusieurs fois : découper la commande en N échéances ──
+      // Règles dans echeancier-cb-utils.ts. Les échéances 2..N d'abord, puis
+      // la commande d'origine devient l'échéance 1 : une coupure en cours de
+      // route se rattrape en relançant, sans rien doubler.
+      if (quickMode === "cb_echeances") {
+        const plan = preparerEcheancierCb(p.id, p, { nombre: cbNombre, dateDepart: quickDate, lienCbMensuel: cbRappelLien });
+        if (!plan.possible || !plan.premiere) {
+          toast(plan.raison || "Découpage impossible", "error");
+          setQuickSaving(false);
+          return;
+        }
+        for (const e of plan.suivantes) {
+          await setDoc(doc(db, "payments", e.id), { ...e.data, createdAt: p.createdAt || serverTimestamp(), updatedAt: serverTimestamp() });
+        }
+        await updateDoc(doc(db, "payments", p.id), { ...plan.premiere.data, updatedAt: serverTimestamp() });
+        const nbTotal = plan.suivantes.length + 1;
+        const premier = plan.premiere.data;
+        if (cbPremiereMaintenant) {
+          await enregistrerEncaissement(
+            p.id, { ...p, ...premier }, Number(premier.totalTTC), "cb_terminal", quickRef,
+            (premier.items || []).map((i: any) => i.activityTitle).join(", "),
+            new Date().toISOString().split("T")[0],
+          );
+        }
+        toast(
+          `✅ ${p.familyName} : ${nbTotal} échéances CB de ${Number(premier.totalTTC).toFixed(2)}€ environ`
+          + (cbPremiereMaintenant ? " — la 1re est encaissée" : "")
+          + (cbRappelLien ? " — rappel des liens le dernier jour de chaque mois" : "")
+          + ". Suivi dans l'onglet Échéances.",
+          "success",
+        );
+        onClose();
+        setQuickMontant(""); setQuickRef("");
+        setQuickDate(new Date().toISOString().split("T")[0]);
+        await refreshAll([p.id, ...plan.suivantes.map(e => e.id)]);
         setQuickSaving(false);
         return;
       }
@@ -509,6 +554,7 @@ export default function ModaleEncaisser({
                   { id: "pass_sport", label: "Pass'Sport", icon: "🤸" },
                   { id: "prelevement_sepa", label: "SEPA", icon: "🏦" },
                   { id: "cheque_differe", label: "Chèques différés", icon: "📅" },
+                  { id: "cb_echeances", label: "CB en plusieurs fois", icon: "🗓️" },
                   { id: "bon_cadeau", label: "Bon cadeau", icon: "🎁" },
                 ].map(m => {
                   const isSepa = m.id === "prelevement_sepa";
@@ -656,6 +702,39 @@ export default function ModaleEncaisser({
                 </div>
               </div>
             )}
+            {quickMode === "cb_echeances" && (
+              <div className="bg-purple-50 rounded-xl p-4 flex flex-col gap-3">
+                <div className="font-body text-xs font-semibold text-purple-900">Paiement en plusieurs fois par CB</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="font-body text-[10px] text-gray-500 block mb-1">Nb échéances</label>
+                    <select value={cbNombre} onChange={e => setCbNombre(parseInt(e.target.value) || 10)}
+                      className="w-full px-2 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white">
+                      {[2,3,4,5,6,7,8,9,10,11,12].map(n => <option key={n} value={n}>{n}×</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="font-body text-[10px] text-gray-500 block mb-1">1ère échéance</label>
+                    <input type="date" value={quickDate} onChange={e => setQuickDate(e.target.value)}
+                      className="w-full px-2 py-2 rounded-lg border border-gray-200 font-body text-sm"/>
+                  </div>
+                </div>
+                <div className="font-body text-xs text-purple-800">
+                  💡 {cbNombre} × {((Number(payment.totalTTC) || 0) / cbNombre).toFixed(2)}€ environ = {(Number(payment.totalTTC) || 0).toFixed(2)}€ (la commande entière est étalée)
+                </div>
+                <label className="flex items-center gap-2 font-body text-xs text-slate-700 cursor-pointer">
+                  <input type="checkbox" checked={cbPremiereMaintenant} onChange={e => setCbPremiereMaintenant(e.target.checked)} className="accent-purple-600 w-4 h-4" />
+                  Encaisser la 1ère échéance maintenant au terminal CB
+                </label>
+                <label className="flex items-center gap-2 font-body text-xs text-slate-700 cursor-pointer">
+                  <input type="checkbox" checked={cbRappelLien} onChange={e => setCbRappelLien(e.target.checked)} className="accent-purple-600 w-4 h-4" />
+                  Me rappeler le dernier jour de chaque mois d&apos;envoyer le lien de paiement
+                </label>
+                <div className="font-body text-[10px] text-gray-500">
+                  Chaque échéance se règle ensuite dans l&apos;onglet Échéances : au terminal, ou par « 💳 Lien ». Impossible sur une commande déjà facturée ou déjà en partie réglée.
+                </div>
+              </div>
+            )}
             {/* Saisie multi-chèques (mode cheque_differe) */}
             {quickMode === "cheque_differe" && (() => {
               const totalChq = quickChequesDiffres.reduce((s, c) => s + safeNumber(c.montant), 0);
@@ -770,7 +849,7 @@ export default function ModaleEncaisser({
               );
             })()}
             {/* Date (masquée en mode cheque_differe : chaque chèque a sa propre date) */}
-            {quickMode !== "cheque_differe" && quickMode !== "bon_cadeau" && (
+            {quickMode !== "cheque_differe" && quickMode !== "bon_cadeau" && quickMode !== "cb_echeances" && (
               <div>
                 <label className="font-body text-xs font-semibold text-blue-800 block mb-1">Date d'encaissement</label>
                 <input type="date" value={quickDate} onChange={e => setQuickDate(e.target.value)}
@@ -797,6 +876,8 @@ export default function ModaleEncaisser({
                 {quickSaving ? <Loader2 size={16} className="animate-spin inline mr-2"/> : (quickMode === "cheque_differe" ? "📅 " : "💶 ")}
                 {quickMode === "cheque_differe"
                   ? `Enregistrer ${quickChequesDiffres.length} chèque${quickChequesDiffres.length > 1 ? "s" : ""}`
+                  : quickMode === "cb_echeances"
+                  ? `Créer ${cbNombre} échéances CB`
                   : `Confirmer ${quickMontant ? `${parseFloat(quickMontant).toFixed(2)}€` : ""}`}
               </button>
             </div>
