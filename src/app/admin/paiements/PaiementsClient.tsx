@@ -1096,8 +1096,13 @@ export default function PaiementsPage() {
       {/* ─── Échéances Tab ─── */}
       {tab === "echeances" && (
         <TabEcheances loading={loading} payments={payments}
+          families={families}
           toast={toast} setPayments={setPayments} refreshAll={refreshAll}
           enregistrerEncaissement={enregistrerEncaissement}
+          setPayLinkModal={setPayLinkModal}
+          setPayLinkEmail={setPayLinkEmail}
+          setPayLinkAmount={setPayLinkAmount}
+          setPayLinkMessage={setPayLinkMessage}
         />
       )}
 

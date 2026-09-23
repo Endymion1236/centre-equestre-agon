@@ -7,7 +7,9 @@ import { Loader2, Check, X, AlertTriangle, CreditCard, Search } from "lucide-rea
 import { authFetch } from "@/lib/auth-fetch";
 import {
   computeDefaultDate,
+  messageLienEcheance,
   preparerEcheanciers,
+  resteDuEcheance,
   todayIso,
   type SortMode,
 } from "./echeances-utils";
@@ -15,13 +17,25 @@ import {
 interface TabEcheancesProps {
   loading: boolean;
   payments: any[];
+  /** Fiches familles : pour pré-remplir l'adresse du lien de paiement. */
+  families: any[];
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
   setPayments: React.Dispatch<React.SetStateAction<any[]>>;
   refreshAll: () => Promise<void>;
   enregistrerEncaissement: (paymentId: string, paymentData: any, montant: number, mode: string, ref?: string, activityTitle?: string, customDate?: string) => Promise<any>;
+  // La modale d'envoi de lien vit dans PaiementsClient : on la réutilise telle
+  // quelle plutôt que d'en écrire une seconde, qui finirait par diverger
+  // (relance des liens encore valables, garde-fou sur le montant, aperçu).
+  setPayLinkModal: (val: any) => void;
+  setPayLinkEmail: (val: string) => void;
+  setPayLinkAmount: (val: string) => void;
+  setPayLinkMessage: (val: string) => void;
 }
 
-export function TabEcheances({ loading, payments, toast, refreshAll, enregistrerEncaissement }: TabEcheancesProps) {
+export function TabEcheances({
+  loading, payments, families, toast, refreshAll, enregistrerEncaissement,
+  setPayLinkModal, setPayLinkEmail, setPayLinkAmount, setPayLinkMessage,
+}: TabEcheancesProps) {
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   const [search, setSearch] = useState("");
@@ -313,6 +327,30 @@ export function TabEcheances({ loading, payments, toast, refreshAll, enregistrer
                                 </button>
                                 );
                               })}
+                              {/* Régler en ligne : l'écran ne proposait que les
+                                  modes encaissés au club. Une famille qui
+                                  voulait payer son échéance par carte devait
+                                  appeler, et sa carte se saisissait à la main. */}
+                              {(() => {
+                                const reste = resteDuEcheance(e);
+                                const fam = families.find((f: any) => f.firestoreId === e.familyId);
+                                const email = fam?.parentEmail || e.familyEmail || "";
+                                return (
+                                  <button type="button" disabled={reste <= 0}
+                                    title={email
+                                      ? `Envoyer à ${email} un lien de paiement de ${reste.toFixed(2)}€ pour cette échéance`
+                                      : "Cette famille n'a pas d'adresse email — à compléter sur sa fiche"}
+                                    onClick={() => {
+                                      setPayLinkModal(e);
+                                      setPayLinkEmail(email);
+                                      setPayLinkAmount(reste.toFixed(2));
+                                      setPayLinkMessage(messageLienEcheance(e));
+                                    }}
+                                    className="font-body text-[9px] font-semibold text-white bg-indigo-500 px-2 py-1 rounded border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                                    💳 Lien
+                                  </button>
+                                );
+                              })()}
                             </div>
                             <div className="flex items-center gap-1.5 text-[9px]">
                               <span className="text-slate-400">📅</span>
