@@ -6,7 +6,9 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Check, X, AlertTriangle, CreditCard, Search } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import {
+  CHAMP_LIEN_CB,
   computeDefaultDate,
+  estReglementParLienCb,
   messageLienEcheance,
   preparerEcheanciers,
   resteDuEcheance,
@@ -49,6 +51,23 @@ export function TabEcheances({
   // ID plutôt qu'un booléen : bloque les doubles clics sur UNE échéance sans
   // empêcher l'admin de travailler sur le reste de la liste.
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+
+  // Repère « réglé par lien CB chaque mois » : posé sur toutes les échéances
+  // de la série, lu par le rappel de fin de mois (cron liens-cb-mensuels).
+  const [reperageEnCours, setReperageEnCours] = useState<string | null>(null);
+  const basculerLienCb = async (key: string, echs: any[]) => {
+    const actif = echs.some(estReglementParLienCb);
+    setReperageEnCours(key);
+    try {
+      for (const e of echs) await updateDoc(doc(db, "payments", e.id), { [CHAMP_LIEN_CB]: !actif, updatedAt: serverTimestamp() });
+      toast(actif
+        ? `${echs[0]?.familyName} : plus de rappel de lien CB en fin de mois.`
+        : `${echs[0]?.familyName} : rappel du lien CB à envoyer le dernier jour de chaque mois.`, "success");
+      await refreshAll();
+    } catch (err: any) {
+      toast(`Repère non enregistré : ${err?.message || err}`, "error");
+    } finally { setReperageEnCours(null); }
+  };
 
   const { groupesList, statsRecap, hasOverdue } = useMemo(
     () => preparerEcheanciers(payments, { search, onlyOverdue, sortMode }),
@@ -165,6 +184,14 @@ export function TabEcheances({
                 <div>
                   <div className="font-body text-sm font-semibold text-blue-800">{first.familyName}</div>
                   <div className="font-body text-xs text-slate-600">{first.forfaitRef || (first.items || []).map((i: any) => i.activityTitle).join(", ")}</div>
+                  {nbPayes < nbTotal && (
+                    <button type="button" disabled={reperageEnCours === key}
+                      onClick={() => basculerLienCb(key, echs)}
+                      title="Rappel par email et notification, le dernier jour de chaque mois, d'envoyer le lien de paiement de l'échéance suivante"
+                      className={`mt-1 font-body text-[11px] px-2 py-0.5 rounded-full border cursor-pointer disabled:opacity-50 ${echs.some(estReglementParLienCb) ? "bg-purple-50 text-purple-700 border-purple-200" : "bg-white text-slate-500 border-gray-200 hover:bg-slate-50"}`}>
+                      {echs.some(estReglementParLienCb) ? "💳 Lien CB chaque mois · rappel actif" : "💳 Réglé par lien CB ? Me le rappeler"}
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="text-right">

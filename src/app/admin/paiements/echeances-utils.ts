@@ -197,3 +197,72 @@ export function messageLienEcheance(echeance: any, aujourdhui = todayIso()): str
   return `Bonjour,\n\nVoici le lien pour régler ${rappel} de votre forfait.${situation}`
     + `\n\nSi vous l'avez déjà réglée entre-temps, ce message est sans objet.`;
 }
+
+// ─── Échéanciers réglés par lien de paiement CB, mois après mois ───────────
+//
+// Certaines familles ne sont ni au prélèvement, ni au comptoir : Nicolas leur
+// envoie chaque fin de mois un lien de paiement CB pour l'échéance suivante.
+// Rien ne le rappelait. Un échéancier porte donc un repère, posé sur toutes
+// ses échéances depuis l'onglet Échéances, et le rappel de fin de mois (cron
+// liens-cb-mensuels) liste ce qu'il faut envoyer.
+
+/** Champ posé sur chaque échéance d'un échéancier réglé par lien CB. */
+export const CHAMP_LIEN_CB = "reglementParLienCb";
+
+export function estReglementParLienCb(payment: any): boolean {
+  return payment?.[CHAMP_LIEN_CB] === true;
+}
+
+/** Dernier jour du mois suivant, « AAAA-MM-JJ ». */
+export function finDuMoisSuivant(today = todayIso()): string {
+  const [annee, mois] = today.split("-").map(Number);
+  return dateIsoLocale(new Date(annee, mois + 1, 0, 12, 0, 0));
+}
+
+export interface LienCbAEnvoyer {
+  paymentId: string;
+  familyId: string;
+  familyName: string;
+  numero: number;
+  total: number;
+  date: string;
+  reste: number;
+  enRetard: boolean;
+  /** Autres échéances de la même série, non réglées et déjà dépassées. */
+  autresEnRetard: number;
+}
+
+/**
+ * Une ligne par échéancier marqué : sa prochaine échéance non réglée, si elle
+ * tombe d'ici la fin du mois suivant. Un lien couvre UNE échéance ; les
+ * retards supplémentaires sont comptés à part pour ne pas les oublier.
+ */
+export function liensCbAEnvoyer(payments: any[], today = todayIso()): LienCbAEnvoyer[] {
+  const limite = finDuMoisSuivant(today);
+  const series = new Map<string, any[]>();
+  for (const p of payments) {
+    if (!estReglementParLienCb(p) || estEcheanceSepa(p)) continue;
+    if (p.status === "paid" || p.status === "cancelled") continue;
+    if (Number(p.echeancesTotal || 0) <= 1 || !p.echeanceDate || resteDuEcheance(p) <= 0) continue;
+    const key = `${p.familyId}_${p.forfaitRef || ""}`;
+    series.set(key, [...(series.get(key) || []), p]);
+  }
+  const lignes: LienCbAEnvoyer[] = [];
+  for (const echs of series.values()) {
+    echs.sort((a, b) => String(a.echeanceDate).localeCompare(String(b.echeanceDate)));
+    const prochaine = echs[0];
+    if (prochaine.echeanceDate > limite) continue;
+    lignes.push({
+      paymentId: prochaine.id,
+      familyId: prochaine.familyId || "",
+      familyName: prochaine.familyName || "(sans nom)",
+      numero: Number(prochaine.echeance || 0),
+      total: Number(prochaine.echeancesTotal || 0),
+      date: prochaine.echeanceDate,
+      reste: resteDuEcheance(prochaine),
+      enRetard: prochaine.echeanceDate < today,
+      autresEnRetard: echs.slice(1).filter((e) => e.echeanceDate < today).length,
+    });
+  }
+  return lignes.sort((a, b) => a.date.localeCompare(b.date) || a.familyName.localeCompare(b.familyName));
+}

@@ -59,6 +59,10 @@
     {
       "path": "/api/cron/envoi-comptable",
       "schedule": "0 7 5 * *"
+    },
+    {
+      "path": "/api/cron/liens-cb-mensuels",
+      "schedule": "0 6 28-31 * *"
     }
   ]
 }

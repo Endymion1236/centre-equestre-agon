@@ -50,6 +50,8 @@ export async function GET(req: NextRequest) {
       // Le prélèvement se reconnaît au mode : passée en « partiel » au premier
       // prélèvement, une commande SEPA aurait reçu des rappels de règlement.
       if (["paid", "cancelled"].includes(p.status) || estPrelevementSepa(p)) return;
+      // Réglée par lien CB chaque mois : elle a son propre rappel (liens-cb-mensuels).
+      if (p.reglementParLienCb === true) return;
       const date = p.echeanceDate;
       if (!date || date > endWindowYMD) return; // uniquement ce qui est dû d'ici la fin du mois en cours
       rows.push({
