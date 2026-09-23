@@ -297,7 +297,10 @@ export function estLibelleVirement(label: string) {
  * intégralement « pas d'encaissement CB correspondant », alors que les
  * écritures existaient au journal (remise du 20/09/2026, 150 € = 60 € + 90 €).
  */
-export const MODES_CARTE = ["cb_terminal", "cb_online", "cb_cawl"] as const;
+// « cb » tout court : les ventes de bons cadeaux en ligne l'ont porté jusqu'au
+// 23/09/2026. Ces écritures sont au journal, donc inaltérables : on les
+// reconnaît ici plutôt que de les réécrire.
+export const MODES_CARTE = ["cb_terminal", "cb_online", "cb_cawl", "cb"] as const;
 
 export const estEncaissementCarte = (mode: unknown) =>
   (MODES_CARTE as readonly string[]).includes(String(mode ?? ""));
@@ -312,7 +315,7 @@ export const estEncaissementCarte = (mode: unknown) =>
  */
 export const CANAUX_REMISE_CARTE = [
   { cle: "terminal", libelle: "CB Terminal", modes: ["cb_terminal"] },
-  { cle: "en-ligne", libelle: "CB en ligne", modes: ["cb_online", "cb_cawl"] },
+  { cle: "en-ligne", libelle: "CB en ligne", modes: ["cb_online", "cb_cawl", "cb"] },
 ] as const;
 
 export type CanalRemiseCarte = (typeof CANAUX_REMISE_CARTE)[number]["cle"];
@@ -368,6 +371,41 @@ export function apparierRemiseCarte<T extends { montant?: number; mode?: string 
     }
   }
   return apparier(montants, candidats);
+}
+
+/**
+ * Fusionne les lignes bancaires d'un mois avec celles déjà enregistrées.
+ *
+ * Un import ne remplace JAMAIS le relevé du mois : il s'y ajoute. Le CSV du
+ * Crédit Agricole se tire sur l'intervalle qu'on lui demande, et Nicolas en
+ * tire souvent un de deux jours pour rattraper le retard. Sans fusion, ces
+ * deux jours effaceraient les vingt lignes déjà pointées.
+ *
+ * La clé d'une ligne est `date|libellé|montant` : deux lignes identiques au
+ * centime près sont la même opération, réimportée.
+ *
+ * `mode` décide de ce qui gagne en cas de conflit :
+ *   - « user-update » : la nouvelle version gagne. C'est un geste de Nicolas
+ *     (pointer, dé-pointer, ignorer) et il fait autorité ;
+ *   - « csv-import » : un pointage existant survit à une ligne réimportée non
+ *     pointée. Une remise carte pointée à la main par « Détail CA » ressort du
+ *     CSV en « à traiter » — elle ne doit pas écraser le travail fait.
+ */
+export function fusionnerLignesBancaires<T extends { date: string; label: string; amount: number; matched?: boolean }>(
+  existantes: T[],
+  nouvelles: T[],
+  mode: "user-update" | "csv-import" = "user-update",
+): T[] {
+  const cle = (b: T) => `${b.date}|${b.label}|${Math.round((b.amount || 0) * 100)}`;
+  const fusion = new Map<string, T>();
+  for (const ancienne of existantes || []) fusion.set(cle(ancienne), ancienne);
+  for (const nouvelle of nouvelles || []) {
+    const k = cle(nouvelle);
+    const ancienne = fusion.get(k);
+    if (mode === "csv-import" && ancienne?.matched && !nouvelle.matched) continue;
+    fusion.set(k, nouvelle);
+  }
+  return Array.from(fusion.values());
 }
 
 /**

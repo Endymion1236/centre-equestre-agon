@@ -41,7 +41,8 @@ export interface OngletRapprochementProps {
   relancerRapprochement: () => Promise<{ avant: number; apres: number }>;
   updateAndSaveBankLines: (lignes: LigneBancaire[]) => Promise<void> | void;
   setBankLines: (lignes: LigneBancaire[]) => void;
-  saveBankLinesByMonth: (lignes: LigneBancaire[], mode?: "user-update" | "csv-import") => Promise<void> | void;
+  /** Renvoie les lignes du mois actif après fusion avec ce qui est déjà en base. */
+  saveBankLinesByMonth: (lignes: LigneBancaire[], mode?: "user-update" | "csv-import") => Promise<LigneBancaire[]>;
   syncVersementsEspeces: (lignes: LigneBancaire[]) => Promise<void> | void;
   fetchData: () => void;
   /** Analyse du relevé par l'assistant, partagée avec le panneau flottant. */

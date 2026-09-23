@@ -70,7 +70,11 @@ export async function traiterBonCadeauSession(
     familyId: "",
     familyName: `Bon cadeau en ligne — ${sess.acheteurNom || "acheteur"}`,
     montant,
-    mode: "cb",
+    // « cb_online », pas « cb » : c'est le mode que reconnaissent le
+    // rapprochement des remises carte et la liste des encaissements à
+    // remettre. Sous « cb », la vente n'était ni rapprochable ni sortable
+    // de cette liste — elle y restait indéfiniment (vente du 06/09/2026).
+    mode: "cb_online",
     modeLabel: "CB en ligne (bon cadeau)",
     ref: sess.merchantRef || "",
     activityTitle: "Bon cadeau",

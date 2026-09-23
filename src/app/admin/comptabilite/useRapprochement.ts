@@ -31,6 +31,7 @@ import {
   encaissementsCouvertsParLigne,
   parserCsvBancaire,
 } from "./rapprochement-utils";
+import { fusionnerLignesBancaires } from "./rapprochement-utils";
 import { rapprocherReleve } from "./rapprochement-matching";
 import { createEncaissement } from "@/lib/compta-encaissement";
 
@@ -143,6 +144,14 @@ export function useRapprochement({
   //  on ne dé-marque QUE les encs dont la date appartient à la période courante.
   //  ─────────────────────────────────────────────────────────────────────────
   const syncReconciledFromBankLines = async (lines: typeof bankLines) => {
+    // Un tableau vide voudrait dire « aucune ligne bancaire ne couvre quoi que
+    // ce soit », donc tout dé-rapprocher. C'est toujours un accident : un
+    // chargement qui n'a pas abouti, un appel fait au mauvais moment. On ne
+    // détruit pas un mois de pointage sur cette base.
+    if (!lines || lines.length === 0) {
+      console.warn("[sync-reconciled] aucune ligne bancaire fournie — synchronisation ignorée");
+      return;
+    }
     try {
       // 1. Construire l'ensemble cible des encs et payments à marquer rapprochés
       const targetEncIds = new Set<string>();
@@ -290,11 +299,18 @@ export function useRapprochement({
       // Sauvegarder en groupant par mois (chaque bankLine va dans le doc
       // rapprochements/{YYYY-MM} correspondant à sa propre date, pas la
       // période active. Cf. saveBankLinesByMonth pour le détail.)
-      await saveBankLinesByMonth(updated);
+      //
+      // On repart ENSUITE du mois complet tel qu'il est en base, jamais du
+      // tableau qu'on vient d'écrire. Après un import de deux jours, celui-ci
+      // ne contient que ces deux jours : synchroniser dessus dé-rapprochait
+      // tous les encaissements du mois que les autres lignes couvraient, et
+      // remettait en attente des factures déjà réglées.
+      const moisComplet = await saveBankLinesByMonth(updated);
+      setBankLines(moisComplet);
       // Synchroniser reconciledByBank sur encs/payments/remises
-      await syncReconciledFromBankLines(updated);
+      await syncReconciledFromBankLines(moisComplet);
       // Synchroniser les versements bancaires du livre de caisse
-      await syncVersementsEspeces(updated);
+      await syncVersementsEspeces(moisComplet);
       // Rafraîchir les données pour que l'UI reflète les changements
       fetchData();
     } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
@@ -327,10 +343,16 @@ export function useRapprochement({
   //   précédemment (bug rencontré par Nicolas le 28/04 après réimport CSV qui avait
   //   tout dépointé). Si la nouvelle apporte un nouveau pointage (matched: true), on
   //   le prend ; sinon on garde l'existant.
+  //  Renvoie les lignes du MOIS ACTIF telles qu'elles sont désormais en base,
+  //  fusion comprise. L'appelant doit s'en servir plutôt que de son propre
+  //  tableau : après un import partiel, celui-ci ne contient que les quelques
+  //  jours importés, et tout ce qui s'appuierait dessus croirait le reste du
+  //  mois disparu.
   const saveBankLinesByMonth = async (
     lines: typeof bankLines,
     mode: "user-update" | "csv-import" = "user-update"
-  ) => {
+  ): Promise<typeof bankLines> => {
+    let lignesDuMoisActif: any[] | null = null;
     // 1. Grouper par mois (YYYY-MM extrait de DD/MM/YYYY)
     const byMonth: Record<string, typeof bankLines> = {};
     for (const bl of lines) {
@@ -350,33 +372,20 @@ export function useRapprochement({
         const existingSnap = await getDoc(doc(db, "rapprochements", ym));
         const existingBls: any[] = (existingSnap.exists() ? (existingSnap.data() as any).bankLines : []) || [];
 
-        // Map des bankLines à fusionner par clé "date|label|amount"
-        const keyOf = (b: any) => `${b.date}|${b.label}|${Math.round(b.amount * 100)}`;
-        const merged = new Map<string, any>();
-        for (const eb of existingBls) merged.set(keyOf(eb), eb);
-        for (const nb of blGroup) {
-          const key = keyOf(nb);
-          const existing = merged.get(key);
-          const incoming = {
-            date: nb.date, label: nb.label, amount: nb.amount,
-            matched: nb.matched, matchType: nb.matchType, matchDetail: nb.matchDetail,
-            matchedEncs: nb.matchedEncs || null,
-            missingAmounts: nb.missingAmounts || null,
-            manualPaymentId: nb.manualPaymentId || null,
-            remiseSepaId: nb.remiseSepaId || null,
-            uncertain: nb.uncertain || false,
-          };
-
-          if (mode === "csv-import" && existing && existing.matched && !incoming.matched) {
-            // L'existante est pointée et la nouvelle (du CSV) ne l'est pas → on
-            // CONSERVE l'existante. C'est le cas typique d'un réimport CSV : une
-            // remise CB qu'on a pointée à la main via "Détail CA" doit garder son
-            // pointage même si le CSV la réimporte avec matched=false par défaut.
-            continue;
-          }
-          merged.set(key, incoming);
-        }
-        const allBls = Array.from(merged.values());
+        // La règle de fusion vit dans rapprochement-utils, où elle se teste
+        // sans base. On normalise d'abord les champs écrits en Firestore
+        // (undefined y est refusé : null partout).
+        const aEcrire = blGroup.map((nb: any) => ({
+          date: nb.date, label: nb.label, amount: nb.amount,
+          matched: nb.matched, matchType: nb.matchType, matchDetail: nb.matchDetail,
+          matchedEncs: nb.matchedEncs || null,
+          missingAmounts: nb.missingAmounts || null,
+          manualPaymentId: nb.manualPaymentId || null,
+          remiseSepaId: nb.remiseSepaId || null,
+          uncertain: nb.uncertain || false,
+        }));
+        const allBls = fusionnerLignesBancaires(existingBls as any, aEcrire as any, mode);
+        if (ym === period) lignesDuMoisActif = allBls;
 
         await setDoc(doc(db, "rapprochements", ym), {
           period: ym,
@@ -392,6 +401,9 @@ export function useRapprochement({
         throw e;
       }
     }
+    // Aucune ligne du mois actif dans ce lot (CSV d'un autre mois) : l'écran
+    // garde ce qu'il affiche déjà.
+    return (lignesDuMoisActif || lines) as typeof bankLines;
   };
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -670,10 +682,14 @@ export function useRapprochement({
       // bankLine, plus la période active à l'import — fix du bug de doublons
       // découvert par Nicolas le 28/04 sur les CSV à cheval sur 2 mois)
       try {
-        await saveBankLinesByMonth(finalMatched as any, "csv-import");
-        console.log(`✅ Rapprochement sauvegardé (${finalMatched.length} lignes réparties par mois)`);
+        const moisComplet = await saveBankLinesByMonth(finalMatched as any, "csv-import");
+        console.log(`✅ Rapprochement sauvegardé (${finalMatched.length} ligne(s) importée(s), ${moisComplet.length} sur le mois)`);
+        // Un CSV ne remplace pas le relevé du mois, il s'y ajoute : l'écran
+        // doit montrer l'ensemble, sans quoi importer deux jours donne
+        // l'impression d'avoir effacé les vingt lignes déjà pointées.
+        setBankLines(moisComplet);
         // Synchroniser les versements bancaires (sorties du livre de caisse)
-        await syncVersementsEspeces(finalMatched as any);
+        await syncVersementsEspeces(moisComplet);
       } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
     };
     reader.readAsText(file, "ISO-8859-1"); // Encodage Crédit Agricole = Latin1

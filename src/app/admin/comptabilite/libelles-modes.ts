@@ -6,7 +6,8 @@
  * sous deux noms selon l'endroit où on le regarde.
  */
 export const modeLabels: Record<string, string> = {
-  cb_terminal: "CB Terminal", cb_online: "CB en ligne", cb_cawl: "CB en ligne", cheque: "Chèque", especes: "Espèces",
+  cb_terminal: "CB Terminal", cb_online: "CB en ligne", cb_cawl: "CB en ligne", cb: "CB en ligne",
+  cheque: "Chèque", especes: "Espèces",
   cheque_vacances: "Chèques Vacances", pass_sport: "Pass'Sport", ancv: "ANCV",
   virement: "Virement", avoir: "Avoir", prelevement_sepa: "Prélèvement SEPA",
 };

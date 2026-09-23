@@ -7,6 +7,7 @@ import {
   estEncaissementCarte,
   encaissementEnDetail,
   estDansFenetreBancaire,
+  fusionnerLignesBancaires,
   parserCsvBancaire,
   parserDateBancaire,
   parserDetailCa,
@@ -184,6 +185,17 @@ test("le paiement en ligne compte, pas seulement le terminal", () => {
   assert.equal(estEncaissementCarte("cb_cawl"), true);
 });
 
+test("l'ancien code « cb » des bons cadeaux en ligne compte aussi", () => {
+  // Les ventes de bons cadeaux écrivaient « cb » tout court. Ces écritures
+  // sont au journal, donc inaltérables : elles doivent se rapprocher telles
+  // quelles, sinon la vente reste éternellement « à remettre »
+  // (125 € du 06/09/2026).
+  assert.equal(estEncaissementCarte("cb"), true);
+  const resultat = apparierRemiseCarte([125], [{ id: "bon", montant: 125, mode: "cb" }]);
+  assert.equal(resultat.canal, "en-ligne");
+  assert.equal(resultat.trouves.length, 1);
+});
+
 test("les autres moyens de paiement restent hors remise carte", () => {
   for (const mode of ["cheque", "especes", "virement", "avoir", "prelevement_sepa", "", null, undefined]) {
     assert.equal(estEncaissementCarte(mode), false, String(mode));
@@ -249,6 +261,64 @@ test("les chèques et espèces ne servent jamais une remise carte", () => {
   ]);
   assert.deepEqual(resultat.trouves, []);
   assert.deepEqual(resultat.manquants, [30]);
+});
+
+console.log("\n── Fusion des lignes bancaires ──");
+
+const ligne = (date: string, label: string, amount: number, extra: any = {}) =>
+  ({ date, label, amount, matched: false, matchType: "", matchDetail: "", ...extra });
+
+test("un CSV de deux jours s'ajoute au mois, il ne le remplace pas", () => {
+  // Cas vécu : vingt lignes déjà pointées, un CSV tiré sur les deux derniers
+  // jours, et tout le mois qui disparaît de l'écran.
+  const deja = [
+    ligne("01/09/2026", "REMISE CHQ", 70, { matched: true, matchType: "Chèques" }),
+    ligne("02/09/2026", "VIR DUPONT", 120, { matched: true, matchType: "Virement" }),
+  ];
+  const nouvelles = [ligne("22/09/2026", "REMISE CARTE", 150)];
+  const fusion = fusionnerLignesBancaires(deja, nouvelles, "csv-import");
+  assert.equal(fusion.length, 3);
+  assert.equal(fusion.filter((l) => l.matched).length, 2, "les pointages d'avant sont intacts");
+});
+
+test("une ligne réimportée ne défait pas un pointage manuel", () => {
+  const deja = [ligne("20/09/2026", "REMISE CARTE", 150, { matched: true, matchType: "Manuel", matchDetail: "Détail CA" })];
+  const fusion = fusionnerLignesBancaires(deja, [ligne("20/09/2026", "REMISE CARTE", 150)], "csv-import");
+  assert.equal(fusion.length, 1);
+  assert.equal(fusion[0].matched, true);
+  assert.equal(fusion[0].matchType, "Manuel");
+});
+
+test("un geste de Nicolas fait autorité, lui", () => {
+  const deja = [ligne("20/09/2026", "REMISE CARTE", 150, { matched: true, matchType: "CB Terminal" })];
+  const depointee = ligne("20/09/2026", "REMISE CARTE", 150);
+  const fusion = fusionnerLignesBancaires(deja, [depointee], "user-update");
+  assert.equal(fusion[0].matched, false, "le dé-pointage passe");
+});
+
+test("deux opérations du même jour et du même montant restent distinctes", () => {
+  const fusion = fusionnerLignesBancaires(
+    [ligne("20/09/2026", "REMISE CARTE 8067954", 57)],
+    [ligne("20/09/2026", "REMISE CARTE 1535124", 57)],
+    "csv-import",
+  );
+  assert.equal(fusion.length, 2, "le libellé les sépare");
+});
+
+test("un centime d'écart fait deux lignes, pas une", () => {
+  const fusion = fusionnerLignesBancaires(
+    [ligne("20/09/2026", "REMISE", 57)],
+    [ligne("20/09/2026", "REMISE", 57.01)],
+    "csv-import",
+  );
+  assert.equal(fusion.length, 2);
+});
+
+test("fusionner avec rien ne perd rien", () => {
+  const deja = [ligne("01/09/2026", "REMISE CHQ", 70, { matched: true })];
+  assert.equal(fusionnerLignesBancaires(deja, [], "csv-import").length, 1);
+  assert.equal(fusionnerLignesBancaires([], deja, "csv-import").length, 1);
+  assert.equal(fusionnerLignesBancaires([], [], "csv-import").length, 0);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

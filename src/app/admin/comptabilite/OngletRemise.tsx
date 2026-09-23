@@ -145,8 +145,10 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
   });
 
   const nonRemisEnc = (encaissementsCompta || []).filter((e: any) => {
-    // Modes exclus des remises physiques
-    if (["virement", "prelevement_sepa", "cb_online", "avoir"].includes(e.mode)) return false;
+    // Modes exclus des remises physiques : rien à porter à la banque, la
+    // banque les crédite directement. « cb » est l'ancien code des ventes de
+    // bons cadeaux en ligne, conservé pour les écritures déjà au journal.
+    if (["virement", "prelevement_sepa", "cb_online", "cb_cawl", "cb", "avoir"].includes(e.mode)) return false;
     // Montant positif uniquement (pas de remboursements)
     if ((e.montant || 0) <= 0) return false;
     // Neutralisé par une contre-passation de montant opposé
