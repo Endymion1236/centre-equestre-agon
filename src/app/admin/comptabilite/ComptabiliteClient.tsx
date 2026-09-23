@@ -260,6 +260,25 @@ export default function ComptabilitePage() {
   // Le FEC du mois, construit par le serveur : le même fichier que celui de
   // l'envoi mensuel au cabinet, et le seul moyen d'y mettre les écritures
   // Céleris de juillet-août (le navigateur n'a pas le droit de les lire).
+  // Ce que contiendra le FEC du mois, demandé au serveur : le compte des
+  // paiements de l'écran ignorait les écritures Céleris (juillet-août 2026)
+  // et affichait « 0 paiements » pour un fichier qui n'est pas vide.
+  const [apercuFec, setApercuFec] = useState<{ mois: string; source?: string; ventes?: number; reglements?: number; erreur?: string } | null>(null);
+  useEffect(() => {
+    if (tab !== "fec") return;
+    let actif = true;
+    setApercuFec(null);
+    authFetch(`/api/admin/fec?mois=${period}`)
+      .then(async (res) => {
+        const data = await res.json().catch(() => null);
+        if (!actif) return;
+        if (!res.ok || !data) { setApercuFec({ mois: period, erreur: data?.error || `erreur ${res.status}` }); return; }
+        setApercuFec({ mois: period, source: data.source, ventes: data.ecrituresVentes ?? 0, reglements: data.ecrituresReglements ?? 0 });
+      })
+      .catch((e) => { if (actif) setApercuFec({ mois: period, erreur: e?.message || "erreur réseau" }); });
+    return () => { actif = false; };
+  }, [tab, period]);
+
   const generateFEC = async () => {
     try {
       const res = await authFetch(`/api/admin/fec?mois=${period}`);
@@ -613,7 +632,13 @@ export default function ComptabilitePage() {
               </div>
               <div>
                 <div className="font-body text-xs font-semibold text-slate-500">Écritures</div>
-                <div className="font-body text-sm font-semibold text-blue-800">{filteredPayments.length} paiements → ~{filteredPayments.length * 3} lignes</div>
+                <div className="font-body text-sm font-semibold text-blue-800">
+                  {!apercuFec || apercuFec.mois !== period ? "calcul…"
+                    : apercuFec.erreur ? `indisponible (${apercuFec.erreur})`
+                    : apercuFec.source === "celeris" ? `${apercuFec.ventes} écritures reprises de Céleris`
+                    : (apercuFec.ventes || 0) + (apercuFec.reglements || 0) === 0 ? "aucune écriture ce mois-ci"
+                    : `${apercuFec.ventes} factures (VE) + ${apercuFec.reglements} règlements (RG)`}
+                </div>
               </div>
               <div>
                 <div className="font-body text-xs font-semibold text-slate-500">Format</div>
