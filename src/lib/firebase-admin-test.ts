@@ -30,6 +30,7 @@
 
 import { initializeApp, getApps, getApp, cert, App } from "firebase-admin/app";
 import { getFirestore, Firestore } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
 
 const NOM_APP = "base-de-test";
 
@@ -80,4 +81,31 @@ export function firestoreDeTest(): Firestore {
     : initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) }, NOM_APP);
 
   return getFirestore(app);
+}
+
+/**
+ * Stockage de fichiers de la base de test, en LECTURE — utilisé pour
+ * rapatrier en production les justificatifs importés sur la préversion
+ * (lib/rapatriement-test-utils). Le seau se déduit du projet, sauf si
+ * FIREBASE_TEST_STORAGE_BUCKET le nomme : Firebase a changé de convention
+ * (…appspot.com puis …firebasestorage.app), on essaie les deux.
+ */
+export async function seauDeTest() {
+  firestoreDeTest(); // ouvre l'application de test et vérifie sa configuration
+  const projectId = projetDeTest();
+  const storage = getStorage(getApp(NOM_APP));
+  const candidats = [
+    (process.env.FIREBASE_TEST_STORAGE_BUCKET || "").trim(),
+    `${projectId}.firebasestorage.app`,
+    `${projectId}.appspot.com`,
+  ].filter(Boolean);
+  for (const nom of candidats) {
+    const seau = storage.bucket(nom);
+    const [existe] = await seau.exists().catch(() => [false]);
+    if (existe) return seau;
+  }
+  throw new BaseDeTestIndisponible(
+    `Stockage de la base de test introuvable (essayé : ${candidats.join(", ")}). `
+    + "Renseignez FIREBASE_TEST_STORAGE_BUCKET dans Vercel.",
+  );
 }

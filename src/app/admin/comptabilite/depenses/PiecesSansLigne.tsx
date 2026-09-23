@@ -109,6 +109,53 @@ export default function JustificatifsPage() {
     } catch (e) { setMessage(e instanceof Error ? e.message : "Import Drive impossible"); }
     finally { setBusy(false); }
   }
+  // ── Rapatriement depuis la préversion test (septembre 2026) ─────────
+  // Les pièces importées sur test n'existaient que là, et certaines ne sont
+  // dans aucun dossier Drive. Aperçu d'abord, écriture ensuite.
+  type ApercuRapatriement = { source: string; destination: string; parCollection: { collection: string; aCreer: number; dejaPresents: number }[]; piecesDetachees: number; liensIgnores: number; nbDoublonsProbables: number; doublonsProbables: { mois: string; montant: number; fournisseur: string }[] };
+  const [apercuRapatriement, setApercuRapatriement] = useState<ApercuRapatriement | null>(null);
+  const LIBELLES_RAPATRIEMENT: Record<string, string> = {
+    justificatifs: "Pièces justificatives", "justificatifs-liens": "Associations pièce ↔ dépense", depenses: "Dépenses",
+    "mouvements-rapprochement": "Autres opérations du tableau", "fournisseurs-alias": "Noms de fournisseurs appris",
+  };
+  async function appelRapatriement(body: object) {
+    const r = await authFetch(`${endpoint}/rapatrier-test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json().catch(() => ({ error: `Réponse illisible du serveur (HTTP ${r.status}). Relancez : rien ne sera dupliqué.` }));
+    if (!r.ok) throw new Error(d.error || `Refus du serveur (HTTP ${r.status})`);
+    return d;
+  }
+  async function voirRapatriement() {
+    setBusy(true); setMessage("Lecture de la base de test…");
+    try { const d = await appelRapatriement({ etape: "apercu" }); setApercuRapatriement(d); setMessage("Aperçu prêt : rien n'a encore été écrit."); }
+    catch (e) { setMessage(e instanceof Error ? e.message : "Aperçu impossible"); }
+    finally { setBusy(false); }
+  }
+  async function lancerRapatriement() {
+    if (!apercuRapatriement) return;
+    const total = apercuRapatriement.parCollection.reduce((s, l) => s + l.aCreer, 0);
+    if (!window.confirm(`Créer en production ${total} élément(s) venant de la base de test ${apercuRapatriement.source} ?\n\nRien n'est modifié ni effacé : seuls les éléments absents sont ajoutés. Laissez la page ouverte jusqu'à la fin de la copie des fichiers.`)) return;
+    setBusy(true);
+    try {
+      setMessage("Création des pièces, dépenses et associations…");
+      const d = await appelRapatriement({ etape: "documents", confirm: "RAPATRIER-DEPUIS-TEST" });
+      let copies = 0, tours = 0, restants = 1; const echecs: string[] = [];
+      while (restants > 0 && tours < 60) {
+        tours++;
+        setMessage(`${d.documentsCrees} document(s) créé(s). Copie des fichiers : ${copies} copié(s)${restants > 1 ? `, ${restants} restant(s)` : ""}…`);
+        const f = await appelRapatriement({ etape: "fichiers", confirm: "RAPATRIER-DEPUIS-TEST" });
+        copies += f.copies; restants = f.restants;
+        if (f.copies === 0) { echecs.push(...f.echecs); break; }
+      }
+      setApercuRapatriement(null);
+      await load();
+      setMessage([`Rapatriement terminé : ${d.documentsCrees} document(s) créé(s), ${copies} fichier(s) de pièces copié(s).`,
+        d.piecesDetachees ? `${d.piecesDetachees} pièce(s) arrivée(s) sans association : relancez le rapprochement automatique.` : "",
+        d.nbDoublonsProbables ? `${d.nbDoublonsProbables} dépense(s) ressemblent à une dépense déjà saisie en production : passez par le contrôle des doublons.` : "",
+        restants > 0 ? `${restants} fichier(s) non copié(s) : relancez le rapatriement, il reprendra là où il s'est arrêté.` : "",
+        ...echecs.map(e => `Échec : ${e}`)].filter(Boolean).join("\n"));
+    } catch (e) { setMessage(e instanceof Error ? e.message : "Rapatriement interrompu"); }
+    finally { setBusy(false); }
+  }
   /**
    * Lecture en masse des pièces jamais analysées.
    *
@@ -164,6 +211,24 @@ export default function JustificatifsPage() {
         : drive && <p className="text-sm text-amber-800">Aucun compte Google connecté sur cette base{drive.base ? <> (<b>{drive.base}</b>)</> : null}. Connectez-le depuis l’Assistant boîte mail de <em>cette</em> préversion : la connexion faite en production n’y donne pas accès.</p>}
       <p className="text-sm">Seuls les fichiers pas encore importés sont récupérés (PDF, JPEG, PNG, 10 Mo maximum), puis lus par l’IA. Le dossier Drive n’est ni modifié ni vidé : les pièces sont copiées dans le coffre privé de l’application, qui reste la référence.{drive && !drive.googleConnecte ? " Compte Google non connecté : connectez-le d’abord dans l’Assistant boîte mail." : ""}</p>
     </section>
+    {!(drive?.base || "").toLowerCase().includes("test") && <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 space-y-2">
+      <p className="font-semibold">Rapatrier le travail fait sur la préversion test</p>
+      <p className="text-sm">Pièces justificatives et leurs fichiers, dépenses lues sur les relevés, autres opérations du tableau, associations et noms de fournisseurs appris. Seul ce qui manque en production est ajouté ; rien n&apos;est modifié ni effacé, on peut relancer sans créer de doublon.</p>
+      {!apercuRapatriement
+        ? <button disabled={busy} className="rounded bg-amber-700 px-4 py-2 text-white disabled:opacity-40" onClick={() => void voirRapatriement()}>Voir ce qui serait rapatrié</button>
+        : <div className="space-y-2 text-sm">
+          <p>Depuis <b>{apercuRapatriement.source}</b> vers <b>{apercuRapatriement.destination}</b> :</p>
+          <ul className="list-disc pl-5">
+            {apercuRapatriement.parCollection.map(l => <li key={l.collection}>{LIBELLES_RAPATRIEMENT[l.collection] || l.collection} : <b>{l.aCreer}</b> à ajouter{l.dejaPresents ? `, ${l.dejaPresents} déjà en production` : ""}</li>)}
+          </ul>
+          {apercuRapatriement.piecesDetachees > 0 && <p>{apercuRapatriement.piecesDetachees} pièce(s) arriveront sans leur association, parce que la dépense correspondante est déjà liée à une autre pièce en production ou absente.</p>}
+          {apercuRapatriement.nbDoublonsProbables > 0 && <p className="text-amber-900">{apercuRapatriement.nbDoublonsProbables} dépense(s) ressemblent à une dépense déjà en production (même mois, montant et fournisseur), par exemple : {apercuRapatriement.doublonsProbables.slice(0, 3).map(d => `${d.fournisseur} ${d.montant.toFixed(2)} € (${d.mois})`).join(" ; ")}. Elles seront ajoutées puis à départager dans le contrôle des doublons.</p>}
+          <div className="flex gap-2">
+            <button disabled={busy} className="rounded bg-amber-700 px-4 py-2 text-white disabled:opacity-40" onClick={() => void lancerRapatriement()}>Rapatrier</button>
+            <button disabled={busy} className="rounded border px-4 py-2" onClick={() => setApercuRapatriement(null)}>Annuler</button>
+          </div>
+        </div>}
+    </section>}
     <p role="status" className="whitespace-pre-line rounded bg-slate-50 p-3">{message || "Choisissez un fichier ou ouvrez une pièce déjà importée."}</p>
     {p && <article className="rounded-xl border p-5 space-y-4">
       <div className="flex justify-between gap-3"><h2 className="font-semibold break-all">{p.nom} · {statut(p)}</h2><button disabled={busy} className="underline" onClick={() => { setSelection(null); setEdition(false); }}>Fermer</button></div>
