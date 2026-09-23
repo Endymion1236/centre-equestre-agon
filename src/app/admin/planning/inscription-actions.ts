@@ -602,6 +602,123 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
   }
 };
 
+/**
+ * Prévenir le premier de la liste d'attente qu'une place s'est libérée.
+ *
+ * Extrait de `desinscrireCavalier` sans y changer une ligne, pour que le
+ * changement de groupe s'en serve aussi — et surtout pour qu'il n'en existe
+ * qu'une version : c'est ce code qui pose le hold de 24 h et envoie le mail,
+ * deux effets qu'on ne veut pas voir diverger d'un point d'appel à l'autre.
+ *
+ * `cid` est le créneau libéré, `c` son contenu déjà lu, `toast` le retour
+ * à l'écran. Ne lève jamais : une notification ratée ne doit pas faire
+ * échouer l'opération qui l'a déclenchée.
+ */
+export async function notifierListeAttenteSiPlaceLibre(
+  cid: string,
+  c: any,
+  toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void,
+) {
+  try {
+    const freshCSnap = await getDoc(doc(db, "creneaux", cid));
+    if (freshCSnap.exists()) {
+      const freshC = freshCSnap.data() as any;
+      const placesLibres = (freshC.maxPlaces || 0) - (freshC.enrolledCount || (freshC.enrolled || []).length);
+      if (placesLibres > 0) {
+        // Entrées « cours » (creneauId) + entrées « stage » (creneauIds
+        // contient tous les jours de la semaine). Statut filtré en mémoire
+        // côté array-contains : évite un nouvel index composite.
+        const [waitById, waitByDays] = await Promise.all([
+          getDocs(query(
+            collection(db, "waitlist"),
+            where("creneauId", "==", cid),
+            where("status", "==", "waiting"),
+          )),
+          getDocs(query(collection(db, "waitlist"), where("creneauIds", "array-contains", cid))),
+        ]);
+        const waitMap = new Map<string, any>();
+        waitById.docs.forEach(d => waitMap.set(d.id, { id: d.id, ...d.data() }));
+        waitByDays.docs.forEach(d => {
+          const data = d.data() as any;
+          if (data.status === "waiting") waitMap.set(d.id, { id: d.id, ...data });
+        });
+        const waiting = [...waitMap.values()]
+          .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+
+        // ── Règle métier : une attente de STAGE ne se notifie que si la
+        // SEMAINE ENTIÈRE redevient disponible. Sur un stage ouvert à la
+        // journée, la libération d'un seul jour ne doit prévenir personne :
+        // ces cas sont traités manuellement. Prévenir une famille pour une
+        // place qu'elle ne peut pas prendre serait pire que se taire.
+        const eligibles: any[] = [];
+        for (const w of waiting) {
+          const jours: string[] = Array.isArray(w.creneauIds) ? w.creneauIds : [];
+          // Entrée « cours » (ou stage d'un seul jour) : comportement inchangé.
+          if (!w.isStage || jours.length <= 1) { eligibles.push(w); continue; }
+          const snaps = await Promise.all(jours.map(id => getDoc(doc(db, "creneaux", id))));
+          const semaineLibre = snaps.every(sn => {
+            if (!sn.exists()) return false;
+            const d = sn.data() as any;
+            return ((d.maxPlaces || 0) - (d.enrolledCount || (d.enrolled || []).length)) > 0;
+          });
+          if (semaineLibre) eligibles.push(w);
+        }
+
+        if (eligibles.length > 0) {
+          const first = eligibles[0] as any;
+          // ── Réserver la place 24h pour cette famille (hold) ──
+          // Pendant 24h, cette place n'est plus proposée aux autres familles
+          // côté client. Le hold expire automatiquement (vérifié à la lecture)
+          // ou disparaît dès que l'enfant concerné est inscrit.
+          const holdUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+          const hold = {
+            familyId: first.familyId, childId: first.childId,
+            childName: first.childName, until: holdUntil,
+            waitlistEntryId: first.id,
+          };
+          // Stage : on réserve TOUS les jours de la semaine, sinon une autre
+          // famille pourrait prendre le mercredi pendant les 24h accordées.
+          const joursHold: string[] = first.isStage && Array.isArray(first.creneauIds) && first.creneauIds.length > 1
+            ? first.creneauIds
+            : [cid];
+          await Promise.all(joursHold.map(id => updateDoc(doc(db, "creneaux", id), { waitlistHold: hold })));
+          authFetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: first.familyEmail,
+              subject: `Une place s'est libérée — ${c.activityTitle}`,
+              context: "admin_place_liberee",
+              template: "placeLibereeNotif",
+              familyId: first.familyId,
+              creneauId: cid,
+              html: emailLayout([
+                emailTitre("Une place s'est libérée"),
+                P(`Bonjour <strong>${first.familyName}</strong>,`),
+                P(`Une place s'est libérée pour <strong>${first.childName}</strong>.`),
+                emailPanneau(c.activityTitle, [
+                  emailLigne(first.isStage && first.dateFin && first.dateFin !== first.date ? "Dates" : "Date",
+                    first.isStage && first.dateFin && first.dateFin !== first.date
+                      ? `du ${new Date(first.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} au ${new Date(first.dateFin).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}${first.nbJours ? ` (${first.nbJours} jours)` : ""}`
+                      : new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })),
+                  emailLigne("Horaire", `${c.startTime}–${c.endTime}`),
+                ].join("")),
+                P(`<strong>Cette place vous est réservée pendant 24 h</strong>, jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}. Passé ce délai, elle sera proposée aux autres familles.`),
+                emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(cid)}`),
+                P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
+                encadreConditionsPourType(c.activityType),
+                emailSignature(),
+              ].join("\n"), `Place disponible — ${c.activityTitle}`),
+            }),
+          }).catch(() => {});
+          await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString(), holdUntil });
+          toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — ${first.isStage ? "semaine" : "place"} réservée 24h`, "success");
+        }
+      }
+    }
+  } catch (e) { console.error("Erreur waitlist auto:", e); }
+}
+
 export async function desinscrireCavalier(ctx: ContexteInscription, cid: string, childId: string) {
   const {
     creneaux, families, payments, allForfaits,
@@ -1060,104 +1177,7 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
   }
 
   // ── Waitlist automatique : notifier le premier en attente si place libérée ──
-  try {
-    const freshCSnap = await getDoc(doc(db, "creneaux", cid));
-    if (freshCSnap.exists()) {
-      const freshC = freshCSnap.data() as any;
-      const placesLibres = (freshC.maxPlaces || 0) - (freshC.enrolledCount || (freshC.enrolled || []).length);
-      if (placesLibres > 0) {
-        // Entrées « cours » (creneauId) + entrées « stage » (creneauIds
-        // contient tous les jours de la semaine). Statut filtré en mémoire
-        // côté array-contains : évite un nouvel index composite.
-        const [waitById, waitByDays] = await Promise.all([
-          getDocs(query(
-            collection(db, "waitlist"),
-            where("creneauId", "==", cid),
-            where("status", "==", "waiting"),
-          )),
-          getDocs(query(collection(db, "waitlist"), where("creneauIds", "array-contains", cid))),
-        ]);
-        const waitMap = new Map<string, any>();
-        waitById.docs.forEach(d => waitMap.set(d.id, { id: d.id, ...d.data() }));
-        waitByDays.docs.forEach(d => {
-          const data = d.data() as any;
-          if (data.status === "waiting") waitMap.set(d.id, { id: d.id, ...data });
-        });
-        const waiting = [...waitMap.values()]
-          .sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
-
-        // ── Règle métier : une attente de STAGE ne se notifie que si la
-        // SEMAINE ENTIÈRE redevient disponible. Sur un stage ouvert à la
-        // journée, la libération d'un seul jour ne doit prévenir personne :
-        // ces cas sont traités manuellement. Prévenir une famille pour une
-        // place qu'elle ne peut pas prendre serait pire que se taire.
-        const eligibles: any[] = [];
-        for (const w of waiting) {
-          const jours: string[] = Array.isArray(w.creneauIds) ? w.creneauIds : [];
-          // Entrée « cours » (ou stage d'un seul jour) : comportement inchangé.
-          if (!w.isStage || jours.length <= 1) { eligibles.push(w); continue; }
-          const snaps = await Promise.all(jours.map(id => getDoc(doc(db, "creneaux", id))));
-          const semaineLibre = snaps.every(sn => {
-            if (!sn.exists()) return false;
-            const d = sn.data() as any;
-            return ((d.maxPlaces || 0) - (d.enrolledCount || (d.enrolled || []).length)) > 0;
-          });
-          if (semaineLibre) eligibles.push(w);
-        }
-
-        if (eligibles.length > 0) {
-          const first = eligibles[0] as any;
-          // ── Réserver la place 24h pour cette famille (hold) ──
-          // Pendant 24h, cette place n'est plus proposée aux autres familles
-          // côté client. Le hold expire automatiquement (vérifié à la lecture)
-          // ou disparaît dès que l'enfant concerné est inscrit.
-          const holdUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-          const hold = {
-            familyId: first.familyId, childId: first.childId,
-            childName: first.childName, until: holdUntil,
-            waitlistEntryId: first.id,
-          };
-          // Stage : on réserve TOUS les jours de la semaine, sinon une autre
-          // famille pourrait prendre le mercredi pendant les 24h accordées.
-          const joursHold: string[] = first.isStage && Array.isArray(first.creneauIds) && first.creneauIds.length > 1
-            ? first.creneauIds
-            : [cid];
-          await Promise.all(joursHold.map(id => updateDoc(doc(db, "creneaux", id), { waitlistHold: hold })));
-          authFetch("/api/send-email", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              to: first.familyEmail,
-              subject: `Une place s'est libérée — ${c.activityTitle}`,
-              context: "admin_place_liberee",
-              template: "placeLibereeNotif",
-              familyId: first.familyId,
-              creneauId: cid,
-              html: emailLayout([
-                emailTitre("Une place s'est libérée"),
-                P(`Bonjour <strong>${first.familyName}</strong>,`),
-                P(`Une place s'est libérée pour <strong>${first.childName}</strong>.`),
-                emailPanneau(c.activityTitle, [
-                  emailLigne(first.isStage && first.dateFin && first.dateFin !== first.date ? "Dates" : "Date",
-                    first.isStage && first.dateFin && first.dateFin !== first.date
-                      ? `du ${new Date(first.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} au ${new Date(first.dateFin).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}${first.nbJours ? ` (${first.nbJours} jours)` : ""}`
-                      : new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })),
-                  emailLigne("Horaire", `${c.startTime}–${c.endTime}`),
-                ].join("")),
-                P(`<strong>Cette place vous est réservée pendant 24 h</strong>, jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}. Passé ce délai, elle sera proposée aux autres familles.`),
-                emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(cid)}`),
-                P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
-                encadreConditionsPourType(c.activityType),
-                emailSignature(),
-              ].join("\n"), `Place disponible — ${c.activityTitle}`),
-            }),
-          }).catch(() => {});
-          await updateDoc(doc(db, "waitlist", first.id), { status: "notified", notifiedAt: new Date().toISOString(), holdUntil });
-          toast(`🔔 ${first.childName} (liste d'attente) notifié(e) — ${first.isStage ? "semaine" : "place"} réservée 24h`, "success");
-        }
-      }
-    }
-  } catch (e) { console.error("Erreur waitlist auto:", e); }
+  await notifierListeAttenteSiPlaceLibre(cid, c, toast);
 
   const fresh = await refreshCreneaux();
   const upd = fresh.find(x => x.id === cid);

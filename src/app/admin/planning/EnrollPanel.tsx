@@ -37,6 +37,7 @@ import { SepaWarning } from "./SepaWarning";
 import { BandeauPrenotificationSepa } from "@/components/admin/BandeauPrenotificationSepa";
 import { FormulaireAjoutCavalier } from "./FormulaireAjoutCavalier";
 import { PanneauJoursSupplementaires } from "./PanneauJoursSupplementaires";
+import { ModaleChangerGroupe } from "./ModaleChangerGroupe";
 import * as actions from "./enroll-panel-actions";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
@@ -99,6 +100,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // conditions reunies.
   const [preinscription, setPreinscription] = useState(false);
   const [conversion, setConversion] = useState<string | null>(null);
+  // ── Changer de groupe ──
+  // Déplacer un cavalier d'un stage à un autre sans le désinscrire : la
+  // commande et l'acompte suivent (cf. lib/changement-groupe).
+  const [changerGroupePour, setChangerGroupePour] = useState<{ childId: string; childName: string } | null>(null);
   const convertirPreinscription = (e: any) => actions.convertirPreinscription(ctxActions(), rappelsActions(), e);
 
   /**
@@ -1074,6 +1079,14 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 hover:text-purple-800 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-purple-50 flex-shrink-0 disabled:opacity-40">
                       {unenrollingSaison === e.childId ? <Loader2 size={12} className="animate-spin" /> : <span>🏫</span>}
                       <span className="hidden sm:inline">Retirer de la saison</span>
+                    </button>
+                  )}
+                  {isStage && !(e as any).preinscription && (
+                    <button type="button" onClick={() => setChangerGroupePour({ childId: e.childId, childName: e.childName })}
+                      title={`Déplacer ${e.childName} vers un autre groupe ou un autre stage, sans perdre l'acompte`}
+                      className="flex items-center gap-1 font-body text-xs font-semibold text-blue-500 hover:text-blue-700 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-blue-50 flex-shrink-0">
+                      <span>🔀</span>
+                      <span className="hidden sm:inline">Changer de groupe</span>
                     </button>
                   )}
                   <button type="button" onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
@@ -2297,6 +2310,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           );
         })()}
       </div>
+
+      {changerGroupePour && (
+        <ModaleChangerGroupe
+          creneau={creneau}
+          childId={changerGroupePour.childId}
+          childName={changerGroupePour.childName}
+          creneauxConnus={allCreneaux}
+          onClose={() => setChangerGroupePour(null)}
+          onDone={async () => { await onRefresh?.(); }}
+          toast={panelToast}
+        />
+      )}
     </div>
   );
 }

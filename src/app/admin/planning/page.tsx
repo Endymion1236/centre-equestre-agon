@@ -1184,7 +1184,7 @@ export default function PlanningPage() {
         />
       )}
 
-      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll} onRefresh={async ()=>{await refreshCreneaux(); try { const fs = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif"))); setAllForfaits(fs.docs.map(d => ({ id: d.id, ...d.data() }))); } catch(e){} }}/>}
+      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll} onRefresh={async ()=>{const fresh = await refreshCreneaux(); const maj = fresh.find(x=>x.id===selectedCreneau.id); if (maj) setSelectedCreneau(maj); try { const fs = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif"))); setAllForfaits(fs.docs.map(d => ({ id: d.id, ...d.data() }))); } catch(e){} }}/>}
 
       {/* ── Modal suppression créneau ── */}
       {deleteCreneau && (
