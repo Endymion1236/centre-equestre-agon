@@ -3,20 +3,21 @@ import { authFetch } from "@/lib/auth-fetch";
 import { BandeauPrenotificationSepa } from "@/components/admin/BandeauPrenotificationSepa";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from "firebase/firestore";
+import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, serverTimestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge, Button } from "@/components/ui";
 import { useToast } from "@/components/ui/Toast";
 import { generateSepaXml, regrouperParMandat, SEPA_CREDITOR } from "@/lib/sepa";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { etatCommandeApresRemise } from "@/lib/sepa-remise";
+import { planifierAnnulationEcheancier } from "./annulation-echeancier-utils";
 import type { SepaTransaction, SepaRemise } from "@/lib/sepa";
 import { validateIban, validateBic, formatIban } from "@/lib/sepa-validation";
 import type { Family } from "@/types";
 import {
   Search, Plus, X, Save, Loader2, Download, Check, ChevronDown, ChevronUp,
   Building2, Users, Calendar, CreditCard, FileText, Trash2, CheckSquare, Square,
-  AlertTriangle,
+  AlertTriangle, Ban,
 } from "lucide-react";
 
 // ═══ Types ═══
@@ -764,6 +765,38 @@ export default function SepaPage() {
     fetchAll();
   };
 
+  // ─── Annuler tout l'échéancier d'une commande (créé par erreur) ───
+  // La corbeille ne retirait qu'une échéance, et la commande restait
+  // « prélèvement planifié » : absente des impayés, impossible à replanifier.
+  // Règles dans annulation-echeancier-utils.ts.
+  const handleAnnulerEcheancier = async (ech: EcheanceSepa) => {
+    const commande = payments.find((p: any) => (ech.paymentId && p.id === ech.paymentId) || (ech.orderId && p.orderId === ech.orderId));
+    if (!commande) { toast("Commande introuvable pour cette échéance : supprimez les échéances une par une.", "error"); return; }
+    const plan = planifierAnnulationEcheancier(commande.id, echeances, commande);
+    if (!plan.possible) { toast(plan.raison || "Annulation impossible", "error"); return; }
+    if (!confirm(
+      `Annuler l'échéancier de ${ech.familyName} ?\n\n`
+      + `${plan.aRetirer.length} échéance(s) à venir seront supprimées (${plan.montantRetire.toFixed(2)} €).\n`
+      + `La commande de ${(Number(commande.totalTTC) || 0).toFixed(2)} € repassera « ${plan.commande.status === "pending" ? "en attente" : "partiellement réglée"} » et réapparaîtra dans les impayés.\n\n`
+      + `Vous pourrez ensuite corriger la commande et refaire le bon échéancier depuis les impayés.`
+    )) return;
+    try {
+      for (const id of plan.aRetirer) await deleteDoc(doc(db, "echeances-sepa", id));
+      await updateDoc(doc(db, "payments", commande.id), {
+        status: plan.commande.status,
+        sepaRestant: deleteField(),
+        paymentRef: plan.commande.paymentRef,
+        ...(plan.commande.paymentMode !== undefined ? { paymentMode: plan.commande.paymentMode } : {}),
+        echeancierAnnuleLe: new Date().toISOString(),
+        updatedAt: serverTimestamp(),
+      });
+      toast(`Échéancier annulé : ${plan.aRetirer.length} échéance(s) supprimée(s). La commande est de retour dans les impayés.`, "success");
+    } catch (e: any) {
+      toast(`Annulation interrompue : ${e?.message || e}. Relancez-la, elle reprendra les échéances restantes.`, "error");
+    }
+    fetchAll();
+  };
+
   // ─── Decaler toutes les echeances d'une serie a partir d'une nouvelle date ───
   // Cas d'usage : on inscrit en mai mais on veut que le 1er prelevement parte
   // en septembre. Au lieu de modifier 10 dates a la main, on choisit la nouvelle
@@ -1391,6 +1424,14 @@ export default function SepaPage() {
                           title={`Décaler les ${ech.echeancesTotal} échéances de cette série`}
                           className="w-8 flex justify-center text-blue-400 hover:text-blue-600 bg-transparent border-none cursor-pointer">
                           📅
+                        </button>
+                      )}
+                      {ech.echeance === 1 && ech.status === "pending" && (
+                        <button type="button"
+                          onClick={() => handleAnnulerEcheancier(ech)}
+                          title="Annuler tout l'échéancier de cette commande (échéances à venir), pour le refaire"
+                          className="w-8 flex justify-center text-gray-300 hover:text-red-600 bg-transparent border-none cursor-pointer">
+                          <Ban size={13} />
                         </button>
                       )}
                       <button type="button" onClick={() => handleDeleteEcheance(ech.id)} className="w-10 flex justify-end text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer">
