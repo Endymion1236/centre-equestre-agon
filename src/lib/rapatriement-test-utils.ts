@@ -1,7 +1,7 @@
 /**
  * src/lib/rapatriement-test-utils.ts — rapatrier en production le travail
  * fait sur la préversion test : justificatifs, dépenses lues sur les relevés,
- * tableau des opérations. Module pur, sans Firebase : il reçoit ce que lit la
+ * tableau des opérations, écritures importées de Céleris. Module pur, sans Firebase : il reçoit ce que lit la
  * route et rend ce qu'il faut créer.
  *
  * Pourquoi : jusqu'au 23/09/2026, justificatifs et relevés n'existaient que
@@ -37,6 +37,9 @@ export const COLLECTIONS_RAPATRIEES = [
   "imports-bancaires-liens",
   "imports-bancaires-historique",
   "tableau-depenses-historique",
+  // Écritures importées de Céleris (juillet-août 2026), un document par mois,
+  // jamais modifié après import : créé en production s'il y manque.
+  "historiqueComptableCeleris",
 ] as const;
 
 export type CollectionRapatriee = (typeof COLLECTIONS_RAPATRIEES)[number];

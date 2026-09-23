@@ -120,6 +120,17 @@ test("même mois, montant et fournisseur sous un autre identifiant : signalé", 
   assert.deepEqual(plan.doublonsProbables.map((d) => [d.idTest, d.idProd]), [["pdf_1", "aleatoire"]]);
 });
 
+console.log("\n── Écritures Céleris ──");
+test("un mois Céleris absent de la production est créé, un mois présent est laissé", () => {
+  const plan = planifierRapatriement({
+    test: { historiqueComptableCeleris: [{ id: "2026-07", data: { mois: "2026-07" } }, { id: "2026-08", data: { mois: "2026-08" } }] },
+    idsProd: { historiqueComptableCeleris: new Set(["2026-07"]) },
+    depensesProd: [],
+  });
+  assert.deepEqual(plan.aCreer.historiqueComptableCeleris.map((d) => d.id), ["2026-08"]);
+  assert.equal(plan.dejaPresents.historiqueComptableCeleris, 1);
+});
+
 console.log("\n── Fichiers ──");
 test("ne copier que les fichiers des pièces présentes et absents en production", () => {
   const r = fichiersACopier(

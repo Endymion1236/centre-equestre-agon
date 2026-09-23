@@ -116,7 +116,7 @@ export default function JustificatifsPage() {
   const [apercuRapatriement, setApercuRapatriement] = useState<ApercuRapatriement | null>(null);
   const LIBELLES_RAPATRIEMENT: Record<string, string> = {
     justificatifs: "Pièces justificatives", "justificatifs-liens": "Associations pièce ↔ dépense", depenses: "Dépenses",
-    "mouvements-rapprochement": "Autres opérations du tableau", "fournisseurs-alias": "Noms de fournisseurs appris",
+    "mouvements-rapprochement": "Autres opérations du tableau", "fournisseurs-alias": "Noms de fournisseurs appris", historiqueComptableCeleris: "Écritures Céleris (mois importés)",
   };
   async function appelRapatriement(body: object) {
     const r = await authFetch(`${endpoint}/rapatrier-test`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -213,7 +213,7 @@ export default function JustificatifsPage() {
     </section>
     {!(drive?.base || "").toLowerCase().includes("test") && <section className="rounded-xl border border-amber-300 bg-amber-50 p-5 space-y-2">
       <p className="font-semibold">Rapatrier le travail fait sur la préversion test</p>
-      <p className="text-sm">Pièces justificatives et leurs fichiers, dépenses lues sur les relevés, autres opérations du tableau, associations et noms de fournisseurs appris. Seul ce qui manque en production est ajouté ; rien n&apos;est modifié ni effacé, on peut relancer sans créer de doublon.</p>
+      <p className="text-sm">Pièces justificatives et leurs fichiers, dépenses lues sur les relevés, autres opérations du tableau, associations, noms de fournisseurs appris et écritures Céleris importées. Seul ce qui manque en production est ajouté ; rien n&apos;est modifié ni effacé, on peut relancer sans créer de doublon.</p>
       {!apercuRapatriement
         ? <button disabled={busy} className="rounded bg-amber-700 px-4 py-2 text-white disabled:opacity-40" onClick={() => void voirRapatriement()}>Voir ce qui serait rapatrié</button>
         : <div className="space-y-2 text-sm">

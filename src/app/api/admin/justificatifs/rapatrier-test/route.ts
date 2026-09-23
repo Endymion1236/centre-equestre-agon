@@ -2,7 +2,7 @@
  * POST /api/admin/justificatifs/rapatrier-test
  *
  * Rapatrie en PRODUCTION les justificatifs, dépenses lues sur les relevés et
- * le tableau des opérations faits sur la préversion test (règles dans
+ * le tableau des opérations et les écritures Céleris importés sur la préversion test (règles dans
  * lib/rapatriement-test-utils). Trois étapes, appelées par l'écran Pièces :
  *
  *   { etape: "apercu" }                          → ce qui serait créé, rien n'est écrit ;
@@ -39,6 +39,7 @@ export const maxDuration = 60;
 
 const MOT_CLE = "RAPATRIER-DEPUIS-TEST";
 const TAILLE_LOT = 400;
+const POIDS_LOT = 4_000_000;
 const BUDGET_MS = 45_000;
 const PREFIXE = "justificatifs-prives/";
 
@@ -113,12 +114,18 @@ export async function POST(req: NextRequest) {
         const parent = h.ref.parent.parent?.path;
         if (parent && parents.has(parent)) ecritures.push({ chemin: h.ref.path, data: h.data() });
       }
-      for (let i = 0; i < ecritures.length; i += TAILLE_LOT) {
-        const lot = adminDb.batch();
-        for (const e of ecritures.slice(i, i + TAILLE_LOT)) lot.create(adminDb.doc(e.chemin), e.data);
-        await lot.commit();
-        crees += Math.min(TAILLE_LOT, ecritures.length - i);
+      // Lots bornés en nombre ET en poids : un mois Céleris pèse jusqu'à
+      // 700 ko, et Firestore refuse un lot au-delà d'environ 10 Mo.
+      let lot = adminDb.batch(), nb = 0, poids = 0;
+      for (const e of ecritures) {
+        const taille = JSON.stringify(e.data).length;
+        if (nb > 0 && (nb >= TAILLE_LOT || poids + taille > POIDS_LOT)) {
+          await lot.commit(); crees += nb;
+          lot = adminDb.batch(); nb = 0; poids = 0;
+        }
+        lot.create(adminDb.doc(e.chemin), e.data); nb++; poids += taille;
       }
+      if (nb > 0) { await lot.commit(); crees += nb; }
       await adminDb.collection("rapatriements-test").add({
         source: baseTest, uid: auth.uid, at: FieldValue.serverTimestamp(),
         documentsCrees: crees, ...resume(plan),
