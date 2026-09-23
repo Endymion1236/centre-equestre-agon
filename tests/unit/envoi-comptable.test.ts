@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   adressesComptable,
   construireColisComptable,
+  fecDuMois,
   corpsEmailComptable,
   facturesDuMois,
   moisParisDeSecondes,
@@ -69,7 +70,7 @@ test("le résumé compte ce qui part", () => {
     nbDepenses: 1, totalDepenses: 420.5,
     // Le FEC : la facture Enaux (VE) et ses deux règlements du mois (RG),
     // virement et contre-passation, tous deux au compte bancaire du cabinet.
-    fec: { fichier: "FEC_202609.txt", ecrituresVentes: 1, ecrituresReglements: 2, anomalies: [], nbAnomalies: 0, comptesAConfirmer: [] },
+    fec: { fichier: "FEC_202609.txt", source: "application", ecrituresVentes: 1, ecrituresReglements: 2, anomalies: [], nbAnomalies: 0, comptesAConfirmer: [] },
   });
 });
 
@@ -96,6 +97,10 @@ test("un mois tenu dans Céleris joint ses écritures et le dit dans le résumé
   assert.ok(piece!.contenu.includes('"Stage; été"'), "le point-virgule du libellé est protégé");
   assert.ok(piece!.contenu.includes("0.00;50.00"), "montants en euros");
   assert.ok(corpsEmailComptable({ mois: "2026-07", resume: avecCeleris.resume, pieces: [], nomCentre: "CE" }).includes("tenu dans Céleris"));
+  // Le FEC du mois reprend les écritures Céleris.
+  assert.equal(avecCeleris.resume.fec?.source, "celeris");
+  const fec = avecCeleris.pieces.find((p) => p.filename === "FEC_202607.txt")!.contenu;
+  assert.match(fec, /^VT\tVentes\t1\t20260703\t70600000\tPrestations/m);
   // Sans écritures : ni pièce, ni résumé.
   assert.equal(construireColisComptable({ mois: "2026-07", payments: [], encaissements: [], depenses: [], celeris: { lignes: [], totaux: { ht: 0, tva: 0, ttc: 0 } } }).resume.celeris, undefined);
 });
@@ -122,6 +127,17 @@ test("le FEC ne contient que les factures du mois", () => {
   const fec = colis.pieces.find((p) => p.filename === "FEC_202609.txt")!.contenu;
   assert.match(fec, /Enaux/);
   assert.doesNotMatch(fec, /Durand/);
+});
+
+test("mois Céleris : les saisies de l'application ce mois-là ne sont pas reprises, et c'est dit", () => {
+  const r = fecDuMois({ mois: "2026-08", factures: [payments[2]], encaissements: [encaissements[1]], payments,
+    celeris: { lignes: [
+      { journal: "VT", compte: "41100000", piece: "F9", date: "2026-08-20", debit: 11400, credit: 0, libelle: "Stage", libelleCompte: "Clients" },
+      { journal: "VT", compte: "70611400", piece: "F9", date: "2026-08-20", debit: 0, credit: 11400, libelle: "Stage", libelleCompte: "Stages" },
+    ] } });
+  assert.equal(r.source, "celeris");
+  assert.doesNotMatch(r.contenu, /Durand/);
+  assert.ok(r.anomalies.some((a) => /1 facture\(s\) et 1 encaissement\(s\)/.test(a)));
 });
 
 console.log("\n── Destinataires ──");

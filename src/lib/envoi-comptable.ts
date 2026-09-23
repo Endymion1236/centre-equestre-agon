@@ -20,7 +20,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { genererPdfSyntheseCompta } from "@/lib/compta-synthese-pdf";
-import { adressesComptable, construireColisComptable, corpsEmailComptable, nomMoisLong } from "@/lib/envoi-comptable-utils";
+import { adressesComptable, construireColisComptable, corpsEmailComptable, encaissementsDuMois, facturesDuMois, fecDuMois, nomMoisLong } from "@/lib/envoi-comptable-utils";
 import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -67,6 +67,30 @@ function normaliserDate(d: any) {
 function normaliserDoc(snap: FirebaseFirestore.QueryDocumentSnapshot) {
   const data = snap.data() as any;
   return { id: snap.id, ...data, date: normaliserDate(data.date) };
+}
+
+/**
+ * Le FEC d'un mois, construit côté serveur : c'est le seul endroit qui lit à
+ * la fois la caisse et les écritures Céleris (interdites au navigateur).
+ * Même fonction que l'envoi mensuel (fecDuMois) : le fichier téléchargé est
+ * celui que reçoit le cabinet.
+ */
+export async function chargerFecMois(mois: string) {
+  const [paySnap, encSnap, celerisSnap, club] = await Promise.all([
+    adminDb.collection("payments").get(),
+    adminDb.collection("encaissements").get(),
+    adminDb.collection("historiqueComptableCeleris").doc(mois).get().catch(() => null),
+    getClubInfo(),
+  ]);
+  const payments = paySnap.docs.map(normaliserDoc);
+  const encaissements = encSnap.docs.map(normaliserDoc);
+  const celerisDoc = celerisSnap?.exists ? (celerisSnap.data() as any) : null;
+  const factures = facturesDuMois(payments, mois).sort((a: any, b: any) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
+  return fecDuMois({
+    mois, factures, encaissements: encaissementsDuMois(encaissements, mois), payments,
+    celeris: celerisDoc && Array.isArray(celerisDoc.lignes) ? { lignes: celerisDoc.lignes } : null,
+    siret: club.siret,
+  });
 }
 
 export async function envoyerEcrituresComptable(params: {

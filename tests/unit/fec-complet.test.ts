@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/fec-complet.test.ts
  */
 import assert from "node:assert/strict";
-import { construireFecComplet, nomFichierFec } from "../../src/lib/fec-complet";
+import { construireFecCeleris, construireFecComplet, libelleJournal, nomFichierFec } from "../../src/lib/fec-complet";
 import { ENTETE_FEC } from "../../src/app/admin/comptabilite/fec-utils";
 
 let passes = 0;
@@ -103,6 +103,39 @@ test("résumé : écritures et totaux", () => {
   assert.equal(fec.resume.ventes.ecritures, 3);
   assert.equal(fec.resume.reglements.ecritures, 5);
   assert.equal(fec.resume.reglements.total, 436.5);
+});
+
+console.log("\n── Mois tenus dans Céleris ──");
+test("les écritures Céleris deviennent un FEC : une écriture par pièce, en euros, chronologique", () => {
+  const r = construireFecCeleris([
+    { journal: "VTE", compte: "70611400", piece: "F2", date: "2026-08-02", debit: 0, credit: 10000, libelle: "Stage", libelleCompte: "Stages" },
+    { journal: "VTE", compte: "41100000", piece: "F2", date: "2026-08-02", debit: 10550, credit: 0, libelle: "Stage", libelleCompte: "Clients" },
+    { journal: "VTE", compte: "44571200", piece: "F2", date: "2026-08-02", debit: 0, credit: 550, libelle: "TVA", libelleCompte: "TVA 5,5" },
+    { journal: "BQ1", compte: "51200000", piece: "R1", date: "2026-08-01", debit: 5000, credit: 0, libelle: "Remise", libelleCompte: "Banque" },
+    { journal: "BQ1", compte: "41100000", piece: "R1", date: "2026-08-01", debit: 0, credit: 5000, libelle: "Remise", libelleCompte: "Clients" },
+  ]);
+  const ls = r.contenu.split("\n").filter(Boolean);
+  assert.equal(ls[0], ENTETE_FEC);
+  assert.equal(r.ecritures, 2);
+  assert.deepEqual(ls.slice(1).map((l) => cols(l).slice(0, 5).concat(cols(l).slice(11, 13))), [
+    ["BQ1", "Banque", "1", "20260801", "51200000", "50.00", ""],
+    ["BQ1", "Banque", "1", "20260801", "41100000", "", "50.00"],
+    ["VTE", "Ventes", "2", "20260802", "70611400", "", "100.00"],
+    ["VTE", "Ventes", "2", "20260802", "41100000", "105.50", ""],
+    ["VTE", "Ventes", "2", "20260802", "44571200", "", "5.50"],
+  ]);
+  for (const l of ls) assert.equal(cols(l).length, 18);
+  assert.deepEqual(r.anomalies, []);
+});
+
+test("un montant négatif Céleris passe du côté opposé ; journal inconnu gardé tel quel", () => {
+  const r = construireFecCeleris([
+    { journal: "ZZ", compte: "41100000", piece: "A1", date: "2026-07-05", debit: -1200, credit: 0, libelle: "Avoir", libelleCompte: "Clients" },
+    { journal: "ZZ", compte: "70611000", piece: "A1", date: "2026-07-05", debit: 0, credit: -1200, libelle: "Avoir", libelleCompte: "Forfaits" },
+  ]);
+  const ls = r.contenu.split("\n").filter(Boolean).slice(1);
+  assert.deepEqual(ls.map((l) => [cols(l)[1], cols(l)[4], cols(l)[11], cols(l)[12]]), [["ZZ", "41100000", "", "12.00"], ["ZZ", "70611000", "12.00", ""]]);
+  assert.equal(libelleJournal("OD"), "Opérations diverses");
 });
 
 console.log("\n── Nom du fichier ──");

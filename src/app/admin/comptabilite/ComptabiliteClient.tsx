@@ -3,15 +3,13 @@
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { collection, getDocs, query, orderBy, getDoc, doc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, FileText, Building2, Receipt, Calculator, Printer, Sparkles, Bot, EyeOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
-import { construireFecComplet, nomFichierFec } from "@/lib/fec-complet";
-import { encaissementsDuMois } from "@/lib/envoi-comptable-utils";
 import PanneauxDebug from "./PanneauxDebug";
 import OngletRemise from "./OngletRemise";
 import { useRapprochement } from "./useRapprochement";
@@ -113,14 +111,6 @@ export default function ComptabilitePage() {
   };
 
   useEffect(() => { fetchData(); }, []);
-  // SIRET du club (Paramètres → Identité) : le FEC téléchargé prend le nom
-  // réglementaire SIREN + FEC + fin de mois, comme celui envoyé au cabinet.
-  const [siretClub, setSiretClub] = useState("");
-  useEffect(() => {
-    getDoc(doc(db, "settings", "centre"))
-      .then((snap) => setSiretClub(String((snap.data() as any)?.siret || "")))
-      .catch(() => setSiretClub(""));
-  }, []);
 
   // Le rapprochement bancaire — lecture du relevé, rapprochement automatique
   // et report dans la base — vit dans son propre hook (useRapprochement.ts).
@@ -267,32 +257,31 @@ export default function ComptabilitePage() {
     }
   };
 
-  const generateFEC = () => {
-    // Le même FEC que celui envoyé au cabinet : ventes (VE) et règlements
-    // clients (RG) du mois, cf. lib/fec-complet.
-    const numeros = new Map<string, string>(payments.filter((p: any) => p?.id && p?.invoiceNumber).map((p: any) => [String(p.id), String(p.invoiceNumber)]));
-    const { contenu: content, anomalies } = construireFecComplet({
-      factures: filteredPayments as any,
-      encaissements: encaissementsDuMois(encaissementsCompta, period),
-      numeroFactureDe: (id) => numeros.get(id),
-    });
-
-    // Le fichier reste équilibré quoi qu'il arrive ; ce qui mérite un regard
-    // (écart de ventilation, prestation ou mode de règlement non reconnu)
-    // est dit avant l'envoi plutôt qu'à la relecture du cabinet.
-    if (anomalies.length > 0) {
-      const detail = anomalies.slice(0, 8).map((a) => `• ${a}`).join("\n");
-      const reste = anomalies.length > 8 ? `\n… et ${anomalies.length - 8} autre(s).` : "";
-      alert(`${anomalies.length} point(s) à regarder dans le FEC :\n\n${detail}${reste}\n\nLe fichier est quand même équilibré et téléchargé.`);
+  // Le FEC du mois, construit par le serveur : le même fichier que celui de
+  // l'envoi mensuel au cabinet, et le seul moyen d'y mettre les écritures
+  // Céleris de juillet-août (le navigateur n'a pas le droit de les lire).
+  const generateFEC = async () => {
+    try {
+      const res = await authFetch(`/api/admin/fec?mois=${period}`);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.contenu) { alert(`FEC indisponible : ${data?.error || `erreur ${res.status}`}`); return; }
+      const anomalies: string[] = data.anomalies || [];
+      // Le fichier reste équilibré ; ce qui mérite un regard est dit avant l'envoi.
+      if (anomalies.length > 0) {
+        const detail = anomalies.slice(0, 8).map((a) => `• ${a}`).join("\n");
+        const reste = anomalies.length > 8 ? `\n… et ${anomalies.length - 8} autre(s).` : "";
+        alert(`${anomalies.length} point(s) à regarder dans le FEC :\n\n${detail}${reste}\n\nLe fichier est quand même équilibré et téléchargé.`);
+      }
+      const blob = new Blob([data.contenu], { type: "text/tab-separated-values;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.fichier;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(`FEC indisponible : ${e?.message || e}`);
     }
-
-    const blob = new Blob([content], { type: "text/tab-separated-values;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = nomFichierFec(siretClub, period);
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const nbIgnores = bankLines.filter(b => b.matched && b.matchType === "Ignoré").length;
@@ -631,9 +620,10 @@ export default function ComptabilitePage() {
                 <div className="font-body text-sm font-semibold text-blue-800">TXT (TAB)</div>
               </div>
             </div>
-            <button onClick={generateFEC} disabled={filteredPayments.length === 0}
-              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all
-                ${filteredPayments.length === 0 ? "bg-gray-200 text-slate-500" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
+            {/* Toujours actif : un mois sans facture dans l'application (juillet-
+                août 2026, tenus dans Céleris) a quand même son FEC. */}
+            <button onClick={generateFEC}
+              className="flex items-center gap-2 px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all bg-blue-500 text-white hover:bg-blue-400">
               <Download size={16} /> Télécharger le FEC — {period}
             </button>
           </Card>

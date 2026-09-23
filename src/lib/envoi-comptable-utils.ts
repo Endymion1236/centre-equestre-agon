@@ -20,7 +20,7 @@ import {
   construireExportEncaissements,
   construireExportFactures,
 } from "@/app/admin/comptabilite/exports-csv-utils";
-import { construireFecComplet, nomFichierFec } from "@/lib/fec-complet";
+import { construireFecCeleris, construireFecComplet, nomFichierFec, type CompteFec } from "@/lib/fec-complet";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
 
 import { bilanVentilationAchats, construireExportVentilationAchats } from "@/lib/ventilation-achats";
@@ -50,7 +50,7 @@ export interface ResumeColis {
    */
   celeris?: { nombre: number; ht: number; tva: number; ttc: number };
   /** Le FEC joint : ventes (VE) et règlements clients (RG). */
-  fec?: { fichier: string; ecrituresVentes: number; ecrituresReglements: number; anomalies: string[]; nbAnomalies: number; comptesAConfirmer: { compte: string; libelle: string }[] };
+  fec?: { fichier: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; anomalies: string[]; nbAnomalies: number; comptesAConfirmer: { compte: string; libelle: string }[] };
 }
 
 /** Une écriture importée de Céleris, montants en centimes (lib/import-comptable-celeris). */
@@ -137,16 +137,16 @@ export function construireColisComptable(params: {
     resume.celeris = { nombre: celeris.lignes.length, ht: arrondi(celeris.totaux.ht / 100), tva: arrondi(celeris.totaux.tva / 100), ttc: arrondi(celeris.totaux.ttc / 100) };
   }
 
-  const numeros = new Map<string, string>(params.payments.filter((p) => p?.id && p?.invoiceNumber).map((p) => [String(p.id), String(p.invoiceNumber)]));
-  const fec = construireFecComplet({ factures, encaissements, numeroFactureDe: (id) => numeros.get(id), maintenant });
-  const fichierFec = nomFichierFec(params.siret, mois);
+  const fec = fecDuMois({ mois, factures, encaissements, payments: params.payments, celeris, siret: params.siret, maintenant });
+  const fichierFec = fec.fichier;
   resume.fec = {
-    fichier: fichierFec,
-    ecrituresVentes: fec.resume.ventes.ecritures,
-    ecrituresReglements: fec.resume.reglements.ecritures,
+    fichier: fec.fichier,
+    source: fec.source,
+    ecrituresVentes: fec.ecrituresVentes,
+    ecrituresReglements: fec.ecrituresReglements,
     anomalies: fec.anomalies.slice(0, 10),
     nbAnomalies: fec.anomalies.length,
-    comptesAConfirmer: fec.resume.comptesAConfirmer,
+    comptesAConfirmer: fec.comptesAConfirmer,
   };
 
   const csv = "text/csv; charset=utf-8";
@@ -166,6 +166,48 @@ export function construireColisComptable(params: {
   ];
 
   return { mois, factures, encaissements, depenses, pieces, resume };
+}
+
+/**
+ * Le FEC d'un mois : celui de l'application, ou, pour un mois tenu dans
+ * Céleris (juillet-août 2026), la réécriture de ses écritures importées.
+ * Une seule fonction, lue par l'envoi mensuel et par le téléchargement.
+ *
+ * Mois Céleris : les ventes et règlements saisis AUSSI dans l'application
+ * ce mois-là (essais en parallèle) ne sont pas repris — Céleris est la
+ * comptabilité de ces mois — mais ils sont signalés.
+ */
+export function fecDuMois(params: {
+  mois: string;
+  /** Déjà filtrées sur le mois (facturesDuMois / encaissementsDuMois). */
+  factures: any[];
+  encaissements: any[];
+  /** Toutes les commandes, pour retrouver le numéro de facture d'un règlement. */
+  payments: any[];
+  celeris?: { lignes: EcritureCelerisColis[] } | null;
+  siret?: string;
+  maintenant?: Date;
+}): { fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; anomalies: string[]; comptesAConfirmer: CompteFec[] } {
+  const fichier = nomFichierFec(params.siret, params.mois);
+  if (params.celeris && params.celeris.lignes.length) {
+    const c = construireFecCeleris(params.celeris.lignes);
+    const doublons = params.factures.length + params.encaissements.length;
+    return {
+      fichier, contenu: c.contenu, source: "celeris",
+      ecrituresVentes: c.ecritures, ecrituresReglements: 0, comptesAConfirmer: [],
+      anomalies: [
+        ...c.anomalies,
+        ...(doublons ? [`Mois tenu dans Céleris : ${params.factures.length} facture(s) et ${params.encaissements.length} encaissement(s) saisis aussi dans l'application ne sont pas repris, pour ne pas les compter deux fois.`] : []),
+      ],
+    };
+  }
+  const numeros = new Map<string, string>(params.payments.filter((p) => p?.id && p?.invoiceNumber).map((p) => [String(p.id), String(p.invoiceNumber)]));
+  const f = construireFecComplet({ factures: params.factures, encaissements: params.encaissements, numeroFactureDe: (id) => numeros.get(id), maintenant: params.maintenant });
+  return {
+    fichier, contenu: f.contenu, source: "application",
+    ecrituresVentes: f.resume.ventes.ecritures, ecrituresReglements: f.resume.reglements.ecritures,
+    anomalies: f.anomalies, comptesAConfirmer: f.resume.comptesAConfirmer,
+  };
 }
 
 export function nomMoisLong(mois: string) {
@@ -199,7 +241,7 @@ export function corpsEmailComptable(params: {
       ${resume.celeris ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventes tenues dans Céleris</td><td style="padding:4px 0;"><b>${resume.celeris.nombre}</b> écritures importées — ${eur(resume.celeris.ttc)} TTC, dont ${eur(resume.celeris.tva)} de TVA collectée</td></tr>` : ""}
       ${resume.completude ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Justificatifs</td><td style="padding:4px 0;"><b>${resume.completude.justifies}/${resume.completude.total}</b> dépenses justifiées${resume.completude.sansPiece ? ` — <span style="color:#b45309;">${eur(resume.completude.montantSansPiece)} sans pièce sur ${resume.completude.sansPiece} ligne(s)</span>` : ""}${resume.completude.perdues ? ` — ${resume.completude.perdues} pièce(s) déclarée(s) perdue(s), relevé conservé (${eur(resume.completude.montantPerdues || 0)}, motif dans le CSV justificatifs, sans TVA déduite)` : ""}</td></tr>` : ""}
       ${resume.tvaDeductibleJustifiee != null ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">TVA documentée — paiements uniques</td><td style="padding:4px 0;"><b>${eur(resume.tvaDeductibleJustifiee)}</b>${resume.tvaAVerifier?.nb ? ` — ${resume.tvaAVerifier.nb} ligne(s) à vérifier (${eur(resume.tvaAVerifier.ttc)} TTC)` : ""}</td></tr>` : ""}
-      ${resume.fec ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">FEC</td><td style="padding:4px 0;"><b>${resume.fec.fichier}</b> — ${resume.fec.ecrituresVentes} écriture(s) de ventes (VE), ${resume.fec.ecrituresReglements} de règlements clients (RG)${resume.fec.nbAnomalies ? ` — <span style="color:#b45309;">${resume.fec.nbAnomalies} point(s) à regarder, ci-dessous</span>` : ""}</td></tr>` : ""}
+      ${resume.fec ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">FEC</td><td style="padding:4px 0;"><b>${resume.fec.fichier}</b> — ${resume.fec.source === "celeris" ? `${resume.fec.ecrituresVentes} écriture(s) reprises de Céleris, journaux d'origine conservés` : `${resume.fec.ecrituresVentes} écriture(s) de ventes (VE), ${resume.fec.ecrituresReglements} de règlements clients (RG)`}${resume.fec.nbAnomalies ? ` — <span style="color:#b45309;">${resume.fec.nbAnomalies} point(s) à regarder, ci-dessous</span>` : ""}</td></tr>` : ""}
       ${resume.ventilationAchats ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventilation des achats</td><td>${resume.ventilationAchats.total} opérations, <b>${resume.ventilationAchats.aVentiler} à ventiler</b> (${eur(resume.ventilationAchats.montantAVentiler)}). Comptes proposés à valider.</td></tr>` : ""}
     </table>
     ${resume.tvaDeductibleJustifiee != null ? "<p>Les paiements fractionnés et les factures partagées restent à vérifier, hors total TVA automatique. La TVA totale de la facture ne doit pas être cumulée entre paiements.</p>" : ""}

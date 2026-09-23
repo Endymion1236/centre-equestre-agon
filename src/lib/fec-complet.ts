@@ -202,3 +202,55 @@ export function nomFichierFec(siret: string | undefined, mois: string): string {
   const aaaammjj = `${fin.getUTCFullYear()}${String(fin.getUTCMonth() + 1).padStart(2, "0")}${String(fin.getUTCDate()).padStart(2, "0")}`;
   return siren.length === 9 ? `${siren}FEC${aaaammjj}.txt` : `FEC_${mois.replace("-", "")}.txt`;
 }
+
+// ─── Mois tenus dans Céleris (juillet-août 2026) ───────────────────────────
+//
+// Avant la bascule, les ventes et règlements étaient dans Céleris. Leurs
+// écritures, importées mois par mois (lib/import-comptable-celeris), sont
+// déjà en partie double et équilibrées par journal / pièce / date : on les
+// réécrit telles quelles aux 18 colonnes du FEC, sans rien recalculer.
+
+export interface EcritureCelerisFec {
+  journal: string; compte: string; piece: string; date: string;
+  /** Centimes. Un montant négatif passe du côté opposé, en positif. */
+  debit: number; credit: number; libelle: string; libelleCompte: string;
+}
+
+const LIBELLES_JOURNAUX: [RegExp, string][] = [
+  [/^VT|^VE/, "Ventes"], [/^BQ|^BA/, "Banque"], [/^CA/, "Caisse"],
+  [/^HA|^AC/, "Achats"], [/^OD/, "Opérations diverses"], [/^AN|^RAN/, "À-nouveaux"],
+];
+export function libelleJournal(code: string): string {
+  return LIBELLES_JOURNAUX.find(([re]) => re.test(code))?.[1] || code;
+}
+
+export function construireFecCeleris(lignes: EcritureCelerisFec[]): { contenu: string; ecritures: number; anomalies: string[] } {
+  // Regrouper par écriture (journal, pièce, date), dans l'ordre chronologique.
+  const groupes = new Map<string, EcritureCelerisFec[]>();
+  for (const l of lignes) {
+    const cle = JSON.stringify([l.date, l.journal, l.piece]);
+    groupes.set(cle, [...(groupes.get(cle) || []), l]);
+  }
+  const cles = [...groupes.keys()].sort();
+  const sortie: string[] = [];
+  const anomalies: string[] = [];
+  let numero = 0;
+  for (const cle of cles) {
+    const groupe = groupes.get(cle)!;
+    numero++;
+    let solde = 0;
+    for (const l of groupe) {
+      const net = (Number(l.debit) || 0) - (Number(l.credit) || 0);
+      if (net === 0) continue;
+      solde += net;
+      const date = l.date.replace(/-/g, "");
+      sortie.push(ligneFec({
+        journal: { code: l.journal, libelle: libelleJournal(l.journal) }, numero, date,
+        compte: { compte: l.compte, libelle: l.libelleCompte }, piece: l.piece, libelle: l.libelle,
+        ...(net > 0 ? { debit: net } : { credit: -net }),
+      }));
+    }
+    if (solde !== 0) anomalies.push(`Écriture Céleris ${groupe[0].journal} ${groupe[0].piece} du ${groupe[0].date} déséquilibrée de ${euros(solde)} €.`);
+  }
+  return { contenu: [ENTETE_FEC, ...sortie].join("\n") + "\n", ecritures: numero, anomalies };
+}
