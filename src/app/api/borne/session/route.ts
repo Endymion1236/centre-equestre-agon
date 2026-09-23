@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifierAccesBorne } from "@/lib/borne-acces-server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { bornePromptSysteme } from "@/lib/borne-prompt";
 
@@ -20,7 +20,8 @@ export const maxDuration = 30;
  */
 export async function POST(req: NextRequest) {
   // 🔒 Auth : la tablette borne reste connectée avec un compte Firebase
-  const auth = await verifyAuth(req);
+  // Personnel du club ou compte de la borne déclaré (cf. lib/borne-acces).
+  const auth = await verifierAccesBorne(req);
   if (auth instanceof NextResponse) return auth;
 
   // 🚦 6 sessions / minute max : une session couvre toute une conversation,

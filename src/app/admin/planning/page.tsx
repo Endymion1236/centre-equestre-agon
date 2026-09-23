@@ -17,6 +17,7 @@ import {
 } from "@/lib/discounts";
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, CalendarDays, Briefcase, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
+import { nomActuelInscrit } from "./enroll-panel-utils";
 import { Creneau, EnrolledChild, typeColors, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage, ageCavalier } from "./types";
 import { libellePrixCreneau } from "@/lib/tarif-forfaitaire";
 import EnrollPanel from "./EnrollPanel";
@@ -174,7 +175,11 @@ export default function PlanningPage() {
     try {
       const [aS, fS, pS, cartesS, forfaitsS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments")), getDocs(collection(db, "cartes")), getDocs(query(collection(db, "forfaits"), where("status", "==", "actif")))]);
       setActivities(aS.docs.map(d => ({ id: d.id, ...d.data() })) as Activity[]);
-      setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })) as any);
+      // Une fiche absorbée par une fusion reste en base (réversible) mais ne
+      // doit plus recevoir d'inscription : une commande posée dessus est
+      // invisible sur la fiche conservée — Facturé 0, Payé 0, alors que
+      // l'acompte est au journal (cas AMIARD, 21/09/2026).
+      setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })).filter((f: any) => f.status !== "merged") as any);
       setPayments(pS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllCartes(cartesS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllForfaits(forfaitsS.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -397,7 +402,7 @@ export default function PlanningPage() {
   };
 
   const openEdit = (c: Creneau & { id: string }) => {
-    setEditCreneau(c);    setEditForm({ date: c.date, activityId: (c as any).activityId || "", activityType: c.activityType, tvaTaux: (c as any).tvaTaux || 5.5, activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "", tarifForfaitaire: !!(c as any).tarifForfaitaire, niveauADefinir: !!(c as any).niveauADefinir, niveauFixe: (c as any).niveauFixe || "" });
+    setEditCreneau(c);    setEditForm({ date: c.date, activityId: (c as any).activityId || "", activityType: c.activityType, tvaTaux: (c as any).tvaTaux ?? 5.5, activityTitle: c.activityTitle, monitor: c.monitor || "", startTime: c.startTime, endTime: c.endTime, maxPlaces: c.maxPlaces, priceTTC: (c as any).priceTTC || 0, color: (c as any).color || "", allowDayBooking: (c as any).allowDayBooking || false, priceTTCDay: (c as any).priceTTCDay || "", themeStage: (c as any).themeStage || "", tarifForfaitaire: !!(c as any).tarifForfaitaire, niveauADefinir: !!(c as any).niveauADefinir, niveauFixe: (c as any).niveauFixe || "" });
     setEditApplyAll(false);
     // Pour un stage multi-jours : appliquer par défaut à tous les jours du stage
     setEditApplyStage(c.activityType === "stage" || c.activityType === "stage_journee");
@@ -585,7 +590,7 @@ export default function PlanningPage() {
         const fam = families.find(f => f.firestoreId === e.familyId);
         if (!fam?.parentEmail) continue;
         const entry = byEmail.get(fam.parentEmail) || { parentName: fam.parentName || "", children: [] };
-        entry.children.push(e.childName);
+        entry.children.push(nomActuelInscrit(families, e));
         byEmail.set(fam.parentEmail, entry);
       }
       if (byEmail.size === 0) { toast("Aucun email de famille trouvé pour les inscrits", "error"); setNotifyingEnrolled(false); return; }
@@ -879,6 +884,11 @@ export default function PlanningPage() {
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg no-underline hover:bg-blue-100">
             🐴 Montoir
           </a>
+          <a href="/borne/tableau" target="_blank" rel="noopener"
+            title="Les cours d'aujourd'hui avec le prénom des cavaliers, à afficher sur la tablette de l'accueil"
+            className="flex items-center gap-1.5 font-body text-xs font-semibold text-amber-800 bg-amber-50 px-3 py-1.5 rounded-lg no-underline hover:bg-amber-100">
+            📺 Tableau du jour
+          </a>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
 
@@ -1062,6 +1072,7 @@ export default function PlanningPage() {
           weekDates={weekDates}
           creneaux={creneaux}
           payments={payments}
+          families={families}
           onPrev={() => setWeekOffset(w => w - 1)}
           onNext={() => setWeekOffset(w => w + 1)}
           onToday={() => setWeekOffset(0)}
@@ -1112,11 +1123,11 @@ export default function PlanningPage() {
         <MareesBandeau date={fmtDate(currentDay)} />
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:
         dayCreneaux.length===0?<Card padding="lg" className="text-center"><div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><CalendarDays size={28} className="text-blue-300" /></div><p className="font-body text-sm text-slate-600">Aucun créneau.</p></Card>:
-        <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux||5.5)/100);return(
+        <div className="flex flex-col gap-3">{dayCreneaux.map(c=>{const en=c.enrolled||[];const fill=c.maxPlaces>0?en.length/c.maxPlaces:0;const col=(c as any).color||typeColors[c.activityType]||"#666";const ttc=(c as any).priceTTC||(c.priceHT||0)*(1+(c.tvaTaux ?? 5.5)/100);return(
           <Card key={c.id} padding="md" className="cursor-pointer hover:shadow-lg" hover>
             <div onClick={()=>setSelectedCreneau(c)}>
               <div className="flex items-start justify-between mb-3"><div className="flex items-center gap-4"><div className="w-14 text-center"><div className="font-body text-lg font-bold" style={{color:col}}>{c.startTime}</div><div className="font-body text-[10px] text-slate-600">{c.endTime}</div></div><div style={{borderLeftWidth:3,borderLeftColor:col,paddingLeft:12}}><div className="font-body text-base font-semibold text-blue-800">{c.activityTitle}</div><div className="font-body text-xs text-slate-600">{c.monitor} · {c.maxPlaces} pl.{ttc>0?` · ${libellePrixCreneau(c as any)}`:""}{(c as any).allowDayBooking&&<span className="ml-1.5 inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 align-middle" title="Ce jour est réservable à l'unité par les familles">📅 journée{(c as any).priceTTCDay>0?` ${Number((c as any).priceTTCDay).toFixed(0)}€`:""}</span>}</div></div></div><div className="flex items-center gap-2">{(()=>{/* Impayé = rien d'encaissé. Une commande créée, même relancée par lien de paiement, en fait partie tant qu'aucun euro n'est arrivé. */
-                const unpaid=en.filter((e:any)=>statutPaiementCavalier(e,payments,c).etat==="impaye").length;return unpaid>0?<span className="font-body text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-lg">⚠️ {unpaid} impayé{unpaid>1?"s":""}</span>:null;})()}{waitCounts[c.id]>0&&<span className="font-body text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-1 rounded-lg whitespace-nowrap" title="Enfants en liste d'attente sur ce créneau">🔔 {waitCounts[c.id]} en attente</span>}<Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button type="button" onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({date:c.date,activityId:(c as any).activityId||"",activityType:c.activityType,tvaTaux:(c as any).tvaTaux||5.5,activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||"",allowDayBooking:(c as any).allowDayBooking||false,priceTTCDay:(c as any).priceTTCDay||"",themeStage:(c as any).themeStage||"",tarifForfaitaire:!!(c as any).tarifForfaitaire,niveauADefinir:!!(c as any).niveauADefinir,niveauFixe:(c as any).niveauFixe||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button type="button" onClick={e=>{e.stopPropagation();openDelete(c);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
+                const unpaid=en.filter((e:any)=>statutPaiementCavalier(e,payments,c).etat==="impaye").length;return unpaid>0?<span className="font-body text-xs font-semibold text-red-500 bg-red-50 px-2 py-1 rounded-lg">⚠️ {unpaid} impayé{unpaid>1?"s":""}</span>:null;})()}{waitCounts[c.id]>0&&<span className="font-body text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-1 rounded-lg whitespace-nowrap" title="Enfants en liste d'attente sur ce créneau">🔔 {waitCounts[c.id]} en attente</span>}<Badge color={fill>=1?"red":fill>=0.7?"orange":"green"}>{en.length}/{c.maxPlaces}</Badge><button type="button" onClick={e=>{e.stopPropagation();setEditCreneau(c);setEditForm({date:c.date,activityId:(c as any).activityId||"",activityType:c.activityType,tvaTaux:(c as any).tvaTaux ?? 5.5,activityTitle:c.activityTitle,monitor:c.monitor||"",startTime:c.startTime,endTime:c.endTime,maxPlaces:c.maxPlaces,priceTTC:(c as any).priceTTC||0,color:(c as any).color||"",allowDayBooking:(c as any).allowDayBooking||false,priceTTCDay:(c as any).priceTTCDay||"",themeStage:(c as any).themeStage||"",tarifForfaitaire:!!(c as any).tarifForfaitaire,niveauADefinir:!!(c as any).niveauADefinir,niveauFixe:(c as any).niveauFixe||""});setEditApplyAll(false);}} className="text-blue-400 hover:text-blue-600 bg-blue-50 hover:bg-blue-100 w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center"><Settings size={15}/></button><button type="button" onClick={e=>{e.stopPropagation();openDelete(c);}} className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer"><Trash2 size={16}/></button></div></div>
               {en.length>0&&<div className="ml-[68px] flex flex-wrap gap-2">{en.map((e:any)=>{
                 // Rouge rien reçu, orange partiellement réglé, vert réglé :
                 // une seule règle pour les quatre vues (types.ts). Le mode de
@@ -1127,11 +1138,12 @@ export default function PlanningPage() {
                 const statusIcon = statut.icone;
                 const statusLabel = statut.label;
                 const age = ageCavalier(e, families).label;
-                return <span key={e.childId} title={`${e.childName} · ${statusLabel} — ${statut.detail}`}
+                const nomAffiche = nomActuelInscrit(families, e);
+                return <span key={e.childId} title={`${nomAffiche} · ${statusLabel} — ${statut.detail}`}
                   className="font-body text-xs px-2.5 py-1.5 rounded-full flex items-center gap-1.5 border"
                   style={{ background: statusBg, borderColor: statusColor+"33", color: "#0C1A2E" }}>
                   <span className="text-[11px]">{statusIcon}</span>
-                  <span className="font-semibold">{e.childName}</span>
+                  <span className="font-semibold">{nomAffiche}</span>
                   {age && <span style={{ color: "#64748b", fontSize: 10 }}>{age}</span>}
                   <span style={{ color: statusColor, fontSize: 10 }}>{statusLabel}</span>
                 </span>;
@@ -1172,7 +1184,7 @@ export default function PlanningPage() {
         />
       )}
 
-      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll} onRefresh={async ()=>{await refreshCreneaux(); try { const fs = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif"))); setAllForfaits(fs.docs.map(d => ({ id: d.id, ...d.data() }))); } catch(e){} }}/>}
+      {selectedCreneau&&<EnrollPanel creneau={selectedCreneau as any} families={families} allCreneaux={creneaux} payments={payments} allCartes={allCartes} allForfaits={allForfaits} onClose={()=>{setSelectedCreneau(null);fetchData();}} onEnroll={handleEnroll} onUnenroll={handleUnenroll} onRefresh={async ()=>{const fresh = await refreshCreneaux(); const maj = fresh.find(x=>x.id===selectedCreneau.id); if (maj) setSelectedCreneau(maj); try { const fs = await getDocs(query(collection(db, "forfaits"), where("status", "==", "actif"))); setAllForfaits(fs.docs.map(d => ({ id: d.id, ...d.data() }))); } catch(e){} }}/>}
 
       {/* ── Modal suppression créneau ── */}
       {deleteCreneau && (

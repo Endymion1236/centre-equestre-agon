@@ -78,11 +78,23 @@ export interface Paiement {
   status: StatutPaiement;
   paymentMode?: ModePaiement;
   paymentRef?: string;
+  /** Moyen réellement utilisé sur la page CAWL (carte, paypal, apple_pay…) et son libellé — cf. lib/cawl-moyen-paiement. */
+  moyenPaiement?: string;
+  moyenPaiementLibelle?: string;
+  cawlPaymentProductId?: number;
 
   /** Numéro séquentiel définitif (F-AAAA-NNNN). Absent = proforma.
    *  Attribué UNIQUEMENT par attribuerNumeroFacture() — jamais à la main. */
   invoiceNumber?: string;
   invoiceDate?: unknown;
+  /** Échéance de règlement (AAAA-MM-JJ) d'une facture émise AVANT
+   *  encaissement à un client professionnel. BT-9 du Factur-X. */
+  dueDate?: string;
+  /** Dépôt du Factur-X sur la Plateforme Agréée (Cecurity). Absent = à
+   *  déposer, si le client est professionnel. Posé/retiré à la main depuis
+   *  l'onglet Factur-X tant que l'envoi n'est pas automatisé. */
+  facturxDeposeLe?: unknown;
+  facturxDeposePar?: string;
 
   // ── CAWL ──────────────────────────────────────────────────────────────
   cawlRef?: string;
@@ -99,6 +111,20 @@ export interface Paiement {
   amountPaidReported?: number;
   amountExpected?: number;
   needsReview?: boolean;
+  /** Règlements CAWL arrivés alors que rien ne les attendait — deux liens
+   *  réglés, cumul dépassé, lien annulé. Écrits par lib/cawl-inattendu,
+   *  affichés dans Paiements jusqu'à être marqués traités. */
+  encaissementsInattendus?: Array<{
+    motif: "deja_solde" | "trop_percu" | "lien_annule";
+    exces: number;
+    montant: number;
+    hostedCheckoutId: string;
+    merchantRef?: string;
+    source: "webhook" | "status";
+    recuA: string;
+    traite?: boolean;
+    traiteA?: string;
+  }>;
 
   // ── Stage ─────────────────────────────────────────────────────────────
   stageDate?: string;
@@ -178,6 +204,12 @@ export interface SessionCawl {
   totalCents?: number;
   isDeposit?: boolean;
   depositPercent?: number;
+  /** Trace du lien envoyé (`payment-links`) qui a ouvert cette session. */
+  lienId?: string;
+  /** Lien annulé par l'administration : un règlement reçu malgré tout est signalé (lib/cawl-inattendu). */
+  annule?: boolean;
+  annuleA?: string;
+  annulePar?: string;
   /** Achat public d'un bon cadeau (sans compte). */
   bonCadeau?: boolean;
   montant?: number;

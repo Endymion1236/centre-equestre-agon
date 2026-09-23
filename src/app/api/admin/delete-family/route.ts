@@ -23,17 +23,30 @@
  *   - Comptes de test à nettoyer
  *   - Requêtes RGPD de suppression (conserver le rapport comme preuve)
  *
- * Ne supprime PAS :
- *   - Les encaissements qui ont déjà été reportés en comptabilité (ils restent
- *     pour la traçabilité fiscale — à la charge de l'admin de les archiver avant)
- *   - Les factures émises (pour la même raison — obligation fiscale de conservation)
- *   Note : cette exception n'est pas encore implémentée car elle demande une
- *   décision métier (cf commentaire à la fin). Pour l'instant, on supprime TOUT.
+ * Ne supprime PAS, en PRODUCTION :
+ *   - Les encaissements, factures, avoirs, remises, mandats et déclarations.
+ *     Ces pièces sont ANONYMISÉES (nom, email, téléphone neutralisés) et
+ *     conservées : le montant, la date, le numéro de pièce et la chaîne
+ *     d'empreintes restent intacts.
+ *
+ *   C'est la réponse correcte à une demande RGPD d'effacement : l'art. 17-3-b
+ *   du RGPD réserve le droit à l'effacement lorsqu'une obligation légale de
+ *   conservation s'y oppose (art. L102 B du LPF : 6 ans ; art. L123-22 du Code
+ *   de commerce : 10 ans). Supprimer l'écriture elle-même serait à la fois
+ *   inutile au regard du RGPD et fautif au regard du fisc.
+ *
+ *   Sur la base de TEST, la suppression reste totale : c'est là que se
+ *   nettoient les comptes d'essai.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { isProdEnvironment } from "@/lib/reset-guard";
+import {
+  estCollectionFiscale,
+  anonymisationComptable,
+} from "@/lib/collections-comptables";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -72,6 +85,8 @@ interface DeletionReport {
   familyName: string | null;
   mode: "dry-run" | "apply";
   counts: Record<string, number>;
+  /** Pièces comptables conservées mais dépersonnalisées (production). */
+  anonymises: Record<string, number>;
   creneauxCleaned: number;
   firebaseAuthDeleted: boolean;
   familyDocDeleted: boolean;
@@ -101,8 +116,10 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
   const apply = req.nextUrl.searchParams.get("apply") === "true";
 
   // NB : suppression ciblée sur UNE seule famille (par email), protégée
-  // par l'auth admin + le mode dry-run. Le garde-fou anti-prod ne
-  // s'applique qu'aux resets massifs (reset-base, reset-compta).
+  // par l'auth admin + le mode dry-run. En production, les pièces comptables
+  // de cette famille sont anonymisées et non supprimées (cf. en-tête).
+  const estProd = isProdEnvironment();
+  const champsAnonymes = anonymisationComptable();
 
   const report: DeletionReport = {
     email,
@@ -111,6 +128,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
     familyName: null,
     mode: apply ? "apply" : "dry-run",
     counts: {},
+    anonymises: {},
     creneauxCleaned: 0,
     firebaseAuthDeleted: false,
     familyDocDeleted: false,
@@ -187,6 +205,8 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
 
   // ── 3. Compter (et supprimer si apply) les docs liés ────────────────
   for (const collName of FAMILY_ID_COLLECTIONS) {
+    // En production, une pièce comptable se dépersonnalise, elle ne s'efface pas.
+    const anonymiser = estProd && estCollectionFiscale(collName);
     let totalInColl = 0;
     for (const fid of possibleFamilyIds) {
       try {
@@ -203,7 +223,10 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
           for (let i = 0; i < snap.docs.length; i += BATCH_SIZE) {
             const chunk = snap.docs.slice(i, i + BATCH_SIZE);
             const batch = adminDb.batch();
-            for (const doc of chunk) batch.delete(doc.ref);
+            for (const doc of chunk) {
+              if (anonymiser) batch.update(doc.ref, champsAnonymes);
+              else batch.delete(doc.ref);
+            }
             await batch.commit();
           }
         }
@@ -215,7 +238,8 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
       }
     }
     if (totalInColl > 0) {
-      report.counts[collName] = totalInColl;
+      if (anonymiser) report.anonymises[collName] = totalInColl;
+      else report.counts[collName] = totalInColl;
       report.totalDocsAffected += totalInColl;
     }
   }
@@ -356,18 +380,16 @@ export async function POST(req: NextRequest) {
 }
 
 /*
- * TODO futur — conformité fiscale française :
+ * Conformité fiscale — implémenté (septembre 2026).
  *
- * Selon le CGI, les factures émises doivent être conservées 10 ans. En cas
- * de request RGPD, il faut :
- *   - Anonymiser les factures (remplacer familyName et adresse par "CLIENT
- *     ANONYMISÉ") plutôt que les supprimer
- *   - Conserver le hash du compte pour prouver la demande
+ * Le choix n'est plus délégué à l'admin, parce qu'il n'en est pas un : sur la
+ * base de PRODUCTION, les pièces comptables de la famille sont anonymisées et
+ * conservées ; sur la base de TEST, tout est supprimé. La bascule se fait sur
+ * le projectId Firebase actif (isProdEnvironment), pas sur un paramètre d'URL
+ * — un garde-fou qu'on peut désactiver depuis la barre d'adresse n'en est pas
+ * un.
  *
- * Pour les comptes de test, TOUT supprimer est acceptable — pas d'obligation
- * fiscale sur des données non réelles.
- *
- * Ce choix est délégué à l'admin. La route actuelle supprime tout. Si un
- * jour on implémente un flag ?mode=rgpd pour anonymiser au lieu de supprimer,
- * ce sera ici.
+ * Le rapport distingue les deux : `counts` liste ce qui a été supprimé,
+ * `anonymises` ce qui a été conservé sous forme dépersonnalisée. Conserver ce
+ * rapport vaut preuve de traitement de la demande RGPD.
  */

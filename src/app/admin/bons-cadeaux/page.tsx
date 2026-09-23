@@ -1,14 +1,50 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui";
-import { Ticket, Printer, Info } from "lucide-react";
+import { Ticket, Printer, Info, Trash2, Ban } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { db } from "@/lib/firebase";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { useToast } from "@/components/ui/Toast";
+import { collection, getDocs, query, orderBy, doc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 
 export default function BonsCadeauxPage() {
   const [bons, setBons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  /**
+   * Retirer un bon. Deux cas :
+   *  - jamais entamé (solde = montant) : le document est supprimé — c'est le
+   *    cas des bons de test ou d'une vente annulée. La recette, elle, vit au
+   *    journal des encaissements et n'est pas touchée ici : si le bon a été
+   *    réellement vendu, c'est l'annulation de la commande qui la corrige.
+   *  - déjà utilisé en partie : on ne supprime pas la trace, on passe le bon
+   *    en « annulé » et il n'est plus applicable en caisse.
+   */
+  const retirerBon = async (b: any) => {
+    const solde = typeof b.solde === "number" ? b.solde : (b.montant || 0);
+    const entame = solde < (b.montant || 0);
+    const question = entame
+      ? `Annuler le bon ${b.code} (${solde.toFixed(2)}€ restants) ?\n\nIl restera visible, mais ne pourra plus être appliqué en caisse.`
+      : `Supprimer le bon ${b.code} de ${(b.montant || 0).toFixed(2)}€ ?\n\nIl n'a jamais été utilisé. La recette éventuelle au journal n'est pas modifiée.`;
+    if (!confirm(question)) return;
+    setBusy(b.id);
+    try {
+      if (entame) {
+        await updateDoc(doc(db, "bons-cadeaux", b.id), { statut: "annule", updatedAt: serverTimestamp() });
+        toast(`Bon ${b.code} annulé`, "info");
+      } else {
+        await deleteDoc(doc(db, "bons-cadeaux", b.id));
+        toast(`Bon ${b.code} supprimé`, "success");
+      }
+      await loadBons();
+    } catch (e) {
+      console.error(e);
+      toast("Impossible de retirer ce bon", "error");
+    }
+    setBusy(null);
+  };
 
   const loadBons = async () => {
     setLoading(true);
@@ -83,8 +119,10 @@ export default function BonsCadeauxPage() {
                 {bons.map(b => {
                   const solde = typeof b.solde === "number" ? b.solde : (b.montant || 0);
                   const badge = b.statut === "utilise" ? "bg-gray-100 text-gray-500"
-                    : b.statut === "expire" ? "bg-rose-100 text-rose-700"
+                    : b.statut === "expire" || b.statut === "annule" ? "bg-rose-100 text-rose-700"
                     : "bg-emerald-100 text-emerald-700";
+                  const entame = solde < (b.montant || 0);
+                  const retirable = b.statut !== "annule" && b.statut !== "utilise";
                   return (
                     <tr key={b.id} className="border-b border-blue-500/5">
                       <td className="py-2 pr-3 font-mono font-semibold text-blue-800">{b.code}</td>
@@ -92,11 +130,18 @@ export default function BonsCadeauxPage() {
                       <td className="py-2 pr-3 text-right">{(b.montant || 0).toFixed(2)}€</td>
                       <td className="py-2 pr-3 text-right font-semibold">{solde.toFixed(2)}€</td>
                       <td className="py-2 pr-3"><span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badge}`}>{b.statut || "actif"}</span></td>
-                      <td className="py-2 text-right">
+                      <td className="py-2 text-right whitespace-nowrap">
                         <button type="button" onClick={() => imprimerBon(b)} title="Imprimer / voir le bon avec son code"
                           className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg font-body text-xs font-semibold text-blue-800 bg-gold-400 border-none cursor-pointer hover:bg-gold-300">
                           <Printer size={14} /> Imprimer
                         </button>
+                        {retirable && (
+                          <button type="button" disabled={busy === b.id} onClick={() => retirerBon(b)}
+                            title={entame ? "Annuler ce bon (déjà entamé : il reste visible, plus applicable)" : "Supprimer ce bon (jamais utilisé)"}
+                            className="ml-1.5 inline-flex items-center gap-1 px-2 py-1.5 rounded-lg font-body text-xs font-semibold text-red-600 bg-red-50 border-none cursor-pointer hover:bg-red-100 disabled:opacity-50">
+                            {entame ? <Ban size={13} /> : <Trash2 size={13} />}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

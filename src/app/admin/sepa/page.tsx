@@ -1,5 +1,6 @@
 "use client";
 import { authFetch } from "@/lib/auth-fetch";
+import { BandeauPrenotificationSepa } from "@/components/admin/BandeauPrenotificationSepa";
 
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where } from "firebase/firestore";
@@ -1220,6 +1221,12 @@ export default function SepaPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Pré-notifications SEPA à vérifier : forfaits annuels dont
+                  l'email d'échéancier n'a pas encore été confirmé. */}
+              {payments.filter((p: any) => p.prenotificationSepa === "a_verifier").map((p: any) => (
+                <BandeauPrenotificationSepa key={p.id} paymentId={p.id} familyName={p.familyName} toast={toast} onEnvoye={fetchAll} />
+              ))}
 
               {/* Formulaire nouvel échéancier */}
               {showNewEcheancier && (

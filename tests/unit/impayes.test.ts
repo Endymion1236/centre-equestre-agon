@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import {
   calculerResumeImpayes,
+  compterParNature,
   filtrerImpayes,
+  natureCommande,
+  rienRegle,
   grouperImpayesParEvenement,
   listerImpayes,
+  prelevementAPreparer,
   preparerMultiEncaissements,
   resumerAttentes,
   soldeRestant,
@@ -41,15 +45,28 @@ test("le solde restant tient compte du déjà encaissé", () => {
   assert.equal(soldeRestant(p()), 80);
 });
 
-test("payés, annulés, SEPA et chèques différés sont exclus", () => {
+test("payés, annulés, prélèvements ORGANISÉS et chèques différés sont exclus", () => {
   const result = listerImpayes([
     p({ id: "ok" }),
     p({ id: "paid", status: "paid" }),
     p({ id: "cancelled", status: "cancelled" }),
-    p({ id: "sepa", paymentMode: "prelevement_sepa", status: "partial" }),
+    // Prélèvement réellement posé : échéancier chiffré, ou commande marquée à l'inscription.
+    p({ id: "sepa-planifie", paymentMode: "prelevement_sepa", status: "sepa_scheduled" }),
     p({ id: "diff", paymentMode: "cheque_differe" }),
   ], "2026-09-01");
   assert.deepEqual(result.map((x) => x.id), ["ok"]);
+});
+
+test("annoncé en prélèvement mais sans échéance posée : la somme reste réclamée", () => {
+  // Une facture de récurrence porte le mode de règlement habituel de la
+  // famille ; rien n'est prélevé tant qu'aucune échéance n'existe.
+  const result = listerImpayes([
+    p({ id: "a-preparer", paymentMode: "prelevement_sepa", status: "partial", totalTTC: 900, paidAmount: 300 }),
+  ], "2026-09-01");
+  assert.deepEqual(result.map((x) => x.id), ["a-preparer"]);
+  assert.equal(prelevementAPreparer(result[0]), true);
+  assert.equal(prelevementAPreparer(p({ paymentMode: "prelevement_sepa", status: "sepa_scheduled" })), false);
+  assert.equal(prelevementAPreparer(p({ paymentMode: "cheque" })), false);
 });
 
 test("une échéance n'est impayée que si sa date est dépassée", () => {
@@ -81,6 +98,54 @@ test("la recherche couvre famille, activité et enfant", () => {
   assert.deepEqual(filtrerImpayes(unpaid, { search: "durand" }).map((x) => x.id), ["b", "c"]);
   assert.deepEqual(filtrerImpayes(unpaid, { search: "balade" }).map((x) => x.id), ["b"]);
   assert.deepEqual(filtrerImpayes(unpaid, { search: "eliot" }).map((x) => x.id), ["a"]);
+});
+
+console.log("\n── Nature des commandes ──");
+
+test("la nature se lit sur le type d'activité, le libellé en repli", () => {
+  assert.equal(natureCommande(p({ items: [{ activityType: "stage", activityTitle: "Galop de bronze 6/7 ans", stageDates: [{ date: "2026-10-20" }] }] })), "stage");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Stage galop de bronze 6/7 ans — 20 au 24 oct." }] })), "stage");
+  assert.equal(natureCommande(p({ items: [{ activityType: "balade", activityTitle: "Balade en forêt" }] })), "balade");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Promenade du dimanche", date: "2026-10-04" }] })), "balade");
+  assert.equal(natureCommande(p({ items: [{ activityType: "cours", activityTitle: "Adultes G1 à G4", creneauId: "cr1", date: "2026-10-02" }] })), "seance");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Cours débutant", date: "2026-10-02" }] })), "seance");
+});
+
+test("un forfait annuel prime sur ses lignes de cours, adhésion seule est « autre »", () => {
+  assert.equal(natureCommande(p({ items: [
+    { activityTitle: "Adhésion annuelle (enfant 1)" },
+    { activityTitle: "Licence FFE -18 ans" },
+    { activityType: "cours", activityTitle: "Forfait 1×/semaine" },
+  ] })), "forfait");
+  assert.equal(natureCommande(p({ type: "inscription_annuelle", items: [{ activityType: "cours", activityTitle: "Cours débutant 10-16 ans" }] })), "forfait");
+  assert.equal(natureCommande(p({ items: [{ activityTitle: "Adhésion annuelle" }] })), "autre");
+});
+
+test("le filtre par nature et ses compteurs", () => {
+  const lot = [
+    p({ id: "s", items: [{ activityType: "stage", activityTitle: "Stage", date: "2026-10-20" }] }),
+    p({ id: "b", items: [{ activityTitle: "Promenade", date: "2026-10-04" }] }),
+    p({ id: "c", items: [{ activityType: "cours", activityTitle: "Adultes G1 à G4", creneauId: "cr1", date: "2026-10-02" }] }),
+    p({ id: "f", items: [{ activityTitle: "Forfait 1×/semaine" }] }),
+  ];
+  assert.deepEqual(filtrerImpayes(lot, { natureFilter: "seance" }).map((x) => x.id), ["c"]);
+  assert.deepEqual(filtrerImpayes(lot, { natureFilter: "stage" }).map((x) => x.id), ["s"]);
+  assert.deepEqual(filtrerImpayes(lot, { natureFilter: "all" }).map((x) => x.id), ["s", "b", "c", "f"]);
+  assert.deepEqual(compterParNature(lot), { stage: 1, balade: 1, seance: 1, forfait: 1, autre: 0 });
+});
+
+test("« Rien réglé » écarte les acomptes et règlements partiels", () => {
+  const lot = [
+    p({ id: "zero", paidAmount: 0 }),
+    p({ id: "absent", paidAmount: undefined }),
+    p({ id: "acompte", paidAmount: 30 }),
+    p({ id: "centime", paidAmount: 0.01 }),
+  ];
+  assert.equal(rienRegle(lot[0]), true);
+  assert.equal(rienRegle(lot[1]), true);
+  assert.equal(rienRegle(lot[2]), false);
+  assert.deepEqual(filtrerImpayes(lot, { rienRegle: true }).map((x) => x.id), ["zero", "absent"]);
+  assert.deepEqual(filtrerImpayes(lot, { rienRegle: false }).map((x) => x.id), ["zero", "absent", "acompte", "centime"]);
 });
 
 console.log("\n── Totaux et regroupements ──");
@@ -120,7 +185,7 @@ test("seules les familles avec au moins deux factures réglables sont proposées
     p({ id: "m1", familyId: "f1", familyName: "Martin", totalTTC: 100, paidAmount: 0 }),
     p({ id: "m2", familyId: "f1", familyName: "Martin", totalTTC: 50, paidAmount: 10 }),
     p({ id: "m3", familyId: "f2", familyName: "Durand" }),
-    p({ id: "m4", familyId: "f3", familyName: "Sepa", paymentMode: "prelevement_sepa" }),
+    p({ id: "m4", familyId: "f3", familyName: "Sepa", paymentMode: "prelevement_sepa", status: "sepa_scheduled" }),
     p({ id: "m5", familyId: "f3", familyName: "Sepa" }),
   ]);
   assert.equal(result.length, 1);
@@ -166,7 +231,8 @@ test("resumerAttentes : une commande simple impayée compte comme impayé, une a
 
 test("resumerAttentes : SEPA programmé et chèques différés sont à venir", () => {
   const payments = [
-    { id: "s1", familyId: "f1", status: "pending", totalTTC: 120, paidAmount: 0, paymentMode: "prelevement_sepa" },
+    // Prélèvement réellement posé : 120 € d'échéances à venir, pas un impayé.
+    { id: "s1", familyId: "f1", status: "pending", totalTTC: 120, paidAmount: 0, paymentMode: "prelevement_sepa", sepaRestant: 120 },
     { id: "d1", familyId: "f1", status: "pending", totalTTC: 90, paidAmount: 0, paymentMode: "cheque_differe" },
   ];
   const r = resumerAttentes(payments, ["f1"], "2026-09-02");

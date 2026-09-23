@@ -1,0 +1,44 @@
+import { NextRequest, NextResponse } from "next/server";
+import { verifierAccesBorne } from "@/lib/borne-acces-server";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { adminDb } from "@/lib/firebase-admin";
+import { toParisDateString } from "@/lib/date-local";
+import { construireTableauDuJour, heureParis, type CreneauBrut } from "@/lib/borne-tableau";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * GET /api/borne/tableau — les cours du jour avec les prénoms des cavaliers,
+ * pour le « tableau du jour » de la borne (voir lib/borne-tableau).
+ *
+ * RÉSERVÉ au personnel du club (administrateur, moniteur) et au compte de la
+ * borne déclaré dans Paramètres. Les autres routes de la borne ne renvoient
+ * que des informations publiques (horaires, tarifs, places restantes) ; ce
+ * tableau nomme des enfants. Ouvert à tout compte connecté, n'importe quelle
+ * famille aurait pu lire les prénoms et les poneys de toute la journée.
+ *
+ * Lecture seule, limité en débit ; ne renvoie que titre, horaire, moniteur,
+ * prénoms et poney.
+ */
+export async function GET(req: NextRequest) {
+  const auth = await verifierAccesBorne(req, { strict: true });
+  if (auth instanceof NextResponse) return auth;
+
+  const rl = await checkRateLimit({ uid: auth.uid, routeKey: "borne_tableau", limit: 12, windowMs: 60_000 });
+  if (!rl.allowed) return rateLimitResponse(rl);
+
+  try {
+    const aujourdhui = toParisDateString();
+    // Heure de Paris, en cycle 0–23 explicite : `hour12: false` donnait
+    // « 00:15 » à midi et quart sur Vercel (cycle h11), ce qui envoyait tous
+    // les cours de l'après-midi dans « plus tard » et effaçait ceux du matin.
+    const heure = heureParis(new Date());
+    const snap = await adminDb.collection("creneaux").where("date", "==", aujourdhui).get();
+    const creneaux: CreneauBrut[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<CreneauBrut, "id">) }));
+    const cartes = construireTableauDuJour(creneaux, heure);
+    return NextResponse.json({ date: aujourdhui, heure, cartes });
+  } catch (e) {
+    console.error("[borne/tableau]", e);
+    return NextResponse.json({ error: "Tableau indisponible" }, { status: 500 });
+  }
+}

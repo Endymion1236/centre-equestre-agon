@@ -10,6 +10,11 @@
  * résultat ligne à ligne, ensembles consommés compris.
  *
  * RAPPROCHEMENT_DIFF_N=2000 pour une passe plus longue.
+ *
+ * Quand une correction change VOLONTAIREMENT le résultat, on ne réécrit pas
+ * l'ancien code : on inscrit le scénario dans DIVERGENCES_ATTENDUES avec sa
+ * raison. Le test continue alors de garder tout le reste, et la liste dit
+ * noir sur blanc ce qu'on a accepté de changer.
  */
 import { rapprocherReleve } from "../../src/app/admin/comptabilite/rapprochement-matching";
 import { rapprocherReleveAncien } from "../fixtures/rapprochement-ancien-main";
@@ -91,7 +96,27 @@ function scenario(k: number) {
 const clone = (o: any) => JSON.parse(JSON.stringify(o));
 const setEq = (a: Set<string>, b: Set<string>) => a.size === b.size && [...a].every(x => b.has(x));
 const N = Number(process.env.RAPPROCHEMENT_DIFF_N || 400);
+
+/**
+ * Les écarts voulus avec l'ancien code, scénario par scénario (graine fixe).
+ *
+ * Une remise carte du Crédit Agricole ne contient pas que les tickets du
+ * terminal : le club a aussi un contrat « e-commerce de CAWL » dont les
+ * paiements en ligne arrivent sous le même libellé « Remise carte ». Le
+ * rapprochement ne cherchait que `cb_terminal`, si bien qu'une remise de
+ * paiements en ligne restait « à traiter » (cas vécu le 20/09/2026).
+ */
+const DIVERGENCES_ATTENDUES: Record<number, string> = {
+  // « REMISE CARTE » de 57 € : l'ancien code ne voyait pas le paiement en
+  // ligne du 21/05 et retombait sur un « Montant exact » quelconque.
+  25: "remise carte servie par un paiement en ligne",
+  // « PRLV SEPA REMISE 4 » : l'ancien code servait un prélèvement avec une CB
+  // du terminal. Un prélèvement n'entre plus dans le bloc carte : la ligne
+  // reste à pointer, ce qui vaut mieux qu'un faux rapprochement.
+  44: "prélèvement SEPA qui n'est plus servi par une CB",
+};
 let divergences = 0, lignes = 0, rapprochees = 0;
+const attendues = new Set<number>();
 const exemples: string[] = [];
 const parType: Record<string, number> = {};
 const silence = console.log; console.log = () => {};
@@ -106,14 +131,24 @@ for (let k = 0; k < N; k++) {
   const sets = setEq(A.usedEncIds, B.usedEncIds) && setEq(A.usedRemiseIds, B.usedRemiseIds) && setEq(A.usedRemiseSepaIds, B.usedRemiseSepaIds) && setEq(A.usedPaymentIds, B.usedPaymentIds);
   if (a !== b || !sets || A.autoOverwritten !== B.autoOverwritten || A.manuelsPreserves !== B.manuelsPreserves) {
     divergences++;
-    if (exemples.length < 6) {
+    if (DIVERGENCES_ATTENDUES[k]) { attendues.add(k); }
+    else if (exemples.length < 6) {
       const i = A.finalMatched.findIndex((l: any, j: number) => JSON.stringify(l) !== JSON.stringify(B.finalMatched[j]));
       exemples.push(`scénario ${k} ligne ${i} : ${JSON.stringify(sc.parsed[i])}\n   ANCIEN → ${JSON.stringify({ matched: A.finalMatched[i]?.matched, type: A.finalMatched[i]?.matchType, detail: A.finalMatched[i]?.matchDetail })}\n   NOUVEAU → ${JSON.stringify({ matched: B.finalMatched[i]?.matched, type: B.finalMatched[i]?.matchType, detail: B.finalMatched[i]?.matchDetail })}${sets ? "" : "\n   (ensembles used* différents)"}`);
     }
   }
 }
 console.log = silence;
-console.log(`rapprochement différentiel : ${N} scénarios, ${lignes} lignes bancaires, ${rapprochees} rapprochées — ${divergences} divergence(s) ancien/nouveau`);
-if (divergences) console.log("Répartition par type (nouveau) :", parType);
+const inattendues = divergences - attendues.size;
+// Un scénario inscrit qui ne diverge plus : la correction a été défaite, ou la
+// graine a bougé. Dans les deux cas la liste ment, donc le test doit tomber.
+const manquantes = Object.keys(DIVERGENCES_ATTENDUES)
+  .map(Number)
+  .filter((k) => k < N && !attendues.has(k));
+
+console.log(`rapprochement différentiel : ${N} scénarios, ${lignes} lignes bancaires, ${rapprochees} rapprochées — ${inattendues} divergence(s) inattendue(s), ${attendues.size} voulue(s)`);
+for (const k of attendues) console.log(`   ✓ scénario ${k} : ${DIVERGENCES_ATTENDUES[k]} (écart voulu)`);
+for (const k of manquantes) console.log(`   ❌ scénario ${k} ne diverge plus : ${DIVERGENCES_ATTENDUES[k]}`);
+if (inattendues) console.log("Répartition par type (nouveau) :", parType);
 for (const e of exemples) console.log(" - " + e);
-process.exit(divergences ? 1 : 0);
+process.exit(inattendues || manquantes.length ? 1 : 0);

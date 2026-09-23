@@ -12,16 +12,19 @@
  *   - Transaction par créneau : vérifie la capacité (maxPlaces) et les doublons.
  *   - Nom de l'enfant/famille pris depuis la fiche famille (pas depuis le client).
  *
- * Body : { enrollments: [{ childId, creneauIds: string[], sourceFamilyId?, childName? }] }
- * Réponse : { ok, enrolled: string[], full: string[], notOwned: string[] }
+ * Body : { enrollments: [{ childId, creneauIds: string[], sourceFamilyId?, childName?, cardId? }] }
+ * Réponse : { ok, enrolled: string[], viaCarte: string[], full: string[], notOwned: string[] }
  */
 import { NextRequest, NextResponse } from "next/server";
+import { nomCompletCavalier } from "@/lib/nom-cavalier";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { dateExpirationHold } from "@/lib/places-tenues";
 import { isForfaitActif } from "@/lib/forfaits";
 import { deciderInscriptionNiveau, compatibiliteCavalier, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
+import { carteCouvreCreneau, compterReservationsParCarte, libelleCarte, seancesDisponibles, type CarteLike } from "@/lib/cartes-seances";
+import { toParisDateString } from "@/lib/date-local";
 
 interface EnrollItem {
   childId: string;
@@ -30,6 +33,8 @@ interface EnrollItem {
   childName?: string;
   paymentSource?: string;      // ex. "forfait" pour une inscription annuelle
   forfaitId?: string | null;
+  /** Carte de séances annoncée par la famille : vérifiée ici, jamais crue sur parole. */
+  cardId?: string | null;
   pending?: boolean;           // place tenue mais non confirmée (paiement différé)
   holdUntil?: string;          // ISO — au-delà, la place tenue est purgée
   paymentMethod?: string;
@@ -63,8 +68,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Famille introuvable" }, { status: 404 });
     }
     const family = famSnap.data() as any;
+    // « Prénom Nom » : nom de l'enfant, sinon nom de la fiche famille. Le
+    // prénom seul laissait des « Louis » anonymes au planning, et le nom
+    // envoyé par le navigateur n'est pas une source (il pourrait être
+    // n'importe quoi) : on le recompose ici, depuis la fiche.
     const childrenMap = new Map<string, string>();
-    (family.children || []).forEach((c: any) => childrenMap.set(c.id, c.firstName || c.prenom || ""));
+    (family.children || []).forEach((c: any) => childrenMap.set(c.id, nomCompletCavalier(c, family)));
     // Enfants LIÉS : autorisés explicitement par l'admin (fiche famille → « Lier
     // des cavaliers »). Chaque entrée porte le childId + sa sourceFamilyId. C'est
     // la relation enregistrée qui autorise à réserver pour un enfant d'une autre
@@ -76,6 +85,8 @@ export async function POST(req: NextRequest) {
     const familyName = family.parentName || "";
 
     const enrolled: string[] = [];
+    /** Créneaux inscrits sur une carte de séances (place ferme, rien à payer). */
+    const viaCarte: string[] = [];
     const full: string[] = [];
     const notOwned: string[] = [];
     const missing: string[] = [];
@@ -98,7 +109,17 @@ export async function POST(req: NextRequest) {
         if (item.sourceFamilyId && item.sourceFamilyId !== link.sourceFamilyId) {
           notOwned.push(item.childId); continue;
         }
+        // Enfant d'une autre fiche : même règle, depuis SA fiche. Le nom
+        // figé dans le lien ne sert que si la fiche source a disparu.
         childName = link.childName;
+        if (link.sourceFamilyId) {
+          try {
+            const srcSnap = await adminDb.collection("families").doc(link.sourceFamilyId).get();
+            const src = srcSnap.exists ? (srcSnap.data() as any) : null;
+            const srcChild = (src?.children || []).find((c: any) => c?.id === item.childId);
+            if (srcChild) childName = nomCompletCavalier(srcChild, src) || link.childName;
+          } catch (e) { console.warn("[enroll] fiche source de l'enfant lié illisible", link.sourceFamilyId, e); }
+        }
       } else {
         notOwned.push(item.childId);
         continue;
@@ -131,6 +152,42 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // ── Carte de séances annoncée : vérifiée à la source ────────────────
+      // Même principe que le forfait : la famille annonce `cardId`, le serveur
+      // vérifie que la carte existe, lui appartient, est active, et qu'il lui
+      // reste des séances NON ENCORE RÉSERVÉES (les inscrits à venir portant
+      // cette carte comptent, même si le montoir ne les a pas décomptés).
+      // Une carte valide rend l'inscription FERME sans paiement : la séance
+      // est décomptée au montoir, à la présence constatée.
+      let carteValide: CarteLike | null = null;
+      if (item.cardId) {
+        const cSnap = await adminDb.collection("cartes").doc(String(item.cardId)).get();
+        const cd = cSnap.exists ? ({ id: cSnap.id, ...(cSnap.data() as any) } as CarteLike) : null;
+        const proprietaire = !!cd && (cd.familyId === uid
+          || (!!item.sourceFamilyId && cd.familyId === item.sourceFamilyId && linkedMap.has(item.childId)));
+        if (!cd || !proprietaire || cd.status !== "active") {
+          console.warn(`/api/enroll — cardId ${item.cardId} refusé pour uid=${uid}, child=${item.childId}`);
+          return NextResponse.json(
+            { error: "Cette carte de séances n'est pas utilisable pour cette réservation.", code: "CARTE_INVALIDE" },
+            { status: 409 },
+          );
+        }
+        const aujourdhui = toParisDateString(); // heure de Paris, pas celle du serveur
+        const futurs = await adminDb.collection("creneaux").where("date", ">=", aujourdhui).select("date", "enrolled").get();
+        const reservees = compterReservationsParCarte(futurs.docs.map((d) => d.data() as any), aujourdhui);
+        const dispo = seancesDisponibles(cd, reservees);
+        if (dispo < creneauIds.length) {
+          return NextResponse.json(
+            {
+              error: `Votre ${libelleCarte(cd)} n'a plus de séance disponible : ${Number(cd.remainingSessions) || 0} restante(s), dont ${reservees[cd.id] || 0} déjà réservée(s) sur des séances à venir.`,
+              code: "CARTE_EPUISEE",
+            },
+            { status: 409 },
+          );
+        }
+        carteValide = cd;
+      }
+
       // ── Inscription ATOMIQUE de l'item : on lit TOUS les créneaux, on vérifie
       // que chacun a de la place (ou l'enfant déjà inscrit), puis on inscrit
       // PARTOUT ou NULLE PART. Évite qu'un stage soit inscrit à moitié mais
@@ -146,9 +203,18 @@ export async function POST(req: NextRequest) {
             if (!s.exists) return { status: "missing" as const, cid: creneauIds[i] };
             const cr = s.data() as any;
             const list: any[] = cr.enrolled || [];
-            if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit = ok
+            // Déjà inscrit = ok. Une simple pré-inscription (place retenue par
+            // l'admin, rien de réglé) n'est PAS une inscription : elle sera
+            // remplacée ci-dessous par l'inscription réelle, sinon le drapeau
+            // « pré-inscrit » survivait au paiement et la famille était
+            // relancée pour un dossier déjà réglé.
+            if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit (ou pré-inscrit : sa place est déjà comptée) = ok
             const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
             if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
+            // La carte doit couvrir CE créneau (type cours/balade, cavalier, validité).
+            if (carteValide && !carteCouvreCreneau(carteValide, { childId: item.childId, activityType: cr.activityType, date: cr.date })) {
+              return { status: "carte_inapte" as const, cid: creneauIds[i] };
+            }
             // Promenade au niveau fixé par la première inscription : le
             // premier verrouille, les suivants doivent être du même niveau.
             // Décidé ICI, dans la transaction, pour que deux premières
@@ -165,8 +231,12 @@ export async function POST(req: NextRequest) {
           // 2) Tout est bon → inscrire partout
           for (let i = 0; i < snaps.length; i++) {
             const cr = snaps[i].data() as any;
-            const list: any[] = cr.enrolled || [];
-            if (list.some((e: any) => e.childId === item.childId)) continue;
+            const listeBrute: any[] = cr.enrolled || [];
+            const preinscriptionExistante = listeBrute.find((e: any) => e.childId === item.childId && e.preinscription);
+            if (listeBrute.some((e: any) => e.childId === item.childId) && !preinscriptionExistante) continue;
+            // On retire la pré-inscription de l'enfant : l'entrée définitive
+            // prend sa place (même nombre d'inscrits, la place était retenue).
+            const list = listeBrute.filter((e: any) => e.childId !== item.childId);
             const entry: any = {
               childId: item.childId,
               childName,
@@ -175,8 +245,10 @@ export async function POST(req: NextRequest) {
               enrolledAt: new Date().toISOString(),
             };
             if (item.sourceFamilyId) entry.sourceFamilyId = item.sourceFamilyId;
-            if (item.paymentSource) entry.paymentSource = item.paymentSource;
+            // « card » ne se déclare pas : il découle d'une carte vérifiée ci-dessus.
+            if (item.paymentSource && item.paymentSource !== "card") entry.paymentSource = item.paymentSource;
             if ("forfaitId" in item) entry.forfaitId = forfaitIdValide;
+            if (carteValide) { entry.paymentSource = "card"; entry.cardId = carteValide.id; }
 
             // ── Place tenue : décidée par le SERVEUR, jamais par le client ──
             // Auparavant `pending` et `holdUntil` étaient recopiés du corps de
@@ -190,7 +262,9 @@ export async function POST(req: NextRequest) {
             // (confirmerPlacesTenues, appelé par /api/cawl/status, le webhook et
             // la validation admin d'une déclaration), et repart sinon via le cron
             // de purge. Seul le staff pose une inscription ferme.
-            const tenue = estStaff ? !!item.pending : true;
+            // Exception : une séance prise sur une carte vérifiée n'a rien à
+            // payer, la place est ferme tout de suite.
+            const tenue = carteValide ? false : estStaff ? !!item.pending : true;
             if (tenue) {
               entry.pending = true;
               // Durée calculée côté serveur à partir du mode de règlement :
@@ -198,6 +272,14 @@ export async function POST(req: NextRequest) {
               // ou des espèces que le bureau encaissera plus tard.
               entry.holdUntil = dateExpirationHold(new Date(), item.paymentMethod);
               if (item.paymentMethod) entry.paymentMethod = item.paymentMethod;
+              // La place n'est que tenue : si la famille abandonne, la purge ne
+              // doit pas effacer la pré-inscription posée par l'admin. On la
+              // garde sur l'entrée ; l'encaissement (confirmerPlacesTenues)
+              // la lèvera en même temps que le `pending`.
+              if (preinscriptionExistante) {
+                entry.preinscription = true;
+                if (preinscriptionExistante.preinscriptionMode) entry.preinscriptionMode = preinscriptionExistante.preinscriptionMode;
+              }
             }
             if (item.niveauPromenade && estNiveauPromenade(item.niveauPromenade)) entry.niveauPromenade = item.niveauPromenade;
             const fixer = aFixer.get(i);
@@ -209,8 +291,14 @@ export async function POST(req: NextRequest) {
           }
           return { status: "ok" as const };
         });
-        if (outcome.status === "ok") enrolled.push(...creneauIds);
+        if (outcome.status === "ok") { enrolled.push(...creneauIds); if (carteValide) viaCarte.push(...creneauIds); }
         else if (outcome.status === "full") full.push(outcome.cid);
+        else if (outcome.status === "carte_inapte") {
+          return NextResponse.json(
+            { error: "Votre carte de séances ne couvre pas ce créneau (type d'activité, cavalier ou date de validité).", code: "CARTE_INVALIDE", creneauId: outcome.cid },
+            { status: 409 },
+          );
+        }
         else if (outcome.status === "missing") missing.push(outcome.cid);
         else if (outcome.status === "niveau_requis" || outcome.status === "niveau_different" || outcome.status === "niveau_inapte") {
           // Refus lié au niveau de la promenade : message clair, rien d'inscrit.
@@ -271,7 +359,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, enrolled, full, notOwned });
+    return NextResponse.json({ ok: true, enrolled, viaCarte, full, notOwned });
   } catch (e: any) {
     console.error("/api/enroll — erreur:", e);
     return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });

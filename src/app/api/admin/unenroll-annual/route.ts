@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { estPrelevementSepa } from "@/lib/sepa";
 import { verifyAuth } from "@/lib/api-auth";
 import { doitAnnulerReservationLorsDesinscriptionAnnuelle } from "@/lib/inscription-annuelle-paiement";
+import { attribuerNumeroAvoir } from "@/lib/invoice-number";
 
 export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire — route admin
@@ -272,7 +273,13 @@ export async function POST(req: NextRequest) {
 
         const expiryDate = new Date();
         expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-        const newRef = `AV-${Date.now().toString(36).toUpperCase()}`;
+        const { reference: newRef } = await attribuerNumeroAvoir({
+          // L'avoir peut solder plusieurs paiements ; on trace le premier,
+          // le détail complet restant dans avoirDetails.
+          paymentId: avoirDetails[0]?.paymentId || null,
+          familyId,
+          motif: "Désinscription annuelle",
+        });
 
         // ── Fusion silencieuse avec les avoirs actifs existants ─────────
         // Cohérent avec createAvoir() côté client : on ne laisse jamais

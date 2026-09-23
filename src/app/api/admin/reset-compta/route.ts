@@ -35,17 +35,29 @@
  *     - families, children, creneaux, activities, cavalerie, cartes, forfaits
  *
  * ⚠️ IRRÉVERSIBLE — réservé à la phase de test interne.
+ *
+ * PRODUCTION : les collections à valeur fiscale (encaissements, avoirs,
+ * clôtures, journal d'audit…) sont retirées du périmètre par construction
+ * — cf. src/lib/collections-comptables.ts. Aucune phrase de déblocage ne
+ * permet de les effacer : leur conservation est une obligation légale
+ * (art. 286-I-3° bis du CGI, art. L102 B du LPF). La route reste entière
+ * sur la base de test, qui est son seul usage légitime.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
-import { assertResetAllowed } from "@/lib/reset-guard";
+import { assertResetAllowed, isProdEnvironment } from "@/lib/reset-guard";
+import {
+  filtrerCollectionsEffacables,
+  messageCollectionsProtegees,
+} from "@/lib/collections-comptables";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-// Collections à supprimer entièrement
-const DELETE_COLLECTIONS = [
+// Collections que la route cherche à supprimer. Le périmètre RÉEL est calculé
+// par perimetre() : en production, les collections fiscales en sont retirées.
+const COLLECTIONS_DEMANDEES = [
   "encaissements",
   "remises",
   "rapprochements",
@@ -55,13 +67,20 @@ const DELETE_COLLECTIONS = [
   "fidelite",
 ];
 
+/** Périmètre réellement effaçable sur la base active. */
+function perimetre() {
+  return filtrerCollectionsEffacables(COLLECTIONS_DEMANDEES, isProdEnvironment());
+}
+
 async function buildReport() {
   const counts: Record<string, number> = {};
   let totalEncaissements = 0;
   let totalAvoirs = 0;
 
-  // Compter chaque collection
-  for (const col of DELETE_COLLECTIONS) {
+  const { effacables, protegees } = perimetre();
+
+  // Compter chaque collection réellement effaçable
+  for (const col of effacables) {
     const snap = await adminDb.collection(col).get();
     counts[col] = snap.size;
     if (col === "encaissements") {
@@ -89,8 +108,18 @@ async function buildReport() {
     preservedCounts[col] = snap.size;
   }
 
+  // Les collections protégées sont comptées à part : on dit ce qu'elles
+  // contiennent, mais elles ne seront pas touchées.
+  const protegeesCounts: Record<string, number> = {};
+  for (const col of protegees) {
+    const snap = await adminDb.collection(col).count().get();
+    protegeesCounts[col] = snap.data().count;
+  }
+
   return {
     deleteCollections: counts,
+    collectionsProtegees: protegeesCounts,
+    avertissement: messageCollectionsProtegees(protegees) || undefined,
     preservedCollections: preservedCounts,
     totals: {
       encaissementsEuros: Math.round(totalEncaissements * 100) / 100,
@@ -106,8 +135,11 @@ async function applyReset() {
   const deleted: Record<string, number> = {};
   const errors: string[] = [];
 
-  // 1. Supprimer complètement les collections
-  for (const col of DELETE_COLLECTIONS) {
+  const { effacables, protegees } = perimetre();
+  const estProd = isProdEnvironment();
+
+  // 1. Supprimer complètement les collections effaçables
+  for (const col of effacables) {
     try {
       const snap = await adminDb.collection(col).get();
       let count = 0;
@@ -126,9 +158,12 @@ async function applyReset() {
     }
   }
 
-  // 2. Réinitialiser les payments (status pending, paidAmount 0)
+  // 2. Réinitialiser les payments (status pending, paidAmount 0).
+  //    Interdit en production : remettre une facture réglée en "à payer"
+  //    revient à altérer une pièce comptable après coup.
   let resetCount = 0;
   try {
+    if (estProd) throw new Error("réinitialisation des payments refusée en production");
     const snap = await adminDb.collection("payments").get();
     const docs = snap.docs.filter(d => {
       const s = d.data().status;
@@ -167,7 +202,13 @@ async function applyReset() {
     console.error("audit_log failed:", e);
   }
 
-  return { deleted, errors, durationMs: Date.now() - startedAt.getTime() };
+  return {
+    deleted,
+    protegees,
+    avertissement: messageCollectionsProtegees(protegees) || undefined,
+    errors,
+    durationMs: Date.now() - startedAt.getTime(),
+  };
 }
 
 function checkSecret(req: NextRequest): string | null {

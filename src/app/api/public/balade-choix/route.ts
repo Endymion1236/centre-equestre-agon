@@ -37,6 +37,7 @@ import {
   compterInscritsConfirmes,
   formatDateBalade,
 } from "@/lib/balade-petit-groupe";
+import { attribuerNumeroAvoir } from "@/lib/invoice-number";
 
 export const dynamic = "force-dynamic";
 
@@ -419,7 +420,13 @@ export async function POST(req: NextRequest) {
     const finalAmount = Math.round((montantPaye + mergedAmount) * 100) / 100;
     const expiryDate = new Date();
     expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-    avoirRefStr = `AV-${Date.now().toString(36).toUpperCase()}`;
+    avoirRefStr = (
+      await attribuerNumeroAvoir({
+        familyId: d.familyId,
+        motif: "Balade annulée faute de participants",
+        attributedBy: "system:balade-choix",
+      })
+    ).reference;
 
     const avoirRef = await adminDb.collection("avoirs").add({
       familyId: d.familyId,

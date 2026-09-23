@@ -1,3 +1,4 @@
+import type { FournisseurConnexion } from "@/lib/fournisseur-connexion";
 // ═══ Types Firestore — Centre Équestre Agon ═══
 
 // ─── Utilisateurs & Familles ───
@@ -13,7 +14,8 @@ export interface Family {
   address?: string; // Adresse postale (rue, n°)
   zipCode?: string; // Code postal
   city?: string; // Ville
-  authProvider: "google" | "facebook";
+  /** Par où la famille se connecte — cf. lib/fournisseur-connexion. "admin" : fiche créée au club. */
+  authProvider: FournisseurConnexion | "admin";
   authUid: string;
   children: Child[];
   linkedChildren?: LinkedChild[]; // Cavaliers d'autres familles (ex: grands-parents)

@@ -56,7 +56,7 @@ test.describe("SEC · Sécurité et accès", () => {
     const response = await page.request.post("/api/upload-vitrine", {
       multipart: {
         key: "hero-plage",
-        adminEmail: "ceagon@orange.fr",
+        adminEmail: "ceagon50@gmail.com",
       },
     });
     // Doit retourner 400 (bad request) pas 500

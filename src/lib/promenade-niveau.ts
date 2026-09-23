@@ -114,6 +114,65 @@ export function compatibiliteCavalier(
 }
 
 /**
+ * Niveaux de promenade qu'un cavalier PEUT réserver d'après sa fiche, du plus
+ * accessible au plus exigeant. `null` si la fiche ne permet pas de trancher
+ * (date de naissance absente). Un galop inconnu ne ferme aucun niveau : le
+ * doute se lève par l'évaluation, pas par un refus.
+ *
+ * Sert à l'assistant de la boîte mail : il proposait une promenade
+ * « confirmés » à une cavalière Galop 2 alors que la promenade débrouillés
+ * de la même semaine lui convenait. Le calcul est fait ici, une fois, plutôt
+ * que laissé au modèle.
+ */
+export function niveauxAdmissibles(cavalier: { birthDate?: any; galopLevel?: any }): NiveauPromenade[] | null {
+  if (ageFromBirth(cavalier.birthDate) === null) return null;
+  return NIVEAUX_PROMENADE.filter((n) => compatibiliteCavalier(n, cavalier).ok);
+}
+
+/**
+ * Niveaux atteignables d'après ce qu'on SAIT d'un cavalier : l'âge et/ou
+ * le galop, l'un ou l'autre pouvant manquer (mail d'une famille inconnue).
+ * Ce qui est inconnu ne ferme rien ; ce qui est connu et insuffisant ferme
+ * le niveau. Pour « débrouillés », un galop insuffisant ne ferme pas : la
+ * règle admet aussi le trot enlevé maîtrisé, qui se vérifie à l'évaluation.
+ * `null` si on ne sait rien du tout.
+ */
+export function niveauxAtteignables(c: { age?: number | null; birthDate?: any; galopLevel?: any }): NiveauPromenade[] | null {
+  const age = typeof c.age === "number" ? c.age : ageFromBirth(c.birthDate);
+  const galop = galopToNumber(c.galopLevel);
+  if (age === null && galop === null) return null;
+  return NIVEAUX_PROMENADE.filter((n) => {
+    const regle = REGLES_PROMENADE[n];
+    if (age !== null && age < regle.ageMin) return false;
+    if (n === "confirme" && galop !== null && regle.galopMin !== null && galop < regle.galopMin) return false;
+    return true;
+  });
+}
+
+/**
+ * Union des niveaux atteignables par AU MOINS UN des cavaliers concernés.
+ * Sert à filtrer la liste des promenades avant de la donner à l'assistant :
+ * une promenade d'un niveau qu'aucun d'eux ne peut atteindre n'a rien à y
+ * faire. `null` = aucune information exploitable, on ne filtre pas.
+ */
+export function niveauxAtteignablesParAuMoinsUn(cavaliers: { age?: number | null; birthDate?: any; galopLevel?: any }[]): NiveauPromenade[] | null {
+  let union: Set<NiveauPromenade> | null = null;
+  for (const c of cavaliers) {
+    const n = niveauxAtteignables(c);
+    if (!n) continue;
+    if (!union) union = new Set();
+    n.forEach((x) => union!.add(x));
+  }
+  return union ? NIVEAUX_PROMENADE.filter((n) => union!.has(n)) : null;
+}
+
+/** Le niveau à conseiller : le plus exigeant que la fiche autorise. */
+export function niveauConseille(cavalier: { birthDate?: any; galopLevel?: any }): NiveauPromenade | null {
+  const admissibles = niveauxAdmissibles(cavalier);
+  return admissibles && admissibles.length > 0 ? admissibles[admissibles.length - 1] : null;
+}
+
+/**
  * Ce qu'il faut écrire sur le créneau après un retrait d'inscrits : si une
  * promenade « à définir » se vide, son niveau redevient à définir.
  */

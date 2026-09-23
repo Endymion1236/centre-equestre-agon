@@ -33,7 +33,7 @@ function exportVentes(paiements: PaiementExportComptable[]) {
         paiement.familyName,
         article.activityTitle,
         (article.priceHT || 0).toFixed(2),
-        article.tva || 5.5,
+        article.tva ?? 5.5,
         ((article.priceTTC || 0) - (article.priceHT || 0)).toFixed(2),
         (article.priceTTC || 0).toFixed(2),
         paiement.paymentMode,

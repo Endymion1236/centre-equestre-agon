@@ -19,7 +19,7 @@ service cloud.firestore {
       return isAuth() && (
         request.auth.token.admin == true
         || (request.auth.token.email_verified == true
-            && request.auth.token.email in ['ceagon@orange.fr', 'ceagon50@gmail.com', 'emmelinelagy@gmail.com'])
+            && request.auth.token.email in ['ceagon50@gmail.com', 'emmelinelagy@gmail.com'])
       );
     }
     function isMoniteur() {

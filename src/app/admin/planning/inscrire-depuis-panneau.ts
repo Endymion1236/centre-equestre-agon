@@ -104,6 +104,8 @@ export interface ContexteInscriptionPanneau {
   weekCreneaux: any[];
   setAnnualPayMode: any;
   setConfirmationEnAttente: any;
+  /** Pré-notification SEPA à vérifier avant envoi ({ paymentId, familyName }). */
+  setPrenotificationEnAttente: any;
   setEditRemise: any;
   setEnrolling: any;
   setEnvoiConfirmation: any;
@@ -194,6 +196,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
     weekCreneaux,
     setAnnualPayMode,
     setConfirmationEnAttente,
+    setPrenotificationEnAttente,
     setEditRemise,
     setEnrolling,
     setEnvoiConfirmation,
@@ -337,6 +340,31 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
 
   // Mode stage : inscription multi-enfants
   if (isStage && selectedChildren.length > 0 && fam) {
+    // Acompte réglé par bon cadeau : le code est indispensable, et il vaut
+    // mieux le savoir AVANT d'avoir inscrit les enfants et créé la commande.
+    if (showAcompte && acompteReglement === "sur_place" && acompteMode === "bon_cadeau" && !String(acompteRef || "").trim()) {
+      panelToast("Saisissez le code du bon cadeau qui règle l'acompte.", "error");
+      return;
+    }
+    // L'acompte au comptoir : même écriture que la caisse ; par bon cadeau,
+    // c'est le serveur qui applique le crédit (lib/bon-cadeau-application).
+    const encaisserAcompte = async (paymentId: string, paymentData: any) => {
+      if (acompteMode === "bon_cadeau") {
+        const res = await authFetch("/api/admin/bon-cadeau", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: String(acompteRef || "").trim().toUpperCase(), paymentId, montant: stageAcompte }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json?.error || "Bon cadeau refusé");
+        const applique = Number(json.applique) || 0;
+        if (applique + 0.005 < stageAcompte) {
+          panelToast(`Le bon ne couvrait que ${applique.toFixed(2)}€ sur les ${Number(stageAcompte).toFixed(2)}€ d'acompte — le reste sera demandé avec le solde.`, "warning");
+        }
+        return;
+      }
+      await enregistrerEncaissement(paymentId, paymentData, stageAcompte, acompteMode, acompteRef, `Acompte ${creneau.activityTitle}`);
+    };
     setEnrolling(true);
     try {
       // Trouver les créneaux à inscrire selon le mode choisi
@@ -527,46 +555,19 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
           updatedAt: serverTimestamp(),
         });
 
-        // ── Lien de paiement du COMPLÉMENT d'acompte ────────────────────
-        //
-        // L'envoi n'existait que pour une commande neuve. Inscrire un second
-        // enfant dans une commande déjà ouverte ne déclenchait donc aucun
-        // email : la famille restait avec le lien du premier — 30 € et un
-        // « solde de 150 € » devenus faux, alors que la commande en réclamait
-        // 60 et 289,20. Rien n'était perdu, mais plus rien n'était juste.
-        //
-        // On ne redemande que ce qui manque : l'acompte de la commande
-        // entière moins ce qui a déjà été réglé.
-        const emailFamille = existingData.familyEmail || fam.parentEmail || "";
-        if (showAcompte && acompteReglement === "lien" && emailFamille) {
-          const dejaRegle = existingData.paidAmount || 0;
-          const complement = Math.round(Math.max(0, acompteTotal - dejaRegle) * 100) / 100;
-          if (complement > 0) {
-            authFetch("/api/send-payment-link", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                paymentId: openOrder.id,
-                recipientEmail: emailFamille,
-                amount: complement,
-                familyId: fam.firestoreId,
-                familyName: fam.parentName || "",
-                message: `Bonjour,\n\nVotre inscription porte maintenant sur ${nbEnfantsStage} enfant${nbEnfantsStage > 1 ? "s" : ""}, pour un total de ${mergedTotal.toFixed(2)}€.\n\nL'acompte est de ${acompteTotal.toFixed(2)}€${dejaRegle > 0 ? `, dont ${dejaRegle.toFixed(2)}€ déjà réglés` : ""}. Voici le lien pour régler ${complement.toFixed(2)}€.\n\nCe message remplace le précédent. Le solde de ${soldeTotal.toFixed(2)}€ vous sera demandé 7 jours avant le stage.`,
-              }),
-            }).catch(e => console.warn("Lien complément acompte:", e));
-          }
-        }
+        // Le lien de paiement de l'acompte ne part plus d'ici. Il partait à
+        // chaque passage — 30 € pour le premier enfant, puis 60 € « qui
+        // remplace le précédent » pour le second — et la famille pouvait
+        // régler les deux. Il est désormais mis en file AVEC la lettre de
+        // confirmation (plus bas, `lienAcompte`), et son montant est lu sur
+        // la commande au moment de l'envoi : un seul lien, du bon montant.
 
         // Acompte réglé au comptoir : même écriture comptable que la caisse,
         // et même confirmation d'acompte que lorsqu'il est payé en ligne.
         if (showAcompte && acompteReglement === "sur_place") {
-          await enregistrerEncaissement(
+          await encaisserAcompte(
             openOrder.id,
             { ...existingData, items: mergedItems, totalTTC: Math.round(mergedTotal * 100) / 100 },
-            stageAcompte,
-            acompteMode,
-            acompteRef,
-            `Acompte ${creneau.activityTitle}`,
           );
           authFetch("/api/admin/stage-acompte-recu", {
             method: "POST",
@@ -595,19 +596,12 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
 
         // Acompte réglé au comptoir : on encaisse ici, sans lien de paiement.
         if (showAcompte && acompteReglement === "sur_place") {
-          await enregistrerEncaissement(
-            newPayRef.id,
-            {
-              familyId: fam.firestoreId,
-              familyName: fam.parentName || "",
-              items: newItems,
-              totalTTC: stageTotalTTC,
-            },
-            stageAcompte,
-            acompteMode,
-            acompteRef,
-            `Acompte ${creneau.activityTitle}`,
-          );
+          await encaisserAcompte(newPayRef.id, {
+            familyId: fam.firestoreId,
+            familyName: fam.parentName || "",
+            items: newItems,
+            totalTTC: stageTotalTTC,
+          });
           // Confirmation d'acompte — le pendant du webhook CAWL, qui ne se
           // déclenche pas quand l'argent est reçu au comptoir.
           authFetch("/api/admin/stage-acompte-recu", {
@@ -617,21 +611,8 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
           }).catch(e => console.warn("Confirmation acompte:", e));
         }
 
-        // Envoyer automatiquement le lien de paiement pour l'acompte
-        if (showAcompte && acompteReglement === "lien" && fam.parentEmail) {
-          authFetch("/api/send-payment-link", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              paymentId: newPayRef.id,
-              recipientEmail: fam.parentEmail,
-              amount: stageAcompte,
-              familyId: fam.firestoreId,
-              familyName: fam.parentName || "",
-              message: `Bonjour,\n\nVoici le lien de paiement pour l'acompte du stage "${creneau.activityTitle}" (${stageAcompte}€).\n\nLe solde de ${stageSolde}€ vous sera demandé 7 jours avant le stage.`,
-            }),
-          }).catch(e => console.warn("Lien paiement acompte:", e));
-        }
+        // Le lien de paiement de l'acompte part avec la lettre de
+        // confirmation, plus bas (`lienAcompte`) — pas d'ici.
       }
 
       const noms = stageLines.map(l => l.childName).join(", ");
@@ -651,7 +632,13 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
       // cas /api/admin/stage-acompte-recu a déjà envoyé « Acompte confirmé —
       // la place est réservée », qui dit la même chose en mieux. La famille
       // recevait les deux à une seconde d'intervalle.
+      //
+      // Le lien de paiement de l'acompte suit la même file : il part juste
+      // après la lettre, une seule fois pour toutes les inscriptions
+      // regroupées, du montant que la commande réclame alors. Le bandeau du
+      // panneau annonce les deux, et « Ne pas envoyer » retient les deux.
       const acompteEncaisseAuComptoir = showAcompte && acompteReglement === "sur_place";
+      const lienAcompteAvecLaLettre = showAcompte && acompteReglement === "lien";
       if (fam.parentEmail && !acompteEncaisseAuComptoir) {
         try {
           const dates = stageMode === "jour"
@@ -667,7 +654,8 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
               paymentId: commandeId,
               // L'acompte part dans un lien de paiement séparé
               // (send-payment-link) : la lettre ne porte pas de bouton.
-              lienSepare: showAcompte && acompteReglement === "lien",
+              lienSepare: lienAcompteAvecLaLettre,
+              lienAcompte: lienAcompteAvecLaLettre,
               stage: {
                 stageKey,
                 stageTitle: creneau.activityTitle,
@@ -695,6 +683,9 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
               familyName: fam.parentName || "",
               nbStages: fileConfirmation.nbStages || 1,
               envoiPrevuA: fileConfirmation.envoiPrevuA || "",
+              lienAcompte: !!fileConfirmation.lienAcompte,
+              montantLien: Number(fileConfirmation.montantLien) || 0,
+              email: fam.parentEmail || "",
             });
             setEnvoiConfirmation("");
             programmerEnvoiConfirmation(fam.firestoreId, fileConfirmation.envoiPrevuA || "");
@@ -974,18 +965,19 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
             echeancesTotal: nbEcheances,
             echeanceDate: fmtDate(new Date()),
             forfaitRef: slotKey,
+            // Pré-notification SEPA à VÉRIFIER avant envoi : elle ne part plus
+            // toute seule, l'admin relit l'échéancier et confirme (panneau,
+            // ou écran Prélèvements SEPA si le panneau est fermé avant).
+            prenotificationSepa: "a_verifier",
             date: serverTimestamp(),
           });
           createdPaymentIds.push(docRef.id);
 
           // Pré-notification : montant, dates et mandat. La famille doit
           // savoir ce qui sera prélevé et quand — les règles SEPA l'imposent
-          // au créancier avant le premier prélèvement.
-          authFetch("/api/admin/sepa-prenotification", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paymentId: docRef.id }),
-          }).catch(e => console.warn("Pré-notification SEPA:", e));
+          // au créancier avant le premier prélèvement. Elle partait ici sans
+          // relecture ; elle est maintenant proposée à la vérification.
+          setPrenotificationEnAttente({ paymentId: docRef.id, familyName: fam.parentName || "" });
         } else {
           for (let i = 0; i < nbEcheances; i++) {
             const echeanceDate = new Date();

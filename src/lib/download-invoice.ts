@@ -28,6 +28,11 @@ export async function downloadInvoicePdf(params: {
   paymentDetails?: PaymentDetail[];
   /** ID du paiement : si fourni, la facture reconstruit le détail depuis les encaissements */
   paymentId?: string;
+  /**
+   * Nature de la pièce. À défaut, le serveur la déduit du préfixe du numéro :
+   * AV- pour un avoir, PF- pour un proforma, facture sinon.
+   */
+  documentType?: "facture" | "avoir" | "proforma";
 }) {
   const res = await authFetch("/api/invoice-pdf", {
     method: "POST",

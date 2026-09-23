@@ -11,8 +11,10 @@
  */
 
 import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
+import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { createEncaissement } from "@/lib/compta-encaissement";
 
 // ═══ TYPES ═══
 export interface EnrolledChild {
@@ -210,82 +212,44 @@ export async function computeStageReductionsAsync(params: {
   //    des enfants précédents dans la boucle (simuler l'ordre d'inscription)
   const results: StageLine[] = [];
   const simulatedStages = [...existingStages];
+  const plancherProratise =
+    Math.round(((settings as any).prixPlancherStage || 0) * jourRatio * 100) / 100;
 
   for (let idx = 0; idx < selectedChildren.length; idx++) {
     const childId = selectedChildren[idx];
     const child = children.find((c: any) => c.id === childId);
     const childName = child?.firstName || "?";
 
-    // On passe par applyDiscounts en simulant : les stages "existants" pour
-    // cet enfant incluent les enfants précédents de la sélection courante.
+    // Une seule source de vérité : lib/discounts. Ce bloc recalculait les
+    // barèmes pour son compte — additif au lieu d'en cascade, et le rang
+    // multi-stages compté en lignes de réservation. Le panneau affichait donc
+    // un prix que le module central n'aurait jamais produit (cas JUVET
+    // FRASER, 22/09/2026). Les enfants déjà traités dans cette sélection
+    // partent avec, puisqu'ils ne sont pas encore en base.
     const result = await applyDiscounts({
       familyId,
       newChildId: childId,
       stageDate,
       stageType,
       originalPriceTTC: prixBase,
-      settings,
+      // Le plancher vise un stage COMPLET : on le proratise au nombre de
+      // jours facturés, sinon une journée seule se facturerait au plancher
+      // d'une semaine entière.
+      settings: { ...settings, prixPlancherStage: plancherProratise },
       periods,
       excludeCreneauId: creneauId,
-      // NB : on ne peut pas passer simulatedStages directement (API ne le permet pas)
-      // Pour que le calcul soit correct, il faut que les enfants précédents aient
-      // déjà créé leurs réservations dans Firestore, OU qu'on réécrive applyDiscounts
-      // pour accepter un tableau de stages à ajouter virtuellement. Ici on simule.
-    } as any);
-
-    // Ajuster manuellement pour prendre en compte les enfants précédents
-    // (pas encore dans Firestore). On recalcule à partir des règles brutes :
-    const distinctChildren = new Set(simulatedStages.map((s) => s.childId));
-    const nthFamille = distinctChildren.has(childId) ? 0 : distinctChildren.size + 1;
-    const nbStagesEnfant = simulatedStages.filter((s) => s.childId === childId).length;
-    const nthMultiStage = nbStagesEnfant + 1;
-
-    const famRule = [...(settings.familyDiscount || [])].sort((a, b) => a.nth - b.nth);
-    const msRule = [...(settings.multiStageDiscount || [])].sort((a, b) => a.nth - b.nth);
-
-    let pctFamille = 0;
-    if (nthFamille >= 2) {
-      for (const r of famRule) if (r.nth <= nthFamille) pctFamille = r.discount;
-    }
-    let pctMulti = 0;
-    if (nthMultiStage >= 2) {
-      for (const r of msRule) if (r.nth <= nthMultiStage) pctMulti = r.discount;
-    }
-    const totalPct = Math.min(pctFamille + pctMulti, 50);
-    const rawDiscount = Math.round((prixBase * totalPct) / 100 * 100) / 100;
-    let prixReduit = Math.max(0, Math.round((prixBase - rawDiscount) * 100) / 100);
-
-    // Appliquer le prix plancher (config admin) — meme logique que dans
-    // lib/discounts.ts > applyDiscounts. Si le prix calcule est sous le
-    // plancher, on remonte au plancher.
-    const plancher = Math.round(((settings as any).prixPlancherStage || 0) * jourRatio * 100) / 100;
-    let plancherApplied = false;
-    if (plancher > 0 && prixReduit < plancher) {
-      prixReduit = Math.round(plancher * 100) / 100;
-      plancherApplied = true;
-    }
-
-    // Recalcul de la remise effective apres plancher (peut etre inferieure
-    // au rawDiscount si le plancher a remonte le prix).
-    const discountAmount = Math.round((prixBase - prixReduit) * 100) / 100;
-    const effectivePct = prixBase > 0
-      ? Math.round((discountAmount / prixBase) * 10000) / 100
-      : 0;
-
-    const reasons: string[] = [];
-    if (pctFamille > 0) reasons.push(`${nthFamille}ème enfant famille (-${pctFamille}%)`);
-    if (pctMulti > 0) reasons.push(`${nthMultiStage}ème stage (-${pctMulti}%)`);
-    if (plancherApplied) reasons.push(`(plafond au prix plancher ${plancher}€)`);
+      stagesSupplementaires: simulatedStages.slice(existingStages.length),
+    });
 
     results.push({
       childId,
       childName,
       prixBase,
-      remiseEuros: discountAmount,
-      rang: nthFamille || 1,
-      prixReduit,
-      discountPercent: effectivePct,
-      discountReasons: reasons,
+      remiseEuros: result.discountAmount,
+      rang: result.nthFamille || 1,
+      prixReduit: result.finalPriceTTC,
+      discountPercent: result.discountPercent,
+      discountReasons: result.reasons,
       originalPriceTTC: prixBase,
     });
 
@@ -323,11 +287,19 @@ export async function enrollChildInCreneau(creneauId: string, child: EnrolledChi
       const snap = await transaction.get(creneauRef);
       if (!snap.exists()) return false;
       const c = snap.data();
-      const enrolled = c.enrolled || [];
-      if (enrolled.some((e: any) => e.childId === child.childId)) return false;
+      const enrolled: any[] = c.enrolled || [];
+      // Déjà inscrit : on ne double pas (et on ne refacture pas). Une simple
+      // pré-inscription n'est pas une inscription : l'inscription définitive
+      // la remplace, sinon le drapeau « pré-inscrit » restait posé sur ce
+      // créneau alors que le cavalier est inscrit (et payé) partout ailleurs.
+      // Une pré-inscription qu'on re-pose par-dessus une pré-inscription reste
+      // un doublon : on n'écrit rien.
+      const existante = enrolled.find((e: any) => e.childId === child.childId);
+      if (existante && (!existante.preinscription || (child as any).preinscription)) return false;
+      const sans = existante ? enrolled.filter((e: any) => e.childId !== child.childId) : enrolled;
       transaction.update(creneauRef, {
-        enrolled: [...enrolled, child],
-        enrolledCount: enrolled.length + 1,
+        enrolled: [...sans, child],
+        enrolledCount: sans.length + 1,
       });
       return true;
     });
@@ -343,7 +315,7 @@ export async function createReservation(
   child: EnrolledChild,
   creneau: any,
 ) {
-  const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+  const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux ?? 5.5) / 100);
   await addDoc(collection(db, "reservations"), {
     familyId: child.familyId,
     familyName: child.familyName,
@@ -491,7 +463,11 @@ export async function createAvoir(
   sourcePaymentId?: string,
   sourceType?: string,
 ) {
-  const newRef = `AV-${Date.now().toString(36).toUpperCase()}`;
+  const newRef = await demanderNumeroAvoir({
+    paymentId: sourcePaymentId,
+    familyId,
+    motif: reason,
+  });
   const expiry = echeanceAvoir();
   const baseAmount = Math.round(montant * 100) / 100;
 
@@ -579,7 +555,7 @@ export async function createAvoir(
   // Trace dans le journal des encaissements (montant négatif = avoir)
   // Note : on n'enregistre QUE le baseAmount (la part vraiment nouvelle),
   // pas le total fusionné. Les anciens avaient déjà été journalisés.
-  await addDoc(collection(db, "encaissements"), {
+  await createEncaissement({
     paymentId: sourcePaymentId || "",
     familyId,
     familyName,
@@ -588,7 +564,6 @@ export async function createAvoir(
     modeLabel: `Avoir (${sourceType || "désinscription"})`,
     ref: newRef,
     activityTitle: reason,
-    date: serverTimestamp(),
     isAvoir: true,
     avoirRef: newRef,
   });
@@ -635,7 +610,7 @@ export async function duplicateWeekCreneaux(creneaux: any[], nbWeeks: number) {
         status: "planned",
         priceHT: c.priceHT || 0,
         priceTTC: c.priceTTC || 0,
-        tvaTaux: c.tvaTaux || 5.5,
+        tvaTaux: c.tvaTaux ?? 5.5,
         ...(c.price1day ? { price1day: c.price1day } : {}),
         ...(c.price2days ? { price2days: c.price2days } : {}),
         ...(c.price3days ? { price3days: c.price3days } : {}),

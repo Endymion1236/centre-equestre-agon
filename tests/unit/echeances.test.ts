@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import {
   computeDefaultDate,
+  dateEcheanceLisible,
   estEcheanceSepa,
+  messageLienEcheance,
   preparerEcheanciers,
+  resteDuEcheance,
 } from "../../src/app/admin/paiements/echeances-utils";
 
 let passes = 0;
@@ -117,6 +120,45 @@ test("la préparation ne modifie pas l'ordre du tableau source", () => {
   const ids = payments.map((p) => p.id);
   preparerEcheanciers(payments, { sortMode: "prochaine" }, "2026-09-01");
   assert.deepEqual(payments.map((p) => p.id), ids);
+});
+
+console.log("\n── Lien de paiement d'une échéance ──");
+
+test("le reste dû tient compte d'un règlement partiel", () => {
+  assert.equal(resteDuEcheance({ totalTTC: 69.9 }), 69.9);
+  assert.equal(resteDuEcheance({ totalTTC: 69.9, paidAmount: 20 }), 49.9);
+  assert.equal(resteDuEcheance({ totalTTC: 69.9, paidAmount: 69.9 }), 0);
+});
+
+test("un trop-perçu ne rend jamais un reste dû négatif", () => {
+  assert.equal(resteDuEcheance({ totalTTC: 69.9, paidAmount: 100 }), 0);
+  assert.equal(resteDuEcheance({}), 0);
+  assert.equal(resteDuEcheance(null), 0);
+});
+
+test("la date d'échéance se lit en toutes lettres, ou pas du tout", () => {
+  assert.equal(dateEcheanceLisible("2026-11-23"), "23 novembre 2026");
+  assert.equal(dateEcheanceLisible(""), "");
+  assert.equal(dateEcheanceLisible("23/11/2026"), "", "un format inattendu ne produit pas une date fausse");
+});
+
+test("le message dit de quelle échéance il s'agit", () => {
+  const texte = messageLienEcheance(
+    { echeance: 3, echeancesTotal: 10, echeanceDate: "2026-11-23" }, "2026-09-23");
+  assert.ok(texte.includes("l'échéance 3/10"), texte);
+  assert.ok(texte.includes("prévue pour le 23 novembre 2026"), texte);
+});
+
+test("une échéance dépassée se dit au passé", () => {
+  const texte = messageLienEcheance(
+    { echeance: 1, echeancesTotal: 10, echeanceDate: "2026-09-23" }, "2026-10-05");
+  assert.ok(texte.includes("était attendue le 23 septembre 2026"), texte);
+});
+
+test("sans numéro ni date, le message reste correct", () => {
+  const texte = messageLienEcheance({}, "2026-09-23");
+  assert.ok(texte.includes("cette échéance"), texte);
+  assert.ok(!texte.includes("undefined") && !texte.includes("NaN"), texte);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

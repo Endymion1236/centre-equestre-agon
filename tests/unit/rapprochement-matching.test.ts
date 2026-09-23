@@ -71,6 +71,48 @@ console.log("\n✓ Remise CB terminal : le total de la journée :");
   assert("les trois CB de la journée sont consommées", r.usedEncIds.size === 3, `${r.usedEncIds.size}`);
 }
 
+console.log("\n✓ Remise carte d'e-commerce : lue dans les paiements en ligne :");
+{
+  // Cas vécu le 20/09/2026 : « Remise carte CARTE 8067954 » de 150 €, qui est
+  // le contrat E-COMMERCE DE CAWL — donc deux paiements en ligne (60 + 90) du
+  // 19. Le rapprochement ne cherchait que le terminal : la remise ressortait
+  // « à traiter » et le détail collé depuis la banque ne trouvait rien.
+  const encaissements = [
+    enc("v1", 60, "cb_online", "2026-09-19"),
+    enc("h1", 90, "cb_online", "2026-09-19"),
+  ];
+  const r = rapprocherReleve(
+    [ligne("20/09/2026", "Remise carte CARTE 8067954 001 172955 20/09", 150)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("la remise est rapprochée", r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("reconnue comme CB en ligne", r.finalMatched[0].matchType === "CB en ligne", r.finalMatched[0].matchType);
+  assert("les deux paiements sont consommés", r.usedEncIds.size === 2, `${r.usedEncIds.size}`);
+}
+
+console.log("\n✓ Les deux canaux ne se mélangent pas dans une même journée :");
+{
+  // Même jour : 150 € en ligne (60 + 90) et 80 € au terminal. Deux remises
+  // distinctes le lendemain. Chacune doit prendre son canal — un total
+  // journalier « toutes cartes confondues » (230 €) ne correspondrait à rien.
+  const encaissements = [
+    enc("v1", 60, "cb_online", "2026-09-19"),
+    enc("h1", 90, "cb_online", "2026-09-19"),
+    enc("t1", 80, "cb_terminal", "2026-09-19"),
+  ];
+  const r = rapprocherReleve(
+    [
+      ligne("20/09/2026", "Remise carte CARTE 8067954", 150),
+      ligne("20/09/2026", "Remise carte CARTE 1535124", 80),
+    ],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("la remise e-commerce est rapprochée", r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("la remise du terminal est rapprochée", r.finalMatched[1].matched, r.finalMatched[1].matchDetail);
+  assert("la seconde est bien le terminal", r.finalMatched[1].matchType === "CB Terminal", r.finalMatched[1].matchType);
+  assert("les trois écritures sont consommées", r.usedEncIds.size === 3, `${r.usedEncIds.size}`);
+}
+
 console.log("\n✓ Remise CB partielle : volontairement laissée à traiter :");
 {
   // Même journée, mais la banque ne remet que 300 : le compte n'y est pas.
@@ -308,6 +350,53 @@ console.log("\n✓ Écritures couvertes par une ligne pointée sur une facture :
   const nee = { id: "v1", montant: 300, bankLineKey: "01/09/2026|VIR ENAUX|300.00" };
   assert("l'écriture née de la ligne est couverte par sa clé",
     encaissementsCouvertsParLigne(ligne("01/09/2026", "VIR ENAUX", 300), [nee, { id: "autre", montant: 300 }]).map(e => e.id).join() === "v1");
+}
+
+console.log("\n✓ Un virement pour deux commandes d'une même famille :");
+{
+  // La grand-mère GRENIER vire 100 € pour ses deux petits-enfants ; Nicolas a
+  // encaissé 50 € sur chacune des deux commandes de la famille. Le libellé
+  // porte le nom de la grand-mère, pas celui de la famille.
+  const encaissements = [
+    { ...enc("g1", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("g2", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("x1", 40, "virement", "2026-09-18", "Dupont"), familyId: "famD" },
+  ];
+  const r = rapprocherReleve(
+    [ligne("19/09/2026", "VIR DE MME LEGRAND ODILE", 100)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  const l = r.finalMatched[0];
+  assert("la ligne est rapprochée", l.matched, l.matchDetail);
+  assert("les deux écritures de la famille sont consommées", r.usedEncIds.has("g1") && r.usedEncIds.has("g2") && !r.usedEncIds.has("x1"), [...r.usedEncIds].join(","));
+  assert("le détail explique la somme", l.matchDetail.includes("50.00 + 50.00"), l.matchDetail);
+  assert("nom absent du libellé : la ligne reste à vérifier", l.uncertain === true);
+  assert("aucune facture n'est pointée (rien ne sera ré-encaissé)", !l.manualPaymentId);
+
+  // Même virement, mais cette fois le libellé porte le nom de la famille :
+  // la correspondance est sûre.
+  const r2 = rapprocherReleve(
+    [ligne("19/09/2026", "VIR DE MME GRENIER MATHILDE", 100)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("nom présent : rapprochée sans doute", r2.finalMatched[0].matched && !r2.finalMatched[0].uncertain, r2.finalMatched[0].matchDetail);
+  assert("les deux écritures GRENIER consommées", r2.usedEncIds.has("g1") && r2.usedEncIds.has("g2"));
+}
+
+console.log("\n✓ Deux familles pourraient faire la somme : on laisse la main :");
+{
+  const encaissements = [
+    { ...enc("a1", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("a2", 50, "virement", "2026-09-18", "Grenier"), familyId: "famG" },
+    { ...enc("b1", 60, "virement", "2026-09-18", "Dupont"), familyId: "famD" },
+    { ...enc("b2", 40, "virement", "2026-09-18", "Dupont"), familyId: "famD" },
+  ];
+  const r = rapprocherReleve(
+    [ligne("19/09/2026", "VIR DE M INCONNU", 100)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("ambigu : la ligne reste à pointer", !r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("rien n'est consommé", r.usedEncIds.size === 0);
 }
 
 console.log("\n✓ Relevé vide :");

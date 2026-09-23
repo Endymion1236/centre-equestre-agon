@@ -104,7 +104,7 @@ export async function POST(req: NextRequest) {
         ${(items || []).map((item: any) => `
         <tr>
           <td>${item.activityTitle || item.label || '—'}</td>
-          <td>${item.tva || 5.5}%</td>
+          <td>${item.tva ?? 5.5}%</td>
           <td>${(item.priceHT || 0).toFixed(2)} EUR</td>
           <td>${(item.priceTTC || 0).toFixed(2)} EUR</td>
         </tr>`).join('')}

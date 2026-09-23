@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { getClubInfo } from "@/lib/club-info";
-import { buildFacturXXml } from "@/lib/facturx";
+import { buildFacturXXml, sirenDepuisFiche } from "@/lib/facturx";
 
 // ═══════════════════════════════════════════════════════════════════
 // GET /api/admin/facturx?paymentId=…  (admin uniquement)
@@ -45,9 +45,7 @@ export async function GET(req: NextRequest) {
           const f = famSnap.data() as any;
           const parts = [f.address, [f.zipCode, f.city].filter(Boolean).join(" ")].filter(Boolean);
           if (parts.length > 0) buyerAddress = parts.join(", ");
-          if (f.siren && /^\d{9}$/.test(String(f.siren).replace(/\s/g, ""))) {
-            buyerSiren = String(f.siren).replace(/\s/g, "");
-          }
+          buyerSiren = sirenDepuisFiche(f);
         }
       } catch {
         /* adresse facultative */
@@ -72,7 +70,7 @@ export async function GET(req: NextRequest) {
         // S2 si la facture est déjà intégralement réglée au dépôt, S1 sinon.
         // Choix par défaut à faire confirmer par le cabinet comptable / la PA.
         businessProcess: p.status === "paid" ? "S2" : "S1", // facture pleine : les règlements figurent au dossier, la facture porte le dû total
-        dueDate: p.stageDate || null,
+        dueDate: p.dueDate || p.stageDate || null, // échéance saisie à l'émission (client pro), sinon début du stage
       },
       club
     );

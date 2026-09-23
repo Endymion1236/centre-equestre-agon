@@ -344,7 +344,7 @@ function RecurrenceModal({ recurrence, families, onClose, onSaved }: {
   const [familyId, setFamilyId] = useState(recurrence?.familyId || "");
   const [label, setLabel] = useState(recurrence?.label || "");
   const [montantTTC, setMontantTTC] = useState(recurrence?.montantTTC || 0);
-  const [tvaRate, setTvaRate] = useState(recurrence?.tvaRate || 5.5);
+  const [tvaRate, setTvaRate] = useState(recurrence?.tvaRate ?? 5.5);
   // Catégorie comptable : le libellé étant libre, c'est elle qui dit dans quel
   // compte tombe la recette et sous quelle rubrique elle apparaît en stats.
   const [categorie, setCategorie] = useState(recurrence?.categorie || "pension");
@@ -581,7 +581,7 @@ function FacturationModal({ recurrences, paiementsExistants, onClose, onDone }: 
         if (dejaFact) continue; // garde-fou : ne jamais re-facturer
 
         const moisLabel = `${MOIS[moisIdx]} ${annee}`;
-        const priceHT = Math.round((r.montantTTC / (1 + (r.tvaRate || 5.5) / 100)) * 100) / 100;
+        const priceHT = Math.round((r.montantTTC / (1 + (r.tvaRate ?? 5.5) / 100)) * 100) / 100;
 
         const paymentDoc = await addDoc(collection(db, "payments"), {
           orderId: `REC-${Date.now().toString(36).toUpperCase()}-${count}`,

@@ -19,6 +19,7 @@ import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
 import { CATEGORIES_COMPTABLES } from "@/lib/categories-comptables";
+import { nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import {
   emailLayout, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature, emailCouleurs as CE,
@@ -39,7 +40,7 @@ interface TabEncaisserProps {
     mode: string, ref?: string, activityTitle?: string, customDate?: string
   ) => Promise<any>;
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
-  setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes">>;
+  setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes" | "facturx">>;
   refreshAll: () => Promise<void>;
   /** Pré-remplissage du panier (flux « Dupliquer » du journal). */
   prefill?: { familyId: string; familySearch: string; items: BasketItem[] } | null;
@@ -116,9 +117,7 @@ export function TabEncaisser({
   const selectedFam = families.find((f) => f.firestoreId === selectedFamily);
   const children = selectedFam?.children || [];
   // Sites facturables du client (collectivité réglant pour plusieurs centres).
-  const servicesFacturables: string[] = Array.isArray((selectedFam as any)?.services)
-    ? (selectedFam as any).services.filter(Boolean)
-    : [];
+  const servicesFacturables: string[] = nomsServices((selectedFam as any)?.services);
 
   const filteredFamilies = familySearch
     ? families.filter((f) => {
@@ -164,7 +163,7 @@ export function TabEncaisser({
     if (!selectedActivity) return;
     const act = activities.find((a) => a.firestoreId === selectedActivity);
     if (!act) return;
-    const priceTTC = (act as any).priceTTC || ((act.priceHT || 0) * (1 + ((act as any).tvaTaux || 5.5) / 100));
+    const priceTTC = (act as any).priceTTC || ((act.priceHT || 0) * (1 + ((act as any).tvaTaux ?? 5.5) / 100));
     const fam = families.find(f => f.firestoreId === selectedFamily);
     const child = (fam?.children || []).find((c: any) => c.id === selectedChild);
     const childName = (child as any)?.firstName || selectedChild || "—";
@@ -176,8 +175,8 @@ export function TabEncaisser({
       childName,
       activityType: (act as any).type || "",
       description: act.title,
-      priceHT: priceTTC / (1 + ((act as any).tvaTaux || 5.5) / 100),
-      tva: (act as any).tvaTaux || 5.5,
+      priceHT: priceTTC / (1 + ((act as any).tvaTaux ?? 5.5) / 100),
+      tva: (act as any).tvaTaux ?? 5.5,
       priceTTC,
     }]);
   };
@@ -553,6 +552,28 @@ export function TabEncaisser({
             <p className="font-body text-[10px] text-slate-500 mt-1">
               Apparaîtra sur la facture sous le nom du client. La liste se règle sur la fiche du client.
             </p>
+            {/* Coordonnées propres au site : sans elles, la facture part à
+                l'adresse de la structure, pour tous ses centres à la fois. */}
+            {(() => {
+              const site = serviceParNom((selectedFam as any)?.services, serviceFacture);
+              if (!site) return null;
+              const lignes = [
+                site.contact,
+                site.email,
+                site.telephone,
+                [site.adresse, [site.codePostal, site.ville].filter(Boolean).join(" ")].filter(Boolean).join(", ") || "",
+                site.codeService ? `Code service : ${site.codeService}` : "",
+                site.numeroEngagement ? `Engagement : ${site.numeroEngagement}` : "",
+              ].filter(Boolean);
+              if (lignes.length === 0) {
+                return <p className="font-body text-[10px] text-amber-700 mt-1">Ce site n&apos;a pas de coordonnées : la facture portera celles de la structure.</p>;
+              }
+              return (
+                <div className="mt-1.5 rounded-lg bg-blue-50/60 border border-blue-100 px-2.5 py-1.5 font-body text-[11px] text-blue-900">
+                  {lignes.map((l) => <div key={l}>{l}</div>)}
+                </div>
+              );
+            })()}
           </div>
         )}
         {selectedFam && children.length > 0 && (
@@ -932,7 +953,7 @@ export function TabEncaisser({
                 {/* Pastille sélection active */}
                 {selected && !activityDropdownOpen && (
                   <div className="mt-1.5 inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-800 font-body text-xs px-2.5 py-1 rounded-lg">
-                    ✓ {selected.title} — <span className="font-semibold">{(((selected as any).priceTTC) || (selected.priceHT || 0) * (1 + (selected.tvaTaux || 5.5) / 100)).toFixed(2)}€</span>
+                    ✓ {selected.title} — <span className="font-semibold">{(((selected as any).priceTTC) || (selected.priceHT || 0) * (1 + (selected.tvaTaux ?? 5.5) / 100)).toFixed(2)}€</span>
                   </div>
                 )}
                 {/* Liste déroulante filtrée */}
@@ -942,7 +963,7 @@ export function TabEncaisser({
                       <div className="px-3 py-4 text-center font-body text-xs text-slate-400">Aucune activité ne correspond à "{activitySearch}"</div>
                     ) : (
                       filtered.map((a, idx) => {
-                        const ttc = (a as any).priceTTC || (a.priceHT || 0) * (1 + (a.tvaTaux || 5.5) / 100);
+                        const ttc = (a as any).priceTTC || (a.priceHT || 0) * (1 + (a.tvaTaux ?? 5.5) / 100);
                         const isSelected = selectedActivity === a.firestoreId;
                         return (
                           <button type="button"

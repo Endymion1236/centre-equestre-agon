@@ -50,7 +50,7 @@ export function calculerSyntheseFactures(factures: FactureSynthese[]) {
       const ht = ligne.priceHT || 0;
       const ttc = ligne.priceTTC || 0;
       const montantTva = ttc - ht;
-      const taux = ligne.tva || 5.5;
+      const taux = ligne.tva ?? 5.5;
 
       totalHT += ht;
       totalTVA += montantTva;

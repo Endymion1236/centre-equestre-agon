@@ -6,8 +6,8 @@ import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import IllustratedFeatureBand from "@/components/public/IllustratedFeatureBand";
 import { compareCreneaux } from "@/lib/creneau-sort";
-import { addCalendarDays, calendarDaysBetween, comparePublicPlanningSlots, type PublicPlanningSlot, tarifJournee } from "@/lib/public-planning";
-import { ArrowRight, CalendarDays, ChevronLeft, ChevronRight, Clock, Filter, Sparkles, Users } from "lucide-react";
+import { addCalendarDays, calendarDaysBetween, comparePublicPlanningSlots, renseignementsActivite, type PublicPlanningSlot, tarifJournee } from "@/lib/public-planning";
+import { ArrowRight, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Clock, Filter, Sparkles, Users } from "lucide-react";
 
 type Creneau = PublicPlanningSlot;
 
@@ -43,7 +43,7 @@ function getMonday(date: Date) {
 
 function priceOf(slot: Creneau) {
   if (typeof slot.priceTTC === "number") return slot.priceTTC;
-  if (typeof slot.priceHT === "number") return Math.round(slot.priceHT * (1 + (slot.tvaTaux || 5.5) / 100) * 100) / 100;
+  if (typeof slot.priceHT === "number") return Math.round(slot.priceHT * (1 + (slot.tvaTaux ?? 5.5) / 100) * 100) / 100;
   return null;
 }
 
@@ -76,6 +76,8 @@ export default function PlanningPublic() {
   const [reloadKey, setReloadKey] = useState(0);
   const [weekOffset, setWeekOffset] = useState(0);
   const [filter, setFilter] = useState("all");
+  // Créneau dont le panneau « En savoir plus » est déplié (un seul à la fois).
+  const [detailOuvert, setDetailOuvert] = useState<string | null>(null);
   const didSelectInitialWeek = useRef(false);
 
   // Type d'activité transmis par les fiches : /planning?type=stage.
@@ -284,7 +286,40 @@ export default function PlanningPublic() {
                                 <div className={`flex items-center gap-1.5 font-body text-xs font-bold ${full ? "text-red-500" : places !== null && places <= 2 ? "text-orange-600" : "text-emerald-600"}`}><Users size={14} />{capacity === 0 ? `${enrolled} inscrit${enrolled > 1 ? "s" : ""}` : full ? "Complet" : `${places} place${places && places > 1 ? "s" : ""}`}</div>
                                 {!isPast && <Link href="/espace-cavalier/reserver" className={`rounded-lg px-3 py-2 font-body text-xs font-bold no-underline ${full ? "bg-slate-100 text-slate-500" : "bg-blue-700 text-white"}`}>{full ? "Voir la liste d’attente" : "Réserver"}</Link>}
                               </div>
-                              <Link href={activityLink(slot.activityType)} className="mt-3 inline-flex items-center gap-1 font-body text-xs font-semibold text-blue-500 no-underline">En savoir plus sur cette activité <ArrowRight size={12} /></Link>
+                              {(() => {
+                                // La fiche du catalogue décrit CETTE activité : on la
+                                // déplie sur place. Sans fiche renseignée, on garde le
+                                // renvoi vers la page des activités.
+                                const infos = renseignementsActivite(slot.details);
+                                const aDire = !!infos.description || infos.puces.length > 0;
+                                if (!aDire) {
+                                  return <Link href={activityLink(slot.activityType)} className="mt-3 inline-flex items-center gap-1 font-body text-xs font-semibold text-blue-500 no-underline">En savoir plus sur cette activité <ArrowRight size={12} /></Link>;
+                                }
+                                const ouvert = detailOuvert === slot.id;
+                                return (
+                                  <div className="mt-3">
+                                    <button type="button" onClick={() => setDetailOuvert(ouvert ? null : slot.id)}
+                                      aria-expanded={ouvert}
+                                      className="inline-flex items-center gap-1 font-body text-xs font-semibold text-blue-500 bg-transparent border-none p-0 cursor-pointer">
+                                      {ouvert ? "Masquer le détail" : "En savoir plus sur cette activité"}
+                                      <ChevronDown size={13} className={ouvert ? "rotate-180 transition-transform" : "transition-transform"} />
+                                    </button>
+                                    {ouvert && (
+                                      <div className="mt-2 rounded-xl border border-blue-100 bg-blue-50/40 p-3">
+                                        {infos.description && <p className="font-body text-xs leading-relaxed text-slate-600 whitespace-pre-line m-0">{infos.description}</p>}
+                                        {infos.puces.length > 0 && (
+                                          <ul className="mt-2 mb-0 flex flex-wrap gap-1.5 list-none p-0">
+                                            {infos.puces.map((puce) => (
+                                              <li key={puce} className="rounded-full bg-white border border-blue-100 px-2.5 py-1 font-body text-[11px] font-semibold text-blue-700">{puce}</li>
+                                            ))}
+                                          </ul>
+                                        )}
+                                        <Link href={activityLink(slot.activityType)} className="mt-2 inline-flex items-center gap-1 font-body text-[11px] font-semibold text-blue-500 no-underline">Toutes nos activités <ArrowRight size={11} /></Link>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           );
                         })}

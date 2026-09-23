@@ -5,6 +5,113 @@ export interface Depense {
   fournisseur: string;
   montant: number;
   note: string;
+  /** "saisie" (à la main) ou "releve-bancaire" (débit lu sur un relevé). */
+  source?: string;
+  /** Date de l'opération telle que lue sur le relevé (absente sur les saisies). */
+  dateOperation?: string;
+}
+
+/* ── Doublons ──────────────────────────────────────────────────────────────
+ * Le même relevé PDF déposé deux fois dans Trésorerie renvoyait deux fois
+ * chaque débit vers ici : la matrice doublait sans prévenir. Une dépense est
+ * identifiée par (mois, libellé normalisé, montant) — le poste n'en fait pas
+ * partie, une recatégorisation ne crée pas une nouvelle dépense. */
+
+/** "  EDF - Prélèvement  " → "edf prelevement" (accents, casse, ponctuation). */
+export function normaliserLibelle(libelle: unknown): string {
+  return String(libelle ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export interface DepenseCle {
+  mois: string;
+  fournisseur?: string;
+  montant: number | string;
+}
+
+export function empreinteDepense(d: DepenseCle): string {
+  const montant = Math.round((Number(String(d.montant).replace(",", ".")) || 0) * 100) / 100;
+  return `${d.mois}|${normaliserLibelle(d.fournisseur)}|${montant.toFixed(2)}`;
+}
+
+/**
+ * Garde-fou d'import : ne retient du lot que les lignes qui ne sont pas déjà
+ * enregistrées. Compte par empreinte : deux pleins identiques le même mois
+ * restent possibles (le lot en porte deux, la base une → une seule ajoutée),
+ * mais un relevé déjà importé ne repasse pas.
+ */
+export function filtrerNouvellesLignes<T extends DepenseCle>(
+  existantes: DepenseCle[],
+  lot: T[],
+): { aAjouter: T[]; doublons: T[] } {
+  const restantes = new Map<string, number>();
+  for (const e of existantes) {
+    const k = empreinteDepense(e);
+    restantes.set(k, (restantes.get(k) || 0) + 1);
+  }
+  const aAjouter: T[] = [];
+  const doublons: T[] = [];
+  for (const l of lot) {
+    const k = empreinteDepense(l);
+    const n = restantes.get(k) || 0;
+    if (n > 0) {
+      restantes.set(k, n - 1);
+      doublons.push(l);
+    } else {
+      aAjouter.push(l);
+    }
+  }
+  return { aAjouter, doublons };
+}
+
+export interface GroupeDoublons {
+  empreinte: string;
+  mois: string;
+  fournisseur: string;
+  montant: number;
+  /** Toutes les lignes du groupe, la plus ancienne (id) d'abord. */
+  lignes: Depense[];
+  /** Celles à retirer pour n'en garder qu'une. */
+  enTrop: Depense[];
+  /** Postes rencontrés (un relevé réimporté peut avoir été recatégorisé). */
+  postes: string[];
+}
+
+/** Lignes déjà en base qui se répètent (mois, libellé, montant) — doublons
+ *  probables d'un double import. Le montant zéro et les lignes sans
+ *  fournisseur sont ignorés : trop ambigus pour être proposés au retrait. */
+export function trouverDoublons(depenses: Depense[]): GroupeDoublons[] {
+  const parEmpreinte = new Map<string, Depense[]>();
+  for (const d of depenses) {
+    if (!normaliserLibelle(d.fournisseur) || !(Number(d.montant) > 0)) continue;
+    const k = empreinteDepense(d);
+    const g = parEmpreinte.get(k);
+    if (g) g.push(d); else parEmpreinte.set(k, [d]);
+  }
+  const groupes: GroupeDoublons[] = [];
+  for (const [empreinte, lignes] of parEmpreinte) {
+    if (lignes.length < 2) continue;
+    const triees = [...lignes].sort((a, b) => a.id.localeCompare(b.id));
+    groupes.push({
+      empreinte,
+      mois: triees[0].mois,
+      fournisseur: triees[0].fournisseur,
+      montant: Number(triees[0].montant) || 0,
+      lignes: triees,
+      enTrop: triees.slice(1),
+      postes: [...new Set(triees.map((l) => l.poste))],
+    });
+  }
+  return groupes.sort((a, b) => b.mois.localeCompare(a.mois) || b.montant - a.montant);
+}
+
+/** Montant qui disparaîtrait de la matrice si l'on retirait les lignes en trop. */
+export function totalEnTrop(groupes: GroupeDoublons[]): number {
+  return groupes.reduce((t, g) => t + g.enTrop.reduce((s, l) => s + (Number(l.montant) || 0), 0), 0);
 }
 
 export interface PosteDepense {

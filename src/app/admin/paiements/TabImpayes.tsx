@@ -12,15 +12,22 @@ import { verrouCommande } from "./commande-verrou";
 import { NoteField } from "./NoteField";
 import { authFetch } from "@/lib/auth-fetch";
 import { useConfirm } from "@/components/ui/Confirm";
+import { estCompteProfessionnel } from "@/lib/facturx";
+import { echeanceParDefaut } from "./facturx-depot-utils";
 import {
+  NATURES_IMPAYES,
   calculerResumeImpayes,
+  compterParNature,
   filtrerImpayes,
+  rienRegle,
+  type NatureImpaye,
   grouperImpayesParEvenement,
   listerImpayes,
   preparerMultiEncaissements,
   soldeRestant,
   duMaintenant,
   type ImpayeTypeFilter,
+  prelevementAPreparer,
 } from "./impayes-utils";
 
 interface TabImpayesProps {
@@ -73,17 +80,60 @@ export function TabImpayes({
     }
   };
 
+  // Échéance choisie par commande avant « Émettre la facture » (clients pros).
+  const [echeances, setEcheances] = useState<Record<string, string>>({});
+
+  /** Client professionnel : facture émise AVANT règlement, avec échéance,
+   *  puis dépôt sur la Plateforme Agréée (onglet Factur-X). */
+  const emettreFacturePro = async (p: any) => {
+    const dueDate = echeances[p.id] || echeanceParDefaut();
+    if (!(await confirmer({
+      titre: `Émettre la facture — ${p.familyName} ?`,
+      details: [
+        "Un numéro séquentiel définitif sera attribué (F-AAAA-NNNN) sans attendre le règlement.",
+        `Échéance de paiement portée sur la facture : ${new Date(dueDate).toLocaleDateString("fr-FR")}.`,
+        "Les lignes de la commande seront figées. La facture apparaîtra dans l'onglet Factur-X, à déposer sur Cecurity.",
+      ],
+      libelleConfirmer: "Émettre",
+      danger: true,
+    }))) return;
+    try {
+      const res = await authFetch("/api/admin/attribuer-numero-facture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: p.id, dueDate }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d?.error || `HTTP ${res.status}`);
+      if (!d?.invoiceNumber) throw new Error("numéro absent de la réponse");
+      setPayments(prev => prev.map(x => x.id === p.id ? { ...x, invoiceNumber: d.invoiceNumber, invoiceDate: new Date(), dueDate } as any : x));
+      toast(`Facture ${d.invoiceNumber} émise pour ${p.familyName} — à déposer sur Cecurity (onglet Factur-X)`, "success", 6000);
+    } catch (e: any) {
+      console.error(e);
+      toast(e?.message || "Erreur à l'émission", "error", 6000);
+    }
+  };
+
   const [impayesSearch, setImpayesSearch] = useState(initialSearch || "");
   const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [impayesExpanded, setImpayesExpanded] = useState<Set<string>>(new Set());
   const [typeFilter, setTypeFilter] = useState<ImpayeTypeFilter>("all");
+  // Par activité : stages, promenades, séances, forfaits annuels.
+  const [natureFilter, setNatureFilter] = useState<NatureImpaye | "all">("all");
+  // « Rien réglé » : les commandes sans aucun encaissement, ni acompte ni partiel.
+  const [seulementRienRegle, setSeulementRienRegle] = useState(false);
 
   const todayStr = new Date().toISOString().split("T")[0];
   const unpaid = useMemo(() => listerImpayes(payments, todayStr), [payments, todayStr]);
   const filtered = useMemo(
-    () => filtrerImpayes(unpaid, { familyFilter, typeFilter, search: impayesSearch }),
-    [unpaid, familyFilter, typeFilter, impayesSearch],
+    () => filtrerImpayes(unpaid, { familyFilter, typeFilter, natureFilter, rienRegle: seulementRienRegle, search: impayesSearch }),
+    [unpaid, familyFilter, typeFilter, natureFilter, seulementRienRegle, impayesSearch],
   );
+  const parNature = useMemo(() => compterParNature(unpaid), [unpaid]);
+  const naturesPresentes = NATURES_IMPAYES.filter(n => parNature[n.id] > 0);
+  const nbRienRegle = useMemo(() => unpaid.filter(rienRegle).length, [unpaid]);
+  // La pastille n'a de sens que si elle sépare quelque chose.
+  const proposerRienRegle = nbRienRegle > 0 && nbRienRegle < unpaid.length;
   const groups = useMemo(() => grouperImpayesParEvenement(filtered), [filtered]);
   const multiEncaissements = useMemo(() => preparerMultiEncaissements(unpaid), [unpaid]);
   const { totalDue, totalFiltre, nbInvoice, nbEcheance } = useMemo(
@@ -202,10 +252,35 @@ export function TabImpayes({
         </div>
       )}
 
+      {(naturesPresentes.length >= 2 || proposerRienRegle) && (
+        <div className="flex gap-2 mb-4 flex-wrap" data-testid="impaye-nature-filter">
+          <button type="button" onClick={() => { setNatureFilter("all"); setSeulementRienRegle(false); }}
+            className={`px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${natureFilter === "all" && !seulementRienRegle ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
+            Tout
+          </button>
+          {naturesPresentes.map(n => (
+            <button type="button" key={n.id} onClick={() => setNatureFilter(natureFilter === n.id ? "all" : n.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${natureFilter === n.id ? "bg-slate-700 text-white border-slate-700" : "bg-white text-slate-600 border-gray-200 hover:bg-slate-50"}`}>
+              {n.emoji} {n.label} <span className={`px-1.5 py-0.5 rounded text-[10px] ${natureFilter === n.id ? "bg-white/20" : "bg-slate-100"}`}>{parNature[n.id]}</span>
+            </button>
+          ))}
+          {proposerRienRegle && (
+            <button type="button" data-testid="impaye-rien-regle" onClick={() => setSeulementRienRegle(v => !v)}
+              title="Ne garder que les commandes sans aucun encaissement (ni acompte, ni partiel)"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full font-body text-xs font-semibold border cursor-pointer ${seulementRienRegle ? "bg-red-600 text-white border-red-600" : "bg-white text-red-600 border-red-200 hover:bg-red-50"}`}>
+              💸 Rien réglé <span className={`px-1.5 py-0.5 rounded text-[10px] ${seulementRienRegle ? "bg-white/20" : "bg-red-50"}`}>{nbRienRegle}</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {filtered.length === 0 && (
         <p className="font-body text-sm text-slate-500 text-center py-8">
           {search ? `Aucun résultat pour "${search}"` :
             familyFilter ? `Aucun impayé pour ${familyFilterLabel}.` :
+            seulementRienRegle && natureFilter !== "all" ? `Aucune commande « ${NATURES_IMPAYES.find(n => n.id === natureFilter)?.label} » sans rien de réglé.` :
+            seulementRienRegle ? "Toutes les commandes en attente ont au moins un acompte." :
+            natureFilter !== "all" ? `Aucun impayé pour « ${NATURES_IMPAYES.find(n => n.id === natureFilter)?.label} ».` :
             typeFilter === "invoice" ? "Aucune facture impayée." :
             typeFilter === "echeance" ? "Aucune échéance en retard." :
             "Aucun impayé."}
@@ -255,6 +330,13 @@ export function TabImpayes({
                           {typeof p.sepaRestant === "number" && p.sepaRestant > 0.005 && (
                             <span className="font-body text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-200 rounded-full px-2 py-0.5 whitespace-nowrap" title="Cette part est planifiée en prélèvement SEPA ; seul le reste est dû ici">
                               {p.sepaRestant.toFixed(2)} € en SEPA
+                            </span>
+                          )}
+                          {/* Annoncée en prélèvement, mais aucune échéance posée :
+                              rien ne sera prélevé tant que l'échéancier n'existe pas. */}
+                          {prelevementAPreparer(p) && (
+                            <span className="font-body text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 whitespace-nowrap" title="Le mode de règlement annoncé est le prélèvement, mais aucune échéance n'est posée : rien ne sera prélevé tant que l'échéancier n'est pas créé dans Prélèvements SEPA.">
+                              Prélèvement à préparer
                             </span>
                           )}
                           <a
@@ -444,7 +526,17 @@ export function TabImpayes({
                                   className="font-body text-[10px] font-bold text-white bg-indigo-500 px-2 py-1 rounded border-none cursor-pointer hover:bg-indigo-600 whitespace-nowrap leading-none">F-X</button>
                               </>
                             )}
-                            {!p.invoiceNumber && (
+                            {!p.invoiceNumber && estCompteProfessionnel(families.find(f => f.firestoreId === p.familyId)) && (
+                              <span className="inline-flex items-center gap-1">
+                                <input type="date" value={echeances[p.id] || echeanceParDefaut()} title="Échéance de règlement portée sur la facture"
+                                  onChange={e => setEcheances(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                  className="font-body text-[10px] text-slate-600 bg-white border border-gray-200 rounded px-1.5 py-0.5"/>
+                                <button type="button" onClick={() => emettreFacturePro(p)}
+                                  title="Client professionnel : facture émise avant règlement, à déposer sur Cecurity"
+                                  className="font-body text-[10px] font-semibold text-white bg-indigo-500 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-indigo-600 flex items-center gap-1"><FileText size={10}/> Émettre la facture</button>
+                              </span>
+                            )}
+                            {!p.invoiceNumber && !estCompteProfessionnel(families.find(f => f.firestoreId === p.familyId)) && (
                               <button type="button" onClick={async () => {
                                 if (!(await confirmer({
                                   titre: `Convertir en facture définitive — ${p.familyName} ?`,
@@ -471,7 +563,33 @@ export function TabImpayes({
                               }} className="font-body text-[10px] text-orange-600 bg-orange-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-orange-100 flex items-center gap-1"><Receipt size={10}/> → Facture définitive</button>
                             )}
                             <button type="button" onClick={() => setDuplicateTarget({ payment: p, targetFamilyId: "", targetSearch: "", mode: "choose" })} className="font-body text-[10px] text-blue-500 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 flex items-center gap-1"><Plus size={10}/> Dupliquer</button>
-                            {(p.items||[]).some((i:any) => i.activityType === "cours" || i.activityTitle?.includes("Forfait")) && (
+                            {/* Séance, promenade ou stage réservés sur des créneaux précis :
+                                on REPLACE le cavalier sur ces créneaux-là (la place tenue
+                                a pu expirer faute de paiement), jamais sur toutes les
+                                semaines à venir — c'est le rôle du bouton forfait ci-dessous. */}
+                            {(p.items||[]).some((i:any) => (i.creneauId || (Array.isArray(i.creneauIds) && i.creneauIds.length > 0)) && !i.activityTitle?.includes("Forfait")) && (
+                              <button type="button" onClick={async () => {
+                                try {
+                                  const res = await authFetch("/api/admin/confirmer-places", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ paymentId: p.id }),
+                                  });
+                                  const json = await res.json().catch(() => ({}));
+                                  if (!res.ok) throw new Error(json?.error || "Échec");
+                                  const n = Number(json?.reinscrites || 0) + Number(json?.confirmees || 0);
+                                  toast(n > 0
+                                    ? `✅ ${p.familyName} replacé(e) au planning (${n} place${n > 1 ? "s" : ""}).`
+                                    : "Déjà au planning : rien à replacer.", n > 0 ? "success" : "info");
+                                } catch (e: any) {
+                                  console.error(e);
+                                  toast(e?.message || "Impossible de replacer au planning", "error");
+                                }
+                              }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
+                                📅 Replacer au planning
+                              </button>
+                            )}
+                            {(p.items||[]).some((i:any) => i.activityTitle?.includes("Forfait")) && (
                               <button type="button" onClick={async () => {
                                 let paymentToUse = p;
                                 if (p.sourcePaymentId) {
@@ -485,7 +603,7 @@ export function TabImpayes({
                                 const n = await enrollChildInForfait(paymentToUse, p.familyId);
                                 toast(n > 0 ? `✅ ${n} séance(s) inscrite(s)` : "⚠️ Aucune séance inscrite — vérifiez le planning", n > 0 ? "success" : "error");
                               }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
-                                📅 Inscrire créneaux
+                                📅 Inscrire créneaux de l'année
                               </button>
                             )}
                           </div>

@@ -5,6 +5,8 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { calculerDisponibilites, labelFr, jourFr } from "@/lib/dispo";
 import { getClubInfo } from "@/lib/club-info";
+import { trouverPeriodeNommee, resumePeriodes, type PeriodeVacances } from "@/lib/periode-vacances";
+import { niveauxAdmissibles, niveauConseille, niveauxAtteignablesParAuMoinsUn, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
 import { libelleCartesSeances } from "@/lib/tarifs-reference";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -65,27 +67,41 @@ async function extractPeriode(
   from: string,
   subject: string,
   body: string,
-  today: string
-): Promise<{ start: string; end: string; borne: boolean }> {
+  today: string,
+  /** Périodes de vacances configurées (Paramètres), pour traduire « la Toussaint » en dates. */
+  periodesConnues: string = "",
+): Promise<{ start: string; end: string; borne: boolean; cavaliers: CavalierDeclare[] }> {
   const defStart = today;
   const defEnd = addDaysStr(today, 63);
   const we = prochainWeekend(today);
   try {
-    const sys = `Tu extrais la fenêtre de dates demandée dans un mail. Date du jour : ${today}. Ce week-end = ${we.samedi} au ${we.dimanche}.
-Réponds UNIQUEMENT en JSON : {"dateStart":"YYYY-MM-DD"|null,"dateEnd":"YYYY-MM-DD"|null}
-Règles : "cette semaine" = lundi→dimanche de la semaine du jour ; "ce week-end" = ${we.samedi} et ${we.dimanche} ; "demain" = jour+1 ; "en juillet 2027" = 2027-07-01 à 2027-07-31 ; "la semaine du 20 juillet" = ce lundi-là au dimanche ; "cet été" = juin→août de l'année concernée. Si AUCUNE période n'est mentionnée, mets les deux à null.`;
+    // Les cavaliers DÉCLARÉS dans le mail (âge, galop) sont extraits ici,
+    // avant la réponse : ils servent à retirer de la liste les promenades
+    // d'un niveau inaccessible, que la famille soit connue ou non.
+    const sys = `Tu extrais d'un mail la fenêtre de dates demandée et les cavaliers mentionnés. Date du jour : ${today}. Ce week-end = ${we.samedi} au ${we.dimanche}.
+Réponds UNIQUEMENT en JSON : {"dateStart":"YYYY-MM-DD"|null,"dateEnd":"YYYY-MM-DD"|null,"cavaliers":[{"prenom":"..."|null,"age":13|null,"galop":"Galop 2"|null}]}
+Règles dates : "cette semaine" = lundi→dimanche de la semaine du jour ; "ce week-end" = ${we.samedi} et ${we.dimanche} ; "demain" = jour+1 ; "en juillet 2027" = 2027-07-01 à 2027-07-31 ; "la semaine du 20 juillet" = ce lundi-là au dimanche ; "cet été" = juin→août de l'année concernée. Si AUCUNE période n'est mentionnée, mets les deux à null.
+${periodesConnues ? `Vacances scolaires configurées (quand le mail nomme l'une d'elles — Toussaint, Noël, février/hiver, Pâques/printemps, été — utilise EXACTEMENT ses dates, la prochaine à venir) : ${periodesConnues}.` : ""}
+Règles cavaliers : uniquement ce qui est ÉCRIT (âge, niveau de galop, "débutant", "galop d'argent"…) ; n'invente ni âge ni niveau ; liste vide si aucun cavalier n'est décrit.`;
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 80,
+      max_tokens: 300,
       system: sys,
       messages: [{ role: "user", content: `${subject || ""}\n${(body || "").slice(0, 1500)}` }],
     });
     const raw = msg.content.map((b: any) => (b.type === "text" ? b.text : "")).join("").trim();
     const j = JSON.parse(raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim());
+    const cavaliers: CavalierDeclare[] = (Array.isArray(j.cavaliers) ? j.cavaliers : [])
+      .map((c: any) => ({
+        prenom: typeof c?.prenom === "string" ? c.prenom : null,
+        age: typeof c?.age === "number" && c.age > 0 && c.age < 120 ? c.age : null,
+        galop: c?.galop != null && String(c.galop).trim() !== "" ? String(c.galop) : null,
+      }))
+      .filter((c: CavalierDeclare) => c.age !== null || c.galop !== null);
     let start = isDate(j.dateStart) ? j.dateStart : null;
     let end = isDate(j.dateEnd) ? j.dateEnd : null;
 
-    if (!start && !end) return { start: defStart, end: defEnd, borne: false };
+    if (!start && !end) return { start: defStart, end: defEnd, borne: false, cavaliers };
     if (start && !end) end = addDaysStr(start, 62);
     if (!start && end) start = today;
     // On ne lit pas le passé.
@@ -93,11 +109,14 @@ Règles : "cette semaine" = lundi→dimanche de la semaine du jour ; "ce week-en
     if (end! < start!) end = addDaysStr(start!, 62);
     // Cap de sécurité : jamais plus de ~100 jours lus d'un coup.
     if (daysBetween(start!, end!) > 100) end = addDaysStr(start!, 100);
-    return { start: start!, end: end!, borne: true };
+    return { start: start!, end: end!, borne: true, cavaliers };
   } catch {
-    return { start: defStart, end: defEnd, borne: false };
+    return { start: defStart, end: defEnd, borne: false, cavaliers: [] };
   }
 }
+
+/** Un cavalier tel que le mail le décrit. */
+interface CavalierDeclare { prenom: string | null; age: number | null; galop: string | null }
 
 function ageFrom(birth: any): number | null {
   if (!birth) return null;
@@ -146,8 +165,29 @@ export async function POST(req: NextRequest) {
     }
 
     const today = todayParis();
+    // Périodes de vacances configurées (Paramètres > Réductions) : elles
+    // traduisent « les vacances de la Toussaint » en dates exactes.
+    let periodesVacances: PeriodeVacances[] = [];
+    try {
+      const vSnap = await adminDb.collection("vacationPeriods").get();
+      periodesVacances = vSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) } as PeriodeVacances))
+        .filter((p) => /^\d{4}-\d{2}-\d{2}$/.test(p.startDate || "") && /^\d{4}-\d{2}-\d{2}$/.test(p.endDate || ""));
+    } catch { /* pas de périodes → extraction sans repère */ }
+
     // Passe légère : on détecte la période demandée pour ne lire que l'utile.
-    const periode = await extractPeriode(from || "", subject || "", body || "", today);
+    const periode = await extractPeriode(from || "", subject || "", body || "", today, resumePeriodes(periodesVacances, today));
+
+    // Repli DÉTERMINISTE : si le mail nomme une période de vacances, la
+    // fenêtre est celle configurée, quoi qu'ait extrait le modèle. Sans ça,
+    // « pendant la Toussaint » donnait deux mois à partir du jour, et les
+    // promenades du dimanche d'avant les vacances entraient dans la liste.
+    const periodeNommee = trouverPeriodeNommee(`${subject || ""}\n${body || ""}`, periodesVacances, today);
+    if (periodeNommee) {
+      periode.start = periodeNommee.startDate > today ? periodeNommee.startDate : today;
+      periode.end = periodeNommee.endDate;
+      periode.borne = true;
+      console.log(`[inbox-assistant] période nommée : ${periodeNommee.name} → ${periode.start} → ${periode.end}`);
+    }
 
     // ── 1. Créneaux disponibles SUR LA PÉRIODE DEMANDÉE (lecture ciblée) ───
     //    Logique partagée : lib/dispo.ts (assistant email, agent admin, et
@@ -163,7 +203,7 @@ export async function POST(req: NextRequest) {
     let familleContexte: any = null;
     let familyId: string | null = null;
     const childrenMap = new Map<string, string>(); // childId → prénom (validation)
-    const childElig = new Map<string, { age: number | null; galop: string | null }>();
+    const childElig = new Map<string, { age: number | null; galop: string | null; niveauxPromenade: string[] | null }>();
     const fromEmail = (from || "").trim().toLowerCase();
     if (fromEmail) {
       try {
@@ -181,6 +221,7 @@ export async function POST(req: NextRequest) {
               childElig.set(ch.id, {
                 age: ageFrom(ch.birthDate),
                 galop: ch.galopLevel && ch.galopLevel !== "—" ? ch.galopLevel : null,
+                niveauxPromenade: niveauxAdmissibles({ birthDate: ch.birthDate, galopLevel: ch.galopLevel }),
               });
             }
           });
@@ -191,12 +232,43 @@ export async function POST(req: NextRequest) {
               prenom: ch.firstName || "",
               age: ageFrom(ch.birthDate),
               galop: ch.galopLevel && ch.galopLevel !== "—" ? ch.galopLevel : null,
+              // Calculé ici, pas par le modèle : les niveaux de promenade que
+              // la fiche autorise (âge + galop), et celui à conseiller.
+              niveauxPromenade: niveauxAdmissibles({ birthDate: ch.birthDate, galopLevel: ch.galopLevel }),
+              promenadeConseillee: niveauConseille({ birthDate: ch.birthDate, galopLevel: ch.galopLevel }),
             })),
           };
         }
       } catch {
         /* expéditeur inconnu → pas de contexte */
       }
+    }
+
+    // ── 2 bis. Promenades : on retire de la liste celles d'un niveau que
+    //    AUCUN cavalier concerné ne peut atteindre. Cavaliers concernés : ceux
+    //    de la fiche famille si l'expéditeur est connu, sinon ceux décrits
+    //    dans le mail (âge, galop). Le modèle proposait une promenade
+    //    « confirmés » à une Galop 2 malgré la règle écrite : ce qu'il ne
+    //    voit pas, il ne peut pas le proposer. Une promenade « à définir »
+    //    reste toujours visible (la famille y choisit son niveau).
+    //    Les deux sources s'additionnent : une famille connue peut écrire
+    //    pour un petit-enfant absent de sa fiche.
+    const cavaliersConcernes: { birthDate?: any; age?: number | null; galopLevel?: any }[] = [
+      ...((familleContexte?.enfants || []) as any[]).map((e: any) => ({ age: e.age, galopLevel: e.galop })),
+      ...periode.cavaliers.map((c) => ({ age: c.age, galopLevel: c.galop })),
+    ];
+    const niveauxAtteignables = niveauxAtteignablesParAuMoinsUn(cavaliersConcernes);
+    const promenadesRetirees: string[] = [];
+    const activitesFiltrees = niveauxAtteignables
+      ? activitesDispo.filter((a: any) => {
+          if (!estNiveauPromenade(a.niveauPromenade)) return true;
+          if (niveauxAtteignables.includes(a.niveauPromenade)) return true;
+          promenadesRetirees.push(`${a.titre} (${a.date})`);
+          return false;
+        })
+      : activitesDispo;
+    if (promenadesRetirees.length > 0) {
+      console.log(`[inbox-assistant] promenades retirées (niveau inaccessible) : ${promenadesRetirees.join(" ; ")}`);
     }
 
     // ── 3. Appel IA (JSON strict) ─────────────────────────────────────
@@ -245,7 +317,12 @@ Règles:
     • Promenade DÉBROUILLÉS : 12 ans minimum, bonne maîtrise du trot enlevé OU Galop 2, 85 kg maximum.
     • Promenade DÉBUTANTS : 12 ans minimum, 85 kg maximum.
     • POIDS MAXIMUM 85 kg pour TOUTES les promenades, sans exception.
-  Tu ne confirmes JAMAIS une promenade si un critère chiffrable connu n'est pas respecté (âge, poids, galop). Le poids et la maîtrise des allures ne sont pas dans nos données : demande-les et ne les suppose jamais acquis. En cas de doute ou de niveau insuffisant, propose l'ÉVALUATION la veille à 10 € ; précise que SANS évaluation validée, la promenade n'est PAS remboursée si le niveau se révèle insuffisant sur place. Ne contourne jamais un critère d'âge ou de poids par l'évaluation : elle ne lève qu'un doute sur le niveau technique, pas une inaptitude.
+  Tu ne confirmes JAMAIS une promenade si un critère chiffrable connu n'est pas respecté (âge, poids, galop). Le poids et la maîtrise des allures ne sont pas dans nos données : demande-les et ne les suppose jamais acquis.
+  CHOIX DU NIVEAU — c'est calculé pour toi, ne le refais pas : chaque promenade porte "niveauPromenade" ("debutant", "debrouille", "confirme", ou "a_definir" = le niveau sera celui du premier inscrit, la famille choisit) ; chaque enfant connu porte "niveauxPromenade" (les niveaux que sa fiche autorise) et "promenadeConseillee" (le plus exigeant autorisé). Règles :
+    • Propose UNIQUEMENT une promenade dont "niveauPromenade" est dans "niveauxPromenade" de l'enfant, ou "a_definir" (précise alors le niveau à choisir : "promenadeConseillee").
+    • Un galop CONNU et insuffisant n'est pas un doute, c'est un refus : ne propose PAS la promenade d'un niveau supérieur, même avec évaluation. Propose à la place la promenade du niveau adapté (débutants ou débrouillés) ou une promenade "a_definir" de la même période — cherche-les dans la liste avant de conclure qu'il n'y a rien.
+    • L'ÉVALUATION la veille à 10 € ne sert qu'à lever un DOUTE (galop inconnu, "niveauxPromenade" null, maîtrise des allures à confirmer). Quand tu la proposes, précise que SANS évaluation validée, la promenade n'est PAS remboursée si le niveau se révèle insuffisant sur place. Ne contourne jamais un critère d'âge ou de poids par l'évaluation : elle ne lève qu'un doute sur le niveau technique, pas une inaptitude.
+    • Les promenades exigent 12 ans (13 pour confirmés) : la fiche donne l'âge, applique-le.
 - STAGES DE 2 H — composition à préciser si on te pose la question de la durée : un stage de 2 h n'est PAS 2 h d'équitation d'affilée. Il comprend AU MOINS 2 séquences : une séance d'équitation ET une autre séquence (soins, hippologie, théorie, voltige ou attelage selon le niveau). Mentionne-le pour éviter le malentendu.
 - ÉLIGIBILITÉ : chaque activité peut porter des critères "ageMin", "ageMax", "galopRequired" et un texte libre "conditionsAcces". Respecte-les STRICTEMENT. Applique ce qui est VÉRIFIABLE d'après le contexte famille (âge, galop) : ne propose une activité que si l'enfant satisfait l'âge [ageMin, ageMax] et le galop requis (table d'équivalence). Pour les conditions du texte "conditionsAcces" qui ne sont PAS vérifiables dans nos données (ex : "maîtrise du trot enlevé", "maîtrise des 3 allures", "évaluation préalable en carrière"), ne les affirme jamais comme acquises : mentionne-les comme "à confirmer avec la famille". Si "conditionsAcces" mentionne une clause de non-remboursement ou une évaluation préalable, rappelle-la dans ta réponse. Dans le doute, demande à confirmer plutôt que de proposer à tort.
 - PRIORITÉ DES CRITÈRES D'ÂGE : seuls les champs "ageMin"/"ageMax" (et "conditionsAcces") font foi. Si le TITRE d'une activité mentionne un âge ou une tranche d'âge (ex : "Stage bronze 6/7 ans") qui contredit les champs, IGNORE l'âge du titre : c'est un libellé commercial, les champs sont la règle réelle. Exemple : titre "6/7 ans" mais ageMin=5 et ageMax=8 → un enfant de 8 ans EST éligible, propose-lui l'activité. Ne rejette JAMAIS un enfant sur la seule base d'un âge écrit dans le titre.
@@ -266,7 +343,7 @@ Format JSON attendu:
     const we = prochainWeekend(today);
     const userContent = `DATE DU JOUR : ${labelFr(today)} (${today}).
 CE WEEK-END = samedi ${we.samedi} et dimanche ${we.dimanche}.
-ACTIVITÉS FOURNIES CI-DESSOUS : elles couvrent la période du ${periode.start} au ${periode.end} (extraite de la demande). Si la famille évoque une AUTRE période que celle-ci, invite-la poliment à préciser ses dates, que tu vérifieras — ne dis pas "rien de disponible".
+ACTIVITÉS FOURNIES CI-DESSOUS : elles couvrent la période du ${periode.start} au ${periode.end} (extraite de la demande${periodeNommee ? ` — ${periodeNommee.name}` : ""}). ${periode.borne ? "La famille a demandé CETTE période : ne propose rien en dehors, même si tu connais d'autres dates." : ""} Si la famille évoque une AUTRE période que celle-ci, invite-la poliment à préciser ses dates, que tu vérifieras — ne dis pas "rien de disponible".
 IMPORTANT : n'essaie JAMAIS de recalculer un jour de semaine toi-même. Chaque activité fournie contient déjà son champ "jour" (le vrai jour de la semaine) — utilise-le tel quel.
 
 MAIL REÇU (LE PLUS RÉCENT — c'est à CELUI-CI que tu réponds)
@@ -281,12 +358,20 @@ ${JSON.stringify(historiqueFil)}
 ` : ""}CONTEXTE FAMILLE (si expéditeur connu):
 ${familleContexte ? JSON.stringify(familleContexte) : "expéditeur inconnu de la base"}
 
+${periode.cavaliers.length > 0 ? `CAVALIERS DÉCRITS DANS LE MAIL (extraits, à confirmer avec la famille) : ${JSON.stringify(periode.cavaliers)}\n` : ""}${promenadesRetirees.length > 0 ? `PROMENADES RETIRÉES DE LA LISTE (niveau inaccessible d'après l'âge/le galop connus — ne les propose pas, même avec évaluation) : ${promenadesRetirees.join(" ; ")}\n` : ""}
 ACTIVITÉS (à venir). ATTENTION : certaines portent "complet": true — elles EXISTENT mais n'ont plus de place.
-${JSON.stringify(activitesDispo)}`;
+${JSON.stringify(activitesFiltrees)}`;
 
     const message = await client.messages.create({
-      model: "claude-sonnet-4-5",
-      max_tokens: 2000,
+      // Génération courante du même palier (Sonnet 4.5 → Sonnet 5) : mieux
+      // sur le raisonnement d'éligibilité, moins cher au jeton.
+      model: "claude-sonnet-5",
+      // Sonnet 5 réfléchit par défaut avant de répondre, et cette réflexion
+      // compte dans max_tokens : avec 2 000, le JSON arrivait tronqué
+      // (« réponse IA non parsable »). Réflexion coupée — la réponse est un
+      // JSON strict, pas un raisonnement — et budget élargi par sécurité.
+      thinking: { type: "disabled" },
+      max_tokens: 6000,
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });
@@ -295,14 +380,21 @@ ${JSON.stringify(activitesDispo)}`;
       .map((b: any) => (b.type === "text" ? b.text : ""))
       .join("")
       .trim();
-    const cleaned = raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    // Le modèle doit répondre en JSON seul, mais un mot avant l'accolade ou
+    // une clôture de bloc de code suffisait à tout faire échouer : on isole
+    // ce qui va de la première accolade à la dernière.
+    const sansCloture = raw.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    const debut = sansCloture.indexOf("{");
+    const fin = sansCloture.lastIndexOf("}");
+    const cleaned = debut >= 0 && fin > debut ? sansCloture.slice(debut, fin + 1) : sansCloture;
 
     let parsed: any;
     try {
       parsed = JSON.parse(cleaned);
     } catch {
+      console.error("[inbox-assistant] réponse non parsable", { stop: message.stop_reason, longueur: raw.length, debut: raw.slice(0, 300) });
       return NextResponse.json(
-        { error: "Réponse IA non parsable", raw: cleaned.slice(0, 500) },
+        { error: `Réponse IA non parsable${message.stop_reason === "max_tokens" ? " (réponse tronquée)" : ""}`, raw: cleaned.slice(0, 500) },
         { status: 502 }
       );
     }
@@ -413,7 +505,19 @@ ${JSON.stringify(activitesDispo)}`;
       const cr = s.creneauId ? creneauMap.get(s.creneauId) : null;
       const placeOk = !!cr && cr.spots > 0;
       const { ok: ageOk, note: ageNote } = cr ? checkAge(cr.ageMin, cr.ageMax) : { ok: true, note: null };
-      const actionable = placeOk && ageOk;
+      // Promenade d'un niveau que la fiche de l'enfant n'autorise pas : le
+      // modèle ne décide pas, le serveur refuse (galop connu insuffisant, âge).
+      let niveauOk = true;
+      let niveauNote: string | null = null;
+      const niveauCreneau: unknown = cr?.niveauPromenade;
+      if (cr && childId && estNiveauPromenade(niveauCreneau)) {
+        const admissibles = childElig.get(childId)?.niveauxPromenade ?? null;
+        if (admissibles && !admissibles.includes(niveauCreneau)) {
+          niveauOk = false;
+          niveauNote = `niveau ${LIBELLE_NIVEAU[niveauCreneau].toLowerCase()} non autorisé par la fiche (âge ou galop)`;
+        }
+      }
+      const actionable = placeOk && ageOk && niveauOk;
       return {
         groupId: null,
         creneauId: cr ? s.creneauId : null,
@@ -433,7 +537,7 @@ ${JSON.stringify(activitesDispo)}`;
         childName,
         pourquoi: s.pourquoi || "",
         actionable,
-        note: !cr ? "créneau/stage introuvable ou plus dispo" : !placeOk ? "complet" : !ageOk ? ageNote : null,
+        note: !cr ? "créneau/stage introuvable ou plus dispo" : !placeOk ? "complet" : !ageOk ? ageNote : !niveauOk ? niveauNote : null,
       };
     });
 

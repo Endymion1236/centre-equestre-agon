@@ -21,14 +21,14 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
-  let body: { token?: string };
+  let body: { token?: unknown } | null;
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ ok: false, error: "not_found" }, { status: 200 });
   }
 
-  const token = (body.token || "").trim();
+  const token = typeof body?.token === "string" ? body.token.trim() : "";
   const result = await verifyActivationToken(token);
 
   if (!result.ok) {

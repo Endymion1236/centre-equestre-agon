@@ -104,10 +104,16 @@ console.log("\n✓ Réservation mal datée (cas ROZIER, promenade d'octobre au 3
     reservations: [
       { id: "r1", childName: "Loucia", familyName: "Rozier", activityTitle: "Promenade", creneauId: "cr1", date: "2026-08-31" },
       { id: "r2", childName: "Sans date", creneauId: "cr1" },
+      // Le cas GRENIER : une inscription annuelle prise en ligne n'a pas de
+      // date propre — ses créneaux sont listés dans creneauIds.
+      { id: "r3", childName: "Léance", familyName: "Grenier", activityTitle: "Cours débutant 10-16 ans", type: "annual", creneauIds: ["cr1"], status: "pending_validation" },
     ],
   });
   assert("date incohérente signalée", codes(a).includes("reservation-date-incoherente"), codes(a).join(", "));
   assert("réservation sans date signalée", codes(a).includes("reservation-sans-date"), codes(a).join(", "));
+  assert("une seule réservation sans date : l'annuelle n'est pas comptée",
+    a.filter((x) => x.code === "reservation-sans-date").length === 1,
+    a.filter((x) => x.code === "reservation-sans-date").map((x) => x.detail).join(" | "));
 
   const incoherente = a.find((x) => x.code === "reservation-date-incoherente")!;
   assert("la réparation est proposée", incoherente.action === "corriger-date-reservation", String(incoherente.action));
@@ -193,6 +199,63 @@ console.log("\n✓ Une commande annulée est hors du champ :");
     creneaux: [{ id: "cr1", date: "2026-10-26", enrolled: [], enrolledCount: 0 }],
   });
   assert("rien n'est signalé", a.length === 0, codes(a).join(", "));
+}
+
+console.log("\n✓ Commande posée sur une fiche fusionnée (cas AMIARD) :");
+{
+  const a = analyserCoherence({
+    ...vide,
+    familles: [
+      { id: "famGoogle", parentName: "Raphaël AMIARD", status: "active" },
+      { id: "famAdmin", parentName: "AMIARD", status: "merged", mergedInto: "famGoogle" },
+    ],
+    paiements: [
+      { id: "p1", familyId: "famAdmin", familyName: "AMIARD", status: "partial", totalTTC: 180, paidAmount: 30, items: [] },
+      { id: "p2", familyId: "famGoogle", familyName: "Raphaël AMIARD", status: "paid", totalTTC: 26, paidAmount: 26, invoiceNumber: "F-2026-0300", items: [] },
+      { id: "p3", familyId: "famDisparue", familyName: "Fantôme", status: "pending", totalTTC: 50, paidAmount: 0, items: [] },
+    ],
+  });
+  assert("la commande sur la fiche absorbée est signalée", codes(a).includes("commande-famille-fusionnee"), codes(a).join(", "));
+  const fusion = a.find((x) => x.code === "commande-famille-fusionnee")!;
+  assert("la réparation propose de rejouer la fusion", fusion.action === "rejouer-fusion", String(fusion.action));
+  assert("elle sait quelle fiche absorber et laquelle garder", fusion.familleId === "famAdmin" && fusion.familleCibleId === "famGoogle");
+  assert("le détail nomme la fiche conservée", fusion.detail.includes("Raphaël AMIARD"), fusion.detail);
+  assert("la commande de la fiche conservée n'est pas signalée", !a.some((x) => x.paymentId === "p2"));
+  assert("une fiche disparue sans équivalent est signalée sans réparation automatique", a.some((x) => x.code === "commande-famille-introuvable" && x.paymentId === "p3" && !x.action));
+}
+
+console.log("\n✓ Fiche supprimée au rattachement du compte, copie retrouvée par l'email (cas HEKIMIAN) :");
+{
+  const a = analyserCoherence({
+    ...vide,
+    familles: [
+      { id: "uidGoogle", parentName: "HEKIMIAN", parentEmail: "Parent@Exemple.fr", status: "active" },
+      { id: "autre", parentName: "DURAND", parentEmail: "durand@exemple.fr" },
+      { id: "homonyme1", parentName: "MARTIN", parentEmail: "m1@exemple.fr" },
+      { id: "homonyme2", parentName: "MARTIN", parentEmail: "m2@exemple.fr" },
+    ],
+    paiements: [
+      { id: "p1", familyId: "ancienneFiche", familyName: "HEKIMIAN", familyEmail: "parent@exemple.fr", status: "partial", totalTTC: 511.2, paidAmount: 90, items: [] },
+      { id: "p2", familyId: "ancienne2", familyName: "Hékimian", status: "pending", totalTTC: 10, paidAmount: 0, items: [] },
+      { id: "p3", familyId: "ancienne3", familyName: "MARTIN", status: "pending", totalTTC: 10, paidAmount: 0, items: [] },
+    ],
+  });
+  const p1 = a.find((x) => x.paymentId === "p1")!;
+  assert("retrouvée par l'email : réparation proposée", p1.action === "rattacher-famille" && p1.familleCibleId === "uidGoogle", JSON.stringify(p1));
+  assert("le bouton nomme la fiche cible", p1.familleCibleNom === "HEKIMIAN");
+  const p2 = a.find((x) => x.paymentId === "p2")!;
+  assert("sans email, retrouvée par le nom (accents et casse ignorés)", p2.action === "rattacher-famille" && p2.familleCibleId === "uidGoogle", JSON.stringify(p2));
+  const p3 = a.find((x) => x.paymentId === "p3")!;
+  assert("deux homonymes : on ne tranche pas", !p3.action, JSON.stringify(p3));
+}
+
+console.log("\n✓ Sans la liste des familles, la règle se tait :");
+{
+  const a = analyserCoherence({
+    ...vide,
+    paiements: [{ id: "p1", familyId: "inconnue", familyName: "X", status: "pending", totalTTC: 50, paidAmount: 0, items: [] }],
+  });
+  assert("aucune anomalie de fiche", !codes(a).some((c) => c.startsWith("commande-famille")), codes(a).join(", "));
 }
 
 console.log(`\n──────────────────────────────────────────────────────────────`);

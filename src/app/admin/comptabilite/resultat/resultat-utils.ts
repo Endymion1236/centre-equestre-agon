@@ -1,8 +1,14 @@
 export interface MoisResultat {
   mois: string;
+  /** CA encaissé TTC lu dans la caisse NF525 de l'application. */
   ca: number;
   masse: number;
   depenses: number;
+  /** CA encaissé AVANT la bascule, saisi à la main depuis l'ancien logiciel
+   *  (Celeris) pour les mois où la caisse de l'application est incomplète.
+   *  Il s'ajoute au CA caisse ; affiché à part pour rester honnête. */
+  caExterne?: number;
+  caExterneNote?: string;
 }
 
 export const REF_BILAN = { ca: 277163, personnel: 109330, ebe: 35990 } as const;
@@ -40,7 +46,11 @@ export interface LigneResultat {
   mois: string;
   mm: string;
   futur: boolean;
+  /** CA total du mois = caisse + repris de l'ancien logiciel. */
   ca: number;
+  caCaisse: number;
+  caExterne: number;
+  caExterneNote: string;
   masse: number;
   depenses: number;
 }
@@ -54,11 +64,16 @@ export function construireLignesResultat(
   return MOIS_EXERCICE.map((mm) => {
     const mois = moisDe(exercice, mm);
     const ligne = parMois.get(mois);
+    const caCaisse = Number(ligne?.ca || 0);
+    const caExterne = Number(ligne?.caExterne || 0);
     return {
       mois,
       mm,
       futur: mois > courant,
-      ca: Number(ligne?.ca || 0),
+      ca: Math.round((caCaisse + caExterne) * 100) / 100,
+      caCaisse,
+      caExterne,
+      caExterneNote: String(ligne?.caExterneNote || ""),
       masse: Number(ligne?.masse || 0),
       depenses: Number(ligne?.depenses || 0),
     };
@@ -70,10 +85,11 @@ export function resumerResultat(lignes: LigneResultat[]) {
   const cumul = passees.reduce(
     (total, ligne) => ({
       ca: total.ca + ligne.ca,
+      caExterne: total.caExterne + ligne.caExterne,
       masse: total.masse + ligne.masse,
       depenses: total.depenses + ligne.depenses,
     }),
-    { ca: 0, masse: 0, depenses: 0 },
+    { ca: 0, caExterne: 0, masse: 0, depenses: 0 },
   );
   const reste = cumul.ca - cumul.masse - cumul.depenses;
   const pctMasse = cumul.ca > 0 ? Math.round((cumul.masse / cumul.ca) * 100) : null;

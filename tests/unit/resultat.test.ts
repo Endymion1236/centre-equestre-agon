@@ -61,6 +61,40 @@ test("les mois absents sont complétés à zéro", () => {
   assert.deepEqual({ ca: septembre.ca, masse: septembre.masse, depenses: septembre.depenses }, { ca: 0, masse: 0, depenses: 0 });
 });
 
+console.log("\n── CA repris de l'ancien logiciel (Celeris) ──");
+
+test("le CA du mois additionne la caisse et le CA repris, affichés à part", () => {
+  const avecCeleris: MoisResultat[] = [
+    { mois: "2026-07", ca: 1200, masse: 0, depenses: 0, caExterne: 55981.26, caExterneNote: "Celeris" },
+    { mois: "2026-08", ca: 0, masse: 0, depenses: 0, caExterne: 32344.5 },
+  ];
+  const lignes = construireLignesResultat(avecCeleris, "2026-2027", "2026-09");
+  const juillet = lignes.find((l) => l.mois === "2026-07")!;
+  assert.equal(juillet.caCaisse, 1200);
+  assert.equal(juillet.caExterne, 55981.26);
+  assert.equal(juillet.ca, 57181.26);
+  assert.equal(juillet.caExterneNote, "Celeris");
+  const aout = lignes.find((l) => l.mois === "2026-08")!;
+  assert.equal(aout.ca, 32344.5);
+  assert.equal(aout.caExterneNote, "");
+});
+
+test("sans CA repris, rien ne change", () => {
+  const lignes = construireLignesResultat(donnees, "2026-2027", "2026-09");
+  assert.ok(lignes.every((l) => l.caExterne === 0 && l.ca === l.caCaisse));
+});
+
+test("le cumul suit le CA repris et le reste en tient compte", () => {
+  const avecCeleris: MoisResultat[] = [
+    { mois: "2026-07", ca: 1000, masse: 500, depenses: 200, caExterne: 4000 },
+    { mois: "2026-08", ca: 0, masse: 300, depenses: 100, caExterne: 2000 },
+  ];
+  const { cumul, reste } = resumerResultat(construireLignesResultat(avecCeleris, "2026-2027", "2026-09"));
+  assert.equal(cumul.ca, 7000);
+  assert.equal(cumul.caExterne, 6000);
+  assert.equal(reste, 7000 - 800 - 300);
+});
+
 console.log("\n── Résultat ──");
 
 test("le cumul ignore les mois futurs", () => {
@@ -69,7 +103,7 @@ test("le cumul ignore les mois futurs", () => {
     { mois: "2026-10", ca: 99999, masse: 99999, depenses: 99999 },
   ], "2026-2027", "2026-09");
   const result = resumerResultat(lignes);
-  assert.deepEqual(result.cumul, { ca: 22000, masse: 8500, depenses: 4500 });
+  assert.deepEqual(result.cumul, { ca: 22000, caExterne: 0, masse: 8500, depenses: 4500 });
   assert.equal(result.reste, 9000);
 });
 

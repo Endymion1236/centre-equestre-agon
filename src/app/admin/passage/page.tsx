@@ -121,7 +121,7 @@ export default function PassagePage() {
   const handleActivityChange = (actId: string) => {
     setActivite(actId);
     const act = activities.find(a => a.id === actId);
-    if (act) setPrixTTC(act.priceTTC || act.priceHT * (1 + (act.tvaRate || 5.5) / 100) || 0);
+    if (act) setPrixTTC(act.priceTTC || act.priceHT * (1 + (act.tvaRate ?? 5.5) / 100) || 0);
   };
 
   const filtered = passages.filter(p => {

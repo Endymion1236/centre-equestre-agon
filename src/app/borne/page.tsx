@@ -75,6 +75,9 @@ function messageErreurDemarrage(e: any): string {
   if (nom === "NotReadableError") {
     return "Le microphone est déjà utilisé par une autre application. Fermez-la puis réessayez.";
   }
+  if (/borne d.accueil/i.test(msg)) {
+    return "Cette tablette n’est pas reconnue comme borne d’accueil. Déclarez son compte dans Administration → Paramètres → Borne d’accueil.";
+  }
   if (/non authentifi/i.test(msg)) {
     return "La tablette n’est plus connectée au compte du club. Reconnectez-vous depuis l’espace cavalier, puis revenez ici.";
   }

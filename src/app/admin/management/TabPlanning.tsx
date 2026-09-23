@@ -1,7 +1,10 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+
+/** Choix d'affichage de la colonne dimanche, retenu par poste. */
+const CLE_DIMANCHE = "management.planning.dimanche";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
 import { ChevronLeft, ChevronRight, Printer, Save, LayoutTemplate, AlertTriangle, Undo2, RotateCcw, X } from "lucide-react";
@@ -830,8 +833,32 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // Calcul charge par salarié (minutes totales / semaine)
   // Charge par salarié = somme par jour de (amplitude première→dernière tâche − pauses explicites).
   // Cohérent avec TabHoraires : les battements courts entre tâches non-pause sont comptés.
+  // ── Colonne du dimanche ────────────────────────────────────────────────
+  // Elle était masquée par défaut et le redevenait à chaque ouverture de
+  // l'écran : dans un club qui travaille le dimanche, le planning semblait
+  // l'avoir perdu. Le choix est donc mémorisé sur ce poste, et tant qu'aucun
+  // choix n'a été fait, la colonne s'affiche d'elle-même dès qu'une tâche
+  // tombe un dimanche.
   const [inclureDimanche, setInclureDimanche] = useState(false);
+  const [choixDimancheLu, setChoixDimancheLu] = useState(false);
   const nbJours = inclureDimanche ? 7 : 6;
+
+  const choixDimancheMemorise = (): string | null => {
+    try { return localStorage.getItem(CLE_DIMANCHE); } catch { return null; }
+  };
+  const changerDimanche = (valeur: boolean) => {
+    setInclureDimanche(valeur);
+    try { localStorage.setItem(CLE_DIMANCHE, valeur ? "1" : "0"); } catch { /* navigation privée */ }
+  };
+  useEffect(() => {
+    const memorise = choixDimancheMemorise();
+    if (memorise !== null) setInclureDimanche(memorise === "1");
+    setChoixDimancheLu(true);
+  }, []);
+  useEffect(() => {
+    if (!choixDimancheLu || choixDimancheMemorise() !== null) return;
+    if (taches.some(t => t.jour === "dimanche")) setInclureDimanche(true);
+  }, [taches, choixDimancheLu]);
 
   // Le total compte TOUJOURS les sept jours. Le bouton « Dim. » cache une
   // colonne, il ne retire pas des heures : masquer le dimanche affichait 35 h
@@ -985,7 +1012,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       // du dimanche pour que l'admin voie bien ce qui vient d'être ajouté.
       const hasSunday = aCreer.some(t => t.jour === "dimanche");
       if (hasSunday && !inclureDimanche) {
-        setInclureDimanche(true);
+        changerDimanche(true);
       }
 
       // ── 7. Toast récap ──
@@ -1314,7 +1341,7 @@ Réponds de façon concise et pratique, en français.`,
                 <input
                   type="checkbox"
                   checked={inclureDimanche}
-                  onChange={e => setInclureDimanche(e.target.checked)}
+                  onChange={e => changerDimanche(e.target.checked)}
                   className="hidden"
                 />
                 Dim.

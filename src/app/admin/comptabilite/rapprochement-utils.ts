@@ -287,6 +287,128 @@ export function estLibelleVirement(label: string) {
 }
 
 /**
+ * Les modes d'encaissement réglés par carte, tous canaux confondus.
+ *
+ * Une remise carte du Crédit Agricole ne contient pas que les tickets du
+ * terminal du club : CAWL, c'est Crédit Agricole Worldline, et les paiements
+ * en ligne des familles sont remis sur le même compte, sous un libellé
+ * « Remise carte » identique. Le rapprochement ne cherchait que le mode
+ * `cb_terminal` : une remise composée de paiements en ligne ressortait donc
+ * intégralement « pas d'encaissement CB correspondant », alors que les
+ * écritures existaient au journal (remise du 20/09/2026, 150 € = 60 € + 90 €).
+ */
+// « cb » tout court : les ventes de bons cadeaux en ligne l'ont porté jusqu'au
+// 23/09/2026. Ces écritures sont au journal, donc inaltérables : on les
+// reconnaît ici plutôt que de les réécrire.
+export const MODES_CARTE = ["cb_terminal", "cb_online", "cb_cawl", "cb"] as const;
+
+export const estEncaissementCarte = (mode: unknown) =>
+  (MODES_CARTE as readonly string[]).includes(String(mode ?? ""));
+
+/**
+ * Les deux canaux d'encaissement par carte, et les modes qui les composent.
+ *
+ * Le club a quatre contrats monétiques chez le Crédit Agricole : trois de
+ * « paiement de proximité » (le terminal, dont le sans-contact) et un
+ * « e-commerce de CAWL » (les paiements en ligne). Chacun produit ses propres
+ * remises, et la banque les nomme toutes « Remise carte ».
+ */
+export const CANAUX_REMISE_CARTE = [
+  { cle: "terminal", libelle: "CB Terminal", modes: ["cb_terminal"] },
+  { cle: "en-ligne", libelle: "CB en ligne", modes: ["cb_online", "cb_cawl", "cb"] },
+] as const;
+
+export type CanalRemiseCarte = (typeof CANAUX_REMISE_CARTE)[number]["cle"];
+
+/** Les encaissements carte candidats à une remise, tous canaux confondus. */
+export function candidatsRemiseCarte<T extends { mode?: string | null }>(encaissements: T[]): T[] {
+  return (encaissements || []).filter((e) => estEncaissementCarte(e?.mode));
+}
+
+export interface AppariementRemise<T> {
+  trouves: { encaissement: T; montant: number }[];
+  manquants: number[];
+  /** Canal qui explique la remise, ou null quand il a fallu les mélanger. */
+  canal: CanalRemiseCarte | null;
+}
+
+/** Associe chaque montant à un encaissement libre du vivier, sans réemploi. */
+function apparier<T extends { montant?: number }>(montants: number[], pool: T[]): AppariementRemise<T> {
+  const pris = new Set<number>();
+  const trouves: { encaissement: T; montant: number }[] = [];
+  const manquants: number[] = [];
+  for (const montant of montants) {
+    const i = pool.findIndex((e, idx) => !pris.has(idx) && Math.abs((e?.montant || 0) - montant) < 0.02);
+    if (i >= 0) { pris.add(i); trouves.push({ encaissement: pool[i], montant }); }
+    else manquants.push(montant);
+  }
+  return { trouves, manquants, canal: null };
+}
+
+/**
+ * Le détail d'une remise carte, apparié aux encaissements du journal.
+ *
+ * Une remise ne mélange jamais les canaux : elle vient d'UN contrat, donc du
+ * terminal ou de l'e-commerce. On essaie donc chaque canal séparément et on
+ * garde celui qui explique TOUS les montants. Sans cela, il faudrait
+ * reconnaître le numéro de contrat dans le libellé, qui change d'un club à
+ * l'autre — le contenu suffit à trancher.
+ *
+ * Si aucun canal ne suffit, on retombe sur le vivier complet : mieux vaut
+ * proposer une association partielle que rien du tout, la validation reste
+ * à l'écran.
+ */
+export function apparierRemiseCarte<T extends { montant?: number; mode?: string | null }>(
+  montants: number[],
+  encaissements: T[],
+): AppariementRemise<T> {
+  const candidats = candidatsRemiseCarte(encaissements);
+  for (const canal of CANAUX_REMISE_CARTE) {
+    const pool = candidats.filter((e) => (canal.modes as readonly string[]).includes(String(e?.mode ?? "")));
+    const essai = apparier(montants, pool);
+    if (essai.manquants.length === 0 && essai.trouves.length > 0) {
+      return { ...essai, canal: canal.cle };
+    }
+  }
+  return apparier(montants, candidats);
+}
+
+/**
+ * Fusionne les lignes bancaires d'un mois avec celles déjà enregistrées.
+ *
+ * Un import ne remplace JAMAIS le relevé du mois : il s'y ajoute. Le CSV du
+ * Crédit Agricole se tire sur l'intervalle qu'on lui demande, et Nicolas en
+ * tire souvent un de deux jours pour rattraper le retard. Sans fusion, ces
+ * deux jours effaceraient les vingt lignes déjà pointées.
+ *
+ * La clé d'une ligne est `date|libellé|montant` : deux lignes identiques au
+ * centime près sont la même opération, réimportée.
+ *
+ * `mode` décide de ce qui gagne en cas de conflit :
+ *   - « user-update » : la nouvelle version gagne. C'est un geste de Nicolas
+ *     (pointer, dé-pointer, ignorer) et il fait autorité ;
+ *   - « csv-import » : un pointage existant survit à une ligne réimportée non
+ *     pointée. Une remise carte pointée à la main par « Détail CA » ressort du
+ *     CSV en « à traiter » — elle ne doit pas écraser le travail fait.
+ */
+export function fusionnerLignesBancaires<T extends { date: string; label: string; amount: number; matched?: boolean }>(
+  existantes: T[],
+  nouvelles: T[],
+  mode: "user-update" | "csv-import" = "user-update",
+): T[] {
+  const cle = (b: T) => `${b.date}|${b.label}|${Math.round((b.amount || 0) * 100)}`;
+  const fusion = new Map<string, T>();
+  for (const ancienne of existantes || []) fusion.set(cle(ancienne), ancienne);
+  for (const nouvelle of nouvelles || []) {
+    const k = cle(nouvelle);
+    const ancienne = fusion.get(k);
+    if (mode === "csv-import" && ancienne?.matched && !nouvelle.matched) continue;
+    fusion.set(k, nouvelle);
+  }
+  return Array.from(fusion.values());
+}
+
+/**
  * Les écritures du journal produites par une remise SEPA.
  *
  * La remise porte les échéances qu'elle contient (`echeanceIds`) ; chaque

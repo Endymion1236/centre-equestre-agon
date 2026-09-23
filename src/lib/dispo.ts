@@ -1,4 +1,4 @@
-import { titreAvecNiveau } from "./promenade-niveau";
+import { titreAvecNiveau, niveauDuCreneau, estPromenadeADefinir } from "./promenade-niveau";
 /**
  * Disponibilités réelles du planning — source unique de vérité.
  *
@@ -163,6 +163,11 @@ export async function calculerDisponibilites(
       const isStage = (c.activityType || "") === "stage" || (c.activityType || "") === "stage_journee";
       const demiJourneeOuverte = isStage && !!c.allowDayBooking;
       const elig = eligByTitle.get(String(c.activityTitle || "").trim().toLowerCase()) || {};
+      // Promenade : niveau STRUCTURÉ, en plus du titre. "a_definir" = le
+      // niveau sera celui du premier inscrit, la famille le choisit.
+      const niveauPromenade = (c.activityType || "") === "balade"
+        ? (niveauDuCreneau(c) || (estPromenadeADefinir(c) ? "a_definir" : null))
+        : null;
       available.push({
         creneauId: doc.id,
         titre: titreAvecNiveau(c) || c.activityTitle || "",
@@ -179,6 +184,7 @@ export async function calculerDisponibilites(
         ageMax: elig.ageMax ?? null,
         galopRequired: elig.galopRequired ?? null,
         conditionsAcces: elig.conditionsAcces ?? null,
+        ...(niveauPromenade ? { niveauPromenade } : {}),
         moniteur: c.monitor || "",
         // Clé de regroupement semaine (même logique que la page réservation famille)
         stageKey: (c.stageGroupId || c.activityId || "") + "",
@@ -200,6 +206,7 @@ export async function calculerDisponibilites(
         prixTTC,
         ageMin: elig.ageMin ?? null,
         ageMax: elig.ageMax ?? null,
+        niveauPromenade,
       });
     }
   });

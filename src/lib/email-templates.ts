@@ -468,6 +468,8 @@ export const emailTemplates = {
     horaire: string;
     prix: number;
     regle?: boolean;
+    /** Bloc HTML ajouté après le récapitulatif (ex. consignes d'arrivée d'une balade). */
+    supplementHtml?: string;
   }) => ({
     subject: `Réservation confirmée — ${vars.coursTitle}`,
     html: wrap(`
@@ -482,6 +484,7 @@ export const emailTemplates = {
       ${vars.regle
         ? p(`<strong style="color:${C.vert};">Réglé</strong> — rien d'autre à prévoir.`, 14)
         : p(`<strong style="color:${C.encre};">Reste à régler : ${euros(vars.prix)}.</strong> La place est bien réservée ; le règlement peut se faire en ligne depuis votre espace, ou sur place au centre équestre.`, 14)}
+      ${vars.supplementHtml || ""}
       ${button(vars.regle ? "Voir mes réservations" : "Régler ma réservation",
                `${SITE_URL}/espace-cavalier/${vars.regle ? "reservations" : "factures"}`)}
       ${signature()}

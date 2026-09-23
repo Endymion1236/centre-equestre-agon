@@ -15,6 +15,7 @@ import {
   emailLayout, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature, emailCouleurs as CE,
 } from "@/lib/email-templates";
+import { tauxTva } from "@/lib/tva-taux";
 
 const modeLabels: Record<string, string> = {
   cb_terminal: "CB", cb_online: "CB en ligne", cheque: "Chèque",
@@ -636,8 +637,22 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                         const invDate = d || new Date();
                         const civilite = family?.civilite ? `${family.civilite} ` : "";
                         const adresseLines = [family?.address, [family?.zipCode, family?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
-                        const invoiceNumber = p.orderId || `F-${invDate.getFullYear()}${String(invDate.getMonth()+1).padStart(2,"0")}-${(p.id||"").slice(-4).toUpperCase()}`;
-                        const items = (p.items||[]).map((i: any) => ({ label: i.activityTitle||"Prestation", priceHT: i.priceHT||Math.round((i.priceTTC||0)/1.055*100)/100, tva: i.tva||5.5, priceTTC: i.priceTTC||0 }));
+                        // Le vrai numéro de facture d'abord. À défaut, une
+                        // référence de proforma explicite : l'identifiant de
+                        // commande et un numéro fabriqué au format « F- » se
+                        // faisaient passer pour des numéros de facture alors
+                        // qu'aucun n'appartient à la séquence.
+                        const invoiceNumber = p.invoiceNumber
+                          || `PF-${(p.orderId || p.id || "").slice(-6).toUpperCase()}`;
+                        const items = (p.items||[]).map((i: any) => {
+                          const taux = tauxTva(i.tva, i.tvaTaux);
+                          const ttc = i.priceTTC || 0;
+                          // Le HT se reconstituait en divisant par 1,055 quel
+                          // que soit le taux : faux dès qu'une ligne est à 20 %
+                          // ou exonérée.
+                          const ht = i.priceHT || Math.round((ttc / (1 + taux / 100)) * 100) / 100;
+                          return { label: i.activityTitle || "Prestation", priceHT: ht, tva: taux, priceTTC: ttc };
+                        });
                         const totalHT = items.reduce((s: number, i: any) => s+(i.priceHT||0), 0);
 
                         // Charger le détail des encaissements pour cette commande,

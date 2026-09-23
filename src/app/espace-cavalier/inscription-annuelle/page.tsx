@@ -290,7 +290,7 @@ export default function InscriptionAnnuellePage() {
           startTime: c.startTime, endTime: c.endTime,
           monitor: c.monitor, maxPlaces: c.maxPlaces,
           totalSessions: 0, avgEnrolled: 0, spotsAvailable: 0, creneauIds: [],
-          priceTTC: c.priceTTC || ((c.priceHT || 0) * (1 + (c.tvaTaux || 5.5) / 100)),
+          priceTTC: c.priceTTC || ((c.priceHT || 0) * (1 + (c.tvaTaux ?? 5.5) / 100)),
           season,
         };
       }
@@ -813,6 +813,14 @@ export default function InscriptionAnnuellePage() {
   // Crée toutes les inscriptions puis UN SEUL paiement groupé + 1 checkout CAWL.
   const handleEnrollAll = async () => {
     if (!user || !family) return;
+    // Une fiche sans nom donne une famille « Sans nom » à l'accueil et des
+    // confirmations adressées à personne : le nom se demande AVANT le
+    // paiement, pas après (cf. lib/nom-destinataire).
+    if (!String((family as any).lastName || family.parentName || "").trim()) {
+      toast("Avant de réserver, indiquez votre nom dans « Mon profil ».", "warning", 9000);
+      setTimeout(() => { window.location.href = "/espace-cavalier/profil"; }, 1500);
+      return;
+    }
     // Construire la liste finale : panier + inscription en cours (si valide)
     const items: PanierItem[] = [...panier];
     if (child && selectedSlotsData.length > 0) {
@@ -912,6 +920,18 @@ export default function InscriptionAnnuellePage() {
         const names = items.map(it => it.childName).join(", ");
         const modeLabel = libelleMoyenPaiementInscription(moyenPaiement).toLowerCase();
         const nbEcheances = nombreEcheances(paymentPlan);
+        // Qui, et pour quel créneau. La notification ne portait que le nom du
+        // parent, le prénom de l'enfant et un total : impossible, en la
+        // lisant, de savoir quel cours était demandé ni de rappeler la
+        // famille. Une ligne par enfant, reprise telle quelle dans l'onglet
+        // Déclarations.
+        const detailLignes = items.map(it => {
+          const creneaux = it.slotsInfo
+            .map(s => `${s.activityTitle} · ${s.dayLabel} · ${s.startTime}–${s.endTime}`)
+            .join(" + ");
+          return `${it.childName} — forfait ${it.frequence}×/semaine${creneaux ? ` · ${creneaux}` : ""}`;
+        });
+        const contact = [family.parentEmail || user.email || "", (family as any).parentPhone || ""].filter(Boolean).join(" · ");
         await addDoc(collection(db, "payment_declarations"), {
           paymentId: payDoc.id,
           familyId: user.uid,
@@ -921,6 +941,8 @@ export default function InscriptionAnnuellePage() {
           mode: moyenPaiement,
           note: "",
           activityTitle: `Inscription annuelle — ${names}`,
+          detailLignes,
+          familyPhone: (family as any).parentPhone || "",
           status: "pending_confirmation",
           // Marqueurs spécifiques à l'inscription annuelle : permettent à l'admin
           // de finaliser l'inscription (lever le pending, confirmer la résa, créer
@@ -942,6 +964,8 @@ export default function InscriptionAnnuellePage() {
               nbEcheances > 1
                 ? `${family.parentName} demande un échéancier de ${nbEcheances} mensualités pour l'inscription annuelle de ${names} (total ${totalGroupe.toFixed(2)}€, mode prévu : ${modeLabel}).`
                 : `${family.parentName} a inscrit ${names} à l'année et déclare un règlement de ${totalGroupe.toFixed(2)}€ par ${modeLabel}.`,
+              ...detailLignes,
+              ...(contact ? [`Contact : ${contact}`] : []),
               nbEcheances > 1
                 ? "À valider dans Paiements → Déclarations. La validation créera les échéances sans enregistrer d'encaissement."
                 : "À valider dans Paiements → Déclarations pour confirmer la ou les places.",

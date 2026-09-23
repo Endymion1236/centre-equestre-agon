@@ -17,10 +17,23 @@ export const TYPES_DOC_SALARIE = [
   { id: "attestation", label: "Attestation France Travail", emoji: "📄" },
   { id: "contrat", label: "Contrat de travail", emoji: "✍️" },
   { id: "certificat", label: "Certificat de travail", emoji: "📜" },
+  { id: "diplome", label: "Diplôme / qualification", emoji: "🎓" },
+  { id: "registre_horaires", label: "Registre des horaires", emoji: "⏱️" },
   { id: "autre", label: "Autre document", emoji: "📎" },
 ] as const;
 
 export type TypeDocSalarie = (typeof TYPES_DOC_SALARIE)[number]["id"];
+
+/**
+ * Types rattachés à un mois : le formulaire propose « Mois concerné » et le
+ * titre par défaut le reprend. La fiche de paie va de soi ; le registre des
+ * horaires (décompte individuel des heures, art. D.3171-8 du Code du travail)
+ * se tient et se remet lui aussi mois par mois.
+ */
+export const TYPES_DOC_MENSUELS: readonly TypeDocSalarie[] = ["fiche_paie", "registre_horaires"];
+
+export const estDocMensuel = (type: string): boolean =>
+  (TYPES_DOC_MENSUELS as readonly string[]).includes(type);
 
 export interface DocSalarie {
   id: string;
@@ -30,7 +43,7 @@ export interface DocSalarie {
   email: string;
   type: TypeDocSalarie;
   titre: string;
-  /** "2026-08" pour une fiche de paie (mois concerné). */
+  /** "2026-08" pour une fiche de paie ou un registre des horaires (mois concerné). */
   periode?: string;
   fileName: string;
   url: string;

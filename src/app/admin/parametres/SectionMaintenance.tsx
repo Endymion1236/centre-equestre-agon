@@ -18,9 +18,28 @@ import { Card } from "@/components/ui";
 import { Trash2, AlertTriangle, Users } from "lucide-react";
 import ReservationsToggle from "@/components/admin/ReservationsToggle";
 import ThemeSaisonnierToggle from "@/components/admin/ThemeSaisonnierToggle";
+import { authFetch } from "@/lib/auth-fetch";
 
 export default function SectionMaintenance() {
-  const [maintenanceTab, setMaintenanceTab] = useState<"nettoyage" | "test" | "historique">("nettoyage");
+  const [maintenanceTab, setMaintenanceTab] = useState<"nettoyage" | "test" | "historique" | "connexions">("nettoyage");
+  // Modes de connexion : l'ancien code notait « Facebook » tout ce qui
+  // n'était pas Google. Firebase sait la vérité, on la relit.
+  const [connexionsEtat, setConnexionsEtat] = useState<any | null>(null);
+  const [connexionsEnCours, setConnexionsEnCours] = useState(false);
+  const analyserConnexions = async (confirmer: boolean) => {
+    setConnexionsEnCours(true);
+    try {
+      const r = await authFetch("/api/admin/fournisseurs-connexion", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmer }),
+      });
+      const d = await r.json();
+      setConnexionsEtat(r.ok ? d : { erreur: d?.error || `Erreur ${r.status}` });
+    } catch (e: any) {
+      setConnexionsEtat({ erreur: e?.message || "Erreur réseau" });
+    }
+    setConnexionsEnCours(false);
+  };
 
   return (
     <div className="flex flex-col gap-5">
@@ -71,6 +90,7 @@ export default function SectionMaintenance() {
           ["nettoyage", "🧹 Nettoyage complet"],
           ["test",      "🧪 Données test"],
           ["historique","📋 Historique cavaliers"],
+          ["connexions","🔑 Modes de connexion"],
         ] as const).map(([id, label]) => (
           <button type="button" key={id} onClick={() => setMaintenanceTab(id)}
             className={`flex-1 font-body text-xs font-semibold px-3 py-2 rounded-lg border-none cursor-pointer transition-all ${
@@ -199,6 +219,58 @@ export default function SectionMaintenance() {
       )}
 
       {/* ══ ONGLET TEST ══ */}
+      {/* ══ ONGLET MODES DE CONNEXION ══ */}
+      {maintenanceTab === "connexions" && (
+        <Card padding="md">
+          <h3 className="font-body text-base font-semibold text-blue-800 mb-1">Modes de connexion des familles</h3>
+          <p className="font-body text-xs text-slate-500 mb-4">
+            Jusqu&apos;à présent, une fiche notait « Facebook » tout ce qui n&apos;était pas Google : une inscription par e-mail et mot de
+            passe, ou par lien de connexion, était donc mal étiquetée. Cet outil relit chaque compte chez Firebase et corrige la fiche.
+            Rien n&apos;est modifié tant que vous n&apos;avez pas appliqué. Les fiches créées au club ne sont pas touchées.
+          </p>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" disabled={connexionsEnCours} onClick={() => void analyserConnexions(false)}
+              className="font-body text-sm font-semibold text-blue-700 bg-blue-50 px-4 py-2.5 rounded-lg border border-blue-200 cursor-pointer disabled:opacity-50">
+              {connexionsEnCours ? "Analyse…" : "Analyser sans rien changer"}
+            </button>
+            {connexionsEtat?.aCorriger > 0 && !connexionsEtat?.corrigees && (
+              <button type="button" disabled={connexionsEnCours}
+                onClick={() => { if (confirm(`Corriger ${connexionsEtat.aCorriger} fiche(s) ?`)) void analyserConnexions(true); }}
+                className="font-body text-sm font-semibold text-white bg-blue-600 px-4 py-2.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                Appliquer aux {connexionsEtat.aCorriger} fiche(s)
+              </button>
+            )}
+          </div>
+          {connexionsEtat && (
+            <div className="mt-4 font-body text-sm text-slate-700 flex flex-col gap-1">
+              {connexionsEtat.erreur ? (
+                <span className="text-red-600">{connexionsEtat.erreur}</span>
+              ) : (
+                <>
+                  <span>{connexionsEtat.fichesAvecCompte} fiche(s) rattachée(s) à un compte.</span>
+                  {Object.entries(connexionsEtat.repartition || {}).map(([libelle, nb]) => (
+                    <span key={libelle} className="text-slate-500 text-xs">· {libelle} : {String(nb)}</span>
+                  ))}
+                  <span className={connexionsEtat.aCorriger ? "text-orange-700 font-semibold" : "text-green-700"}>
+                    {connexionsEtat.corrigees > 0
+                      ? `${connexionsEtat.corrigees} fiche(s) corrigée(s).`
+                      : connexionsEtat.aCorriger
+                        ? `${connexionsEtat.aCorriger} fiche(s) mal étiquetée(s).`
+                        : "Toutes les fiches sont justes."}
+                  </span>
+                  {(connexionsEtat.exemples || []).slice(0, 5).map((ex: string, i: number) => (
+                    <span key={i} className="text-slate-400 text-xs">{ex}</span>
+                  ))}
+                  {connexionsEtat.comptesIntrouvables > 0 && (
+                    <span className="text-slate-400 text-xs">{connexionsEtat.comptesIntrouvables} fiche(s) dont le compte n&apos;existe plus chez Firebase : non modifiées.</span>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
       {maintenanceTab === "test" && (
         <Card padding="md">
           <h3 className="font-body text-base font-semibold text-blue-800 mb-2">🧪 Supprimer les données de test</h3>

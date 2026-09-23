@@ -148,3 +148,52 @@ export function preparerEcheanciers(
     hasOverdue,
   };
 }
+
+// ── Lien de paiement d'une échéance ─────────────────────────────────────────
+//
+// Chaque échéance est une commande à part entière (`payments`, `echeance: n`
+// sur `echeancesTotal`). Un lien de paiement s'envoie donc échéance par
+// échéance, comme pour n'importe quelle commande — ce qui manquait jusqu'ici,
+// alors que l'écran proposait déjà d'encaisser en CB, chèque, espèces ou
+// virement. Une famille qui voulait régler en ligne n'avait aucun moyen de le
+// faire : il fallait la rappeler et saisir sa carte à la main.
+
+/** Ce qu'une échéance doit encore, au centime. */
+export function resteDuEcheance(echeance: any): number {
+  const du = Number(echeance?.totalTTC || 0) - Number(echeance?.paidAmount || 0);
+  return Math.max(0, Math.round(du * 100) / 100);
+}
+
+/** « 23 novembre 2026 » — la date d'échéance en toutes lettres. */
+export function dateEcheanceLisible(dateIso?: string): string {
+  if (!dateIso || !/^\d{4}-\d{2}-\d{2}/.test(dateIso)) return "";
+  return new Date(`${dateIso.slice(0, 10)}T12:00:00`).toLocaleDateString("fr-FR", {
+    day: "numeric", month: "long", year: "numeric",
+  });
+}
+
+/**
+ * Le message par défaut du lien : il dit DE QUELLE échéance il s'agit.
+ *
+ * Sans lui, une famille en 10 fois recevait dix emails identiques à
+ * « voici le lien de paiement pour régler 69,90 € » et ne pouvait pas savoir
+ * lequel elle avait déjà réglé — ni si celui du mois dernier traînait encore
+ * dans sa boîte.
+ */
+export function messageLienEcheance(echeance: any, aujourdhui = todayIso()): string {
+  const numero = Number(echeance?.echeance || 0);
+  const total = Number(echeance?.echeancesTotal || 0);
+  const date = String(echeance?.echeanceDate || "");
+  const enRetard = Boolean(date) && date < aujourdhui;
+  const quand = dateEcheanceLisible(date);
+
+  const rappel = numero > 0 && total > 0 ? `l'échéance ${numero}/${total}` : "cette échéance";
+  const situation = !quand
+    ? ""
+    : enRetard
+      ? ` Elle était attendue le ${quand}.`
+      : ` Elle est prévue pour le ${quand}.`;
+
+  return `Bonjour,\n\nVoici le lien pour régler ${rappel} de votre forfait.${situation}`
+    + `\n\nSi vous l'avez déjà réglée entre-temps, ce message est sans objet.`;
+}

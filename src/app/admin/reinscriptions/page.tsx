@@ -4,18 +4,35 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { UserMinus, Mail, Phone, Award, Wallet, Star, AlertTriangle, Clock, Loader2 } from "lucide-react";
 
+/** "2026-09-23" → "23/09" */
+const fmtJour = (d: string) => (d && d.length >= 10 ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : d || "");
+
 interface Cavalier {
   childId: string; childName: string; familyId: string; familyName: string;
   statut: string; email: string; phone: string; moniteurs: string[];
   galop: string; anciennete: number; avoirEur: number; fidelite: number;
   avisAnnuel?: { note: number; commentaire: string; recommande?: boolean } | null;
+  /** Créneau qui porte la pré-inscription ou la place tenue (statut « preinscrit »). */
+  creneau?: { date: string; titre: string; heure: string };
+  via?: "preinscription" | "place_tenue";
+  /** Statut « reinscrit » : ce qui a fait compter le cavalier. */
+  forfait?: { id: string; titre: string; statut: string; source: string } | null;
+  nbSeances?: number;
+  premieresSeances?: { date: string; titre: string; heure: string }[];
 }
+interface PreinscritNouveau { childId: string; childName: string; familyName: string; creneau: { date: string; titre: string; heure: string } }
 interface Data {
   saison: number; prochaine: number; rentree: string; today: string; apresRentree: boolean;
   totalN: number; reinscrits: number; nonReinscritsCount: number; partisCount: number;
   retentionPct: number | null; nonReinscrits: Cavalier[]; partis: Cavalier[];
+  reinscritsListe?: Cavalier[];
+  placesReinscrits?: number; placesPreinscrits?: number;
+  placesN?: { fermes: number; preinscrites: number; tenues: number };
+  placesN1?: { fermes: number; preinscrites: number; tenues: number };
+  cavaliersN1?: { fermes: number; preinscrits: number; tenus: number };
   preinscritsCount?: number; preinscrits?: Cavalier[];
-  diag?: { creneauxSaisonN: number; coursSaisonN: number; inscritsCoursN: number; creneauxSaisonN1: number; coursSaisonN1: number; inscritsCoursN1: number; nbForfaits: number };
+  preinscritsNouveauxCount?: number; preinscritsNouveaux?: PreinscritNouveau[];
+  diag?: { creneauxSaisonN: number; coursSaisonN: number; inscritsCoursN: number; creneauxSaisonN1: number; coursSaisonN1: number; inscritsCoursN1: number; preinscritsCoursN1?: number; placesTenuesN1?: number; nbForfaits: number };
 }
 
 const STATUT_BADGE: Record<string, { label: string; cls: string; icon: any }> = {
@@ -194,7 +211,9 @@ export default function ReinscriptionsPage() {
             <div className="bg-white border border-indigo-200 rounded-2xl p-4 text-center">
               <div className="font-body text-xs text-indigo-500 uppercase tracking-wider mb-1">Pré-inscrits</div>
               <div className="font-display text-3xl font-bold text-indigo-600">{data.preinscritsCount ?? 0}</div>
-              <div className="font-body text-[10px] text-indigo-400 mt-1">place retenue, à confirmer</div>
+              <div className="font-body text-[10px] text-indigo-400 mt-1">
+                cavaliers · {data.placesPreinscrits ?? 0} place{(data.placesPreinscrits ?? 0) > 1 ? "s" : ""} de cours retenue{(data.placesPreinscrits ?? 0) > 1 ? "s" : ""}, à confirmer
+              </div>
             </div>
             <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center">
               <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Partis en cours</div>
@@ -203,8 +222,64 @@ export default function ReinscriptionsPage() {
             <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center">
               <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Effectif {data.saison}</div>
               <div className="font-display text-3xl font-bold text-slate-800">{data.totalN}</div>
+              {data.placesN && (
+                <div className="font-body text-[10px] text-slate-400 mt-1">cavaliers · {data.placesN.fermes} place{data.placesN.fermes > 1 ? "s" : ""} de cours</div>
+              )}
             </div>
+            {data.placesN1 && data.cavaliersN1 && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 text-center sm:col-span-2">
+                <div className="font-body text-xs text-slate-500 uppercase tracking-wider mb-1">Inscriptions {data.prochaine}–{data.prochaine + 1}</div>
+                <div className="font-display text-3xl font-bold text-slate-800">
+                  {data.placesN1.fermes}
+                  <span className="text-lg text-slate-400"> + </span>
+                  <span className="text-indigo-600">{data.placesN1.preinscrites + data.placesN1.tenues}</span>
+                </div>
+                <div className="font-body text-[10px] text-slate-400 mt-1">
+                  {data.placesN1.fermes} place{data.placesN1.fermes > 1 ? "s" : ""} ferme{data.placesN1.fermes > 1 ? "s" : ""} ({data.cavaliersN1.fermes} cavalier{data.cavaliersN1.fermes > 1 ? "s" : ""})
+                  {" + "}
+                  <span className="text-indigo-500">{data.placesN1.preinscrites + data.placesN1.tenues} pré-inscrite{(data.placesN1.preinscrites + data.placesN1.tenues) > 1 ? "s" : ""} ({data.cavaliersN1.preinscrits + data.cavaliersN1.tenus} cavalier{(data.cavaliersN1.preinscrits + data.cavaliersN1.tenus) > 1 ? "s" : ""})</span>
+                  {" "}· nouveaux cavaliers compris
+                </div>
+                <div className="font-body text-[10px] text-slate-400 mt-0.5">
+                  1 place = 1 cavalier dans 1 cours hebdomadaire ; un cavalier dans 2 cours compte 2.
+                </div>
+              </div>
+            )}
           </div>
+
+          {(data.reinscritsListe?.length ?? 0) > 0 && (
+            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4">
+              <div className="font-body text-sm font-bold text-emerald-900">
+                {data.reinscritsListe!.length} cavalier(s) compté(s) réinscrit(s), et pourquoi
+              </div>
+              <div className="font-body text-xs text-emerald-800 mt-0.5">
+                Un cavalier est réinscrit s&apos;il a un forfait {data.prochaine} actif, ou une inscription
+                ferme (pas une pré-inscription, pas une place tenue) dans au moins un cours
+                de {data.prochaine}–{data.prochaine + 1} — même une seule séance (essai, séance à l&apos;unité).
+              </div>
+              <ul className="mt-2 space-y-1">
+                {data.reinscritsListe!.map(c => (
+                  <li key={c.childId} className="font-body text-[12px] text-emerald-900">
+                    <strong>{c.childName}</strong> <span className="text-emerald-700/70">· {c.familyName}</span>
+                    {" — "}
+                    {c.forfait
+                      ? <>forfait {data.prochaine} « {c.forfait.titre || "sans libellé"} » ({c.forfait.statut}{c.forfait.source === "client" ? ", souscrit en ligne" : ""})</>
+                      : <>aucun forfait {data.prochaine}</>}
+                    {(c.nbSeances ?? 0) > 0 && (
+                      <>
+                        {" · "}{c.nbSeances} séance{c.nbSeances! > 1 ? "s" : ""} ferme{c.nbSeances! > 1 ? "s" : ""} en cours
+                        {c.premieresSeances && c.premieresSeances.length > 0 && (
+                          <span className="text-emerald-700/70">
+                            {" "}({c.premieresSeances.map(s => `${s.titre} ${fmtJour(s.date)} ${s.heure}`).join(", ")}{c.nbSeances! > c.premieresSeances.length ? ", …" : ""})
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {(data.preinscrits?.length ?? 0) > 0 && (
             <div className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-4">
@@ -219,18 +294,40 @@ export default function ReinscriptionsPage() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {data.preinscrits!.map(c => (
                   <span key={c.childId}
+                    title={c.creneau ? `${c.via === "place_tenue" ? "Place tenue en ligne (paiement non confirmé)" : "Pré-inscription"} posée sur : ${c.creneau.titre} — ${fmtJour(c.creneau.date)} ${c.creneau.heure}` : undefined}
                     className="rounded-md bg-white border border-indigo-200 px-2 py-1 font-body text-[11px] text-indigo-800">
                     {c.childName} <span className="text-indigo-400">· {c.familyName}</span>
+                    {c.via === "place_tenue" && <span className="text-amber-600"> · place tenue en ligne</span>}
+                    {c.creneau?.date && (
+                      <span className="text-indigo-400"> · {c.creneau.titre} {fmtJour(c.creneau.date)}</span>
+                    )}
                   </span>
                 ))}
               </div>
+              {(data.preinscritsNouveauxCount ?? 0) > 0 && (
+                <div className="mt-3 font-body text-xs text-indigo-700">
+                  <strong>{data.preinscritsNouveauxCount}</strong> autre(s) pré-inscrit(s) en {data.prochaine}–{data.prochaine + 1}
+                  ne faisaient pas partie de l&apos;effectif {data.saison}–{data.saison + 1} (nouveaux cavaliers) :
+                  ils ne sont pas comptés dans la carte ci-dessus, mais figurent bien sur l&apos;écran Pré-inscrits.
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {data.preinscritsNouveaux!.map(c => (
+                      <span key={c.childId}
+                        className="rounded-md bg-white/70 border border-indigo-100 px-2 py-1 font-body text-[11px] text-indigo-700">
+                        {c.childName} <span className="text-indigo-400">· {c.familyName}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {data.diag && (
             <div className="font-body text-[11px] text-slate-400 mb-4">
               Données : {data.diag.coursSaisonN} cours en {data.saison}–{data.saison + 1} ({data.diag.inscritsCoursN} inscrits) ·
-              {" "}{data.diag.coursSaisonN1} cours en {data.prochaine}–{data.prochaine + 1} ({data.diag.inscritsCoursN1} inscrits) ·
+              {" "}{data.diag.coursSaisonN1} cours en {data.prochaine}–{data.prochaine + 1} ({data.diag.inscritsCoursN1} inscrits
+              {(data.diag.preinscritsCoursN1 ?? 0) > 0 && <>, {data.diag.preinscritsCoursN1} pré-inscrits</>}
+              {(data.diag.placesTenuesN1 ?? 0) > 0 && <>, {data.diag.placesTenuesN1} place{data.diag.placesTenuesN1! > 1 ? "s" : ""} tenue{data.diag.placesTenuesN1! > 1 ? "s" : ""} en attente de règlement</>}) ·
               {" "}{data.diag.nbForfaits} forfait{data.diag.nbForfaits > 1 ? "s" : ""}
             </div>
           )}

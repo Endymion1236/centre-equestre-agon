@@ -91,6 +91,15 @@ test("commande SEPA d'avant le champ : considérée entièrement prélevée, hor
   assert.equal(listerImpayes([p], "2026-09-04").length, 0);
 });
 
+test("facture de récurrence annoncée en SEPA, sans échéance posée : elle reste due et visible", () => {
+  // Cas DUHEM : 900 € facturés par la récurrence, 300 € réglés. Le mode
+  // « prélèvement SEPA » de la récurrence la faisait disparaître des impayés
+  // alors que rien n'était prélevé.
+  const p = { id: "rec", totalTTC: 900, paidAmount: 300, paymentMode: "prelevement_sepa", status: "pending" };
+  assert.equal(resteHorsSepa(p), 600);
+  assert.equal(listerImpayes([p], "2026-09-17").length, 1);
+});
+
 test("commande ordinaire : le reste dû est simplement total moins réglé", () => {
   assert.equal(resteHorsSepa({ totalTTC: 100, paidAmount: 40, status: "partial" }), 60);
 });

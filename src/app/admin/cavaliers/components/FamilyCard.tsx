@@ -19,6 +19,8 @@ import { authFetch } from "@/lib/auth-fetch";
 import LinkChildrenModal from "./LinkChildrenModal";
 import MoveChildModal from "./MoveChildModal";
 import EmailModal from "./EmailModal";
+import { libelleFournisseur, libelleFournisseurCourt } from "@/lib/fournisseur-connexion";
+import { normaliserServices, type ServiceEtablissement } from "@/lib/services-etablissement";
 
 const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 const inputStyle = "w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400";
@@ -92,7 +94,9 @@ export default function FamilyCard({
   const [editForm, setEditForm] = useState({ civilite: "", parentName: "", lastName: "", firstName: "", parentEmail: "", parentPhone: "", parentPhone2: "", address: "", zipCode: "", city: "", siren: "", accountType: "particulier", raisonSociale: "", structureParente: "" });
   const [editTags, setEditTags] = useState<string[]>([]);
   /** Sites facturables d'un établissement (plusieurs centres de loisirs d'une même collectivité). */
-  const [editServices, setEditServices] = useState<string[]>([]);
+  const [editServices, setEditServices] = useState<ServiceEtablissement[]>([]);
+  // Service dont les coordonnées sont dépliées (une à la fois, la liste reste lisible).
+  const [serviceOuvert, setServiceOuvert] = useState<number | null>(null);
 
   const startEditFamily = () => {
     setEditingFamily(true);
@@ -104,13 +108,16 @@ export default function FamilyCard({
       parentEmail: family.parentEmail || "",
       parentPhone: family.parentPhone || "", parentPhone2: (family as any).parentPhone2 || "", address: family.address || "",
       zipCode: family.zipCode || "", city: family.city || "",
-      siren: String((family as any).siren || ""),
+      // Les fiches créées via « Nouvelle famille » n'ont qu'un SIRET : on en
+      // déduit le SIREN pour ne pas afficher un champ vide trompeur.
+      siren: String((family as any).siren || String((family as any).siret || "").replace(/\D/g, "").slice(0, 9) || ""),
       accountType: (family as any).accountType || "particulier",
       raisonSociale: (family as any).raisonSociale || "",
       structureParente: (family as any).structureParente || "",
     });
     setEditTags(family.tags || []);
-    setEditServices(Array.isArray((family as any).services) ? (family as any).services : []);
+    setEditServices(normaliserServices((family as any).services));
+    setServiceOuvert(null);
   };
 
   const handleSaveFamily = async () => {
@@ -141,11 +148,10 @@ export default function FamilyCard({
       const tagsFinaux = estEtablissement
         ? Array.from(new Set([...editTags, "etablissement"]))
         : editTags.filter(t => t !== "etablissement");
-      // Lignes vides ignorées, doublons écartés : la liste sert de menu
-      // déroulant à la facturation, elle doit rester propre.
-      const servicesFinaux = estEtablissement
-        ? Array.from(new Set(editServices.map(s => s.trim()).filter(Boolean)))
-        : [];
+      // Lignes vides ignorées, doublons écartés, champs rognés : la liste sert
+      // de menu déroulant à la facturation, elle doit rester propre
+      // (cf. lib/services-etablissement).
+      const servicesFinaux = estEtablissement ? normaliserServices(editServices) : [];
 
       const newEmail = editForm.parentEmail.trim().toLowerCase();
       const oldEmail = (family.parentEmail || "").trim().toLowerCase();
@@ -411,7 +417,8 @@ export default function FamilyCard({
     setCreneauxLoaded(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (a.date || "").localeCompare(b.date || "")));
   };
 
-  const accountColor = family.accountType === "asso" ? "bg-purple-500" : family.accountType === "collectivite" ? "bg-teal-500" : "bg-blue-500";
+  const accountColor = family.accountType === "asso" ? "bg-purple-500" : family.accountType === "collectivite" ? "bg-teal-500" : family.accountType === "entreprise" ? "bg-amber-500" : "bg-blue-500";
+  const estParticulier = !family.accountType || family.accountType === "particulier";
 
   return (
     <>
@@ -431,11 +438,17 @@ export default function FamilyCard({
                     : family.parentName || "Sans nom"
                   }
                 </div>
-                {!(family as any).lastName && family.accountType !== "asso" && family.accountType !== "collectivite" && (
-                  <span title="Nom/prénom séparés manquants" className="font-body text-[10px] font-semibold text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded cursor-default">⚠️ à compléter</span>
+                {/* Une fiche sans nom (compte créé par email et mot de passe : le
+                    fournisseur n'en donne aucun) doit se corriger d'un geste,
+                    depuis la liste, sans chercher où cliquer. */}
+                {!(family as any).lastName && estParticulier && (
+                  <button type="button" title="Renseigner le nom et le prénom du responsable"
+                    onClick={(e) => { e.stopPropagation(); setIsExpanded(true); startEditFamily(); }}
+                    className="font-body text-[10px] font-semibold text-orange-600 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-1.5 py-0.5 rounded cursor-pointer">⚠️ à compléter</button>
                 )}
                 {family.accountType === "asso" && <span className="font-body text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">ASSO</span>}
                 {family.accountType === "collectivite" && <span className="font-body text-[10px] font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">COLLECTIVITÉ</span>}
+                {family.accountType === "entreprise" && <span className="font-body text-[10px] font-semibold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded">ENTREPRISE</span>}
                 {(family.tags || []).map((tag: string) => {
                   const t = FAMILY_TAGS.find(ft => ft.id === tag);
                   return t ? <span key={tag} className={`font-body text-[10px] font-semibold ${t.color} px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap`}>{t.emoji} {t.label}</span> : null;
@@ -497,8 +510,8 @@ export default function FamilyCard({
               </a>
             )}
             <span className="hidden sm:block">
-              <Badge color={family.authProvider === "admin" ? "gray" : family.authProvider === "google" ? "blue" : "purple"}>
-                {family.authProvider === "admin" ? "Créé admin" : family.authProvider === "google" ? "Google" : "Facebook"}
+              <Badge color={family.authProvider === "admin" ? "gray" : family.authProvider === "google" ? "blue" : family.authProvider === "facebook" ? "purple" : "green"}>
+                {libelleFournisseurCourt(family.authProvider)}
               </Badge>
             </span>
             {isExpanded ? <ChevronUp size={18} className="text-slate-600"/> : <ChevronDown size={18} className="text-slate-600"/>}
@@ -519,7 +532,7 @@ export default function FamilyCard({
                 <div className="mb-3">
                   <label className={labelStyle}>Type de compte</label>
                   <div className="flex gap-2">
-                    {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"]] as const).map(([val, label]) => (
+                    {([["particulier","👤 Particulier"],["asso","🤝 Association"],["collectivite","🏛️ Collectivité"],["entreprise","🏢 Entreprise"]] as const).map(([val, label]) => (
                       <button key={val} type="button" onClick={() => setEditForm(f => ({ ...f, accountType: val }))}
                         className={`flex-1 py-2 px-3 rounded-lg border font-body text-xs font-semibold cursor-pointer transition-all ${editForm.accountType === val ? "border-blue-500 bg-blue-100 text-blue-700" : "border-gray-200 bg-white text-slate-500"}`}>
                         {label}
@@ -545,11 +558,11 @@ export default function FamilyCard({
                     )}
                     <div>
                       <label className={labelStyle}>
-                        {editForm.accountType === "collectivite" ? "Nom du centre / service" : "Nom de l'association"}
+                        {editForm.accountType === "collectivite" ? "Nom du centre / service" : editForm.accountType === "entreprise" ? "Raison sociale" : "Nom de l'association"}
                       </label>
                       <input value={editForm.raisonSociale}
                         onChange={e => setEditForm(f => ({ ...f, raisonSociale: e.target.value }))}
-                        placeholder={editForm.accountType === "collectivite" ? "Ex: Centre de loisirs" : "Ex: Club équestre..."} className={inputStyle}/>
+                        placeholder={editForm.accountType === "collectivite" ? "Ex: Centre de loisirs" : editForm.accountType === "entreprise" ? "Ex: SARL Les Écuries du Bocage" : "Ex: Club équestre..."} className={inputStyle}/>
                       {(editForm.structureParente.trim() || editForm.raisonSociale.trim()) && (
                         <div className="font-body text-[10px] text-green-600 mt-1">
                           → <strong>{editForm.accountType === "collectivite" && editForm.structureParente.trim() && editForm.raisonSociale.trim()
@@ -572,18 +585,54 @@ export default function FamilyCard({
                         Les sites de cette structure. À la facturation, un menu déroulant
                         permet de choisir lequel apparaît sur la facture.
                       </p>
-                      {editServices.map((s, i) => (
-                        <div key={i} className="flex gap-2 mb-1.5">
-                          <input value={s}
-                            onChange={e => setEditServices(prev => prev.map((v, j) => j === i ? e.target.value : v))}
-                            placeholder="Ex: Centre de loisirs de Saint-Sauveur" className={inputStyle}/>
-                          <button type="button" onClick={() => setEditServices(prev => prev.filter((_, j) => j !== i))}
-                            className="shrink-0 w-9 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
-                            <Trash2 size={14}/>
-                          </button>
-                        </div>
-                      ))}
-                      <button type="button" onClick={() => setEditServices(prev => [...prev, ""])}
+                      {editServices.map((s, i) => {
+                        const maj = (champ: keyof ServiceEtablissement, valeur: string) =>
+                          setEditServices(prev => prev.map((v, j) => j === i ? { ...v, [champ]: valeur } : v));
+                        const ouvert = serviceOuvert === i;
+                        const renseigne = !!(s.contact || s.email || s.telephone || s.adresse || s.codeService || s.numeroEngagement);
+                        return (
+                          <div key={i} className="mb-2 rounded-lg border border-gray-200 bg-gray-50/60 p-2">
+                            <div className="flex gap-2">
+                              <input value={s.nom} onChange={e => maj("nom", e.target.value)}
+                                placeholder="Ex: Centre de loisirs de Saint-Sauveur" className={inputStyle}/>
+                              <button type="button" onClick={() => setEditServices(prev => prev.filter((_, j) => j !== i))}
+                                title="Supprimer ce service"
+                                className="shrink-0 w-9 rounded-lg bg-red-50 text-red-400 flex items-center justify-center border-none cursor-pointer hover:bg-red-100">
+                                <Trash2 size={14}/>
+                              </button>
+                            </div>
+                            <button type="button" onClick={() => setServiceOuvert(ouvert ? null : i)}
+                              className="font-body text-[11px] text-blue-500 bg-transparent border-none cursor-pointer p-0 mt-1.5">
+                              {ouvert ? "▾" : "▸"} Coordonnées de ce site{renseigne && !ouvert ? " · renseignées" : ""}
+                            </button>
+                            {ouvert && (
+                              <div className="mt-2 flex flex-col gap-1.5">
+                                <p className="font-body text-[10px] text-slate-500 m-0">
+                                  Ce qui reste vide est repris de la structure : c&apos;est son adresse et son email qui servent alors.
+                                </p>
+                                <input value={s.contact || ""} onChange={e => maj("contact", e.target.value)} placeholder="Contact (ex : Mme Leroy, directrice)" className={inputStyle}/>
+                                <div className="flex gap-1.5">
+                                  <input value={s.email || ""} onChange={e => maj("email", e.target.value)} placeholder="Email du site" className={inputStyle}/>
+                                  <input value={s.telephone || ""} onChange={e => maj("telephone", e.target.value)} placeholder="Téléphone" className={inputStyle}/>
+                                </div>
+                                <input value={s.adresse || ""} onChange={e => maj("adresse", e.target.value)} placeholder="Adresse de facturation du site" className={inputStyle}/>
+                                <div className="flex gap-1.5">
+                                  <input value={s.codePostal || ""} onChange={e => maj("codePostal", e.target.value)} placeholder="Code postal" className={inputStyle}/>
+                                  <input value={s.ville || ""} onChange={e => maj("ville", e.target.value)} placeholder="Ville" className={inputStyle}/>
+                                </div>
+                                <p className="font-body text-[10px] text-slate-500 m-0 mt-1">
+                                  Facturation publique : le code du service destinataire et le numéro d&apos;engagement du bon de commande.
+                                </p>
+                                <div className="flex gap-1.5">
+                                  <input value={s.codeService || ""} onChange={e => maj("codeService", e.target.value)} placeholder="Code service" className={inputStyle}/>
+                                  <input value={s.numeroEngagement || ""} onChange={e => maj("numeroEngagement", e.target.value)} placeholder="N° d'engagement" className={inputStyle}/>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <button type="button" onClick={() => { setEditServices(prev => [...prev, { nom: "" }]); setServiceOuvert(editServices.length); }}
                         className="font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer flex items-center gap-1 mt-1">
                         <UserPlus size={13}/> Ajouter un service
                       </button>
@@ -635,7 +684,7 @@ export default function FamilyCard({
                   </div>
                 </div>
                 <div className="mb-3">
-                  <label className={labelStyle}>SIREN (clients pros / collectivités — requis sur les factures électroniques B2B)</label>
+                  <label className={labelStyle}>SIREN (entreprises, associations, collectivités — requis sur les factures électroniques B2B)</label>
                   <input value={editForm.siren} onChange={e => setEditForm(f => ({ ...f, siren: e.target.value }))}
                     placeholder="9 chiffres — laisser vide pour un particulier" maxLength={11} className={inputStyle}/>
                 </div>
@@ -693,7 +742,7 @@ export default function FamilyCard({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div><div className={labelStyle}>Email</div><div className="font-body text-sm break-all">{family.parentEmail ? <a href={`mailto:${family.parentEmail}`} className="text-blue-800 no-underline hover:underline">{family.parentEmail}</a> : "—"}</div></div>
                   <div><div className={labelStyle}>Téléphone</div><div className="font-body text-sm">{family.parentPhone ? <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline">📞 {family.parentPhone}</a> : "Non renseigné"}{(family as any).parentPhone2 ? <a href={`tel:${(family as any).parentPhone2.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline block mt-0.5">📞 {(family as any).parentPhone2}</a> : null}</div></div>
-                  <div><div className={labelStyle}>Inscription</div><div className="font-body text-sm text-blue-800">{family.authProvider === "admin" ? "Créé par l'admin" : `Via ${family.authProvider}`}</div></div>
+                  <div><div className={labelStyle}>Inscription</div><div className="font-body text-sm text-blue-800">{libelleFournisseur(family.authProvider)}</div></div>
                 </div>
                 {(family.address || family.city) && (
                   <div className="mt-2">
@@ -701,6 +750,39 @@ export default function FamilyCard({
                     <div className="font-body text-sm text-blue-800">{family.address}{family.address && (family.zipCode || family.city) ? ", " : ""}{family.zipCode} {family.city}</div>
                   </div>
                 )}
+                {/* Sites facturables : ils n'étaient visibles qu'en ouvrant le
+                    formulaire de modification. Pour une collectivité, savoir
+                    quels centres sont enregistrés est une lecture courante,
+                    pas une modification. */}
+                {(() => {
+                  const sites = normaliserServices((family as any).services);
+                  if (sites.length === 0) return null;
+                  return (
+                    <div className="mt-2">
+                      <div className={labelStyle}>Sites facturables ({sites.length})</div>
+                      <ul className="flex flex-col gap-1 list-none p-0 m-0">
+                        {sites.map((site) => {
+                          const detail = [
+                            site.contact,
+                            site.email,
+                            site.telephone,
+                            [site.adresse, [site.codePostal, site.ville].filter(Boolean).join(" ")].filter(Boolean).join(", "),
+                            site.codeService ? `Code service ${site.codeService}` : "",
+                            site.numeroEngagement ? `Engagement ${site.numeroEngagement}` : "",
+                          ].filter(Boolean).join(" · ");
+                          return (
+                            <li key={site.nom} className="rounded-lg bg-gray-50 border border-gray-100 px-2.5 py-1.5">
+                              <div className="font-body text-sm text-blue-800">{site.nom}</div>
+                              {detail
+                                ? <div className="font-body text-xs text-slate-500">{detail}</div>
+                                : <div className="font-body text-xs text-amber-700">Pas de coordonnées propres : facturé à l&apos;adresse de la structure.</div>}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  );
+                })()}
                 {/* Solde client */}
                 <div className="mt-3 space-y-2">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -708,12 +790,31 @@ export default function FamilyCard({
                       { label: "Facturé", val: totalFacture, cls: "bg-gray-50 text-blue-500" },
                       { label: "Payé", val: totalPaye, cls: "bg-green-50 text-green-600" },
                       { label: "Reste dû", val: resteDu, cls: resteDu > 0 ? "bg-red-50 text-red-500" : "bg-green-50 text-green-600" },
-                    ].map(({ label, val, cls }) => (
-                      <div key={label} className={`rounded-xl p-3 text-center ${cls.split(" ")[0]}`}>
-                        <div className="font-body text-[10px] text-slate-600 uppercase">{label}</div>
-                        <div className={`font-body text-lg font-bold ${cls.split(" ")[1]}`}>{val.toFixed(2)}€</div>
-                      </div>
-                    ))}
+                    ].map(({ label, val, cls }) => {
+                      const contenu = (
+                        <>
+                          <div className="font-body text-[10px] text-slate-600 uppercase">{label}</div>
+                          <div className={`font-body text-lg font-bold ${cls.split(" ")[1]}`}>{val.toFixed(2)}€</div>
+                        </>
+                      );
+                      // La case rouge mène aux impayés de la famille : même
+                      // destination que le bouton dessous, un geste de moins.
+                      if (label === "Reste dû" && resteDu > 0) {
+                        return (
+                          <a key={label} href={`/admin/paiements?tab=impayes&family=${fid}`}
+                            title="Ouvrir les impayés de cette famille"
+                            className={`rounded-xl p-3 text-center no-underline ring-1 ring-red-200 hover:ring-red-400 hover:bg-red-100 transition-colors ${cls.split(" ")[0]}`}>
+                            {contenu}
+                            <div className="font-body text-[10px] text-red-400 mt-0.5">voir les impayés →</div>
+                          </a>
+                        );
+                      }
+                      return (
+                        <div key={label} className={`rounded-xl p-3 text-center ${cls.split(" ")[0]}`}>
+                          {contenu}
+                        </div>
+                      );
+                    })}
                     {totalAvoir > 0 && (
                       <div className="bg-purple-50 rounded-xl p-3 text-center">
                         <div className="font-body text-[10px] text-purple-600 uppercase">Avoir</div>

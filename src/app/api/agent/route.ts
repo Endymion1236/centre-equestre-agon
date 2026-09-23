@@ -312,7 +312,7 @@ async function executeTool(name: string, input: any): Promise<string> {
             d.data().title?.toLowerCase().includes(input.activityTitle.toLowerCase())
           );
           if (!match) return `❌ Activité "${input.activityTitle}" introuvable`;
-          const tvaTaux = match.data().tvaTaux || 5.5;
+          const tvaTaux = match.data().tvaTaux ?? 5.5;
           const priceHT = input.nouveauPrixTTC / (1 + tvaTaux / 100);
           await match.ref.update({
             priceTTC: input.nouveauPrixTTC,
@@ -322,7 +322,7 @@ async function executeTool(name: string, input: any): Promise<string> {
           return `✅ Tarif "${match.data().title}" mis à jour : ${input.nouveauPrixTTC}€ TTC`;
         }
         const doc = snap.docs[0];
-        const tvaTaux = doc.data().tvaTaux || 5.5;
+        const tvaTaux = doc.data().tvaTaux ?? 5.5;
         await doc.ref.update({
           priceTTC: input.nouveauPrixTTC,
           priceHT: Math.round(input.nouveauPrixTTC / (1 + tvaTaux / 100) * 100) / 100,

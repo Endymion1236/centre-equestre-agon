@@ -163,7 +163,7 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
         emailLigne("Participants", "{participants}"),
         emailLigne("Montant", "{prix}&nbsp;€"),
       ].join("")),
-      P("<strong>Rendez-vous</strong> au parking du centre équestre, 15 minutes avant le départ.", 14),
+      P("<strong>Rendez-vous</strong> au centre équestre <strong>30 minutes avant le départ</strong> : préparation du cheval, réglage du matériel et consignes de sécurité.", 14),
       P("<strong>À prévoir :</strong> pantalon long, chaussures fermées. Bombe fournie si besoin.", 14),
       emailSignature("Bonne balade !"),
     ].join("\n"),

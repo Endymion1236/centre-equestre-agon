@@ -13,7 +13,7 @@ import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
 import ModaleModifierCommande from "./ModaleModifierCommande";
 import ModaleEncaisser from "./ModaleEncaisser";
 import { useToast } from "@/components/ui/Toast";
-import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar } from "lucide-react";
+import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar, FileText } from "lucide-react";
 import type { Family, Activity } from "@/types";
 import { normalizePayment, loadPayments } from "./utils";
 import { BasketItem, Payment, paymentModes } from "./types";
@@ -25,8 +25,13 @@ import { TabImpayes } from "./TabImpayes";
 import { TabOfferts } from "./TabOfferts";
 import { TabDeclarations } from "./TabDeclarations";
 import { TabChequesDiffres } from "./TabChequesDiffres";
+import { TabFacturX } from "./TabFacturX";
+import { resumerDepots } from "./facturx-depot-utils";
 import { authFetch } from "@/lib/auth-fetch";
+import { LiensEnvoyes, useLiensCommande } from "./LiensEnvoyes";
+import { AlerteEncaissementsInattendus } from "./AlerteEncaissementsInattendus";
 import { enregistrerEncaissement as enregistrerEncaissementPartage } from "@/lib/encaissement";
+import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 
 
 /** Libelles des modes de remboursement, pour le journal comptable. */
@@ -43,8 +48,8 @@ export default function PaiementsPage() {
   // Onglet d'ouverture : celui demandé par l'URL s'il est connu (seul
   // `impayes` était honoré — un lien vers l'historique retombait sur
   // « Encaisser »), sinon les impayés dès qu'un filtre est passé.
-  type PaiementsTab = "encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes";
-  const TABS: PaiementsTab[] = ["encaisser", "journal", "historique", "echeances", "impayes", "offerts", "declarations", "cheques_differes"];
+  type PaiementsTab = "encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes" | "facturx";
+  const TABS: PaiementsTab[] = ["encaisser", "journal", "historique", "echeances", "impayes", "offerts", "declarations", "cheques_differes", "facturx"];
   const [tab, setTab] = useState<PaiementsTab>(
     TABS.includes(urlTab as PaiementsTab) ? (urlTab as PaiementsTab)
       : (urlSearch || urlFamily) ? "impayes"
@@ -58,6 +63,12 @@ export default function PaiementsPage() {
   const [payLinkMessage, setPayLinkMessage] = useState("");
   const [payLinkGenerating, setPayLinkGenerating] = useState(false);
   const [payLinkSending, setPayLinkSending] = useState(false);
+  // Envoi en deux temps : un récapitulatif (montant, destinataire, liens
+  // encore valables) avant que le mail ne parte. Deux liens étaient partis
+  // par mégarde pour une même commande — rien ne demandait confirmation.
+  const [payLinkConfirm, setPayLinkConfirm] = useState(false);
+  const liensCommande = useLiensCommande(payLinkModal?.id || null);
+  useEffect(() => { setPayLinkConfirm(false); }, [payLinkModal, payLinkAmount, payLinkEmail]);
   // Annulation : répartition avoir / remboursement (cf. AnnulationModal)
   const [annulModal, setAnnulModal] = useState<{ payment: any; encaisse: number; lignes: string[] } | null>(null);
 
@@ -108,6 +119,9 @@ export default function PaiementsPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [declarations, setDeclarations] = useState<any[]>([]);
+  // Déclarations déjà validées, rejetées ou réglées en ligne : elles quittaient
+  // l'écran sans trace, on ne pouvait plus les retrouver.
+  const [declarationsTraitees, setDeclarationsTraitees] = useState<any[]>([]);
   // Chèques différés (pour calcul du badge de retard dans la barre d'onglets)
   const [chequesDiffresCount, setChequesDiffresCount] = useState<{ total: number; overdue: number }>({ total: 0, overdue: 0 });
 
@@ -141,6 +155,19 @@ export default function PaiementsPage() {
       if (promoSnap.exists() && promoSnap.data().items) setPromos(promoSnap.data().items);
       const decls = declSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setDeclarations(decls);
+      // Historique récent, en second appel : la requête des déclarations EN
+      // ATTENTE reste sans tri ni limite, pour qu'une déclaration ancienne ou
+      // sans horodatage ne puisse jamais disparaître de la liste à traiter.
+      try {
+        const traiteesSnap = await getDocs(query(collection(db, "payment_declarations"), orderBy("createdAt", "desc"), limit(100)));
+        setDeclarationsTraitees(
+          traiteesSnap.docs
+            .map(d => ({ id: d.id, ...(d.data() as any) }))
+            .filter((d: any) => d.status !== "pending_confirmation"),
+        );
+      } catch (e) {
+        console.warn("[paiements] historique des déclarations non chargé :", e);
+      }
       // Charger les chèques différés pour le badge
       try {
         const chqSnap = await getDocs(collection(db, "cheques-differes"));
@@ -453,6 +480,26 @@ export default function PaiementsPage() {
   ) => {
     {
       const isForfait = estCommandeInscriptionAnnuelle(payment);
+      const avoirAmount = Math.round(data.avoir * 100) / 100;
+
+      // Le numéro d'avoir est réservé AVANT toute écriture. S'il n'est pas
+      // attribuable, on n'annule rien : une commande passée en "annulée" sans
+      // l'avoir correspondant laisserait la famille sans contrepartie.
+      // Aucun numéro n'est consommé quand il n'y a pas d'avoir à émettre.
+      let ref = "";
+      if (avoirAmount > 0) {
+        try {
+          ref = await demanderNumeroAvoir({
+            paymentId: payment.id,
+            familyId: payment.familyId,
+            motif: `Annulation (${data.motif})`,
+          });
+        } catch (e: any) {
+          console.error(e);
+          alert(e?.message || "Impossible d'attribuer un numéro d'avoir. Rien n'a été annulé.");
+          return;
+        }
+      }
 
       // Marquer cancelled d'abord pour éviter double-traitement
       await updateDoc(doc(db, "payments", payment.id), {
@@ -485,11 +532,8 @@ export default function PaiementsPage() {
         }
       }
 
-      const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
       const expiry = new Date();
       expiry.setFullYear(expiry.getFullYear() + 1);
-
-      const avoirAmount = Math.round(data.avoir * 100) / 100;
       const MOTIF_LABEL: Record<string, string> = {
         anticipee: "annulation +3 semaines",
         certificat: "certificat médical / force majeure",
@@ -619,11 +663,27 @@ export default function PaiementsPage() {
         : `Retirer "${itemToRemove.activityTitle}" ?${hasInscription ? "\n\n⚠️ Le cavalier sera aussi désinscrit." : ""}`;
       if (!confirm(msg)) return;
 
+      // Numéro réservé avant de désinscrire : si l'attribution échoue, le
+      // cavalier reste inscrit plutôt que d'être retiré sans son avoir.
+      let ref = "";
+      if (tropPercu > 0) {
+        try {
+          ref = await demanderNumeroAvoir({
+            paymentId: payment.id,
+            familyId: payment.familyId,
+            motif: `Retrait prestation — ${itemToRemove.activityTitle}`,
+          });
+        } catch (e: any) {
+          console.error(e);
+          alert(e?.message || "Impossible d'attribuer un numéro d'avoir. Rien n'a été retiré.");
+          return;
+        }
+      }
+
       // Désinscrire l'enfant du créneau
       await unenrollPaymentItem(payment, itemToRemove);
 
       if (tropPercu > 0) {
-        const ref = `AV-${Date.now().toString(36).toUpperCase()}`;
         const expiry = new Date();
         expiry.setFullYear(expiry.getFullYear() + 1);
         const tropPercuAmount = Math.round(tropPercu * 100) / 100;
@@ -706,7 +766,7 @@ export default function PaiementsPage() {
       activityType: item.activityType || "",
       description: item.description || item.activityTitle || "",
       priceHT: safeNumber(item.priceHT),
-      tva: safeNumber(item.tva || item.tvaTaux || 5.5),
+      tva: safeNumber(item.tva ?? item.tvaTaux ?? 5.5),
       priceTTC: safeNumber(item.priceTTC),
       creneauId: "",
     }));
@@ -817,7 +877,7 @@ export default function PaiementsPage() {
         const items = row.items.map((item: any, idx: number) => {
           const overrideTTC = row.overrides[idx];
           if (overrideTTC !== undefined) {
-            const tva = safeNumber(item.tva || item.tvaTaux || 5.5);
+            const tva = safeNumber(item.tva ?? item.tvaTaux ?? 5.5);
             return { ...item, priceTTC: overrideTTC, priceHT: round2(overrideTTC / (1 + tva / 100)) };
           }
           return item;
@@ -940,6 +1000,10 @@ export default function PaiementsPage() {
     }));
   };
 
+  // Factures pros pas encore déposées sur la Plateforme Agréée (Cecurity) :
+  // le badge de l'onglet Factur-X est le rappel, tant que l'envoi est manuel.
+  const facturxADeposer = resumerDepots(payments as any[], families as any[]).aDeposer.length;
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -953,6 +1017,14 @@ export default function PaiementsPage() {
         </button>
       </div>
 
+      <AlerteEncaissementsInattendus
+        payments={payments}
+        toast={toast}
+        onTraite={(id, maj) => setPayments((prev: any[]) => prev.map((p) =>
+          p.id === id ? { ...p, encaissementsInattendus: maj, needsReview: maj.some((x) => !x.traite) } : p,
+        ))}
+      />
+
       {/* Barre d'onglets : elle passe à la ligne sur mobile plutôt que de
           défiler horizontalement. Huit onglets ne tiennent pas sur la largeur
           d'un téléphone, et les derniers — « Offerts », « Déclar. » — restaient
@@ -960,7 +1032,7 @@ export default function PaiementsPage() {
           pas être là. Au-delà de `sm`, tout tient sur une ligne et l'ancien
           comportement reprend. */}
       <div className="flex flex-wrap gap-1 mb-6 pb-1 -mx-1 px-1 sm:flex-nowrap sm:overflow-x-auto hide-scrollbar">
-        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques diff.", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclar.", Receipt]] as const).map(([id, label, Icon]) => (
+        {([["encaisser", "Encaisser", ShoppingCart], ["journal", "Journal", Receipt], ["historique", "Historique", Receipt], ["echeances", "Échéances", Receipt], ["impayes", "Impayés", Receipt], ["cheques_differes", "Chèques diff.", Calendar], ["offerts", "Offerts", Gift], ["declarations", "Déclar.", Receipt], ["facturx", "Factur-X", FileText]] as const).map(([id, label, Icon]) => (
           <button type="button" key={id} onClick={() => setTab(id as any)}
             className={`flex items-center gap-1 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg border font-body text-[11px] sm:text-xs font-medium cursor-pointer transition-all whitespace-nowrap sm:flex-shrink-0
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
@@ -983,6 +1055,9 @@ export default function PaiementsPage() {
             )}
             {id === "declarations" && declarations.length > 0 && (
               <span className="bg-orange-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{declarations.length}</span>
+            )}
+            {id === "facturx" && facturxADeposer > 0 && (
+              <span className="bg-indigo-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center" title={`${facturxADeposer} facture(s) pro à déposer sur Cecurity`}>{facturxADeposer}</span>
             )}
           </button>
         ))}
@@ -1021,8 +1096,13 @@ export default function PaiementsPage() {
       {/* ─── Échéances Tab ─── */}
       {tab === "echeances" && (
         <TabEcheances loading={loading} payments={payments}
+          families={families}
           toast={toast} setPayments={setPayments} refreshAll={refreshAll}
           enregistrerEncaissement={enregistrerEncaissement}
+          setPayLinkModal={setPayLinkModal}
+          setPayLinkEmail={setPayLinkEmail}
+          setPayLinkAmount={setPayLinkAmount}
+          setPayLinkMessage={setPayLinkMessage}
         />
       )}
 
@@ -1061,11 +1141,17 @@ export default function PaiementsPage() {
         <TabOfferts payments={payments} />
       )}
 
+      {/* ─── Factur-X (dépôts Plateforme Agréée) ─── */}
+      {tab === "facturx" && (
+        <TabFacturX loading={loading} payments={payments} families={families} toast={toast} setPayments={setPayments as any} />
+      )}
+
       {/* ─── Onglet Déclarations ─── */}
       {tab === "declarations" && (
         <TabDeclarations
           loading={loading} payments={payments}
           declarations={declarations} setDeclarations={setDeclarations}
+          declarationsTraitees={declarationsTraitees}
           families={families} avoirs={avoirs}
           broadcastSource={broadcastSource} setBroadcastSource={setBroadcastSource}
           broadcastRows={broadcastRows} setBroadcastRows={setBroadcastRows}
@@ -1531,6 +1617,13 @@ export default function PaiementsPage() {
                     className="w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:border-blue-400 focus:outline-none" />
                   <p className="font-body text-[10px] text-slate-400 mt-1">Reste dû : {due.toFixed(2)}€ — vous pouvez envoyer un montant partiel</p>
                 </div>
+                <LiensEnvoyes
+                  liens={liensCommande.liens}
+                  chargement={liensCommande.chargement}
+                  onRecharger={liensCommande.recharger}
+                  onAnnule={(lien) => liensCommande.setLiens((prev) => prev.map((l) => (l.id === lien.id ? lien : l)))}
+                  toast={toast}
+                />
                 <div>
                   <div className="flex justify-between items-center mb-1">
                     <label className="font-body text-xs font-semibold text-slate-600">Message personnalisé</label>
@@ -1594,11 +1687,29 @@ Règles :
                   </div>
                 )}
               </div>
+              {payLinkConfirm && (() => {
+                const encoreValables = liensCommande.liens.filter((l) => l.etat === "valide");
+                return (
+                  <div className="mx-5 mb-2 rounded-lg border border-indigo-200 bg-indigo-50 p-3 font-body text-xs text-indigo-900">
+                    <div className="font-semibold mb-1">Vérifiez avant l&apos;envoi</div>
+                    <div>Un email avec un lien de paiement de <strong>{(parseFloat(payLinkAmount) || 0).toFixed(2)} €</strong> va partir à <strong>{payLinkEmail}</strong> pour {p.familyName}.</div>
+                    {encoreValables.length > 0 && (
+                      <div className="mt-1 text-red-700">
+                        ⚠️ {encoreValables.length === 1
+                          ? `Un lien de ${encoreValables[0].amount.toFixed(2)} € est encore valable`
+                          : `${encoreValables.length} liens sont encore valables`} : la famille pourrait régler deux fois. Annulez-le ci-dessus si c&apos;est un doublon.
+                      </div>
+                    )}
+                    <div className="mt-1 text-indigo-700">Le lien restera valable 7 jours, et pourra être annulé ici à tout moment.</div>
+                  </div>
+                );
+              })()}
               <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-                <button onClick={() => setPayLinkModal(null)}
-                  className="font-body text-sm text-slate-500 bg-white px-5 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                <button onClick={() => (payLinkConfirm ? setPayLinkConfirm(false) : setPayLinkModal(null))}
+                  className="font-body text-sm text-slate-500 bg-white px-5 py-2.5 rounded-lg border border-gray-200 cursor-pointer">{payLinkConfirm ? "Retour" : "Annuler"}</button>
                 <button disabled={payLinkSending || !payLinkEmail || !payLinkAmount || parseFloat(payLinkAmount) <= 0}
                   onClick={async () => {
+                    if (!payLinkConfirm) { setPayLinkConfirm(true); return; }
                     setPayLinkSending(true);
                     try {
                       const res = await authFetch("/api/send-payment-link", {
@@ -1625,7 +1736,7 @@ Règles :
                   }}
                   className="font-body text-sm font-semibold text-white bg-indigo-500 px-6 py-2.5 rounded-lg border-none cursor-pointer hover:bg-indigo-400 disabled:opacity-50 flex items-center gap-2">
                   {payLinkSending ? <Loader2 size={14} className="animate-spin" /> : <CreditCard size={14} />}
-                  Envoyer le lien
+                  {payLinkConfirm ? "Confirmer l'envoi" : "Envoyer le lien"}
                 </button>
               </div>
             </div>

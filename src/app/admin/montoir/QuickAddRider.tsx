@@ -126,7 +126,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
 
       // Inscription offerte → paiement à 0€ avec motif (traçabilité, pas de facturation)
       if (source === "offert") {
-        const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+        const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux ?? 5.5) / 100);
         await addDoc(collection(db, "payments"), {
           orderId: generateOrderId(),
           familyId: sel.familyId, familyName: sel.familyName,
@@ -134,7 +134,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
             activityTitle: creneau.activityTitle, childId: sel.childId, childName: sel.childName,
             creneauId: creneau.id, activityType: creneau.activityType, date: creneau.date,
             startTime: creneau.startTime, endTime: creneau.endTime,
-            priceHT: 0, tva: creneau.tvaTaux || 5.5, priceTTC: 0,
+            priceHT: 0, tva: creneau.tvaTaux ?? 5.5, priceTTC: 0,
             originalPriceTTC: Math.round(priceTTC * 100) / 100,
           }],
           totalTTC: 0, paidAmount: 0,
@@ -148,7 +148,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
       // Inscription établissement → trace institutionnelle (pas isFree, exclue
       // des séances offertes). L'établissement est facturé à part au forfait.
       if (source === "etablissement") {
-        const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux || 5.5) / 100);
+        const priceTTC = creneau.priceTTC || (creneau.priceHT || 0) * (1 + (creneau.tvaTaux ?? 5.5) / 100);
         await addDoc(collection(db, "payments"), {
           orderId: generateOrderId(),
           familyId: sel.familyId, familyName: sel.familyName,
@@ -156,7 +156,7 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
             activityTitle: creneau.activityTitle, childId: sel.childId, childName: sel.childName,
             creneauId: creneau.id, activityType: creneau.activityType, date: creneau.date,
             startTime: creneau.startTime, endTime: creneau.endTime,
-            priceHT: 0, tva: creneau.tvaTaux || 5.5, priceTTC: 0,
+            priceHT: 0, tva: creneau.tvaTaux ?? 5.5, priceTTC: 0,
             originalPriceTTC: Math.round(priceTTC * 100) / 100,
           }],
           totalTTC: 0, paidAmount: 0,

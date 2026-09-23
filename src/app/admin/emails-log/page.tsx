@@ -12,6 +12,8 @@ const CONTEXT_LABELS: Record<string, string> = {
   cron_rappel_j1: "Rappel J-1 (cron)",
   cron_monitor_recap: "Récap moniteur (cron)",
   cron_stage_solde: "Solde stage J-7 (cron)",
+  cron_saison_rappel: "Mail de rentrée (cron)",
+  admin_saison_rappel: "Mail de rentrée (envoi manuel)",
   // Webhooks
   cawl_webhook: "Paiement CAWL (webhook)",
   cawl_status_check: "Paiement CAWL (retour)",

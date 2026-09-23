@@ -1,5 +1,10 @@
 /**
- * POST /api/admin/sepa-prenotification  { paymentId }
+ * POST /api/admin/sepa-prenotification  { paymentId, mode?: "apercu" }
+ *
+ * `mode: "apercu"` renvoie ce qui PARTIRAIT (destinataire, objet, échéances,
+ * total, mandat) sans rien envoyer : l'administration vérifie l'échéancier
+ * avant de confirmer. À l'envoi, la commande garde la trace
+ * (`prenotificationSepa: { envoyeeLe, to }`).
  *
  * Prévient la famille qu'une commande sera réglée par prélèvement automatique,
  * avec le calendrier, les montants et la référence du mandat.
@@ -48,8 +53,9 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { paymentId } = await req.json().catch(() => ({} as any));
+    const { paymentId, mode } = await req.json().catch(() => ({} as any));
     if (!paymentId) return NextResponse.json({ error: "paymentId requis" }, { status: 400 });
+    const apercu = mode === "apercu";
 
     const paySnap = await adminDb.collection("payments").doc(paymentId).get();
     if (!paySnap.exists) return NextResponse.json({ error: "Commande introuvable" }, { status: 404 });
@@ -131,6 +137,20 @@ export async function POST(req: NextRequest) {
       ? `Prélèvement automatique programmé — ${echeances.length} × à partir du ${jour(echeances[0].dateEcheance)}`
       : `Prélèvement automatique programmé — ${eurosTexte(total)} le ${jour(echeances[0].dateEcheance)}`;
 
+    if (apercu) {
+      return NextResponse.json({
+        apercu: true,
+        to: email,
+        subject,
+        familyName: p.familyName || "",
+        prestations,
+        mandatId,
+        total,
+        echeances: echeances.map((e) => ({ date: String(e.dateEcheance), dateLabel: jour(e.dateEcheance), montant: Number(e.montant) || 0 })),
+        dejaEnvoyeeLe: p.prenotificationSepa?.envoyeeLe || null,
+      });
+    }
+
     const resendKey = process.env.RESEND_API_KEY;
     await refreshEmailMode();
     if (!resendKey || !isRecipientAllowed(email)) {
@@ -164,6 +184,8 @@ export async function POST(req: NextRequest) {
     }).catch(() => {});
 
     if (!res.ok) return NextResponse.json({ error: `Envoi refusé (${res.status})` }, { status: 502 });
+    // La commande garde la trace : l'écran SEPA sait ce qui reste à prévenir.
+    await paySnap.ref.update({ prenotificationSepa: { envoyeeLe: new Date().toISOString(), to: email } }).catch(() => {});
     return NextResponse.json({ sent: true, to: email, nbEcheances: echeances.length, total });
   } catch (e: any) {
     console.error("[sepa-prenotification]", e);

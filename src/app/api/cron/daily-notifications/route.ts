@@ -7,6 +7,7 @@ import { compareCreneaux } from "@/lib/creneau-sort";
 import { logEmail } from "@/lib/email-log";
 import { addDaysParis } from "@/lib/date-local";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
+import { dateRentreeValide, envoyerRappelSaison } from "@/lib/rappel-saison-envoi";
 import {
   emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature, emailCouleurs as CE,
@@ -19,7 +20,7 @@ export const maxDuration = 120;
 
 // Emails toujours destinataires du récap GLOBAL (les gérants), même sans
 // cours assigné. Les monitrices, elles, viennent des fiches `moniteurs`.
-const ADMIN_RECAP_EMAILS = ["ceagon@orange.fr", "ceagon50@gmail.com"];
+const ADMIN_RECAP_EMAILS = ["ceagon50@gmail.com"];
 
 /**
  * Destinataires du récap : construits depuis les fiches moniteurs
@@ -492,98 +493,18 @@ export async function GET(req: NextRequest) {
     // de la rentrée, listant à chaque famille son/ses créneau(x) récurrent(s).
     // Config Vercel : SAISON_DEBUT_DATE = "2026-09-21" (jour de rentrée des cours).
     // L'email part la VEILLE (20/09). Idempotent via un marqueur Firestore.
+    // La préparation et l'envoi vivent dans lib/rappel-saison-envoi, partagés
+    // avec l'envoi à la main (Admin → Communication → Mail de rentrée).
     const saisonDebut = process.env.SAISON_DEBUT_DATE; // ex "2026-09-21"
-    if (saisonDebut && /^\d{4}-\d{2}-\d{2}$/.test(saisonDebut)) {
+    if (dateRentreeValide(saisonDebut)) {
       const debutDate = new Date(`${saisonDebut}T12:00:00`);
       const veilleRentree = addDaysParis(-1, debutDate); // veille de la rentrée
       const realToday = addDaysParis(0);                 // date réelle Paris (indépendante de target)
 
       if (realToday === veilleRentree) {
-        const flagRef = adminDb.collection("system-flags").doc(`saison-rappel-${saisonDebut}`);
-        const flagSnap = await flagRef.get();
-        if (flagSnap.exists) {
-          console.log(`\n🎒 [JOB 4] Rappel de saison déjà envoyé pour ${saisonDebut} — skip`);
-        } else {
-          console.log(`\n🎒 [JOB 4] Rappel de début de saison (rentrée ${saisonDebut})`);
-          // Fenêtre = 1ère semaine de cours (rentrée → +6 jours) = le motif récurrent
-          const weekEnd = addDaysParis(6, debutDate);
-          const seasonSnap = await adminDb.collection("creneaux")
-            .where("date", ">=", saisonDebut).where("date", "<=", weekEnd).get();
-          const seasonCreneaux = seasonSnap.docs.map(d => ({ id: d.id, ...d.data() }))
-            .filter((c: any) => c.activityType !== "stage" && c.activityType !== "stage_journee" && c.status !== "closed") as any[];
-
-          // Regrouper par famille → créneaux récurrents distincts (jour + heure + titre)
-          type Slot = { title: string; jour: string; horaire: string; moniteur: string };
-          const famSeason = new Map<string, { parentName: string; familyId: string; slots: Map<string, Slot> }>();
-          for (const c of seasonCreneaux) {
-            const [yy, mm, dd] = (c.date as string).split("-").map(Number);
-            const jourLabel = new Date(yy, mm - 1, dd, 12).toLocaleDateString("fr-FR", { weekday: "long" });
-            for (const e of (c.enrolled || [])) {
-              if (!e.familyId) continue;
-              let famEmail = e.familyEmail || "";
-              let parentName = e.familyName || "";
-              if (!famEmail) {
-                try {
-                  const fs = await adminDb.collection("families").doc(e.familyId).get();
-                  if (fs.exists) { famEmail = fs.data()!.parentEmail || ""; parentName = parentName || fs.data()!.parentName || ""; }
-                } catch {}
-              }
-              if (!famEmail) continue;
-              if (!famSeason.has(famEmail)) famSeason.set(famEmail, { parentName, familyId: e.familyId, slots: new Map() });
-              const slotKey = `${c.activityTitle}|${jourLabel}|${c.startTime}`;
-              famSeason.get(famEmail)!.slots.set(slotKey, {
-                title: c.activityTitle, jour: jourLabel,
-                horaire: `${c.startTime}–${c.endTime}`, moniteur: c.monitor || "",
-              });
-            }
-          }
-          results.saisonRappel.families = famSeason.size;
-
-          for (const [email, { parentName, slots }] of famSeason) {
-            if (!isRecipientAllowed(email)) {
-              results.saisonRappel.blocked++;
-              console.log(blockedLog(email, "cron_saison_rappel"));
-              continue;
-            }
-            try {
-              const lignes = [...slots.values()]
-                .sort((a, b) => a.jour.localeCompare(b.jour) || a.horaire.localeCompare(b.horaire))
-                .map(s => emailPanneau(s.title, [
-                  emailLigne("Jour", s.jour),
-                  emailLigne("Horaire", s.horaire),
-                  s.moniteur ? emailLigne("Encadrement", s.moniteur) : "",
-                ].join(""))).join("");
-              const subject = "Reprise des cours — votre planning de la saison";
-              const html = emailLayout([
-                emailTitre("Les cours reprennent"),
-                P(`Bonjour ${parentName || "cher parent"},`),
-                P(`Les cours reprennent le <strong>${debutDate.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}</strong>. Voici votre planning récurrent pour la saison :`),
-                lignes,
-                P("Ce créneau est le vôtre chaque semaine pour toute la saison.", 13),
-                emailSignature(),
-              ].join("\n"), `Reprise le ${debutDate.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })}`);
-              const res = await fetch("https://api.resend.com/emails", {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({ from: fromEmail, to: email, ...(process.env.RESEND_BCC_EMAIL ? { bcc: process.env.RESEND_BCC_EMAIL } : {}), subject, html }),
-              });
-              if (res.ok) {
-                results.saisonRappel.emailsSent++;
-                await logEmail({ to: email, subject, context: "cron_saison_rappel", template: "saisonRappel", status: "sent", sentBy: "system" });
-                console.log(`  ✅ Rappel saison → ${email} (${slots.size} créneau(x))`);
-              } else {
-                results.saisonRappel.errors++;
-                const errText = await res.text().catch(() => "");
-                await logEmail({ to: email, subject, context: "cron_saison_rappel", template: "saisonRappel", status: "failed", error: `HTTP ${res.status}: ${errText}`.slice(0, 500), sentBy: "system" });
-              }
-            } catch (e: any) {
-              results.saisonRappel.errors++;
-              await logEmail({ to: email, subject: "Rappel saison", context: "cron_saison_rappel", template: "saisonRappel", status: "failed", error: "Erreur interne", sentBy: "system" });
-            }
-          }
-          // Marqueur d'idempotence : plus jamais d'envoi pour cette rentrée.
-          await flagRef.set({ sentAt: new Date().toISOString(), families: famSeason.size, emailsSent: results.saisonRappel.emailsSent });
-        }
+        console.log(`\n🎒 [JOB 4] Rappel de début de saison (rentrée ${saisonDebut})`);
+        const r = await envoyerRappelSaison({ saisonDebut, sentBy: "system", context: "cron_saison_rappel" });
+        results.saisonRappel = { emailsSent: r.emailsSent, errors: r.errors, blocked: r.blocked, families: r.familles.length };
       }
     }
 

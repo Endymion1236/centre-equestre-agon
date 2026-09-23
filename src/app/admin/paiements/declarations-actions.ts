@@ -27,6 +27,9 @@ export type DeclarationPaiement = {
   note?: string;
   chequeRef?: string;
   activityTitle?: string;
+  /** Une ligne par enfant : forfait et créneaux demandés (inscription annuelle). */
+  detailLignes?: string[];
+  familyPhone?: string;
   dateEncaissement?: string;
   createdAt?: { seconds?: number };
   status?: string;
@@ -36,6 +39,24 @@ export type DeclarationPaiement = {
   reservationIds?: string[];
   forfaitPayloads?: Record<string, unknown>[];
 };
+
+/**
+ * L'état d'une déclaration, en clair.
+ *
+ * L'onglet ne listait que les déclarations en attente : une fois validée,
+ * rejetée, ou réglée en ligne par la famille, la déclaration disparaissait
+ * sans laisser de trace — et on ne pouvait plus répondre à « je ne la
+ * trouve pas ».
+ */
+export function libelleStatutDeclaration(status: string | undefined): string {
+  switch (status) {
+    case "pending_confirmation": return "En attente";
+    case "confirmed": return "Validée";
+    case "rejected": return "Rejetée";
+    case "reglee_en_ligne": return "Réglée en ligne";
+    default: return status || "État inconnu";
+  }
+}
 
 export function libelleModeDeclaration(mode: string): string {
   if (mode === "cheque") return "Chèque";

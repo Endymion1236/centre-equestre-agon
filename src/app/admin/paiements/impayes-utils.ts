@@ -1,10 +1,67 @@
-import { resteHorsSepa } from "@/lib/sepa-remise";
+import { prelevementPlanifie, resteHorsSepa } from "@/lib/sepa-remise";
+import { estBalade } from "@/lib/cgv-clauses";
+import { estCommandeInscriptionAnnuelle } from "@/lib/inscription-annuelle-paiement";
 export type ImpayeTypeFilter = "all" | "invoice" | "echeance";
+
+/** Ce que la commande vend : de quoi trier les impayés par activité. */
+export type NatureImpaye = "stage" | "balade" | "seance" | "forfait" | "autre";
+
+export const NATURES_IMPAYES: { id: NatureImpaye; label: string; emoji: string }[] = [
+  { id: "stage", label: "Stages", emoji: "🏕️" },
+  { id: "balade", label: "Promenades", emoji: "🌲" },
+  { id: "seance", label: "Séances", emoji: "🐴" },
+  { id: "forfait", label: "Forfaits annuels", emoji: "📅" },
+  { id: "autre", label: "Autres", emoji: "📎" },
+];
 
 export interface ImpayeFilters {
   familyFilter?: string;
   typeFilter?: ImpayeTypeFilter;
+  natureFilter?: NatureImpaye | "all";
+  /** « Rien réglé » : ne garder que les commandes sans le moindre encaissement. */
+  rienRegle?: boolean;
   search?: string;
+}
+
+/** Aucun centime encaissé sur la commande — ni acompte, ni règlement partiel. */
+export function rienRegle(payment: any): boolean {
+  return Number(payment?.paidAmount || 0) < 0.005;
+}
+
+const TYPES_STAGE = new Set(["stage", "stage_journee"]);
+const TYPES_SEANCE = new Set(["cours", "cours_collectif", "cours_particulier", "competition"]);
+
+/**
+ * La nature d'une commande, lue sur ses lignes. Le type d'activité est la
+ * référence ; le libellé sert de repli pour les commandes anciennes ou saisies
+ * au bureau, qui n'en portent pas toujours. Un forfait annuel prime : il
+ * contient souvent une ligne « cours » qui ne doit pas le faire passer pour
+ * une séance.
+ */
+export function natureCommande(payment: any): NatureImpaye {
+  if (estCommandeInscriptionAnnuelle(payment)) return "forfait";
+  const items: any[] = Array.isArray(payment?.items) ? payment.items : [];
+  const type = (item: any) => String(item?.activityType || "").toLowerCase();
+  if (payment?.type === "stage"
+    || items.some((item) => TYPES_STAGE.has(type(item))
+      || (Array.isArray(item?.stageDates) && item.stageDates.length > 0)
+      || /\bstage\b/i.test(String(item?.activityTitle || "")))) {
+    return "stage";
+  }
+  if (items.some((item) => estBalade(item))) return "balade";
+  if (items.some((item) => TYPES_SEANCE.has(type(item))
+    || item?.creneauId
+    || (Array.isArray(item?.creneauIds) && item.creneauIds.length > 0)
+    || item?.date)) {
+    return "seance";
+  }
+  return "autre";
+}
+
+export function compterParNature(unpaid: any[]): Record<NatureImpaye, number> {
+  const compte: Record<NatureImpaye, number> = { stage: 0, balade: 0, seance: 0, forfait: 0, autre: 0 };
+  for (const payment of unpaid) compte[natureCommande(payment)]++;
+  return compte;
 }
 
 export interface ImpayeGroup {
@@ -22,8 +79,14 @@ export interface MultiEncaissementFamille {
   total: number;
 }
 
+/** Réglé par prélèvement, organisé ou non. Pour l'affichage ; les règles de suivi passent par `prelevementPlanifie`. */
 export function estPaiementSepa(payment: any): boolean {
   return payment?.paymentMode === "prelevement_sepa" || payment?.status === "sepa_scheduled";
+}
+
+/** Facture annoncée en prélèvement, mais dont aucune échéance n'est encore posée. */
+export function prelevementAPreparer(payment: any): boolean {
+  return estPaiementSepa(payment) && !prelevementPlanifie(payment);
 }
 
 export function soldeRestant(payment: any): number {
@@ -44,10 +107,12 @@ export function listerImpayes(payments: any[], today: string): any[] {
   return payments.filter((payment) => {
     if (payment?.status === "cancelled" || payment?.status === "paid") return false;
     if (duMaintenant(payment) <= 0.005) return false;
-    // Commande SEPA : elle ne reste ici que pour la part NON couverte par
-    // l'échéancier (`sepaRestant` connu) ; sans ce champ, elle est
-    // considérée entièrement prélevée, comme avant.
-    if (estPaiementSepa(payment) && typeof payment?.sepaRestant !== "number") return false;
+    // Commande dont le prélèvement est ORGANISÉ : elle ne reste ici que pour
+    // la part non couverte par l'échéancier (`sepaRestant`). Le seul mode de
+    // paiement « SEPA », sans échéance posée — le cas d'une facture de
+    // récurrence — ne fait plus disparaître ce qui est dû
+    // (cf. prelevementPlanifie).
+    if (prelevementPlanifie(payment) && typeof payment?.sepaRestant !== "number") return false;
     if (payment?.paymentMode === "cheque_differe") return false;
     if (Number(payment?.echeancesTotal || 0) > 1) {
       return Boolean(payment?.echeanceDate && payment.echeanceDate < today);
@@ -66,6 +131,9 @@ export function filtrerImpayes(unpaid: any[], filters: ImpayeFilters): any[] {
     const isEcheance = Number(payment?.echeancesTotal || 0) > 1;
     if (typeFilter === "invoice" && isEcheance) return false;
     if (typeFilter === "echeance" && !isEcheance) return false;
+
+    if (filters.natureFilter && filters.natureFilter !== "all" && natureCommande(payment) !== filters.natureFilter) return false;
+    if (filters.rienRegle && !rienRegle(payment)) return false;
 
     if (!search) return true;
     const inName = String(payment?.familyName || "").toLowerCase().includes(search);
@@ -146,7 +214,7 @@ export function preparerMultiEncaissements(unpaid: any[]): MultiEncaissementFami
   for (const payment of unpaid) {
     const reglable =
       payment?.paymentMode !== "cheque_differe" &&
-      !estPaiementSepa(payment) &&
+      !prelevementPlanifie(payment) &&
       Number(payment?.echeancesTotal || 0) <= 1 &&
       soldeRestant(payment) > 0.005;
     if (!reglable) continue;

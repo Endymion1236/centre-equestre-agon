@@ -4,12 +4,15 @@ import { ChevronLeft, ChevronRight, Loader2, Plus, Settings, Trash2, Users } fro
 import { fmtDate, fmtDateFR, fmtMonthFR, typeColors, compareCreneaux, statutPaiementCavalier } from "./types";
 import type { Creneau } from "./types";
 import { dateSaisieComplete } from "@/lib/date-saisie";
+import { nomActuelInscrit } from "./enroll-panel-utils";
 
 interface Props {
   loading: boolean;
   weekDates: Date[];
   creneaux: (Creneau & { id: string })[];
   payments: any[];
+  /** Fiches familles : le nom affiché est celui de la fiche, pas la copie figée du créneau. */
+  families?: any[];
   onPrev: () => void;
   onNext: () => void;
   onToday: () => void;
@@ -86,9 +89,10 @@ function PaymentDot({ enrolled, payments, childId, childName, creneauId, activit
   );
 }
 
-function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
+function CreneauCard({ c, payments, families, onSelect, onDelete, onEdit }: {
   c: Creneau & { id: string };
   payments: any[];
+  families?: any[];
   onSelect: () => void;
   onDelete: () => void;
   onEdit: () => void;
@@ -134,7 +138,7 @@ function CreneauCard({ c, payments, onSelect, onDelete, onEdit }: {
                   enrolled={person}
                   payments={payments}
                   childId={person.childId}
-                  childName={person.childName}
+                  childName={nomActuelInscrit(families || [], person)}
                   creneauId={c.id}
                   activityTitle={c.activityTitle}
                 />
@@ -224,6 +228,7 @@ export default function WeekView({
   weekDates,
   creneaux,
   payments,
+  families,
   onPrev,
   onNext,
   onToday,
@@ -389,6 +394,7 @@ export default function WeekView({
                         key={slot.id}
                         c={slot}
                         payments={payments}
+                        families={families}
                         onSelect={() => onSelectCreneau(slot)}
                         onDelete={() => onOpenDelete(slot)}
                         onEdit={() => onOpenEdit(slot)}

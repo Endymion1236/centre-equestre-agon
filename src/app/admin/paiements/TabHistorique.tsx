@@ -6,6 +6,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
 import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
+import { facturxEnAttente } from "./facturx-depot-utils";
 import { paymentModes } from "./types";
 import { verrouCommande } from "./commande-verrou";
 import {
@@ -336,6 +337,12 @@ export function TabHistorique({
                                 className="font-body text-[9px] font-bold text-white bg-indigo-500 px-1.5 py-1 rounded cursor-pointer border-none hover:bg-indigo-600 whitespace-nowrap leading-none">
                                 F-X
                               </button>
+                              {facturxEnAttente(payment, families.find((f) => f.firestoreId === payment.familyId)) && (
+                                <span title="Client pro : Factur-X à déposer sur Cecurity (onglet Factur-X)"
+                                  className="font-body text-[9px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-1 rounded whitespace-nowrap leading-none cursor-default">
+                                  à déposer
+                                </span>
+                              )}
                             </>
                           )}
                         </span>

@@ -4,6 +4,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { addDaysParis } from "@/lib/date-local";
+import { encadreConsignesBalade, estBalade } from "@/lib/cgv-clauses";
 import {
   emailLayout, emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailSignature, emailCouleurs as CE,
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
     // Map : familyEmail → { parentName, children: [{childName, coursTitle, horaire, moniteur, isStage}] }
     const recipients = new Map<string, {
       parentName: string;
-      items: { childName: string; coursTitle: string; date: string; horaire: string; moniteur: string; isStage: boolean }[];
+      items: { childName: string; coursTitle: string; date: string; horaire: string; moniteur: string; isStage: boolean; isBalade: boolean }[];
     }>();
 
     const dateLabel = tomorrow.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
@@ -92,6 +93,7 @@ export async function GET(req: NextRequest) {
           horaire: `${c.startTime}–${c.endTime}`,
           moniteur: c.monitor || "",
           isStage,
+          isBalade: estBalade(c as any),
         });
       }
     }
@@ -133,6 +135,8 @@ export async function GET(req: NextRequest) {
           P(`Bonjour <strong>${parentName || "cher parent"}</strong>,`),
           P(`Petit rappel pour demain${childrenStr ? ` — <strong>${childrenStr}</strong>` : ""} :`),
           lignes,
+          // Balade demain : l'heure d'arrivée (30 min avant le départ).
+          items.some(i => i.isBalade) ? encadreConsignesBalade() : "",
           emailPanneau("", P("Casque obligatoire, tenue adaptée recommandée.", 13)),
           emailSignature("À demain au centre équestre."),
         ].join("\n"), `Rappel — demain${childrenStr ? ` : ${childrenStr}` : ""}`);

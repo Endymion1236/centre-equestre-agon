@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
-import { verifyAuth } from "@/lib/api-auth";
+import { verifierAccesBorne } from "@/lib/borne-acces-server";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { getClubInfo } from "@/lib/club-info";
 import { refreshEmailMode, isRecipientAllowed, blockedLog } from "@/lib/email-guard";
@@ -32,7 +32,8 @@ export const maxDuration = 15;
 const BOITE_IA = "ceagon50@gmail.com";
 
 export async function POST(req: NextRequest) {
-  const auth = await verifyAuth(req);
+  // Personnel du club ou compte de la borne déclaré (cf. lib/borne-acces).
+  const auth = await verifierAccesBorne(req);
   if (auth instanceof NextResponse) return auth;
 
   // 🚦 5 messages / 10 min : une borne d'accueil ne prend pas plus de

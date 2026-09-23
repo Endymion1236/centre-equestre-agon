@@ -19,7 +19,11 @@
 //   2. "Même semaine" = même période de vacances scolaires,
 //      définie dans la collection Firestore `vacationPeriods`.
 //
-//   3. Famille + multi-stages sont CUMULABLES.
+//   3. Famille + multi-stages sont CUMULABLES, EN CASCADE : le multi-stages
+//      s'applique d'abord, la réduction famille ensuite sur le prix déjà
+//      réduit. Les taux ne s'additionnent pas (-10 % puis -6 % = -15,4 %).
+//      Le cumul vaut aussi pour un enfant qui enchaîne : son rang dans la
+//      famille lui reste sur tous ses stages de la période.
 //
 //   4. Fusion d'impayé : on ajoute une inscription à un payment
 //      existant UNIQUEMENT si son status === "pending" ET qu'il
@@ -77,9 +81,12 @@ export interface StageInscription {
 export interface DiscountResult {
   originalPriceTTC: number;
   finalPriceTTC: number;
-  discountPercent: number; // total cumulé
+  discountPercent: number; // remise effective, après plancher
   discountAmount: number; // en €
-  reasons: string[]; // ex: ["2ème enfant famille (-20%)", "3ème stage consécutif (-15%)"]
+  reasons: string[]; // ex: ["2ème stage (-6%)", "2ème enfant famille (-6%)"]
+  /** Rangs retenus, pour l'affichage — 0 quand la règle ne s'applique pas. */
+  nthFamille: number;
+  nthMultiStage: number;
 }
 
 export type PaymentStatus = "paid" | "pending" | "partial" | "refunded";
@@ -201,18 +208,20 @@ export async function fetchFamilyStagesInPeriod(
 // ─── Calcul des réductions ──────────────────────────────────────────
 
 /**
- * Calcule la réduction famille pour une nouvelle inscription stage,
- * en tenant compte des inscriptions existantes de la même famille
- * dans la même période.
+ * Réduction famille d'une inscription stage, selon le rang de l'enfant
+ * parmi les enfants de la famille inscrits sur la même période.
  *
- * Règle : on compte le nombre d'ENFANTS DISTINCTS déjà inscrits
- * dans la période. Si ce nombre est N, la nouvelle inscription
- * (pour un enfant non encore inscrit) est considérée comme la
- * (N+1)ème — la règle du barème pour nth=N+1 s'applique.
+ * Le rang se prend dans l'ordre où les enfants sont arrivés : le premier
+ * inscrit de la période est le 1er, le suivant le 2ème, et ce rang LUI RESTE
+ * pour tous ses stages de la période.
  *
- * Si l'enfant qu'on inscrit est DÉJÀ inscrit ailleurs dans la même
- * période, on ne compte pas de nouvelle réduction famille
- * (il est déjà compté dans son enfant existant).
+ * Auparavant, un enfant déjà inscrit perdait sa réduction famille dès son
+ * deuxième stage : elle ne récompensait que la première inscription. L'écran
+ * des paramètres annonçait pourtant le cumul des deux barèmes. C'est le
+ * cumul qui fait foi (décision de Nicolas, 22/09/2026) : un 2ème enfant à
+ * son 2ème stage a les deux réductions.
+ *
+ * Un enfant pas encore inscrit prend le rang suivant : il arrive en dernier.
  *
  * @returns pourcentage de réduction famille (0 si pas applicable)
  */
@@ -223,19 +232,20 @@ export function calculateFamilyDiscount(
 ): { percent: number; nth: number } {
   if (!familyRules || familyRules.length === 0) return { percent: 0, nth: 0 };
 
-  // Compter les enfants distincts déjà inscrits
-  const distinctChildren = new Set(existingStages.map((s) => s.childId));
+  // Ordre d'arrivée des enfants sur la période : par date de stage, puis par
+  // ordre d'apparition (le tri de JavaScript est stable, ce qui préserve
+  // l'ordre d'une sélection en cours).
+  const parDate = [...existingStages].sort(
+    (a, b) => String(a.stageDate || "").localeCompare(String(b.stageDate || "")),
+  );
+  const ordre: string[] = [];
+  for (const s of parDate) {
+    if (s.childId && !ordre.includes(s.childId)) ordre.push(s.childId);
+  }
+  // Pas encore inscrit : il arrive en dernier.
+  if (!ordre.includes(newChildId)) ordre.push(newChildId);
 
-  // Est-ce que le nouvel enfant est déjà inscrit ?
-  const alreadyInscribed = distinctChildren.has(newChildId);
-
-  // Si oui : on ne lui applique PAS la réduction famille sur cette
-  // nouvelle inscription — il est déjà le même "enfant".
-  // Par contre il pourrait bénéficier du multi-stages (voir autre fonction).
-  if (alreadyInscribed) return { percent: 0, nth: 0 };
-
-  // Sinon : le nouvel enfant sera le (N+1)ème enfant distinct
-  const nth = distinctChildren.size + 1;
+  const nth = ordre.indexOf(newChildId) + 1;
 
   // 1er enfant = pas de réduction
   if (nth < 2) return { percent: 0, nth };
@@ -262,6 +272,31 @@ export function calculateFamilyDiscount(
  * nouvelle inscription est la (N+1)ème — la règle du barème
  * pour nth=N+1 s'applique.
  */
+/** Le lundi de la semaine d'une date « AAAA-MM-JJ ». */
+export function lundiDeLaSemaine(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  if (isNaN(d.getTime())) return String(iso || "");
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Identité d'un stage : son intitulé et la semaine où il se déroule.
+ *
+ * Le rang multi-stages se comptait en RÉSERVATIONS. Un stage de plusieurs
+ * jours pesant plusieurs lignes, la deuxième semaine passait pour la
+ * troisième et attrapait le taux du dessus — puis tombait sous le prix
+ * plancher, qui la remontait. La famille voyait « -20 € » quel que soit le
+ * barème (cas JUVET FRASER, 22/09/2026 : 160 € au lieu de 162 €).
+ *
+ * Deux semaines portant le même intitulé restent bien deux stages : c'est la
+ * semaine qui les sépare, pas le nom.
+ */
+export function cleStage(s: { stageTitle?: string | null; stageDate?: string | null }): string {
+  const titre = String(s?.stageTitle || "").trim().toLowerCase();
+  return `${titre}|${lundiDeLaSemaine(String(s?.stageDate || ""))}`;
+}
+
 export function calculateMultiStageDiscount(
   existingStages: StageInscription[],
   newChildId: string,
@@ -271,7 +306,8 @@ export function calculateMultiStageDiscount(
     return { percent: 0, nth: 0 };
 
   const childStages = existingStages.filter((s) => s.childId === newChildId);
-  const nth = childStages.length + 1;
+  // Des STAGES distincts, pas des lignes de réservation.
+  const nth = new Set(childStages.map(cleStage)).size + 1;
 
   if (nth < 2) return { percent: 0, nth };
 
@@ -305,6 +341,12 @@ export async function applyDiscounts(params: {
   settings: DiscountSettings;
   periods: VacationPeriod[];
   excludeCreneauId?: string; // créneau en cours d'inscription à exclure du comptage
+  /**
+   * Inscriptions pas encore écrites en base : les enfants déjà traités dans
+   * la même sélection. Sans elles, inscrire deux enfants d'un coup donnait à
+   * chacun le rang du premier.
+   */
+  stagesSupplementaires?: StageInscription[];
 }): Promise<DiscountResult> {
   const {
     familyId,
@@ -324,6 +366,8 @@ export async function applyDiscounts(params: {
     discountPercent: 0,
     discountAmount: 0,
     reasons: [],
+    nthFamille: 0,
+    nthMultiStage: 0,
   };
 
   // 1. Ne s'applique qu'aux stages
@@ -338,7 +382,10 @@ export async function applyDiscounts(params: {
 
   // 3. Charger les inscriptions existantes de la famille dans la période
   //    (en excluant la résa qu'on vient juste de créer pour le créneau courant)
-  const existingStages = await fetchFamilyStagesInPeriod(familyId, period, excludeCreneauId);
+  const existingStages = [
+    ...(await fetchFamilyStagesInPeriod(familyId, period, excludeCreneauId)),
+    ...(params.stagesSupplementaires || []),
+  ];
 
   // 4. Calculer les deux types de réduction
   const family = calculateFamilyDiscount(
@@ -352,15 +399,20 @@ export async function applyDiscounts(params: {
     settings.multiStageDiscount
   );
 
-  // 5. Cumul (additif, pas multiplicatif — convention du projet)
-  const totalPercent = family.percent + multi.percent;
-  if (totalPercent === 0) return noDiscount;
+  // 5. Application EN CASCADE, dans l'ordre décidé avec Nicolas (22/09/2026) :
+  //    le multi-stages d'abord, la réduction famille ensuite, sur le prix
+  //    déjà réduit. Les taux ne s'additionnent donc plus : -10 % puis -6 %
+  //    font -15,4 %, et non -16 %.
+  if (family.percent === 0 && multi.percent === 0) return noDiscount;
 
-  // Plafond de sécurité à 50% pour éviter les dérives
-  const cappedPercent = Math.min(totalPercent, 50);
+  let prixEnCascade = originalPriceTTC;
+  if (multi.percent > 0) prixEnCascade *= 1 - multi.percent / 100;
+  if (family.percent > 0) prixEnCascade *= 1 - family.percent / 100;
 
-  const rawDiscount = Math.round(originalPriceTTC * cappedPercent) / 100;
-  let finalPriceTTC = Math.round((originalPriceTTC - rawDiscount) * 100) / 100;
+  // Plafond de sécurité à 50 % du prix plein, pour éviter les dérives.
+  const moitiePrix = originalPriceTTC / 2;
+  const plafondAtteint = prixEnCascade < moitiePrix;
+  let finalPriceTTC = Math.round(Math.max(prixEnCascade, moitiePrix) * 100) / 100;
 
   // Prix plancher (config admin) : meme si tous les barèmes cumulent fort,
   // le prix final ne peut pas descendre sous ce seuil. Utile pour borner
@@ -379,14 +431,15 @@ export async function applyDiscounts(params: {
     ? Math.round((discountAmount / originalPriceTTC) * 10000) / 100
     : 0;
 
+  // Dans l'ordre où ils s'appliquent : le lecteur doit pouvoir refaire le calcul.
   const reasons: string[] = [];
-  if (family.percent > 0) {
-    reasons.push(`${family.nth}ème enfant famille (-${family.percent}%)`);
-  }
   if (multi.percent > 0) {
     reasons.push(`${multi.nth}ème stage (-${multi.percent}%)`);
   }
-  if (cappedPercent < totalPercent) {
+  if (family.percent > 0) {
+    reasons.push(`${family.nth}ème enfant famille (-${family.percent}%)`);
+  }
+  if (plafondAtteint) {
     reasons.push(`(plafonné à 50%)`);
   }
   if (plancherApplied) {
@@ -399,6 +452,8 @@ export async function applyDiscounts(params: {
     discountPercent: effectivePercent,
     discountAmount,
     reasons,
+    nthFamille: family.nth,
+    nthMultiStage: multi.nth,
   };
 }
 

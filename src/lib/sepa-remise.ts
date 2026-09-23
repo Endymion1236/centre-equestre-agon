@@ -75,12 +75,28 @@ export function repartirEntreDeuxMandats(e: {
  * Une commande SEPA sans `sepaRestant` (planifiée avant ce champ) est
  * considérée entièrement couverte, comme avant.
  */
+/**
+ * Le prélèvement est-il RÉELLEMENT organisé ?
+ *
+ * Le mode de paiement seul ne prouve rien : une facture de récurrence porte
+ * « prélèvement SEPA » parce que c'est ainsi que la famille règle
+ * d'habitude, sans qu'aucune échéance ait été posée. Comptée comme
+ * prélevée, elle sortait des impayés et n'était plus réclamée nulle part —
+ * six cents euros invisibles sur une fiche qui les affichait pourtant.
+ *
+ * Preuve d'un prélèvement organisé : un échéancier chiffré (`sepaRestant`)
+ * ou une commande marquée `sepa_scheduled` à l'inscription.
+ */
+export function prelevementPlanifie(payment: { sepaRestant?: number | null; status?: string } | null | undefined): boolean {
+  return typeof payment?.sepaRestant === "number" || payment?.status === "sepa_scheduled";
+}
+
 export function resteHorsSepa(payment: {
   totalTTC?: number; paidAmount?: number; sepaRestant?: number | null;
   paymentMode?: string; status?: string;
 }): number {
   const solde = Math.round(((Number(payment?.totalTTC) || 0) - (Number(payment?.paidAmount) || 0)) * 100) / 100;
-  const sepa = payment?.paymentMode === "prelevement_sepa" || payment?.status === "sepa_scheduled";
+  const sepa = prelevementPlanifie(payment);
   if (!sepa) return Math.max(0, solde);
   const planifie = typeof payment?.sepaRestant === "number" ? payment.sepaRestant : solde;
   return Math.max(0, Math.round((solde - planifie) * 100) / 100);

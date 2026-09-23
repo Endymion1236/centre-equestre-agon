@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { encadreConditionsStage } from "@/lib/cgv-clauses";
+import { encadreConditionsStage, blocsConfirmationBalade, estBalade } from "@/lib/cgv-clauses";
 import { deciderPaiement } from "@/lib/cawl-status";
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
@@ -7,12 +7,17 @@ import { loadTemplate } from "@/lib/email-template-loader";
 import { awardLoyaltyPointsServer } from "@/lib/fidelite";
 import { confirmReservationsForPayment } from "@/lib/reservations";
 import { confirmerPlacesTenues } from "@/lib/places-tenues";
+import { cloreDeclarationsRegleesEnLigne } from "@/lib/declarations-reglees";
+import { moyenPaiementCawl, libelleEncaissementCawl } from "@/lib/cawl-moyen-paiement";
+import { nomDestinataireOuDefaut } from "@/lib/nom-destinataire";
+import { enregistrerEchecCawl } from "@/lib/cawl-tentatives";
 import { createForfaitsForPayment } from "@/lib/forfaits-server";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { createEncaissementServer } from "@/lib/compta-encaissement-server";
 import { deciderConfirmation } from "@/lib/cawl-confirmation";
+import { signalerSiInattendu, marquerLienRegle } from "@/lib/cawl-inattendu";
 import { lignesDetailHtml, prestationsCourtes, libelleModePaiement, titreSansEnfant, datesStage, horairesStage, dateEcheanceSolde } from "@/lib/email-prestations";
 import type { Paiement, SessionCawl } from "@/types/argent";
 import crypto from "crypto";
@@ -183,6 +188,15 @@ export async function GET(req: NextRequest) {
       // valide rien ici — une inscription en attente vaut mieux qu'une
       // place donnee sans encaissement.
       const motif = decision === "echec" ? "refused" : "pending";
+      // La cause est gardée (journal des tentatives, lien, commande) : sans
+      // ça, « certains liens marchent, d'autres sont rejetés » restait sans
+      // réponse. Une page CAWL refusée est aussi marquée consommée.
+      const echec = await enregistrerEchecCawl({ source: "retour", hostedCheckoutId, paymentId: paymentId || sessionPaymentId, paymentCawl: paymentOutput });
+      // Une famille venue d'un lien de paiement n'est pas forcément connectée :
+      // elle retourne sur la page du lien, qui explique et propose de réessayer.
+      if (echec.lienToken) {
+        return NextResponse.redirect(new URL(`/payer/${echec.lienToken}?retour=${motif}`, req.nextUrl.origin));
+      }
       return NextResponse.redirect(
         new URL(`/espace-cavalier/reserver?cancelled=true&motif=${motif}`, req.nextUrl.origin),
       );
@@ -325,14 +339,37 @@ export async function GET(req: NextRequest) {
       // Non bloquant — un échec ici ne doit pas faire échouer l'encaissement,
       // la purge respecte de toute façon les paiements aboutis.
       await confirmerPlacesTenues(payRef.id);
+      // Une déclaration « je paierai au bureau » sur cette commande n'a plus
+      // lieu d'être : la famille a finalement réglé en ligne.
+      await cloreDeclarationsRegleesEnLigne(payRef.id, `CAWL-${hostedCheckoutId}`);
 
+      // Règlement attendu ? Deux liens partiels réglés, ou un lien annulé par
+      // l'admin mais utilisé avant son expiration : crédité (l'argent est
+      // réel) et signalé sur la commande pour vérification.
+      await signalerSiInattendu({
+        payRef,
+        statutCommande: pData.status,
+        totalTTC,
+        dejaPaye: pData.paidAmount || 0,
+        montant: paidAmount,
+        hostedCheckoutId,
+        merchantRef: ref || "",
+        source: "status",
+      });
+      await marquerLienRegle(hostedCheckoutId);
+
+      // Carte, PayPal, Apple Pay… : le journal dit par quoi l'argent est
+      // passé, comme le back-office CAWL (cf. lib/cawl-moyen-paiement).
+      const moyen = moyenPaiementCawl(paymentOutput?.paymentOutput || paymentOutput);
+      await payRef.update({ moyenPaiement: moyen.moyen, moyenPaiementLibelle: moyen.libelle, ...(moyen.produit != null ? { cawlPaymentProductId: moyen.produit } : {}) });
       await createEncaissementServer({
         paymentId: payRef.id,
         familyId: familyId || pData.familyId,
         familyName: pData.familyName || "",
         montant: paidAmount,
         mode: "cb_online",
-        modeLabel: !isFullyPaid ? `CB en ligne CAWL (paiement partiel ${montantPaye.toFixed(2)}€)` : "CB en ligne (CAWL)",
+        modeLabel: libelleEncaissementCawl(moyen, !isFullyPaid ? `paiement partiel ${montantPaye.toFixed(2)}€` : null),
+        moyenPaiement: moyen.moyen,
         ref: `CAWL-${hostedCheckoutId}`,
         activityTitle: (pData.items || []).map((i: any) => i.activityTitle).join(", "),
       });
@@ -417,7 +454,7 @@ export async function GET(req: NextRequest) {
             ? `Le solde de ${soldeRestant.toFixed(2)}€ sera prélevé automatiquement sur votre carte enregistrée environ une semaine avant le début du stage. Aucune action n'est requise.`
             : `Un email avec le lien de paiement du solde (${soldeRestant.toFixed(2)}€) vous sera envoyé environ une semaine avant le début du stage.`;
           const vars: Record<string, string | number> = hasStage ? {
-            parentName: pData.familyName || "Client",
+            parentName: nomDestinataireOuDefaut({ familyName: pData.familyName, items: pData.items }),
             // Résout {fidelite} dans le gabarit : les points ont été crédités
             // plus haut, le solde lu par le loader est donc à jour.
             familyId: familyId || pData.familyId || "",
@@ -441,7 +478,7 @@ export async function GET(req: NextRequest) {
             total: (pData.totalTTC || 0).toFixed(2),
             soldePhrase,
           } : {
-            parentName: pData.familyName || "Client",
+            parentName: nomDestinataireOuDefaut({ familyName: pData.familyName, items: pData.items }),
             familyId: familyId || pData.familyId || "",
             montant: paidAmount.toFixed(2),
             prestations: lignesDetail || prestations,
@@ -457,7 +494,10 @@ export async function GET(req: NextRequest) {
           // la clause opposable (l'acceptation à la commande le fait), mais
           // ça évite la mauvaise surprise et désamorce les litiges.
           const estStage = items.some((i: any) => String(i.activityType || "").includes("stage"));
-          const { subject, html } = await loadTemplate(templateKey, vars, estStage ? encadreConditionsStage() : "");
+          // Balade : l'heure d'arrivée (30 min avant) ne figurait nulle part
+          // dans la confirmation — les familles arrivaient à l'heure du départ.
+          const supplement = estStage ? encadreConditionsStage() : items.some((i: any) => estBalade(i)) ? blocsConfirmationBalade() : "";
+          const { subject, html } = await loadTemplate(templateKey, vars, supplement);
           const htmlFinal = html;
           fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -483,8 +523,31 @@ export async function GET(req: NextRequest) {
             });
         } catch (e) { console.error("Email template error:", e); }
       }
-    } else if (pData?.status === "paid") {
-      console.log(`Payment ${payRef?.id} déjà payé, skip`);
+    } else if (pData?.status === "paid" && payRef) {
+      // Commande déjà soldée, et CAWL vient d'encaisser : la famille a réglé
+      // un second lien. Rien n'est crédité ; le club doit le voir pour
+      // rembourser. Même verrou que le webhook : un seul signalement.
+      console.log(`Payment ${payRef.id} déjà payé — encaissement en trop signalé`);
+      const lockAcquired = await acquireCawlConfirmationLock({
+        hostedCheckoutId,
+        stage: isDeposit ? "deposit" : "full",
+        source: "status",
+        paymentId: payRef.id,
+        amountCents: totalCents,
+      });
+      if (lockAcquired) {
+        await signalerSiInattendu({
+          payRef,
+          statutCommande: "paid",
+          totalTTC: pData.totalTTC || 0,
+          dejaPaye: pData.paidAmount || 0,
+          montant: totalEuros,
+          hostedCheckoutId,
+          merchantRef: ref || "",
+          source: "status",
+        });
+        await marquerLienRegle(hostedCheckoutId);
+      }
     } else {
       console.warn(`Payment Firestore introuvable: paymentId=${paymentId}, ref=${ref}`);
     }

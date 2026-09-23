@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     const depuis = new Date(maintenant); depuis.setDate(depuis.getDate() - 30);
     const jusqua = new Date(maintenant); jusqua.setFullYear(jusqua.getFullYear() + 1);
 
-    const [paySnap, crSnap, resaSnap, encSnap, sepaSnap, cartesSnap] = await Promise.all([
+    const [paySnap, crSnap, resaSnap, encSnap, sepaSnap, cartesSnap, famSnap] = await Promise.all([
       adminDb.collection("payments").get(),
       adminDb.collection("creneaux")
         .where("date", ">=", ymd(depuis))
@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       adminDb.collection("encaissements").get(),
       adminDb.collection("echeances-sepa").get(),
       adminDb.collection("cartes").get(),
+      adminDb.collection("families").select("parentName", "parentEmail", "status", "mergedInto").get(),
     ]);
 
     const lire = (snap: FirebaseFirestore.QuerySnapshot) =>
@@ -57,6 +58,7 @@ export async function GET(req: NextRequest) {
       encaissements: lire(encSnap),
       echeancesSepa: lire(sepaSnap),
       cartes: lire(cartesSnap),
+      familles: lire(famSnap),
       maintenant,
     });
 
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest) {
         encaissements: encSnap.size,
         echeancesSepa: sepaSnap.size,
         cartes: cartesSnap.size,
+        familles: famSnap.size,
       },
       nb: anomalies.length,
       nbBloquants: anomalies.filter((a) => a.gravite === "bloquant").length,

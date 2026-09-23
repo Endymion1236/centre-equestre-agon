@@ -8,7 +8,7 @@ export const normalizePayment = (d: any) => ({
     ...i,
     priceTTC: safeNumber(i.priceTTC),
     priceHT: safeNumber(i.priceHT),
-    tva: safeNumber(i.tva || 5.5),
+    tva: safeNumber(i.tva ?? 5.5),
   })),
 });
 

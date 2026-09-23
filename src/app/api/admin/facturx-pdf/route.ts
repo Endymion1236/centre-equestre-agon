@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { getClubInfo } from "@/lib/club-info";
-import { buildFacturXXml } from "@/lib/facturx";
+import { buildFacturXXml, sirenDepuisFiche } from "@/lib/facturx";
 import { embedFacturX } from "@/lib/facturx-pdf";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -41,8 +41,7 @@ export async function GET(req: NextRequest) {
     const civilite = fam?.civilite ? `${fam.civilite} ` : "";
     const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
     const buyerAddress = adresseLines ? adresseLines.replace(/\n/g, ", ") : undefined;
-    const sirenClean = fam?.siren ? String(fam.siren).replace(/\s/g, "") : "";
-    const buyerSiren = /^\d{9}$/.test(sirenClean) ? sirenClean : undefined;
+    const buyerSiren = sirenDepuisFiche(fam);
 
     // ── 1. PDF de la facture via la route serveur existante ──
     const items = p.items || [];
@@ -102,7 +101,7 @@ export async function GET(req: NextRequest) {
         // S2 si la facture est déjà intégralement réglée au dépôt, S1 sinon.
         // Choix par défaut à faire confirmer par le cabinet comptable / la PA.
         businessProcess: p.status === "paid" ? "S2" : "S1",
-        dueDate: p.stageDate || null,
+        dueDate: p.dueDate || p.stageDate || null, // échéance saisie à l'émission (client pro), sinon début du stage
       },
       club
     );
