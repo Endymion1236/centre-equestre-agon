@@ -93,3 +93,47 @@ responsabilité personnelle de Nicolas — inexacte.
 | 21/02/2026 | Attestation d'éditeur rétablie (LF 2026 art. 125, modèle `BOI-LETTRE-000242`) |
 | 01/09/2026 | Réception des factures fournisseurs par voie électronique — canal API Expertise ouvert |
 | 01/09/2027 | Émission électronique + e-reporting, et 4 nouvelles mentions obligatoires |
+
+## Flux de travail d'une session
+
+- La session travaille sur sa branche, puis avance `main` en fast-forward (`git checkout main && git reset --hard origin/main && git merge --ff-only <branche> && git push origin main`). Si `main` a bougé entre-temps : `git rebase origin/main` sur la branche d'abord. Nicolas demande en général que tout finisse sur `main` ; le confirmer une fois en début de session, et demander si le sujet relève plutôt de `test`.
+- `npm run test:unit` lance toute la suite (`scripts/run-unit-tests.mjs`) et sort 1 au premier échec : équivalent de la boucle ci-dessus.
+- `firestore.rules` ne part pas avec le site : déploiement Firebase séparé. Le dire à chaque modification.
+- Vercel déploie `main` automatiquement en deux ou trois minutes : prévenir Nicolas qu'un test « en vrai » attend ce délai.
+- Un commit par sujet, message en français : le problème tel que Nicolas l'a vu, puis ce qui change. Aucun identifiant de modèle dans les commits.
+
+## Conventions de code (issues de la refonte de septembre 2026)
+
+- **Logique pure dans un module à part, testée seule.** Un écran ne calcule pas, il appelle `xxx-utils.ts` (`depenses-utils`, `resultat-utils`, `facturx-depot-utils`, `enroll-panel-utils`, `lib/cartes-seances`…). Toute nouvelle règle métier : un module pur + un test dans `tests/unit` (format maison `test(nom, fn)` + `assert`).
+- **Actions avec effets = contexte explicite + rappels.** Une action qui parle à Firestore ou au serveur reçoit `(ctx, rappels, ...args)` : tout ce qu'elle lit arrive par `ctx`, tout ce qu'elle change à l'écran passe par `rappels`. Modèles : `planning/inscription-actions.ts`, `planning/inscrire-depuis-panneau.ts`, `planning/enroll-panel-actions.ts`, `espace-cavalier/reserver/panier-ajout.ts` et `panier-paiement.ts`.
+- **Sortir un bloc d'un gros écran = déplacement à l'identique.** Comparer les lignes retirées aux lignes des nouveaux modules : seules les en-têtes doivent différer. Garder dans l'écran des enveloppes aux mêmes noms, pour ne pas toucher le JSX.
+- Composants React déclarés au niveau module, jamais dans un autre composant (perte du focus à chaque rendu).
+- Textes contractuels et consignes écrits une seule fois : `lib/cgv-clauses.ts` (clauses d'annulation, consigne d'arrivée des balades 30 min avant). Emails : habillage dans `lib/email-templates.ts`, gabarits modifiables par l'admin dans `lib/email-templates-defauts.ts`, chargés par `loadTemplate(clé, variables, supplément)`.
+- Coordonnées du club : `lib/club-info.ts` (défauts + réglages Firestore `settings/centre`). Email de contact `ceagon50@gmail.com` partout ; l'ancienne adresse orange.fr est bannie, y compris des listes d'administrateurs.
+- Lire des extraits ciblés des gros fichiers (`sed -n a,bp`, `grep -n`), jamais le fichier entier.
+
+## Où sont les choses
+
+| Sujet | Fichiers |
+|---|---|
+| Planning admin et inscription | `src/app/admin/planning/` — `EnrollPanel.tsx` (panneau, 2 300 lignes, surtout du JSX), `inscrire-depuis-panneau.ts` (l'inscription elle-même), `enroll-panel-actions.ts`, `enroll-panel-utils.ts` |
+| Réservation en ligne (familles) | `src/app/espace-cavalier/reserver/` — `page.tsx` (affichage), `panier-ajout.ts`, `panier-paiement.ts`, `ModalePanier.tsx`, `types.ts` |
+| Serveur d'inscription | `src/app/api/enroll/route.ts` — vérifie enfant↔famille, capacité, forfait, carte de séances ; une famille ne pose qu'une place tenue, sauf carte valide |
+| Paiements et caisse | `src/app/admin/paiements/` — un fichier par onglet (`TabImpayes`, `TabHistorique`, `TabFacturX`…), utils à côté ; `PaiementsClient.tsx` porte encore les modales |
+| Facturation électronique 2026-2027 | `lib/facturx.ts` (XML EN 16931, `estCompteProfessionnel`, `sirenDepuisFiche`), `lib/facturx-pdf.ts`, routes `api/admin/facturx*`, onglet Factur-X = dépôts sur la Plateforme Agréée (Cecurity, via le cabinet). Facture pro émise avant paiement : `attribuer-numero-facture` avec `dueDate` |
+| Cartes de séances | `lib/cartes-seances.ts` (quelle carte couvre quel créneau), vente dans `admin/cartes`, décompte au montoir |
+| Promenades : niveau et sécurité | `lib/promenades-securite.ts` (règles), `lib/promenade-niveau.ts` (niveau d'un créneau, niveaux admissibles ou atteignables d'un cavalier) |
+| Assistant de la boîte mail | `api/admin/inbox-assistant/route.ts` : passe légère Haiku (dates + cavaliers décrits dans le mail), disponibilités `lib/dispo.ts`, promenades inaccessibles retirées côté serveur, réponse Sonnet 5 en JSON strict (réflexion coupée : elle mangeait le budget de sortie), revalidation serveur des suggestions. Périodes de vacances nommées : `lib/periode-vacances.ts` |
+| Comptabilité de pilotage | `admin/comptabilite/` — `depenses` (doublons de relevé : garde-fou dans `api/admin/depenses`), `resultat` (CA caisse + CA repris de Celeris), `tresorerie` |
+| SEPA | `admin/sepa/page.tsx`, échéances `echeances-sepa`, pré-notification `api/admin/sepa-prenotification` (mode `apercu`, à vérifier avant envoi : `components/admin/BandeauPrenotificationSepa.tsx`) |
+| Accès admin | `lib/admin-emails.ts` (repli par email ; l'autorité est le claim `admin`), `firestore.rules` garde sa propre copie de la liste |
+
+## Fichiers encore gros, à découper au fil de l'eau
+
+`admin/planning/EnrollPanel.tsx` (formulaire annuel ≈ 700 lignes de JSX), `admin/management/TabPlanning.tsx`, `admin/paiements/PaiementsClient.tsx` (modales), `espace-cavalier/inscription-annuelle/page.tsx`, `admin/montoir/page.tsx`, `admin/forfaits/page.tsx`, `admin/sepa/page.tsx`. Règle : quand une évolution touche un bloc, on le sort à ce moment-là, à l'identique, avec ses tests — pas de grand découpage à froid.
+
+## Pièges connus
+
+- `Confirm` (`components/ui/Confirm.tsx`) prend `{ titre, details, libelleConfirmer, danger }` ; `useToast()` renvoie `{ toast }` avec `(message, type, durée)`.
+- Les modèles Anthropic à réflexion (Sonnet 5, Opus 5) comptent la réflexion dans `max_tokens` : pour une sortie JSON, couper la réflexion (`thinking: { type: "disabled" }`) ou élargir largement le budget.
+- Côté serveur, dates de créneaux et de commandes en heure de Paris (`toParisDateString()`, `lib/date-local.ts`), jamais l'heure du serveur.
