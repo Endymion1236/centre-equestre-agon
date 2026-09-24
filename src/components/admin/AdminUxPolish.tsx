@@ -240,10 +240,13 @@ export default function AdminUxPolish() {
         padding-right: 0.85rem !important;
       }
 
-      [data-admin-section="planning"] .card,
-      [data-admin-section="montoir"] .card,
-      [data-admin-section="paiements"] .card,
-      [data-admin-section="comptabilite"] .card {
+      /* Une carte qui demande à défiler (overflow-x-auto, overflow-auto) garde
+         son défilement : sinon ses tableaux larges étaient coupés sur mobile,
+         sans moyen de lire les colonnes de droite (trésorerie, livre de caisse). */
+      [data-admin-section="planning"] .card:not(.overflow-x-auto):not(.overflow-auto),
+      [data-admin-section="montoir"] .card:not(.overflow-x-auto):not(.overflow-auto),
+      [data-admin-section="paiements"] .card:not(.overflow-x-auto):not(.overflow-auto),
+      [data-admin-section="comptabilite"] .card:not(.overflow-x-auto):not(.overflow-auto) {
         overflow: hidden;
       }
 

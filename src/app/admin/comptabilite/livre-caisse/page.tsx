@@ -262,7 +262,7 @@ export default function LivreCaissePage() {
             <p className="font-body text-sm text-slate-500">Journal chronologique inaltérable des mouvements d'espèces.</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Link href="/admin/comptabilite"
             className="font-body text-xs text-slate-600 bg-white border border-gray-200 px-3 py-2 rounded-lg no-underline hover:bg-gray-50">
             ← Comptabilité
@@ -319,7 +319,9 @@ export default function LivreCaissePage() {
 
       {/* Tableau chronologique */}
       <Card padding="sm" className="overflow-x-auto !p-0 print:shadow-none print:border print:border-gray-400">
-        <table className="w-full border-collapse font-body text-sm">
+        <p className="sm:hidden print:hidden px-3 pt-2 font-body text-[11px] text-slate-400">Faites glisser le tableau vers la gauche pour voir entrées, sorties et solde →</p>
+        {/* Largeur minimale : sur téléphone le tableau défile au lieu d'écraser ses colonnes. */}
+        <table className="w-full min-w-[640px] print:min-w-0 border-collapse font-body text-sm">
           <thead>
             <tr className="bg-slate-50 border-b-2 border-slate-200 print:bg-white">
               <th className="px-3 py-2.5 text-left font-semibold text-[11px] uppercase tracking-wider text-slate-600 w-[110px]">Date & heure</th>
@@ -338,7 +340,7 @@ export default function LivreCaissePage() {
               <td className="px-3 py-2 text-slate-400">—</td>
               <td className="px-3 py-2 text-right text-slate-400">—</td>
               <td className="px-3 py-2 text-right text-slate-400">—</td>
-              <td className="px-3 py-2 text-right font-semibold text-blue-800">{soldeInitial.toFixed(2)}€</td>
+              <td className="px-3 py-2 whitespace-nowrap text-right font-semibold text-blue-800">{soldeInitial.toFixed(2)}€</td>
             </tr>
             {loading ? (
               <tr><td colSpan={6} className="px-3 py-8 text-center text-slate-400 italic">Chargement...</td></tr>
@@ -365,13 +367,13 @@ export default function LivreCaissePage() {
                   )}
                 </td>
                 <td className="px-3 py-2 text-slate-600 text-xs">{l.familyName}</td>
-                <td className="px-3 py-2 text-right text-green-700 font-semibold">
+                <td className="px-3 py-2 whitespace-nowrap text-right text-green-700 font-semibold">
                   {l.montant > 0 ? `+${l.montant.toFixed(2)}€` : ""}
                 </td>
-                <td className="px-3 py-2 text-right text-orange-700 font-semibold">
+                <td className="px-3 py-2 whitespace-nowrap text-right text-orange-700 font-semibold">
                   {l.montant < 0 ? `-${Math.abs(l.montant).toFixed(2)}€` : ""}
                 </td>
-                <td className="px-3 py-2 text-right font-semibold text-blue-800">{l.soldeApres.toFixed(2)}€</td>
+                <td className="px-3 py-2 whitespace-nowrap text-right font-semibold text-blue-800">{l.soldeApres.toFixed(2)}€</td>
               </tr>
             ))}
             {/* Ligne "Totaux" */}
