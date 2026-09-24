@@ -158,6 +158,11 @@ export default function TresoreriePage() {
   const saisons = useMemo(() => saisonsDisponiblesTresorerie(releves), [releves]);
   const saisonCourante = saisons[saisons.length - 1];
   const saisonPrec = saisons[saisons.length - 2];
+  // Tableau : sur téléphone, huit saisons ne tiennent pas en largeur. On part
+  // des trois dernières (bouton « toutes les saisons »), le reste défile.
+  const [toutesSaisons, setToutesSaisons] = useState(true);
+  useEffect(() => { try { if (window.matchMedia("(max-width: 639px)").matches) setToutesSaisons(false); } catch { /* sans effet */ } }, []);
+  const saisonsTableau = toutesSaisons ? saisons : saisons.slice(-3);
 
   const enregistrer = async (saison: string, mm: string, compte: string) => {
     if (saving) return;
@@ -678,12 +683,22 @@ export default function TresoreriePage() {
           )}
 
           {/* ── Matrice mois × saisons, comme le classeur ── */}
-          <Card padding="sm" className="overflow-x-auto !p-0">
-            <table className="w-full border-collapse font-body text-sm">
+          {saisons.length > 3 && (
+            <div className="flex items-center justify-between gap-2 mb-2 font-body text-xs text-slate-500 sm:hidden">
+              <span>{toutesSaisons ? "Faites glisser le tableau vers la gauche →" : `${saisonsTableau.length} dernières saisons`}</span>
+              <button type="button" onClick={() => setToutesSaisons(v => !v)}
+                className="font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg cursor-pointer">
+                {toutesSaisons ? "3 dernières saisons" : `Toutes les saisons (${saisons.length})`}
+              </button>
+            </div>
+          )}
+          <Card padding="sm" className="!p-0 max-w-full">
+            <div className="overflow-x-auto overscroll-x-contain" style={{ WebkitOverflowScrolling: "touch" }}>
+            <table className="w-full border-collapse font-body text-sm whitespace-nowrap">
               <thead>
                 <tr className="bg-slate-50 border-b-2 border-slate-200">
-                  <th className="px-3 py-2.5 text-left font-semibold text-[11px] uppercase tracking-wider text-slate-600">Mois</th>
-                  {saisons.map(s => (
+                  <th className="sticky left-0 z-10 bg-slate-50 px-3 py-2.5 text-left font-semibold text-[11px] uppercase tracking-wider text-slate-600">Mois</th>
+                  {saisonsTableau.map(s => (
                     <th key={s} className={`px-3 py-2.5 text-right font-semibold text-[11px] tracking-wider ${s === saisonCourante ? "text-blue-700" : "text-slate-600"}`}>{s}</th>
                   ))}
                 </tr>
@@ -691,8 +706,8 @@ export default function TresoreriePage() {
               <tbody>
                 {MOIS_SAISON.map(mm => (
                   <tr key={mm} className="border-b border-gray-100 hover:bg-slate-50/50">
-                    <td className="px-3 py-2 text-slate-700 font-medium">{NOMS_MOIS[mm]}</td>
-                    {saisons.map(s => {
+                    <td className="sticky left-0 z-10 bg-white px-3 py-2 text-slate-700 font-medium">{NOMS_MOIS[mm]}</td>
+                    {saisonsTableau.map(s => {
                       const mois = moisDe(s, mm);
                       const total = totalParMois.get(mois);
                       const compteEdit = comptes[0] || "Compte courant";
@@ -732,6 +747,7 @@ export default function TresoreriePage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </Card>
 
           {horsTotal.length > 0 && [...totalHorsParMois.keys()].filter(m => totalParMois.get(m) === undefined).length > 3 && (
