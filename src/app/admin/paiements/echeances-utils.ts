@@ -266,3 +266,66 @@ export function liensCbAEnvoyer(payments: any[], today = todayIso()): LienCbAEnv
   }
   return lignes.sort((a, b) => a.date.localeCompare(b.date) || a.familyName.localeCompare(b.familyName));
 }
+
+// ── Garde-fou avant d'encaisser une échéance ────────────────────────────────
+//
+// Les boutons CB / Chq / Esp / Vir encaissaient au premier clic : l'écriture
+// entre au journal de caisse chaîné (NF525) et ne s'efface plus — une erreur
+// se corrige par contre-passation. Un gérant qui voulait « prévoir » un
+// virement l'encaissait en réalité (septembre 2026). Avant chaque
+// encaissement : ce qui va se passer, et les cas qui méritent un second regard.
+
+const LIBELLES_MODE_ECHEANCE: Record<string, string> = {
+  cb_terminal: "carte bancaire", cheque: "chèque", especes: "espèces", virement: "virement",
+};
+const PREUVE_PAR_MODE: Record<string, string> = {
+  virement: "Vérifiez d'abord que le virement est bien arrivé sur le compte (relevé ou rapprochement bancaire).",
+  cheque: "Le chèque doit être entre vos mains ; il partira ensuite dans une remise en banque.",
+  cb_terminal: "Le paiement doit avoir été accepté par le terminal CB.",
+  especes: "Les espèces doivent être dans la caisse.",
+};
+
+export interface ConfirmationEncaissement {
+  /** Encaissement impossible (date future, montant nul) : message à afficher. */
+  bloque?: string;
+  titre: string;
+  details: string[];
+  /** Vrai quand un point mérite un second regard : bouton rouge. */
+  danger: boolean;
+}
+
+export function confirmationEncaissementEcheance(
+  echeance: any,
+  echeancier: any[],
+  mode: string,
+  dateEncaissement: string,
+  today = todayIso(),
+): ConfirmationEncaissement {
+  const montant = Math.round((Number(echeance?.totalTTC) || 0) * 100) / 100;
+  const eur = `${montant.toFixed(2).replace(".", ",")} €`;
+  const libelle = LIBELLES_MODE_ECHEANCE[mode] || mode;
+  const titre = `Encaisser ${eur} par ${libelle} ?`;
+  if (montant <= 0) return { bloque: "Échéance sans montant : rien à encaisser.", titre, details: [], danger: false };
+  if (dateEncaissement > today) {
+    return { bloque: `Date d'encaissement dans le futur (${dateEcheanceLisible(dateEncaissement)}) : on n'encaisse que de l'argent reçu. Pour prévoir, la date de l'échéance suffit.`, titre, details: [], danger: false };
+  }
+  const details = [
+    `Échéance ${echeance?.echeance ?? "?"}/${echeance?.echeancesTotal ?? "?"} de ${echeance?.familyName || "la famille"}, encaissée à la date du ${dateEcheanceLisible(dateEncaissement)}.`,
+    "Elle entre au journal de caisse et ne s'efface plus : une erreur se corrige par une contre-passation.",
+  ];
+  if (PREUVE_PAR_MODE[mode]) details.push(PREUVE_PAR_MODE[mode]);
+  let danger = false;
+  if (echeance?.echeanceDate && echeance.echeanceDate > today) {
+    danger = true;
+    details.push(`⚠️ Cette échéance est prévue le ${dateEcheanceLisible(echeance.echeanceDate)} : l'encaisser maintenant, c'est dire que l'argent est déjà reçu. Pour seulement la prévoir, ne cliquez pas : elle attend déjà à sa date.`);
+  }
+  const avant = echeancier
+    .filter((x) => x?.id !== echeance?.id && x?.status !== "paid" && x?.status !== "cancelled" && Number(x?.echeance || 0) < Number(echeance?.echeance || 0))
+    .map((x) => x.echeance)
+    .sort((a, b) => Number(a) - Number(b));
+  if (avant.length) {
+    danger = true;
+    details.push(`⚠️ ${avant.length > 1 ? `Les échéances ${avant.join(", ")} ne sont` : `L'échéance ${avant[0]} n'est`} pas encore payée${avant.length > 1 ? "s" : ""} : vérifiez que vous encaissez la bonne ligne.`);
+  }
+  return { titre, details, danger };
+}

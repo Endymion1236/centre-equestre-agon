@@ -504,7 +504,7 @@ export default function ModaleEncaisser({
       setQuickMontant(""); setQuickRef("");
       setQuickDate(new Date().toISOString().split("T")[0]);
       await refreshAll([p.id]);
-    } catch (e) { console.error(e); toast("Erreur encaissement", "error"); }
+    } catch (e: any) { console.error(e); toast(`Erreur encaissement : ${e?.message || e}`, "error"); }
     setQuickSaving(false);
   };
 

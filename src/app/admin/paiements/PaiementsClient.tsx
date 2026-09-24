@@ -1,4 +1,5 @@
 "use client";
+import { toParisDateString } from "@/lib/date-local";
 
 import React, { useState, useEffect } from "react";
 import { estCommandeInscriptionAnnuelle } from "@/lib/inscription-annuelle-paiement";
@@ -106,7 +107,7 @@ export default function PaiementsPage() {
       setMultiEncaisser(null);
       setMultiRef(""); setMultiDate(new Date().toISOString().split("T")[0]);
       await refreshAll(ids);
-    } catch (e) { console.error(e); toast("Erreur encaissement groupé", "error"); }
+    } catch (e: any) { console.error(e); toast(`Erreur encaissement groupé : ${e?.message || e}`, "error", 7000); }
     setMultiSaving(false);
   };
   // `search` et `family` de l'URL sont transmis à TabImpayes, qui porte l'état
@@ -1550,7 +1551,7 @@ export default function PaiementsPage() {
               <div className="flex gap-2 mb-1">
                 <div className="flex-1">
                   <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">Date</label>
-                  <input type="date" value={multiDate} onChange={e => setMultiDate(e.target.value)}
+                  <input type="date" value={multiDate} max={toParisDateString()} onChange={e => setMultiDate(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:border-blue-400 focus:outline-none" />
                 </div>
                 <div className="flex-1">

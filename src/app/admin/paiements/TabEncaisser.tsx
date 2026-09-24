@@ -18,6 +18,8 @@ import { Plus, ShoppingCart, Check, Loader2, Search, X, AlertTriangle, CalendarC
 import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
 import { authFetch } from "@/lib/auth-fetch";
+import { refusDateEncaissement } from "@/lib/date-encaissement";
+import { toParisDateString } from "@/lib/date-local";
 import { CATEGORIES_COMPTABLES } from "@/lib/categories-comptables";
 import { nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import {
@@ -239,6 +241,10 @@ export function TabEncaisser({
       toast("Le panier est vide", "warning");
       return;
     }
+    // Avant toute écriture : une date future ferait échouer l'encaissement
+    // APRÈS la création de la commande, qui resterait impayée.
+    const refusDate = refusDateEncaissement(encaissementDate);
+    if (refusDate) { toast(refusDate, "error", 7000); return; }
     setSaving(true);
     try {
 
@@ -836,7 +842,7 @@ export function TabEncaisser({
               {/* Date d'encaissement (modifiable pour saisie en différé) */}
               <div className="mb-3">
                 <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Date d&apos;encaissement</label>
-                <input type="date" value={encaissementDate}
+                <input type="date" value={encaissementDate} max={toParisDateString()}
                   onChange={(e) => setEncaissementDate(e.target.value)}
                   className={`${inputCls} w-48`} />
                 <p className="font-body text-[10px] text-slate-400 mt-1">Modifiable si encaissement différé</p>
@@ -1175,7 +1181,7 @@ export function TabEncaisser({
             <label className="font-body text-xs font-semibold text-slate-600 block mb-1">
               Date d&apos;encaissement
             </label>
-            <input type="date" value={encaissementDate}
+            <input type="date" value={encaissementDate} max={toParisDateString()}
               onChange={(e) => setEncaissementDate(e.target.value)}
               className={`${inputCls} w-48`} />
           </div>

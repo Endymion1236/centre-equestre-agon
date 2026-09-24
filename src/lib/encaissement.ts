@@ -29,6 +29,7 @@ import { safeNumber } from "@/lib/utils";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { authFetch } from "@/lib/auth-fetch";
 import { paymentModes } from "@/app/admin/paiements/types";
+import { refusDateEncaissement } from "@/lib/date-encaissement";
 
 export interface ResultatEncaissement {
   paidAmount: number;
@@ -47,6 +48,9 @@ export async function enregistrerEncaissement(
    *  ligne bancaire qui l'a produite, pour ne pas l'enregistrer deux fois). */
   extra: Record<string, unknown> = {},
 ): Promise<ResultatEncaissement> {
+  const refus = refusDateEncaissement(customDate);
+  if (refus) throw new Error(refus);
+
   // 1. Créer le doc encaissement (journal) — avec hash SHA-256 chaîné
   const explicitDate = customDate ? new Date(customDate + "T12:00:00") : undefined;
   await createEncaissement({

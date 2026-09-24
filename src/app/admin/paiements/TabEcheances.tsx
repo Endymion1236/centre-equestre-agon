@@ -8,6 +8,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import {
   CHAMP_LIEN_CB,
   computeDefaultDate,
+  confirmationEncaissementEcheance,
   estReglementParLienCb,
   messageLienEcheance,
   preparerEcheanciers,
@@ -16,6 +17,7 @@ import {
   type SortMode,
 } from "./echeances-utils";
 import RefaireEcheancier from "./RefaireEcheancier";
+import { useConfirm } from "@/components/ui/Confirm";
 
 interface TabEcheancesProps {
   loading: boolean;
@@ -39,6 +41,7 @@ export function TabEcheances({
   loading, payments, families, toast, refreshAll, enregistrerEncaissement,
   setPayLinkModal, setPayLinkEmail, setPayLinkAmount, setPayLinkMessage,
 }: TabEcheancesProps) {
+  const confirmer = useConfirm();
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   const [search, setSearch] = useState("");
@@ -310,6 +313,9 @@ export function TabEcheances({
                           </div>
                           {!isPaid ? (
                             <input
+                              // La clé suit la date : après une modification de l'échéancier,
+                              // le champ affichait encore l'ancienne date (valeur non contrôlée).
+                              key={`${e.id}-${e.echeanceDate || ""}`}
                               type="date"
                               defaultValue={e.echeanceDate || ""}
                               onBlur={async (ev) => {
@@ -349,9 +355,13 @@ export function TabEcheances({
                                   disabled={isSubmitting}
                                   onClick={async () => {
                                   if (submittingId === e.id) return;
+                                  const encDate = encaissementDates[e.id] || computeDefaultDate(e.echeanceDate);
+                                  // Garde-fou : un clic encaisse pour de bon (journal chaîné).
+                                  const demande = confirmationEncaissementEcheance(e, echs, m.id, encDate);
+                                  if (demande.bloque) { toast(demande.bloque, "error", 7000); return; }
+                                  if (!(await confirmer({ titre: demande.titre, details: demande.details, libelleConfirmer: "Encaisser", danger: demande.danger }))) return;
                                   setSubmittingId(e.id);
                                   try {
-                                    const encDate = encaissementDates[e.id] || computeDefaultDate(e.echeanceDate);
                                     await enregistrerEncaissement(e.id, e, e.totalTTC || 0, m.id, "",
                                       e.forfaitRef || first.forfaitRef || (e.items || []).map((i: any) => i.activityTitle).join(", "),
                                       encDate);
@@ -360,6 +370,8 @@ export function TabEcheances({
                                     toast(`${(e.totalTTC || 0).toFixed(2)}€ encaissé (${m.label}) le ${dateLabel}`, "success");
                                     setEncaissementDates(prev => { const c = { ...prev }; delete c[e.id]; return c; });
                                     setEditingDate(prev => { const n = new Set(prev); n.delete(e.id); return n; });
+                                  } catch (err: any) {
+                                    toast(`Encaissement non enregistré : ${err?.message || err}`, "error", 7000);
                                   } finally {
                                     setSubmittingId(null);
                                   }
