@@ -22,6 +22,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
+import { controlerCoutEmployeur } from "@/lib/controle-bulletin";
 import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
@@ -104,7 +105,7 @@ export async function POST(req: NextRequest) {
               type: "text",
               text:
                 "Ce document est soit une FICHE DE PAIE française, soit un RÉCAPITULATIF DE COTISATIONS sociales (DSN, TESA, MSA, URSSAF). Identifie lequel et réponds par un objet JSON seul, sans autre texte.\n" +
-                'Fiche de paie → { "typeDoc": "fiche", "salarie": "Prénom Nom", "mois": "AAAA-MM (période de paie)", "brut": nombre, "net": nombre (net à payer avant impôt si distinct, sinon net payé), "coutEmployeur": nombre ou null (total « coût employeur » / brut + charges patronales, seulement s\'il figure), "heures": nombre ou null }\n' +
+                'Fiche de paie → { "typeDoc": "fiche", "salarie": "Prénom Nom", "mois": "AAAA-MM (période de paie)", "brut": nombre, "net": nombre (net à payer avant impôt si distinct, sinon net payé), "coutImprime": nombre ou null (montant imprimé à côté de « Coût global », « Coût total employeur », « Coût employeur » ou « Total versé » pour le MOIS — recopié tel quel, JAMAIS additionné au brut), "chargesPatronales": nombre ou null (total des charges patronales du mois, exonérations déduites, ex. colonne « Ch. patronales »), "heures": nombre ou null }\n' +
                 'Récapitulatif de cotisations → { "typeDoc": "cotisations", "mois": "AAAA-MM (période concernée)", "organisme": "MSA/URSSAF/TESA…", "partPatronale": nombre, "reductionPatronale": nombre ou 0 (exonérations et réductions sur la part patronale), "partOuvriere": nombre ou null, "totalAPayer": nombre ou null }\n' +
                 "Montants en euros, point décimal, sans séparateur de milliers ; null si introuvable. Si le document n'est ni l'un ni l'autre, réponds {\"erreur\": \"document non reconnu\"}.",
             },
@@ -156,7 +157,7 @@ export async function POST(req: NextRequest) {
           mois: MOIS_RE.test(String(data.mois)) ? String(data.mois) : "",
           brut: Number.isFinite(Number(data.brut)) ? Math.round(Number(data.brut) * 100) / 100 : null,
           net: Number.isFinite(Number(data.net)) ? Math.round(Number(data.net) * 100) / 100 : null,
-          coutEmployeur: Number.isFinite(Number(data.coutEmployeur)) ? Math.round(Number(data.coutEmployeur) * 100) / 100 : null,
+          ...controlerCoutEmployeur({ brut: data.brut, coutImprime: data.coutImprime ?? data.coutEmployeur, chargesPatronales: data.chargesPatronales }),
           heures: Number.isFinite(Number(data.heures)) ? Math.round(Number(data.heures) * 100) / 100 : null,
           fichier: String(body.filename || ""),
         },

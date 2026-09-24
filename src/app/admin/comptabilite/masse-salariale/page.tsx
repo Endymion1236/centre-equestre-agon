@@ -1,5 +1,6 @@
 "use client";
 
+import { controlerCoutEmployeur } from "@/lib/controle-bulletin";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
@@ -31,7 +32,7 @@ import {
 
 interface Ligne { id: string; type: "salaire" | "charge"; mois: string; salarie: string; libelle: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; montant: number | null; decaissement: number | null; source: string; }
 interface PropositionCharge { mois: string; libelle: string; montant: number | null; decaissement: number | null; partPatronale: number | null; reductionPatronale: number; partOuvriere: number | null; totalAPayer: number | null; fichier: string; }
-interface Proposition { salarie: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; }
+interface Proposition { salarie: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; /** Coût employeur douteux à la lecture (lib/controle-bulletin). */ alerte?: string | null; }
 
 const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 // Les heures s'additionnent en flottants (152.92 + …) : sans arrondi, le total
@@ -318,6 +319,7 @@ export default function MasseSalarialePage() {
                     Enregistrer
                   </button>
                 </div>
+                {p.alerte && <p className="mt-1.5 font-body text-[11px] text-amber-800">⚠️ {p.alerte}</p>}
               </div>
             ))}
           </div>
@@ -502,7 +504,7 @@ export default function MasseSalarialePage() {
                       </td>
                       <td className="px-2 py-1.5 text-right font-semibold text-slate-800">{eur(l.brut)}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.net != null ? eur(l.net) : "—"}</td>
-                      <td className="px-2 py-1.5 text-right text-slate-600">{l.coutEmployeur != null ? eur(l.coutEmployeur) : "—"}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-600">{l.coutEmployeur != null ? eur(l.coutEmployeur) : "—"}{l.coutEmployeur != null && controlerCoutEmployeur({ brut: l.brut, coutImprime: l.coutEmployeur }).alerte ? <span title="Coût incohérent avec le brut (brut compté deux fois ?) : corrigez avec le « coût global » du bulletin" className="ml-1 text-amber-600 cursor-help">⚠️</span> : null}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.heures != null ? hrs(l.heures) : "—"}</td>
                       <td className="px-2 py-1.5 text-right">
                         <button type="button" onClick={() => setForm({ salarie: l.salarie, brut: String(l.brut), net: l.net != null ? String(l.net) : "", coutEmployeur: l.coutEmployeur != null ? String(l.coutEmployeur) : "", heures: l.heures != null ? String(l.heures) : "" })}
