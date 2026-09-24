@@ -854,7 +854,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           (cf. admin/layout) : plus besoin de reserver 96px en bas, la modale
           peut prendre presque toute la hauteur. dvh plutot que vh pour tenir
           compte de la barre d'URL mobile qui se retracte au defilement. */}
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92dvh] md:max-h-[88vh] my-auto flex flex-col" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92dvh] md:max-h-[88vh] my-auto flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex-1 overflow-auto">
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
           <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button type="button" onClick={confirmClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
@@ -886,62 +886,6 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           </div>
         )}
         <div ref={inscritsRef} className="p-5">
-          {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
-          {confirmationEnAttente && (
-            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg font-body text-sm text-blue-800">
-              <div className="flex items-start gap-2">
-                <Mail size={16} className="shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  {envoiConfirmation === "envoye" ? (
-                    <>Confirmation envoyée à {confirmationEnAttente.familyName || "la famille"} —
-                    {" "}<strong>1 seul email</strong> pour {confirmationEnAttente.nbStages} stage{confirmationEnAttente.nbStages > 1 ? "s" : ""}
-                    {confirmationEnAttente.lienAcompte ? <>, suivi du lien de paiement</> : null}.</>
-                  ) : envoiConfirmation === "annule" ? (
-                    <>Confirmation annulée — aucun email ne partira pour ces inscriptions{confirmationEnAttente.lienAcompte ? ", ni lettre ni lien de paiement" : ""}.</>
-                  ) : (
-                    <>
-                      <strong>1 seul email</strong> de confirmation partira pour cette famille
-                      {confirmationEnAttente.nbStages > 1
-                        ? <> — {confirmationEnAttente.nbStages} stages y sont déjà réunis</>
-                        : <> — inscrivez d&apos;autres stages, ils s&apos;y ajouteront</>}
-                      {confirmationEnAttente.envoiPrevuA && (
-                        <> ; envoi vers {new Date(confirmationEnAttente.envoiPrevuA).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.</>
-                      )}
-                      {confirmationEnAttente.lienAcompte && (
-                        <div className="mt-1.5 text-blue-900">
-                          💳 Suivi d&apos;<strong>un seul lien de paiement</strong>
-                          {confirmationEnAttente.montantLien ? <> de <strong>{confirmationEnAttente.montantLien.toFixed(2)} €</strong></> : null}
-                          {confirmationEnAttente.email ? <> à {confirmationEnAttente.email}</> : null}
-                          {" "}— montant recalculé sur la commande au moment de l&apos;envoi. Rien ne part avant.
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              </div>
-              {!envoiConfirmation && (
-                <div className="flex items-center gap-2 mt-2">
-                  <button type="button" onClick={envoyerConfirmationMaintenant}
-                    className="inline-flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
-                    <Send size={12} /> Envoyer maintenant
-                  </button>
-                  <button type="button" onClick={annulerConfirmationEnAttente}
-                    className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:underline">
-                    Ne pas envoyer
-                  </button>
-                </div>
-              )}
-              {envoiConfirmation === "envoi" && (
-                <div className="mt-2 inline-flex items-center gap-1 font-body text-xs text-blue-600">
-                  <Loader2 size={12} className="animate-spin" /> Envoi…
-                </div>
-              )}
-            </div>
-          )}
-          {prenotificationEnAttente && (
-            <BandeauPrenotificationSepa paymentId={prenotificationEnAttente.paymentId} familyName={prenotificationEnAttente.familyName}
-              toast={panelToast} onPlusTard={() => setPrenotificationEnAttente(null)} />
-          )}
           <div className="flex items-center justify-between mb-3">
             <h3 className="font-body text-sm font-semibold text-blue-800"><Users size={16} className="inline mr-1"/>Inscrits ({enrolled.length})</h3>
             {enrolled.length > 0 && (
@@ -2271,6 +2215,70 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             onEnroll={onEnroll} panelToast={panelToast} setEnrolling={setEnrolling} setJustEnrolled={setJustEnrolled} />
         </div>
         </div>
+        {/* ── Avis d'après inscription, hors défilement ── */}
+        {/* Confirmation, lien d'acompte, pré-notification SEPA : ils s'affichaient
+            au-dessus des inscrits, donc hors de vue quand on venait d'inscrire depuis
+            le formulaire du bas. Ici ils restent sous les yeux, à côté des impayés. */}
+        {(justEnrolled || confirmationEnAttente || prenotificationEnAttente) && (
+          <div className="flex-shrink-0 border-t border-blue-500/10 px-5 pt-3 max-h-[40dvh] overflow-auto bg-white">
+            {justEnrolled && <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg font-body text-sm text-green-700"><Check size={16} className="inline mr-1" /> {justEnrolled} inscrit(e) !</div>}
+            {confirmationEnAttente && (
+              <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-lg font-body text-sm text-blue-800">
+                <div className="flex items-start gap-2">
+                  <Mail size={16} className="shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    {envoiConfirmation === "envoye" ? (
+                      <>Confirmation envoyée à {confirmationEnAttente.familyName || "la famille"} —
+                      {" "}<strong>1 seul email</strong> pour {confirmationEnAttente.nbStages} stage{confirmationEnAttente.nbStages > 1 ? "s" : ""}
+                      {confirmationEnAttente.lienAcompte ? <>, suivi du lien de paiement</> : null}.</>
+                    ) : envoiConfirmation === "annule" ? (
+                      <>Confirmation annulée — aucun email ne partira pour ces inscriptions{confirmationEnAttente.lienAcompte ? ", ni lettre ni lien de paiement" : ""}.</>
+                    ) : (
+                      <>
+                        <strong>1 seul email</strong> de confirmation partira pour cette famille
+                        {confirmationEnAttente.nbStages > 1
+                          ? <> — {confirmationEnAttente.nbStages} stages y sont déjà réunis</>
+                          : <> — inscrivez d&apos;autres stages, ils s&apos;y ajouteront</>}
+                        {confirmationEnAttente.envoiPrevuA && (
+                          <> ; envoi vers {new Date(confirmationEnAttente.envoiPrevuA).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}.</>
+                        )}
+                        {confirmationEnAttente.lienAcompte && (
+                          <div className="mt-1.5 text-blue-900">
+                            💳 Suivi d&apos;<strong>un seul lien de paiement</strong>
+                            {confirmationEnAttente.montantLien ? <> de <strong>{confirmationEnAttente.montantLien.toFixed(2)} €</strong></> : null}
+                            {confirmationEnAttente.email ? <> à {confirmationEnAttente.email}</> : null}
+                            {" "}— montant recalculé sur la commande au moment de l&apos;envoi. Rien ne part avant.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+                {!envoiConfirmation && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <button type="button" onClick={envoyerConfirmationMaintenant}
+                      className="inline-flex items-center gap-1 font-body text-xs font-semibold text-white bg-blue-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-400">
+                      <Send size={12} /> Envoyer maintenant
+                    </button>
+                    <button type="button" onClick={annulerConfirmationEnAttente}
+                      className="font-body text-xs text-blue-600 bg-transparent border-none cursor-pointer hover:underline">
+                      Ne pas envoyer
+                    </button>
+                  </div>
+                )}
+                {envoiConfirmation === "envoi" && (
+                  <div className="mt-2 inline-flex items-center gap-1 font-body text-xs text-blue-600">
+                    <Loader2 size={12} className="animate-spin" /> Envoi…
+                  </div>
+                )}
+              </div>
+            )}
+            {prenotificationEnAttente && (
+              <BandeauPrenotificationSepa paymentId={prenotificationEnAttente.paymentId} familyName={prenotificationEnAttente.familyName}
+                toast={panelToast} onPlusTard={() => setPrenotificationEnAttente(null)} />
+            )}
+          </div>
+        )}
         {/* ── Bandeau impayés sticky ── */}
         {(() => {
           // Collecter les familyIds des inscrits dans ce créneau
