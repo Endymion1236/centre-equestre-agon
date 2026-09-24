@@ -50,6 +50,7 @@ export const POSTE_HORS_DEPENSES = "hors-depenses";
 
 export const POSTE_ASSURANCES = "Assurances";
 export const POSTE_IMPOTS = "Impôts & taxes";
+export const POSTE_FRAIS_BANCAIRES = "Frais bancaires & commissions (CB, Stripe)";
 
 /**
  * Postes sans TVA par nature, dont le débit bancaire tient lieu de pièce :
@@ -87,7 +88,16 @@ export function posteCommissionCarte(libelle: unknown): string | null {
   const commission = /^(com|comm|commission|commissions) (carte|cartes|cb|vente( a)? distance|vad|paiement|paiements|encaissement|encaissements|interchange|monetique|tpe)\b/.test(texte)
     || /^(frais|cotisation|cotisations|abonnement) (bancaire|bancaires|de tenue de compte|tenue de compte|carte|cartes|cb|tpe)\b/.test(texte)
     || /^(commission|commissions) s(ur)? emprunt/.test(texte);
-  return commission ? "Frais bancaires & commissions (CB, Stripe)" : null;
+  return commission ? POSTE_FRAIS_BANCAIRES : null;
+}
+
+/**
+ * Commission ou frais bancaire : classé dans le poste des frais bancaires, ou
+ * reconnu à son libellé. Sert à les masquer du tableau des dépenses, où les
+ * dizaines de petites commissions CB noient les lignes qui attendent une facture.
+ */
+export function estFraisBancaire(l: { poste?: string; fournisseur?: string }): boolean {
+  return l.poste === POSTE_FRAIS_BANCAIRES || posteCommissionCarte(l.fournisseur) !== null;
 }
 
 /** Versement au compte FFE (licences, engagements) : « Carte FFE Lamotte-Beuvron », « FFE », « Fédération Française d'Équitation ». */

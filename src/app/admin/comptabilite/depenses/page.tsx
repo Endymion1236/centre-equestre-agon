@@ -9,7 +9,7 @@ import ReinitialiserPieces from "./ReinitialiserPieces";
 import ReclasserAssureurs from "./ReclasserAssureurs";
 import { estVirementPlateforme } from "@/lib/import-releve-pages";
 import SupprimerPieces from "./SupprimerPieces";
-import { posteCommissionCarte, POSTE_ASSURANCES, POSTE_IMPOTS, POSTES_DEPENSES } from "@/lib/postes-depenses";
+import { estFraisBancaire, posteCommissionCarte, POSTE_ASSURANCES, POSTE_IMPOTS, POSTES_DEPENSES } from "@/lib/postes-depenses";
 import { CATEGORIE_IMMOBILISATION, CATEGORIE_EMPRUNTS, CATEGORIE_COMPTE_FFE, SEUIL_ALERTE_IMMOBILISATION_TTC } from "@/lib/tableau-depenses";
 import { completudeJustificatifs, bilanTvaMois, construireExportTva, construireExportJustificatifs } from "@/lib/bilan-justificatifs";
 import { bilanVentilationAchats, comptesProposes, construireExportVentilationAchats } from "@/lib/ventilation-achats";
@@ -39,6 +39,10 @@ export default function DepensesPage() {
   const [lignes, setLignes] = useState<Ligne[]>([]), [pieces, setPieces] = useState<Piece[]>([]), [categories, setCategories] = useState<string[]>([]);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const [filtre, setFiltre] = useState("actives"), [recherche, setRecherche] = useState("");
+  // Masquer les commissions bancaires : un choix d'affichage, retenu sur cet appareil.
+  const [masquerFrais, setMasquerFrais] = useState(false);
+  useEffect(() => { try { if (localStorage.getItem("depenses.masquerFrais") === "1") setMasquerFrais(true); } catch { /* stockage indisponible */ } }, []);
+  const basculerMasquerFrais = (v: boolean) => { setMasquerFrais(v); try { localStorage.setItem("depenses.masquerFrais", v ? "1" : "0"); } catch { /* stockage indisponible */ } };
   const [cible, setCible] = useState<string | null>(null), [choix, setChoix] = useState<Piece | null>(null);
   /**
    * Filtre de la liste des pièces à associer.
@@ -217,7 +221,8 @@ export default function DepensesPage() {
     try { const r = await authFetch(`${justifs}?id=${p.id}`); if (!r.ok) throw new Error("Téléchargement impossible"); const u = URL.createObjectURL(await r.blob()); const a = document.createElement("a"); a.href = u; a.download = p.nom; a.click(); setTimeout(() => URL.revokeObjectURL(u), 1000); } catch (e) { setMessage(e instanceof Error ? e.message : "Erreur"); }
   }
   const actives = lignes.filter(l => !l.rapprochementExclu);
-  const visibles = lignes.filter(l => (filtre === "exclues" ? l.rapprochementExclu : !l.rapprochementExclu && (filtre !== "manquantes" || etatPiece(l) === "facture-a-obtenir") && (filtre !== "sans-tva" || l.statutTVA === "sans-tva") && (filtre !== "a-ventiler" || comptesProposes(l).aVentiler)) && `${l.fournisseur} ${l.poste} ${l.montant} ${l.compte} ${comptesProposes(l).imputation.compte}`.toLowerCase().includes(recherche.toLowerCase())).sort((a, b) => (a.dateOperation || "").localeCompare(b.dateOperation || ""));
+  const fraisBancaires = lignes.filter(l => !l.rapprochementExclu && estFraisBancaire(l));
+  const visibles = lignes.filter(l => !(masquerFrais && estFraisBancaire(l)) && (filtre === "exclues" ? l.rapprochementExclu : !l.rapprochementExclu && (filtre !== "manquantes" || etatPiece(l) === "facture-a-obtenir") && (filtre !== "sans-tva" || l.statutTVA === "sans-tva") && (filtre !== "a-ventiler" || comptesProposes(l).aVentiler)) && `${l.fournisseur} ${l.poste} ${l.montant} ${l.compte} ${comptesProposes(l).imputation.compte}`.toLowerCase().includes(recherche.toLowerCase())).sort((a, b) => (a.dateOperation || "").localeCompare(b.dateOperation || ""));
   const ligne = lignes.find(l => l.id === cible), extraction = choix?.extraction;
   const montantPiece = extraction?.typeDocument === "paie" ? extraction.netAPayer : extraction?.ttc;
   const lectureControle = correction || extraction;
@@ -327,6 +332,7 @@ export default function DepensesPage() {
       <div className="flex flex-wrap gap-3"><label>Mois <input type="month" className="border rounded p-2" disabled={busy} value={mois} onChange={e => { if(e.target.value) { setMois(e.target.value); setCible(null); setChoix(null); } }} /></label>
         <select className="border rounded p-2" aria-label="État" value={filtre} onChange={e => setFiltre(e.target.value)}><option value="actives">Toutes les lignes actives</option><option value="manquantes">Factures à obtenir</option><option value="sans-tva">Sans TVA</option><option value="a-ventiler">Comptes à ventiler</option><option value="exclues">Exclues du rapprochement</option></select>
         <input className="border rounded p-2" aria-label="Rechercher" placeholder="Fournisseur, montant, catégorie, compte…" value={recherche} onChange={e => setRecherche(e.target.value)} />
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={masquerFrais} onChange={e => basculerMasquerFrais(e.target.checked)} /> Masquer les commissions bancaires{fraisBancaires.length ? ` (${fraisBancaires.length} · ${eurosCourt(fraisBancaires.reduce((t, l) => t + (l.montant || 0), 0))})` : ""}</label>
         <button disabled={busy} className="underline" onClick={() => { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); }}>Actualiser</button>
         <button disabled={busy} className="underline" onClick={() => void rapprocherAuto()}>Rapprocher automatiquement les pièces</button><button disabled={busy} className="underline" onClick={() => void completerDates()}>Compléter les dates manquantes</button>
         <button disabled={busy} className="underline" onClick={() => setVue("pieces")}>Importer un dossier Drive</button></div>

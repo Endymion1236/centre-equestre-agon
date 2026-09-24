@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { construireColisComptable, corpsEmailComptable } from "../../src/lib/envoi-comptable-utils";
 import { construirePointsCloture, resumerCloture } from "../../src/app/admin/comptabilite/cloture-mois/cloture-mois-utils";
 import { justifiableParReleve, CATEGORIE_EMPRUNTS } from "../../src/lib/tableau-depenses";
-import { posteCommissionCarte } from "../../src/lib/postes-depenses";
+import { estFraisBancaire, posteCommissionCarte } from "../../src/lib/postes-depenses";
 import type { LigneMois } from "../../src/lib/bilan-justificatifs";
 
 const lignes: LigneMois[] = [
@@ -35,4 +35,12 @@ test("relevé comme justificatif : commissions bancaires et échéances d'emprun
   assert.equal(justifiableParReleve("Frais bancaires", "Com Carte", posteCommissionCarte), true);
   assert.equal(justifiableParReleve(CATEGORIE_EMPRUNTS, "Caae Prêt PROFESSION", posteCommissionCarte), true);
   assert.equal(justifiableParReleve("Vétérinaire", "Caae Prêt PROFESSION", posteCommissionCarte), false);
+});
+
+test("masquer les commissions : par le poste ou par le libellé, jamais un paiement par carte", () => {
+  assert.equal(estFraisBancaire({ poste: "Frais bancaires & commissions (CB, Stripe)", fournisseur: "CA Normandie" }), true);
+  assert.equal(estFraisBancaire({ poste: "", fournisseur: "COM CARTE 12/09" }), true);
+  assert.equal(estFraisBancaire({ poste: "", fournisseur: "Frais tenue de compte" }), true);
+  assert.equal(estFraisBancaire({ poste: "Alimentation chevaux", fournisseur: "CARTE 12/09 GAMM VERT" }), false);
+  assert.equal(estFraisBancaire({}), false);
 });
