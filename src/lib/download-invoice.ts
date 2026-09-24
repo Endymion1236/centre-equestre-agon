@@ -8,8 +8,7 @@ export interface PaymentDetail {
   ref?: string;
 }
 
-// Helper — télécharger une facture en PDF
-export async function downloadInvoicePdf(params: {
+export interface ParamsFacturePdf {
   invoiceNumber: string;
   date: string;
   familyName: string;
@@ -33,7 +32,10 @@ export async function downloadInvoicePdf(params: {
    * AV- pour un avoir, PF- pour un proforma, facture sinon.
    */
   documentType?: "facture" | "avoir" | "proforma";
-}) {
+}
+
+/** Le PDF de la pièce, tel que le serveur le produit (même rendu partout). */
+export async function genererFacturePdf(params: ParamsFacturePdf): Promise<Blob> {
   const res = await authFetch("/api/invoice-pdf", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -53,7 +55,20 @@ export async function downloadInvoicePdf(params: {
     }
     throw new Error(message);
   }
-  const blob = await res.blob();
+  return res.blob();
+}
+
+/** Le PDF en base64, pour une pièce jointe d'email (api/send-email). */
+export async function facturePdfEnBase64(params: ParamsFacturePdf): Promise<string> {
+  const octets = new Uint8Array(await (await genererFacturePdf(params)).arrayBuffer());
+  let binaire = "";
+  for (let i = 0; i < octets.length; i += 0x8000) binaire += String.fromCharCode(...octets.subarray(i, i + 0x8000));
+  return btoa(binaire);
+}
+
+// Helper — télécharger une facture en PDF
+export async function downloadInvoicePdf(params: ParamsFacturePdf) {
+  const blob = await genererFacturePdf(params);
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

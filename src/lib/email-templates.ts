@@ -623,6 +623,34 @@ export const emailTemplates = {
     `, `${euros(vars.montant)} — ${vars.prestations}`),
   }),
 
+  /** Facture ou proforma jointe en PDF, sans lien de paiement (Impayés → Envoyer). */
+  envoiDocument: (vars: {
+    parentName: string;
+    nature: "facture" | "proforma";
+    numero: string;
+    montant: number;
+    resteDu: number;
+    prestations: string;
+  }) => ({
+    subject: vars.nature === "facture"
+      ? `Votre facture ${vars.numero} — ${eurosTexte(vars.montant)}`
+      : `Votre facture proforma — ${eurosTexte(vars.montant)}`,
+    html: wrap(`
+      ${titre(vars.nature === "facture" ? "Votre facture" : "Votre facture proforma")}
+      ${p(`Bonjour <strong>${vars.parentName}</strong>,`)}
+      ${p(vars.nature === "facture"
+        ? `Vous trouverez ci-joint votre facture <strong>${vars.numero}</strong>.`
+        : "Vous trouverez ci-joint la facture proforma de votre commande.")}
+      ${panneau(vars.resteDu > 0 ? "Reste à régler" : "Montant", `
+        <div>${montant(vars.resteDu > 0 ? vars.resteDu : vars.montant)}</div>
+        ${p(`<span style="color:${C.gris};">${vars.prestations}</span>`, 13)}
+      `)}
+      ${vars.nature === "proforma" ? p("Une facture proforma n'est pas une facture définitive : elle détaille la commande et son montant. La facture vous sera adressée après règlement.", 13) : ""}
+      ${vars.resteDu > 0 ? p("Vous pouvez régler par virement (coordonnées et QR code sur le document), par chèque, en espèces ou par carte au club.", 13) : ""}
+      ${signature()}
+    `, `${vars.nature === "facture" ? `Facture ${vars.numero}` : "Facture proforma"} — ${euros(vars.montant)}`),
+  }),
+
   bienvenueNouvelleFamille: (vars: {
     parentName: string;
   }) => ({

@@ -4,7 +4,7 @@ import { updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Search, X, Receipt, Check, ChevronDown, Plus, Trash2, FileText, Calendar } from "lucide-react";
-import { downloadInvoicePdf } from "@/lib/download-invoice";
+import { downloadInvoicePdf, facturePdfEnBase64, type ParamsFacturePdf } from "@/lib/download-invoice";
 import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
 import { emailTemplates } from "@/lib/email-templates";
 import { paymentModes } from "./types";
@@ -51,6 +51,21 @@ interface TabImpayesProps {
   familyFilterId?: string;
 }
 
+/**
+ * Les données du PDF d'une commande : la facture si elle est numérotée, sinon
+ * une proforma (référence PF-…). Le même document au téléchargement et à l'envoi.
+ */
+function paramsPdfCommande(p: any, fam: any): ParamsFacturePdf {
+  const items = p.items || [];
+  const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+  const totalTTC = p.totalTTC || 0;
+  const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
+  const invoiceNumber = p.invoiceNumber || `PF-${(p.orderId || p.id || "").slice(-6).toUpperCase()}`;
+  const civilite = fam?.civilite ? `${fam.civilite} ` : "";
+  const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
+  return { invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "", familyAddress: adresseLines, serviceFacture: p.serviceFacture || undefined, items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "", paymentId: p.id };
+}
+
 export function TabImpayes({
   loading, payments, families, toast, setPayments,
   setQuickEncaisser,
@@ -60,6 +75,51 @@ export function TabImpayes({
   onMultiEncaisser, initialSearch, familyFilterId,
 }: TabImpayesProps) {
   const confirmer = useConfirm();
+
+  // Envoyer la facture (ou la proforma) seule, en PDF joint : la famille qui
+  // règle par virement ou chèque n'a pas besoin d'un lien de paiement.
+  const [envoiDocumentPour, setEnvoiDocumentPour] = useState<string | null>(null);
+  const envoyerDocument = async (p: any) => {
+    const fam = families.find(f => f.firestoreId === p.familyId);
+    const email = fam?.parentEmail || "";
+    if (!email) { toast("Pas d'email pour cette famille : complétez sa fiche.", "warning"); return; }
+    const nature: "facture" | "proforma" = p.invoiceNumber ? "facture" : "proforma";
+    const params = paramsPdfCommande(p, fam);
+    const resteDu = Math.max(0, Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100);
+    if (!(await confirmer({
+      titre: `Envoyer ${nature === "facture" ? `la facture ${p.invoiceNumber}` : "la facture proforma"} à ${email} ?`,
+      details: [
+        `${p.familyName} — ${(p.totalTTC || 0).toFixed(2)} €${resteDu > 0 ? `, reste à régler ${resteDu.toFixed(2)} €` : ""}.`,
+        "Le PDF part en pièce jointe, sans lien de paiement.",
+        ...(nature === "proforma" ? ["Une proforma n'est pas une facture définitive : l'email le précise."] : []),
+      ],
+      libelleConfirmer: "Envoyer",
+    }))) return;
+    setEnvoiDocumentPour(p.id);
+    try {
+      const contenu = await facturePdfEnBase64(params);
+      const emailData = emailTemplates.envoiDocument({
+        parentName: p.familyName || "", nature, numero: p.invoiceNumber || "", montant: p.totalTTC || 0, resteDu,
+        prestations: (p.items || []).map((i: any) => i.activityTitle).join(", "),
+      });
+      const res = await authFetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: email, ...emailData,
+          attachments: [{ filename: `${nature}-${params.invoiceNumber}.pdf`, content: contenu }],
+          context: nature === "facture" ? "admin_envoi_facture" : "admin_envoi_proforma",
+          template: "envoiDocument", familyId: p.familyId, paymentId: p.id,
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `erreur ${res.status}`);
+      toast(`${nature === "facture" ? "Facture" : "Proforma"} envoyée à ${email}`, "success");
+    } catch (e: any) {
+      toast(`Envoi impossible : ${e?.message || e}`, "error");
+    } finally {
+      setEnvoiDocumentPour(null);
+    }
+  };
   const [verdictMit, setVerdictMit] = useState<Record<string, { ok: boolean; bloquants: string[] } | "chargement">>({});
 
   const verifierPrelevementSolde = async (paymentId: string) => {
@@ -506,16 +566,13 @@ export function TabImpayes({
                         <div className="mt-2 pt-2 border-t border-gray-100 flex flex-wrap gap-1.5 justify-between">
                           <div className="flex gap-1.5">
                             <button type="button" onClick={async () => {
-                              const items = p.items || [];
-                              const totalHT = items.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
-                              const totalTTC = p.totalTTC || 0;
-                              const invDate = p.date?.seconds ? new Date(p.date.seconds * 1000) : new Date();
-                              const invoiceNumber = p.invoiceNumber || `PF-${(p.orderId || p.id || "").slice(-6).toUpperCase()}`;
-                              const fam = families.find(f => f.firestoreId === p.familyId);
-                              const civilite = fam?.civilite ? `${fam.civilite} ` : "";
-                              const adresseLines = [fam?.address, [fam?.zipCode, fam?.city].filter(Boolean).join(" ")].filter(Boolean).join("\n");
-                              await downloadInvoicePdf({ invoiceNumber, date: invDate.toLocaleDateString("fr-FR"), familyName: `${civilite}${p.familyName}`, familyEmail: fam?.parentEmail || "", familyAddress: adresseLines, serviceFacture: p.serviceFacture || undefined, items, totalHT, totalTVA: totalTTC - totalHT, totalTTC, paidAmount: p.paidAmount || 0, paymentMode: p.paymentMode ? (paymentModes.find(m => m.id === p.paymentMode)?.label || p.paymentMode) : "", paymentDate: p.paidAmount > 0 ? invDate.toLocaleDateString("fr-FR") : "", paymentId: p.id });
+                              await downloadInvoicePdf(paramsPdfCommande(p, families.find(f => f.firestoreId === p.familyId)));
                             }} className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1"><Receipt size={10}/> {p.invoiceNumber ? "Facture" : "Proforma"}</button>
+                            <button type="button" disabled={envoiDocumentPour === p.id} onClick={() => envoyerDocument(p)}
+                              title={`Envoyer ${p.invoiceNumber ? "la facture" : "la proforma"} en PDF par email, sans lien de paiement`}
+                              className="font-body text-[10px] text-green-700 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100 flex items-center gap-1 disabled:opacity-50">
+                              {envoiDocumentPour === p.id ? <Loader2 size={10} className="animate-spin" /> : "✉️"} Envoyer
+                            </button>
                             {p.invoiceNumber && (
                               <>
                                 <button type="button" onClick={() => downloadFacturX(p.id!, p.invoiceNumber)}
