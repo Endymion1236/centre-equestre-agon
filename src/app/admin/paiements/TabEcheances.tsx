@@ -15,6 +15,7 @@ import {
   todayIso,
   type SortMode,
 } from "./echeances-utils";
+import RefaireEcheancier from "./RefaireEcheancier";
 
 interface TabEcheancesProps {
   loading: boolean;
@@ -68,6 +69,9 @@ export function TabEcheances({
       toast(`Repère non enregistré : ${err?.message || err}`, "error");
     } finally { setReperageEnCours(null); }
   };
+
+  // Échéancier en cours de modification (nombre d'échéances, moyen de paiement).
+  const [refaireOuvert, setRefaireOuvert] = useState<string | null>(null);
 
   const { groupesList, statsRecap, hasOverdue } = useMemo(
     () => preparerEcheanciers(payments, { search, onlyOverdue, sortMode }),
@@ -199,6 +203,13 @@ export function TabEcheances({
                     <div className="font-body text-[10px] text-slate-600">{nbPayes}/{nbTotal} échéances payées</div>
                   </div>
                   {nbPayes < nbTotal && (
+                    <button type="button" onClick={() => setRefaireOuvert(refaireOuvert === key ? null : key)}
+                      title="Changer le nombre d'échéances ou le moyen de paiement, sans désinscrire"
+                      className="font-body text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100">
+                      Modifier
+                    </button>
+                  )}
+                  {nbPayes < nbTotal && (
                     <button type="button"
                       onClick={async () => {
                         const childIdsSet = new Set<string>();
@@ -263,6 +274,10 @@ export function TabEcheances({
                   )}
                 </div>
               </div>
+
+              {refaireOuvert === key && (
+                <RefaireEcheancier echs={echs} toast={toast} refreshAll={refreshAll} onClose={() => setRefaireOuvert(null)} />
+              )}
 
               {(first.items || []).length > 0 && (
                 <div className="mb-3 bg-sand rounded-lg p-2">
