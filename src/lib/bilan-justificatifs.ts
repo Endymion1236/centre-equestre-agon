@@ -131,6 +131,21 @@ export function bilanTvaMois(lignes: LigneMois[]) {
   return r;
 }
 
+/**
+ * La même TVA déductible justifiée que `bilanTvaMois`, séparée comme la
+ * déclaration CA3 la demande : les immobilisations (ligne 19) d'un côté, les
+ * autres biens et services (ligne 20) de l'autre.
+ */
+export function deductibleParNature(lignes: LigneMois[]) {
+  let immobilisations = 0, autresBiensServices = 0;
+  for (const { ligne: l, tva } of lignesTva(lignes)) {
+    if (tva === null) continue;
+    if (l.immobilisation || comptesProposes(l).imputation.compte.startsWith("2")) immobilisations += tva;
+    else autresBiensServices += tva;
+  }
+  return { immobilisations: c(immobilisations), autresBiensServices: c(autresBiensServices) };
+}
+
 const SEP = ";";
 const champ = (v: unknown) => { const t = v == null ? "" : String(v); return /[;"\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
 const fr = (d?: string | null) => d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d.split("-").reverse().join("/") : "";

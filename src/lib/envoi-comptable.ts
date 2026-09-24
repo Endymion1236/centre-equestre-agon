@@ -64,7 +64,7 @@ function normaliserDate(d: any) {
   if (typeof d.toDate === "function") return { seconds: Math.floor(d.toDate().getTime() / 1000) };
   return null;
 }
-function normaliserDoc(snap: FirebaseFirestore.QueryDocumentSnapshot) {
+export function normaliserDoc(snap: FirebaseFirestore.QueryDocumentSnapshot) {
   const data = snap.data() as any;
   return { id: snap.id, ...data, date: normaliserDate(data.date) };
 }

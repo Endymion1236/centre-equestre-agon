@@ -16,6 +16,7 @@ import { useRapprochement } from "./useRapprochement";
 import OngletRapprochement from "./OngletRapprochement";
 import { modeLabels } from "./libelles-modes";
 import EncartTvaAPayer from "./EncartTvaAPayer";
+import PreparationDeclarationTva from "./PreparationDeclarationTva";
 import { bilanTvaMois, type LigneMois } from "@/lib/bilan-justificatifs";
 import { trimestreDe } from "@/lib/tva-a-payer";
 import {
@@ -559,6 +560,7 @@ export default function ComptabilitePage() {
       {!loading && tab === "tva" && (
         <div className="flex flex-col gap-5">
           <EncartTvaAPayer moisReference={period} parMois={tvaParMois} chargement={!lignesTva} />
+          <PreparationDeclarationTva moisReference={period} />
           <Card className="!p-0 overflow-hidden">
             <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               <span className="flex-1">Taux TVA</span>
