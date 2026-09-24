@@ -156,7 +156,7 @@ export function construireColisComptable(params: {
     { filename: `ventes_${mois}.csv`, contenu: bom + construireExportComptable("ventes", factures, params.payments), contentType: csv },
     { filename: `encaissements_${mois}.csv`, contenu: bom + construireExportEncaissements(encaissements), contentType: csv },
     { filename: `depenses_${mois}.csv`, contenu: bom + construireExportDepenses(depenses), contentType: csv },
-    { filename: fichierFec, contenu: fec.contenu, contentType: "text/tab-separated-values; charset=utf-8" },
+    { filename: fichierFec, contenu: fec.contenu, contentType: "text/plain; charset=utf-8" },
     ...(lignesJustificatifs ? [
       { filename: `justificatifs_${mois}.csv`, contenu: bom + construireExportJustificatifs(lignesJustificatifs), contentType: csv },
       { filename: `tva_${mois}.csv`, contenu: bom + construireExportTva(lignesJustificatifs), contentType: csv },

@@ -291,7 +291,7 @@ export default function ComptabilitePage() {
         const reste = anomalies.length > 8 ? `\n… et ${anomalies.length - 8} autre(s).` : "";
         alert(`${anomalies.length} point(s) à regarder dans le FEC :\n\n${detail}${reste}\n\nLe fichier est quand même équilibré et téléchargé.`);
       }
-      const blob = new Blob([data.contenu], { type: "text/tab-separated-values;charset=utf-8" });
+      const blob = new Blob([data.contenu], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
