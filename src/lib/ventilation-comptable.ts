@@ -102,7 +102,7 @@ export interface LigneFacture {
 
 /**
  * Règles apprises : libellé de prestation (normalisé) → compte, posées par le
- * gérant sur l'écran Export CA pour les lignes restées « à ventiler ».
+ * gérant sur l'écran Ventilation des ventes pour les lignes restées « à ventiler ».
  * Rangées dans settings/ventilationVentes ; lues par l'export, le FEC et
  * l'envoi mensuel au cabinet.
  */

@@ -140,7 +140,10 @@ const NAV_GROUPS: NavGroup[] = [
     icon: BarChart3,
     items: [
       { href: "/admin/comptabilite", icon: BookOpen, label: "Comptabilité" },
-      { href: "/admin/comptabilite/export-ca", icon: FileSpreadsheet, label: "Export CA (comptable)" },
+      // Le seul envoi officiel au cabinet : le colis du mois (FEC, factures,
+      // encaissements, dépenses, justificatifs), aussi parti seul le 5.
+      { href: "/admin/comptabilite/cloture-mois", icon: Send, label: "Clôture du mois et envoi comptable" },
+      { href: "/admin/comptabilite/export-ca", icon: FileSpreadsheet, label: "Ventilation des ventes" },
       { href: "/admin/comptabilite/depenses", icon: FileSpreadsheet, label: "Dépenses et justificatifs" },
       { href: "/admin/comptabilite/documents", icon: FileSpreadsheet, label: "Documents comptables" },
       { href: "/admin/comptabilite/celeris", icon: FileSpreadsheet, label: "Historique Céleris" },

@@ -75,7 +75,7 @@ export function normaliserDoc(snap: FirebaseFirestore.QueryDocumentSnapshot) {
  * Même fonction que l'envoi mensuel (fecDuMois) : le fichier téléchargé est
  * celui que reçoit le cabinet.
  */
-/** Règles de ventilation des ventes posées sur l'écran Export CA. */
+/** Règles de ventilation des ventes posées sur l'écran Ventilation des ventes. */
 export async function chargerReglesVentilation(): Promise<Record<string, string>> {
   const snap = await adminDb.collection("settings").doc("ventilationVentes").get().catch(() => null);
   const regles = snap?.exists ? (snap.data() as any)?.regles : null;

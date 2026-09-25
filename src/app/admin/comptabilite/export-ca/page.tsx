@@ -1,22 +1,21 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
-import { Loader2, Download, AlertTriangle, FileSpreadsheet } from "lucide-react";
+import { Loader2, AlertTriangle } from "lucide-react";
 import {
-  ventiler, compteDeLigne, libelleCompte, baseHT, versCsv, NON_VENTILE,
+  ventiler, NON_VENTILE,
   groupesNonVentiles, PLAN_COMPTABLE,
   type LigneFacture, type ReglesVentilation,
 } from "@/lib/ventilation-comptable";
 import {
   MOIS_EXPORT_CA as MOIS,
   aplatirLignesFactures,
-  dateFacture as dateDe,
   filtrerFacturesExport,
   libellePeriodeExport,
   resumerExportCa,
-  suffixeFichierExport,
 } from "./export-ca-utils";
 
 /**
@@ -69,7 +68,8 @@ function VentilerLignes({ groupes, onChoisir }: {
 }
 
 /**
- * Export du chiffre d'affaires ventilé par compte comptable.
+ * Ventilation des ventes : chiffre d'affaires par compte comptable, et
+ * classement des lignes restées « à ventiler » (le FEC du mois en hérite).
  * Base retenue : les factures émises sur la période, annulées exclues.
  */
 export default function ExportCaPage() {
@@ -133,65 +133,16 @@ export default function ExportCaPage() {
   );
 
   const periode = libellePeriodeExport(annee, mois);
-  const suffixeFichier = suffixeFichierExport(annee, mois);
-
-  const telecharger = (nom: string, contenu: string) => {
-    const blob = new Blob([contenu], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = nom;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const exportRecap = () => {
-    telecharger(
-      `CA-ventile-${suffixeFichier}.csv`,
-      versCsv(
-        ["Compte", "Libellé", "Taux TVA", "Base HT", "TVA", "Total TTC", "Nb lignes"],
-        ventilation.map(l => [l.compte, l.libelle, `${l.taux}%`, l.ht, l.tvaMontant, l.ttc, l.nb]),
-      ),
-    );
-  };
-
-  const exportDetail = () => {
-    telecharger(
-      `CA-detail-${suffixeFichier}.csv`,
-      versCsv(
-        ["Date", "N° commande", "Client", "Prestation", "Compte", "Libellé compte", "Origine du compte", "Taux TVA", "Base HT", "TVA", "TTC"],
-        lignes.filter(l => Number(l.priceTTC || 0) !== 0).map(l => {
-          const { code, source } = compteDeLigne(l, regles);
-          const ttc = Number(l.priceTTC || 0);
-          const taux = Number(l.tva || 0);
-          const ht = baseHT(ttc, taux);
-          const d = dateDe(l.facture);
-          return [
-            d ? d.toLocaleDateString("fr-FR") : "",
-            l.facture.orderId || l.facture.id,
-            l.facture.familyName || "",
-            l.activityTitle || "",
-            code === NON_VENTILE ? "" : code,
-            libelleCompte(code),
-            source,
-            `${taux}%`,
-            ht,
-            Math.round((ttc - ht) * 100) / 100,
-            ttc,
-          ];
-        }),
-      ),
-    );
-  };
 
   const champ = "px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white";
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="font-display text-2xl font-bold text-blue-800">Export CA ventilé</h1>
+        <h1 className="font-display text-2xl font-bold text-blue-800">Ventilation des ventes</h1>
         <p className="font-body text-sm text-slate-500 mt-1">
-          Chiffre d&apos;affaires par compte comptable et par taux de TVA, à transmettre au comptable.
+          Chiffre d&apos;affaires par compte comptable et par taux de TVA. Les ventes restées « à ventiler »
+          se classent ici ; le classement part avec le FEC du mois (Clôture du mois et envoi comptable).
         </p>
       </div>
 
@@ -217,19 +168,11 @@ export default function ExportCaPage() {
             <input type="checkbox" checked={inclureNonReglees} onChange={e => setInclureNonReglees(e.target.checked)} />
             Inclure les factures non réglées
           </label>
-          <div className="flex-1" />
-          <button type="button" onClick={exportRecap} disabled={ventilation.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-600 border-none cursor-pointer hover:bg-blue-700 disabled:opacity-50">
-            <FileSpreadsheet size={16} /> Récapitulatif CSV
-          </button>
-          <button type="button" onClick={exportDetail} disabled={lignes.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-body text-sm font-semibold text-blue-700 bg-blue-50 border-none cursor-pointer hover:bg-blue-100 disabled:opacity-50">
-            <Download size={16} /> Détail ligne à ligne
-          </button>
+
         </div>
         <p className="font-body text-[11px] text-slate-500 mt-3">
-          Base : <strong>factures émises</strong> sur la période (créances acquises), annulées exclues.
-          Si votre comptable travaille sur les encaissements, décochez les factures non réglées — ou demandez-moi un export sur base encaissements.
+          Base : <strong>factures émises</strong> sur la période, annulées exclues. Aucun fichier à envoyer d&apos;ici :
+          le cabinet reçoit le FEC et les exports du mois par <Link href="/admin/comptabilite/cloture-mois" className="underline">Clôture du mois et envoi comptable</Link>.
         </p>
       </Card>
 
@@ -318,9 +261,8 @@ export default function ExportCaPage() {
             <p className="font-body text-[11px] text-slate-600">
               <strong>Comment le compte est déterminé</strong>, du plus fiable au moins fiable : le compte posé sur la
               ligne (caisse, récurrences) ; à défaut sa catégorie ; à défaut le type d&apos;activité (cours, stage,
-              balade…) ; à défaut des mots-clés du libellé (licence, adhésion, pension, forfait…) ; sinon la ligne est
-              laissée « à ventiler ». La colonne <em>Origine du compte</em> de l&apos;export détaillé indique la règle
-              appliquée à chaque ligne — de quoi faire valider les correspondances par votre comptable.
+              balade…) ; à défaut le compte que vous avez choisi pour ce libellé ; à défaut des mots-clés du libellé
+              (licence, adhésion, pension, forfait…) ; sinon la ligne est laissée « à ventiler ».
             </p>
           </Card>
         </>

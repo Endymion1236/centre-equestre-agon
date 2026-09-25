@@ -348,7 +348,7 @@ export default function ComptabilitePage() {
           </Link>
           <Link href="/admin/comptabilite/cloture-mois"
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-teal-700 bg-teal-50 border border-teal-200 hover:bg-teal-100 px-3 py-2 rounded-lg no-underline">
-            ✅ Boucler le mois
+            ✅ Boucler le mois et envoyer à la comptable
           </Link>
           <Link href="/admin/comptabilite/resultat"
             className="flex items-center gap-1.5 font-body text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 px-3 py-2 rounded-lg no-underline">
