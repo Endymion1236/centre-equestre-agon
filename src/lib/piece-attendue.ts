@@ -23,7 +23,7 @@
 
 import { estDeclareePerdue, estJustifiee, type LigneMois } from "./bilan-justificatifs";
 import { CATEGORIE_COMPTE_FFE, CATEGORIE_EMPRUNTS, CATEGORIE_PERSONNELLE, justifiableParReleve } from "./tableau-depenses";
-import { posteCommissionCarte } from "./postes-depenses";
+import { estFraisBancaire, posteCommissionCarte } from "./postes-depenses";
 
 export type EtatPiece = "facture-a-obtenir" | "releve-suffit" | "rien-a-fournir";
 
@@ -76,6 +76,29 @@ export function sansTvaParNature(l: LigneMois): boolean {
     || l.poste === "Salaires"
     || l.poste === "Cotisations sociales"
     || l.poste === "Virements internes";
+}
+
+/**
+ * Une ligne qui, par nature, n'attendra jamais de facture fournisseur —
+ * qu'elle soit déjà réglée ou non : commissions et frais bancaires, échéances
+ * et intérêts d'emprunt, assurances et impôts justifiés par le prélèvement,
+ * versements au compte FFE, salaires et cotisations (justifiés par la Masse
+ * salariale), virements internes, dépenses personnelles, débits hors charges.
+ * Sert à les masquer du tableau des dépenses, pour ne garder sous les yeux
+ * que les pièces qu'il faut vraiment réunir.
+ */
+export function sansFactureParNature(l: LigneMois): boolean {
+  if (l.immobilisation) return false;
+  return justifiableSansFacture(l)
+    || estFraisBancaire(l)
+    || !!l.justifieeVia
+    || l.depensePersonnelle === true
+    || l.poste === CATEGORIE_PERSONNELLE
+    || l.poste === "Salaires"
+    || l.poste === "Cotisations sociales"
+    || l.poste === "Virements internes"
+    // Hors charges et déjà classée ; un débit encore à classer reste visible.
+    || (l.suivie === false && !!l.poste);
 }
 
 /** Libellé court affiché sur la ligne. */

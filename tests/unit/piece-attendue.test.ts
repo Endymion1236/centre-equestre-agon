@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { etatPiece, justifiableSansFacture, resteAFaire, sansTvaParNature, LIBELLE_ETAT_PIECE } from "../../src/lib/piece-attendue";
+import { etatPiece, justifiableSansFacture, resteAFaire, sansFactureParNature, sansTvaParNature, LIBELLE_ETAT_PIECE } from "../../src/lib/piece-attendue";
 import type { LigneMois } from "../../src/lib/bilan-justificatifs";
 
 const ligne = (extra: Partial<LigneMois> = {}): LigneMois => ({
@@ -82,4 +82,23 @@ test("ce qui n'a jamais de TVA n'en réclame pas la vérification", () => {
   // Un achat ordinaire, lui, garde sa vérification de TVA.
   assert.ok(!sansTvaParNature(ligne()));
   assert.ok(!sansTvaParNature(ligne({ poste: "Aliments, litières, paille", fournisseur: "AGRIAL" })));
+});
+
+test("masquer ce qui n'attend aucune facture : emprunts, intérêts, commissions, salaires, FFE…", () => {
+  assert.ok(sansFactureParNature(ligne({ poste: "Emprunts", fournisseur: "ECHEANCE PRET 1234" })));
+  assert.ok(sansFactureParNature(ligne({ poste: "Emprunts", fournisseur: "INTERETS PRET" })));
+  assert.ok(sansFactureParNature(ligne({ poste: "Frais bancaires & commissions (CB, Stripe)", fournisseur: "CA NORMANDIE" })));
+  assert.ok(sansFactureParNature(ligne({ fournisseur: "COM CARTE 12/09" })));
+  assert.ok(sansFactureParNature(ligne({ poste: "Compte FFE (avance licences & engagements)" })));
+  assert.ok(sansFactureParNature(ligne({ poste: "Salaires", suivie: false })));
+  assert.ok(sansFactureParNature(ligne({ poste: "Virements internes", suivie: false })));
+  assert.ok(sansFactureParNature(ligne({ depensePersonnelle: true })));
+});
+
+test("restent visibles : achats, immobilisations, débits encore à classer, même déjà justifiés", () => {
+  assert.ok(!sansFactureParNature(ligne()));
+  assert.ok(!sansFactureParNature(ligne({ poste: "Aliments, litières, paille", piece: { id: "p" } as any })));
+  assert.ok(!sansFactureParNature(ligne({ poste: "Immobilisation — à amortir", suivie: false, immobilisation: true })));
+  assert.ok(!sansFactureParNature(ligne({ poste: "", suivie: false })));
+  assert.ok(!sansFactureParNature(ligne({ fournisseur: "CARTE 12/09 GAMM VERT" })));
 });
