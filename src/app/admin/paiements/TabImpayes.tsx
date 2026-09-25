@@ -423,6 +423,13 @@ export function TabImpayes({
                             </Badge>
                           )}
                         </div>
+                        {/* Email rejeté (webhook Resend) : lien ou relance jamais arrivé. */}
+                        {p.alerteEmail && (
+                          <div className="mt-1 font-body text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1"
+                            title={p.alerteEmail.raison || ""}>
+                            ✉️✗ Email non reçu par {p.alerteEmail.to || "la famille"}{p.alerteEmail.at ? ` (${new Date(p.alerteEmail.at).toLocaleDateString("fr-FR")})` : ""} : {p.alerteEmail.raison || "rejeté"} Vérifiez l&apos;adresse sur la fiche famille, puis renvoyez.
+                          </div>
+                        )}
                         <div className="font-body text-xs text-slate-500 truncate mt-0.5">
                           {(() => {
                             if (isEcheance) {

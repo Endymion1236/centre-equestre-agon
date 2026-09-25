@@ -29,6 +29,8 @@ export interface EmailLogEntry {
   creneauId?: string;
   // Qui a déclenché l'envoi
   sentBy?: string; // UID admin ou "system" pour les crons
+  // Identifiant Resend : le webhook y rattache remise, rejet, ouverture.
+  resendId?: string;
 }
 
 /**
@@ -58,6 +60,7 @@ export async function logEmail(entry: EmailLogEntry): Promise<void> {
     if (entry.paymentId) doc.paymentId = entry.paymentId;
     if (entry.creneauId) doc.creneauId = entry.creneauId;
     if (entry.sentBy) doc.sentBy = entry.sentBy;
+    if (entry.resendId) doc.resendId = entry.resendId;
 
     await adminDb.collection("emailsSent").add(doc);
   } catch (err) {

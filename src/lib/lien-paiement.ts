@@ -163,6 +163,9 @@ export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<Result
   const subject = `Lien de paiement — ${eurosTexte(amount)}`;
   const sentByUid = sentBy || "admin";
   let statutEnvoi: "sent" | "failed" = "failed";
+  // Identifiant Resend de l'email : le webhook (api/webhooks/resend) dira
+  // ensuite s'il a été remis, rejeté ou ouvert.
+  let resendEmailId = "";
   await refreshEmailMode();
   if (resendKey && !isRecipientAllowed(recipientEmail)) {
     // 🔒 Garde-fou phase de préparation : on ne pousse pas le lien à la famille.
@@ -209,7 +212,8 @@ export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<Result
       });
       if (resendRes.ok) {
         statutEnvoi = "sent";
-        await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "sent", sentBy: sentByUid, paymentId, familyId: payData.familyId });
+        resendEmailId = String((await resendRes.json().catch(() => null))?.id || "");
+        await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "sent", sentBy: sentByUid, paymentId, familyId: payData.familyId, resendId: resendEmailId || undefined });
       } else {
         const errText = await resendRes.text().catch(() => "");
         await logEmail({ to: recipientEmail, subject, context: "payment_link", template: "paymentLink", status: "failed", error: `HTTP ${resendRes.status}: ${errText}`.slice(0, 500), sentBy: sentByUid, paymentId, familyId: payData.familyId });
@@ -236,6 +240,7 @@ export async function envoyerLienPaiement(p: ParamsLienPaiement): Promise<Result
     expiresAt: expiresAt.toISOString(),
     sentBy: sentByUid,
     emailStatus: statutEnvoi,
+    ...(resendEmailId ? { resendEmailId } : {}),
     status: "sent",
   });
 
@@ -388,6 +393,10 @@ export interface LienEnvoye {
   dernierEchec?: { at: string; statut: string; code: number | null; explication: string; moyen?: string; authentification?: string } | null;
   /** Nombre de tentatives non abouties. */
   echecs?: number;
+  /** Remise de l'email : « failed » (refusé à l'envoi), « sent » (accepté), puis delivered / bounced / opened… */
+  emailStatus?: string;
+  emailStatusAt?: string;
+  emailRaison?: string;
 }
 
 const isoDepuis = (v: any): string => {
@@ -423,6 +432,10 @@ export async function listerLiensCommande(paymentId: string): Promise<LienEnvoye
         ouvertures: Array.isArray(x.openedAt) ? x.openedAt.length : 0,
         dernierEchec: x.dernierEchec || null,
         echecs: Number(x.echecs) || 0,
+        // Remise de l'email (webhook Resend) : sent, delivered, bounced…
+        emailStatus: x.emailStatus || "",
+        emailStatusAt: x.emailStatusAt || "",
+        emailRaison: x.emailRaison || "",
       };
     })
     .sort((a, b) => (b.sentAt || "").localeCompare(a.sentAt || ""));

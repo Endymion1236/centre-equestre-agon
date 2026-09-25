@@ -226,12 +226,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: errMessage, name: errName }, { status: statusCode });
     }
 
-    // Succès — log
+    // Succès — log (avec l'identifiant Resend, pour suivre la remise)
     await logEmail({
       to: validRecipients, subject,
       context: logContext, template: logTemplate,
       status: "sent",
       sentBy, ...logMeta,
+      ...(data?.id ? { resendId: data.id } : {}),
     });
 
     return NextResponse.json({

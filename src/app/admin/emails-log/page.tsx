@@ -1,4 +1,5 @@
 "use client";
+import { LIBELLE_STATUT_EMAIL, type StatutEmail } from "@/lib/statut-email";
 
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, query, orderBy, limit, where, Timestamp } from "firebase/firestore";
@@ -60,6 +61,9 @@ interface EmailLog {
   sentBy?: string;
   sentAt?: any;
   createdAt?: any;
+  /** Remise, d'après le webhook Resend : delivered, bounced, opened… */
+  deliveryStatus?: string;
+  deliveryRaison?: string;
 }
 
 export default function EmailsLogPage() {
@@ -290,6 +294,11 @@ export default function EmailsLogPage() {
                     </div>
                     {isFail && log.error && (
                       <div className="font-body text-[11px] text-red-600 mt-1 truncate">⚠ {log.error}</div>
+                    )}
+                    {!isFail && log.deliveryStatus && (
+                      <div className={`font-body text-[11px] mt-1 truncate ${log.deliveryStatus === "bounced" || log.deliveryStatus === "complained" ? "text-red-600 font-semibold" : "text-green-700"}`} title={log.deliveryRaison || ""}>
+                        {LIBELLE_STATUT_EMAIL[log.deliveryStatus as StatutEmail] || log.deliveryStatus}{log.deliveryRaison ? ` — ${log.deliveryRaison}` : ""}
+                      </div>
                     )}
                   </div>
                   <div className="font-body text-[11px] text-slate-400 flex-shrink-0">

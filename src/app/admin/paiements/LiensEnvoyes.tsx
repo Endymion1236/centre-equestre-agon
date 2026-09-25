@@ -28,6 +28,24 @@ export interface LienAffiche {
   ouvertures?: number;
   dernierEchec?: { at: string; statut: string; code: number | null; explication: string; moyen?: string } | null;
   echecs?: number;
+  /** Remise de l'email (webhook Resend). */
+  emailStatus?: string;
+  emailStatusAt?: string;
+  emailRaison?: string;
+}
+
+/** Ce qu'on sait de l'arrivée de l'email, en quelques mots. */
+function remiseEmail(l: LienAffiche): { texte: string; alerte: boolean } | null {
+  switch (l.emailStatus) {
+    case "failed": return { texte: "✗ Email refusé à l'envoi : il n'est pas parti", alerte: true };
+    case "bounced": return { texte: `✗ Email non remis${l.emailRaison ? ` — ${l.emailRaison}` : ""}`, alerte: true };
+    case "complained": return { texte: "✗ Signalé comme indésirable par le destinataire", alerte: true };
+    case "delayed": return { texte: "⏳ Remise retardée", alerte: false };
+    case "delivered": return { texte: "✓ Email remis", alerte: false };
+    case "opened": return { texte: "✓ Email ouvert", alerte: false };
+    case "clicked": return { texte: "✓ Lien cliqué dans l'email", alerte: false };
+    default: return null;
+  }
 }
 
 const heure = (iso: string) =>
@@ -121,7 +139,11 @@ export function LiensEnvoyes({
               <span className="font-body text-[11px] text-slate-500 truncate flex-1" title={l.recipientEmail}>
                 {l.recipientEmail} · envoyé le {heure(l.sentAt)}
                 {l.etat === "valide" && l.expiresAt ? ` · valable jusqu'au ${heure(l.expiresAt)}` : ""}
-                {l.ouvertures ? ` · ouvert ${l.ouvertures} fois` : ""}
+                {l.ouvertures ? ` · page de paiement ouverte ${l.ouvertures} fois` : ""}
+                {(() => {
+                  const r = remiseEmail(l);
+                  return r ? <span className={`block truncate ${r.alerte ? "text-red-600 font-semibold" : "text-green-700"}`} title={l.emailRaison || r.texte}>{r.texte}</span> : null;
+                })()}
                 {l.dernierEchec && (
                   <span className="block text-red-600 truncate" title={l.dernierEchec.explication}>
                     ✗ {l.echecs && l.echecs > 1 ? `${l.echecs} tentatives refusées, dernière` : "Tentative refusée"} le {heure(l.dernierEchec.at)} : {l.dernierEchec.explication}
