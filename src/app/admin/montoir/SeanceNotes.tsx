@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
+import { extensionAudio } from "@/lib/transcription-params";
 import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check, FileText, X, Eye, ZoomIn, ZoomOut, Sparkles } from "lucide-react";
 import { LIBELLES_ALERTE, prenomSeul, type AnalyseNoteSeance } from "@/lib/analyse-note-seance";
 
@@ -117,13 +118,17 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
       rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
       rec.onstop = async () => {
         stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(chunks, { type: mime || "audio/webm" });
-        const file = new File([blob], "note.webm", { type: blob.type });
+        // Type réellement produit par le navigateur (audio/mp4 sur iPhone).
+        const type = rec.mimeType || mime || "audio/webm";
+        const blob = new Blob(chunks, { type });
+        if (blob.size < 1000) { alert("Enregistrement vide : le micro n'a rien capté. Vérifiez l'autorisation du micro, puis parlez avant d'arrêter."); return; }
+        const file = new File([blob], `note.${extensionAudio(type)}`, { type });
         setTranscribing(true);
         try {
           const fd = new FormData(); fd.append("audio", file);
           const res = await authFetch("/api/whisper", { method: "POST", body: fd });
-          const data = await res.json();
+          // Une réponse non JSON (délai dépassé, fichier trop lourd) : le dire.
+          const data = await res.json().catch(() => ({ error: res.status === 413 ? "Dictée trop longue : faites-la en plusieurs fois." : res.status === 504 ? "La transcription a pris trop de temps : réessayez avec une dictée plus courte." : `réponse inattendue du serveur (${res.status})` }));
           if (data.success) {
             const avant = finRef.current.trim();
             const complet = (avant ? avant + " " : "") + data.text;
@@ -131,7 +136,7 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
             // La dictée terminée, l'analyse part d'elle-même sur la note entière.
             void analyser(complet);
           }
-          else alert("Erreur transcription : " + (data.error || "inconnue"));
+          else alert(data.error || "Transcription impossible (erreur inconnue).");
         } catch (e: any) { alert("Erreur transcription : " + e.message); }
         setTranscribing(false);
       };

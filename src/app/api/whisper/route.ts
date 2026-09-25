@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { paramsTranscription } from "@/lib/transcription-params";
+import { extensionAudio, messageErreurTranscription, paramsTranscription } from "@/lib/transcription-params";
 import OpenAI from "openai";
 import { verifyAuth } from "@/lib/api-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
@@ -36,11 +36,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const formData = await request.formData();
-    const audioFile = formData.get("audio") as File | null;
+    const recu = formData.get("audio") as File | null;
 
-    if (!audioFile) {
+    if (!recu) {
       return NextResponse.json({ error: "Fichier audio requis" }, { status: 400 });
     }
+    if (recu.size < 1000) {
+      return NextResponse.json({ error: "Enregistrement vide : le micro n'a rien capté. Vérifiez l'autorisation du micro et parlez avant d'arrêter." }, { status: 400 });
+    }
+    // Le service lit le format au nom du fichier : on le nomme d'après son
+    // type réel (un iPhone enregistre en audio/mp4, pas en webm).
+    const typeAudio = (recu.type || "audio/webm").split(";")[0];
+    const audioFile = new File([await recu.arrayBuffer()], `note.${extensionAudio(typeAudio)}`, { type: typeAudio });
 
     // Vérifier la taille (max 25 MB — limite Whisper)
     if (audioFile.size > 25 * 1024 * 1024) {
@@ -84,8 +91,7 @@ export async function POST(request: NextRequest) {
       text: transcription.text,
     });
   } catch (error: any) {
-    console.error("Whisper error:", error?.message || error);
-    const msg = error?.message || "Erreur interne";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    console.error("Whisper error:", error?.status, error?.code, error?.message || error);
+    return NextResponse.json({ error: messageErreurTranscription(error) }, { status: 500 });
   }
 }
