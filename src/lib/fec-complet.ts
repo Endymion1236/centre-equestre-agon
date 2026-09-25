@@ -23,7 +23,7 @@
  */
 
 import { analyserFecVentes, ENTETE_FEC, type PaiementFec } from "@/app/admin/comptabilite/fec-utils";
-import { compteDeLigne, libelleCompte, NON_VENTILE } from "@/lib/ventilation-comptable";
+import { compteDeLigne, libelleCompte, NON_VENTILE, type ReglesVentilation } from "@/lib/ventilation-comptable";
 
 export interface CompteFec { compte: string; libelle: string }
 
@@ -113,6 +113,8 @@ export function construireFecComplet(params: {
   /** Numéro de facture par identifiant de commande, pour la référence de pièce des règlements. */
   numeroFactureDe?: (paymentId: string) => string | undefined;
   maintenant?: Date;
+  /** Règles de ventilation posées par le gérant (settings/ventilationVentes). */
+  regles?: ReglesVentilation | null;
 }): ResultatFecComplet {
   const maintenant = params.maintenant || new Date();
   const anomalies: string[] = [];
@@ -121,7 +123,7 @@ export function construireFecComplet(params: {
   const aVentiler = new Set<string>();
   const ventes = analyserFecVentes(params.factures, maintenant, {
     compteProduit: (item) => {
-      const { code } = compteDeLigne(item);
+      const { code } = compteDeLigne(item, params.regles);
       if (code === NON_VENTILE) { aVentiler.add(item.activityTitle || "(sans libellé)"); return COMPTE_ATTENTE; }
       return { compte: code, libelle: libelleCompte(code) };
     },

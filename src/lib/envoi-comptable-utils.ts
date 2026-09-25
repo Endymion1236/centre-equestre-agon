@@ -21,6 +21,7 @@ import {
   construireExportFactures,
 } from "@/app/admin/comptabilite/exports-csv-utils";
 import { construireFecCeleris, construireFecComplet, nomFichierFec, type CompteFec } from "@/lib/fec-complet";
+import type { ReglesVentilation } from "@/lib/ventilation-comptable";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
 
 import { bilanVentilationAchats, construireExportVentilationAchats } from "@/lib/ventilation-achats";
@@ -107,6 +108,8 @@ export function construireColisComptable(params: {
   celeris?: { lignes: EcritureCelerisColis[]; totaux: { ht: number; tva: number; ttc: number } } | null;
   /** SIRET du club : le FEC prend le nom réglementaire SIREN + FEC + fin de mois. */
   siret?: string;
+  /** Règles de ventilation des ventes posées par le gérant. */
+  regles?: ReglesVentilation | null;
 }): ColisComptable {
   const { mois, maintenant = new Date() } = params;
   const lignesJustificatifs = params.lignesJustificatifs?.filter(l => (l.mois || l.dateOperation?.slice(0, 7)) === mois);
@@ -137,7 +140,7 @@ export function construireColisComptable(params: {
     resume.celeris = { nombre: celeris.lignes.length, ht: arrondi(celeris.totaux.ht / 100), tva: arrondi(celeris.totaux.tva / 100), ttc: arrondi(celeris.totaux.ttc / 100) };
   }
 
-  const fec = fecDuMois({ mois, factures, encaissements, payments: params.payments, celeris, siret: params.siret, maintenant });
+  const fec = fecDuMois({ mois, factures, encaissements, payments: params.payments, celeris, siret: params.siret, maintenant, regles: params.regles });
   const fichierFec = fec.fichier;
   resume.fec = {
     fichier: fec.fichier,
@@ -187,6 +190,7 @@ export function fecDuMois(params: {
   celeris?: { lignes: EcritureCelerisColis[] } | null;
   siret?: string;
   maintenant?: Date;
+  regles?: ReglesVentilation | null;
 }): { fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; anomalies: string[]; comptesAConfirmer: CompteFec[] } {
   const fichier = nomFichierFec(params.siret, params.mois);
   if (params.celeris && params.celeris.lignes.length) {
@@ -202,7 +206,7 @@ export function fecDuMois(params: {
     };
   }
   const numeros = new Map<string, string>(params.payments.filter((p) => p?.id && p?.invoiceNumber).map((p) => [String(p.id), String(p.invoiceNumber)]));
-  const f = construireFecComplet({ factures: params.factures, encaissements: params.encaissements, numeroFactureDe: (id) => numeros.get(id), maintenant: params.maintenant });
+  const f = construireFecComplet({ factures: params.factures, encaissements: params.encaissements, numeroFactureDe: (id) => numeros.get(id), maintenant: params.maintenant, regles: params.regles });
   return {
     fichier, contenu: f.contenu, source: "application",
     ecrituresVentes: f.resume.ventes.ecritures, ecrituresReglements: f.resume.reglements.ecritures,

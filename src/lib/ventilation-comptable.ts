@@ -100,8 +100,27 @@ export interface LigneFacture {
   activityType?: string;
 }
 
+/**
+ * Règles apprises : libellé de prestation (normalisé) → compte, posées par le
+ * gérant sur l'écran Export CA pour les lignes restées « à ventiler ».
+ * Rangées dans settings/ventilationVentes ; lues par l'export, le FEC et
+ * l'envoi mensuel au cabinet.
+ */
+export type ReglesVentilation = Record<string, string>;
+
+/**
+ * Clé d'une règle : le libellé sans accents ni casse, sans la mention
+ * « — échéance 2/10 » ajoutée aux paiements en plusieurs fois.
+ */
+export function cleLibelleVente(titre: unknown): string {
+  return String(titre ?? "")
+    .replace(/\s+—\s+échéance\s+\d+\/\d+$/i, "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 /** Compte d'une ligne + provenance de la décision (pour l'audit à l'écran). */
-export function compteDeLigne(item: LigneFacture): { code: string; source: string } {
+export function compteDeLigne(item: LigneFacture, regles?: ReglesVentilation | null): { code: string; source: string } {
   if (item.compteComptable) return { code: item.compteComptable, source: "compte de la ligne" };
   if (item.category && PAR_CATEGORIE[item.category]) {
     return { code: PAR_CATEGORIE[item.category], source: "catégorie" };
@@ -109,6 +128,9 @@ export function compteDeLigne(item: LigneFacture): { code: string; source: strin
   if (item.activityType && PAR_TYPE_ACTIVITE[item.activityType]) {
     return { code: PAR_TYPE_ACTIVITE[item.activityType], source: "type d'activité" };
   }
+  // Choix explicite du gérant pour ce libellé : il passe avant les mots-clés.
+  const regle = regles?.[cleLibelleVente(item.activityTitle)];
+  if (regle) return { code: regle, source: "règle du gérant" };
   const titre = item.activityTitle || "";
   const parMot = PAR_LIBELLE.find(r => r.motif.test(titre));
   if (parMot) return { code: parMot.code, source: "libellé" };
@@ -135,13 +157,13 @@ export interface LigneVentilee {
 }
 
 /** Agrège des lignes de facture par (compte, taux de TVA). */
-export function ventiler(items: LigneFacture[]): LigneVentilee[] {
+export function ventiler(items: LigneFacture[], regles?: ReglesVentilation | null): LigneVentilee[] {
   const map = new Map<string, LigneVentilee>();
   for (const item of items) {
     const ttc = Number(item.priceTTC || 0);
     if (!ttc) continue;
     const taux = Number(item.tva || 0);
-    const { code } = compteDeLigne(item);
+    const { code } = compteDeLigne(item, regles);
     const cle = `${code}|${taux}`;
     const ht = baseHT(ttc, taux);
     const ligne = map.get(cle) || {
@@ -165,4 +187,21 @@ export function versCsv(entetes: string[], lignes: (string | number)[][]): strin
       ? `"${v.toFixed(2).replace(".", ",")}"`
       : `"${String(v).replace(/"/g, '""')}"`;
   return "﻿" + [entetes, ...lignes].map(l => l.map(cell).join(";")).join("\r\n");
+}
+
+/**
+ * Les lignes restées « à ventiler », regroupées par libellé : ce qu'il faut
+ * classer d'un choix, du plus gros montant au plus petit.
+ */
+export function groupesNonVentiles(items: LigneFacture[], regles?: ReglesVentilation | null): { cle: string; libelle: string; nb: number; ttc: number; taux: number[] }[] {
+  const groupes = new Map<string, { cle: string; libelle: string; nb: number; ttc: number; taux: Set<number> }>();
+  for (const item of items) {
+    const ttc = Number(item.priceTTC || 0);
+    if (!ttc || compteDeLigne(item, regles).code !== NON_VENTILE) continue;
+    const cle = cleLibelleVente(item.activityTitle) || "(sans libellé)";
+    const g = groupes.get(cle) || { cle, libelle: String(item.activityTitle || "(sans libellé)").replace(/\s+—\s+échéance\s+\d+\/\d+$/i, ""), nb: 0, ttc: 0, taux: new Set<number>() };
+    g.nb++; g.ttc = Math.round((g.ttc + ttc) * 100) / 100; g.taux.add(Number(item.tva || 0));
+    groupes.set(cle, g);
+  }
+  return [...groupes.values()].map((g) => ({ ...g, taux: [...g.taux].sort((a, b) => a - b) })).sort((a, b) => b.ttc - a.ttc);
 }

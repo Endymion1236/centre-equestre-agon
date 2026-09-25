@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { Loader2, Download, AlertTriangle, FileSpreadsheet } from "lucide-react";
 import {
   ventiler, compteDeLigne, libelleCompte, baseHT, versCsv, NON_VENTILE,
-  type LigneFacture,
+  groupesNonVentiles, PLAN_COMPTABLE,
+  type LigneFacture, type ReglesVentilation,
 } from "@/lib/ventilation-comptable";
 import {
   MOIS_EXPORT_CA as MOIS,
@@ -19,6 +20,55 @@ import {
 } from "./export-ca-utils";
 
 /**
+ * Les lignes restées « à ventiler », par libellé : un compte à choisir, et la
+ * règle vaut pour toutes les lignes de ce libellé, passées et futures (export,
+ * FEC, envoi mensuel au cabinet). Les factures elles-mêmes ne sont pas
+ * modifiées : c'est leur classement comptable qui est précisé.
+ */
+function VentilerLignes({ groupes, onChoisir }: {
+  groupes: { cle: string; libelle: string; nb: number; ttc: number; taux: number[] }[];
+  onChoisir: (cle: string, code: string) => Promise<void>;
+}) {
+  const [choix, setChoix] = useState<Record<string, string>>({});
+  const [enCours, setEnCours] = useState<string | null>(null);
+  if (!groupes.length) return null;
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      {groupes.map(g => {
+        // Les comptes au même taux de TVA d'abord : le bon choix est presque toujours parmi eux.
+        const memeTaux = PLAN_COMPTABLE.filter(c => g.taux.includes(c.tva));
+        const autres = PLAN_COMPTABLE.filter(c => !g.taux.includes(c.tva));
+        return (
+          <div key={g.cle} className="flex flex-wrap items-center gap-2 rounded-lg bg-white border border-amber-200 px-3 py-2 font-body text-xs">
+            <div className="flex-1 min-w-[180px]">
+              <div className="font-semibold text-slate-800">{g.libelle}</div>
+              <div className="text-slate-500">{g.nb} ligne{g.nb > 1 ? "s" : ""} · {g.ttc.toFixed(2)} € TTC · TVA {g.taux.map(t => `${String(t).replace(".", ",")} %`).join(", ")}</div>
+            </div>
+            <select value={choix[g.cle] || ""} onChange={e => setChoix(prev => ({ ...prev, [g.cle]: e.target.value }))}
+              className="px-2 py-1.5 rounded-lg border border-gray-200 bg-white text-xs max-w-full">
+              <option value="">Choisir le compte…</option>
+              <optgroup label="Même taux de TVA">
+                {memeTaux.map(c => <option key={c.code} value={c.code}>{c.code} — {c.label}</option>)}
+              </optgroup>
+              {autres.length > 0 && (
+                <optgroup label="Autres comptes">
+                  {autres.map(c => <option key={c.code} value={c.code}>{c.code} — {c.label} ({String(c.tva).replace(".", ",")} %)</option>)}
+                </optgroup>
+              )}
+            </select>
+            <button type="button" disabled={!choix[g.cle] || enCours === g.cle}
+              onClick={async () => { setEnCours(g.cle); try { await onChoisir(g.cle, choix[g.cle]); } finally { setEnCours(null); } }}
+              className="px-3 py-1.5 rounded-lg font-semibold text-white bg-amber-600 hover:bg-amber-700 border-none cursor-pointer disabled:opacity-50">
+              {enCours === g.cle ? "…" : "Ventiler"}
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
  * Export du chiffre d'affaires ventilé par compte comptable.
  * Base retenue : les factures émises sur la période, annulées exclues.
  */
@@ -29,15 +79,35 @@ export default function ExportCaPage() {
   const [mois, setMois] = useState<number | "all">("all");
   const [inclureNonReglees, setInclureNonReglees] = useState(true);
 
+  // Règles de ventilation posées ici (settings/ventilationVentes), partagées
+  // avec le FEC et l'envoi mensuel au cabinet.
+  const [regles, setRegles] = useState<ReglesVentilation>({});
+  const [erreurRegle, setErreurRegle] = useState<string | null>(null);
+
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDocs(collection(db, "payments"));
+        const [snap, reglesSnap] = await Promise.all([
+          getDocs(collection(db, "payments")),
+          getDoc(doc(db, "settings", "ventilationVentes")).catch(() => null),
+        ]);
         setPayments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const r = reglesSnap?.exists() ? (reglesSnap.data() as any)?.regles : null;
+        if (r && typeof r === "object") setRegles(r);
       } catch (e) { console.error(e); }
       setLoading(false);
     })();
   }, []);
+
+  const enregistrerRegle = async (cle: string, code: string) => {
+    setErreurRegle(null);
+    try {
+      await setDoc(doc(db, "settings", "ventilationVentes"), { regles: { [cle]: code }, updatedAt: serverTimestamp() }, { merge: true });
+      setRegles(prev => ({ ...prev, [cle]: code }));
+    } catch (e: any) {
+      setErreurRegle(`Règle non enregistrée : ${e?.message || e}`);
+    }
+  };
 
   const factures = useMemo(
     () => filtrerFacturesExport(payments, annee, mois, inclureNonReglees),
@@ -49,7 +119,8 @@ export default function ExportCaPage() {
     [factures],
   );
 
-  const ventilation = useMemo(() => ventiler(lignes), [lignes]);
+  const ventilation = useMemo(() => ventiler(lignes, regles), [lignes, regles]);
+  const aVentiler = useMemo(() => groupesNonVentiles(lignes, regles), [lignes, regles]);
   const {
     totalTTC,
     totalHT,
@@ -90,7 +161,7 @@ export default function ExportCaPage() {
       versCsv(
         ["Date", "N° commande", "Client", "Prestation", "Compte", "Libellé compte", "Origine du compte", "Taux TVA", "Base HT", "TVA", "TTC"],
         lignes.filter(l => Number(l.priceTTC || 0) !== 0).map(l => {
-          const { code, source } = compteDeLigne(l);
+          const { code, source } = compteDeLigne(l, regles);
           const ttc = Number(l.priceTTC || 0);
           const taux = Number(l.tva || 0);
           const ht = baseHT(ttc, taux);
@@ -170,15 +241,18 @@ export default function ExportCaPage() {
             <Card padding="md" className="mb-5 !bg-amber-50 !border-amber-200">
               <div className="flex items-start gap-2">
                 <AlertTriangle size={17} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="font-body text-sm font-bold text-amber-900">
                     {totalNonVentile.toFixed(2)}€ non ventilés
                   </div>
                   <p className="font-body text-xs text-amber-800 mt-0.5">
                     Ces lignes n&apos;ont ni compte, ni catégorie, ni libellé reconnaissable — elles sont
-                    laissées à part plutôt que rangées au hasard. Ouvrez le détail ligne à ligne pour les
-                    identifier : le plus souvent, il suffit de renseigner la catégorie sur la prestation d&apos;origine.
+                    laissées à part plutôt que rangées au hasard. Choisissez le compte de chaque libellé
+                    ci-dessous : le choix vaut pour toutes ses lignes, dans cet export, le FEC et l&apos;envoi
+                    mensuel au cabinet. Les factures elles-mêmes ne changent pas.
                   </p>
+                  {erreurRegle && <p className="font-body text-xs text-red-700 mt-1">{erreurRegle}</p>}
+                  <VentilerLignes groupes={aVentiler} onChoisir={enregistrerRegle} />
                 </div>
               </div>
             </Card>

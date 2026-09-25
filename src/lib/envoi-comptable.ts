@@ -75,12 +75,20 @@ export function normaliserDoc(snap: FirebaseFirestore.QueryDocumentSnapshot) {
  * Même fonction que l'envoi mensuel (fecDuMois) : le fichier téléchargé est
  * celui que reçoit le cabinet.
  */
+/** Règles de ventilation des ventes posées sur l'écran Export CA. */
+export async function chargerReglesVentilation(): Promise<Record<string, string>> {
+  const snap = await adminDb.collection("settings").doc("ventilationVentes").get().catch(() => null);
+  const regles = snap?.exists ? (snap.data() as any)?.regles : null;
+  return regles && typeof regles === "object" ? regles : {};
+}
+
 export async function chargerFecMois(mois: string) {
-  const [paySnap, encSnap, celerisSnap, club] = await Promise.all([
+  const [paySnap, encSnap, celerisSnap, club, regles] = await Promise.all([
     adminDb.collection("payments").get(),
     adminDb.collection("encaissements").get(),
     adminDb.collection("historiqueComptableCeleris").doc(mois).get().catch(() => null),
     getClubInfo(),
+    chargerReglesVentilation(),
   ]);
   const payments = paySnap.docs.map(normaliserDoc);
   const encaissements = encSnap.docs.map(normaliserDoc);
@@ -90,6 +98,7 @@ export async function chargerFecMois(mois: string) {
     mois, factures, encaissements: encaissementsDuMois(encaissements, mois), payments,
     celeris: celerisDoc && Array.isArray(celerisDoc.lignes) ? { lignes: celerisDoc.lignes } : null,
     siret: club.siret,
+    regles,
   });
 }
 
@@ -140,7 +149,8 @@ export async function envoyerEcrituresComptable(params: {
     ? { lignes: celerisDoc.lignes, totaux: { ht: Number(celerisDoc.totaux.ht) || 0, tva: Number(celerisDoc.totaux.tva) || 0, ttc: Number(celerisDoc.totaux.ttc) || 0 } }
     : null;
 
-  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret });
+  const regles = await chargerReglesVentilation();
+  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles });
   if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0 && !colis.resume.ventilationAchats?.total && !colis.resume.celeris) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
   }
