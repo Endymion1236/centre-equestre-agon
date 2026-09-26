@@ -797,7 +797,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       frequenceDejaInscrite, inscParams, inscriptionMode, isCompetition, isStage,
       licence, licenceType, onEnroll, onRefresh, payMode,
       payPlan, payments, preinscription, priceTTC, prixAdhesionDegressif,
-      prixForfait, prixForfaitAnnuel, prixLicence, prorata, quinzaine,
+      prixForfait, prixForfaitAnnuel, prixForfaitBrut, prixLicence, prorata, quinzaine,
       rangEnfantFamille, remiseBaremePercent, remiseHorsBareme, remiseMotif, selChild,
       selectedChildren, semainePaire, sessionsRestantes, showAcompte, showPay,
       stageAcompte, stageLines, stageMode, stageSolde, stageTotalTTC,

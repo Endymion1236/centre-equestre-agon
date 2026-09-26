@@ -31,9 +31,10 @@ import { generateOrderId } from "@/lib/utils";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { formatStageSchedule } from "@/lib/format-stage";
 import { horairesStage } from "@/lib/email-prestations";
-import { estSemaineAttendue, formatFrequence } from "@/lib/rythme";
+import { estSemaineAttendue } from "@/lib/rythme";
 import { ACOMPTE_PAR_ENFANT } from "@/lib/panier-reservation";
 import { fmtDate, sameStage, type Creneau } from "./types";
+import { lignesInscriptionAnnuelle } from "./inscription-annuelle-lignes";
 import { programmerEnvoiConfirmation } from "./minuteries-confirmation";
 import { verrouCommande } from "@/app/admin/paiements/commande-verrou";
 
@@ -78,6 +79,7 @@ export interface ContexteInscriptionPanneau {
   priceTTC: any;
   prixAdhesionDegressif: any;
   prixForfait: any;
+  prixForfaitBrut: any;
   prixForfaitAnnuel: any;
   prixLicence: any;
   prorata: any;
@@ -170,6 +172,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
     priceTTC,
     prixAdhesionDegressif,
     prixForfait,
+    prixForfaitBrut,
     prixForfaitAnnuel,
     prixLicence,
     prorata,
@@ -846,33 +849,12 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
         createdAt: serverTimestamp(),
       });
       // Créer les items pour cet enfant
-      const items: any[] = [];
-      if (adhesion) items.push({ activityTitle: `Adhésion annuelle (enfant ${rangEnfantFamille})`, childId: selChild, childName, priceHT: prixAdhesionDegressif / 1.055, tva: 5.5, priceTTC: prixAdhesionDegressif });
-      if (licence) items.push({ activityTitle: `Licence FFE ${licenceType === "moins18" ? "-18ans" : "+18ans"}`, childId: selChild, childName, priceHT: prixLicence, tva: 0, priceTTC: prixLicence });
-      // Créneau principal
-      items.push({ activityTitle: ajoutHeureAdmin ? `Forfait — heure suppl. (${formatFrequence(frequenceDejaInscrite)}×→${formatFrequence(freqCumuleeAdmin)}×/sem) — ${creneau.activityTitle} (${slotKey})` : `Forfait ${creneau.activityTitle} (${slotKey})`, childId: selChild, childName, creneauId: creneau.id, activityType: creneau.activityType, priceHT: prixForfait / 1.055, tva: 5.5, priceTTC: prixForfait });
-      // Créneaux supplémentaires (2ème, 3ème)
-      const dayNames = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
-      for (const esKey of extraSlots) {
-        const firstDash = esKey.indexOf("-");
-        const secondDash = esKey.indexOf("-", firstDash + 1);
-        const esDow = parseInt(esKey.substring(0, firstDash));
-        const esTime = esKey.substring(firstDash + 1, secondDash);
-        const esTitle = esKey.substring(secondDash + 1);
-        const esSlotLabel = `${esTitle} — ${dayNames[esDow]} ${esTime}`;
-        items.push({ activityTitle: `Forfait ${esTitle} (${esSlotLabel})`, childId: selChild, childName, activityType: creneau.activityType, priceHT: 0, tva: 5.5, priceTTC: 0 });
-      }
-      // Ligne de réduction famille si applicable
-      if (familyDiscountAmount > 0) {
-        // Le motif figure sur la facture : une remise hors barème doit dire
-        // pourquoi, sans quoi personne ne saura la justifier dans six mois.
-        const motif = remiseMotif.trim();
-        const libelleRemise = `Réduction famille (${rangEnfantFamille}ème enfant, -${familyDiscountPercent}%`
-          + (remiseHorsBareme ? ` — ${motif || "remise exceptionnelle"}` : "")
-          + ")";
-        items.push({ activityTitle: libelleRemise, childId: selChild, childName, priceHT: -familyDiscountAmount / 1.055, tva: 5.5, priceTTC: -familyDiscountAmount,
-          ...(remiseHorsBareme ? { remiseHorsBareme: true, remiseBaremePercent, remiseMotif: motif || null } : {}) });
-      }
+      const items: any[] = lignesInscriptionAnnuelle({
+        adhesion, ajoutHeureAdmin, childName, creneau, extraSlots, familyDiscountAmount,
+        familyDiscountPercent, freqCumuleeAdmin, frequenceDejaInscrite, licence, licenceType,
+        prixAdhesionDegressif, prixForfaitBrut, prixLicence, rangEnfantFamille,
+        remiseBaremePercent, remiseHorsBareme, remiseMotif, selChild, slotKey,
+      });
 
       // Chercher un paiement annuel pending existant pour cette famille (pour regrouper la fratrie)
       const existingPaySnap = await getDocs(query(
