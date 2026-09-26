@@ -1,4 +1,5 @@
 "use client";
+import { toParisDateString } from "@/lib/date-local";
 import React, { useMemo, useState } from "react";
 import { updateDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -184,7 +185,7 @@ export function TabImpayes({
   // « Rien réglé » : les commandes sans aucun encaissement, ni acompte ni partiel.
   const [seulementRienRegle, setSeulementRienRegle] = useState(false);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = toParisDateString();
   const unpaid = useMemo(() => listerImpayes(payments, todayStr), [payments, todayStr]);
   const filtered = useMemo(
     () => filtrerImpayes(unpaid, { familyFilter, typeFilter, natureFilter, rienRegle: seulementRienRegle, search: impayesSearch }),

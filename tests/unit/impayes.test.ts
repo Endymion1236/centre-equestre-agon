@@ -77,6 +77,16 @@ test("une échéance n'est impayée que si sa date est dépassée", () => {
   assert.deepEqual(result.map((x) => x.id), ["past"]);
 });
 
+test("la 1re échéance, datée du jour de l'inscription, est impayée dès aujourd'hui", () => {
+  // Forfait annuel en 3× : la première échéance porte la date du jour. Elle
+  // restait invisible dans Impayés jusqu'au lendemain.
+  const result = listerImpayes([
+    p({ id: "jour", echeancesTotal: 3, echeanceDate: "2026-09-26", paidAmount: 0 }),
+    p({ id: "suivante", echeancesTotal: 3, echeanceDate: "2026-10-26", paidAmount: 0 }),
+  ], "2026-09-26");
+  assert.deepEqual(result.map((x) => x.id), ["jour"]);
+});
+
 console.log("\n── Filtres ──");
 
 const unpaid = [

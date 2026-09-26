@@ -7,7 +7,6 @@ import AnnulationModal from "./AnnulationModal";
 import { useSearchParams } from "next/navigation";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { estPrelevementSepa } from "@/lib/sepa";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
@@ -22,8 +21,8 @@ import { TabEncaisser } from "./TabEncaisser";
 import { TabJournal } from "./TabJournal";
 import { TabHistorique } from "./TabHistorique";
 import { TabEcheances } from "./TabEcheances";
-import { estEcheance } from "./echeances-utils";
 import { TabImpayes } from "./TabImpayes";
+import { listerImpayes } from "./impayes-utils";
 import { TabOfferts } from "./TabOfferts";
 import { TabDeclarations } from "./TabDeclarations";
 import { TabChequesDiffres } from "./TabChequesDiffres";
@@ -1040,14 +1039,9 @@ export default function PaiementsPage() {
               ${tab === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
             <Icon size={13} /> {label}
             {id === "impayes" && (() => {
-              const todayBadge = new Date().toISOString().split("T")[0];
-              const count = payments.filter(p => {
-                if (p.status === "cancelled" || p.status === "paid") return false;
-                if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
-                if (estPrelevementSepa(p)) return false; // prélevé, pas à relancer
-                if (estEcheance(p)) return (p as any).echeanceDate && (p as any).echeanceDate < todayBadge;
-                return true;
-              }).length;
+              // Même règle que l'onglet lui-même : le badge comptait à part,
+              // et pouvait annoncer une commande que la liste ne montrait pas.
+              const count = listerImpayes(payments, toParisDateString()).length;
               return count > 0 ? <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{count}</span> : null;
             })()}
             {id === "cheques_differes" && chequesDiffresCount.overdue > 0 && (

@@ -115,8 +115,12 @@ export function listerImpayes(payments: any[], today: string): any[] {
     // (cf. prelevementPlanifie).
     if (prelevementPlanifie(payment) && typeof payment?.sepaRestant !== "number") return false;
     if (payment?.paymentMode === "cheque_differe") return false;
+    // Une échéance est due le jour même : la première d'un paiement en 3× ou
+    // 10× est datée du jour de l'inscription. Avec « < today », elle restait
+    // invisible jusqu'au lendemain — l'inscription annonçait « la commande
+    // part dans Impayés » et l'onglet n'en montrait rien (septembre 2026).
     if (estEcheance(payment)) {
-      return Boolean(payment?.echeanceDate && payment.echeanceDate < today);
+      return Boolean(payment?.echeanceDate && payment.echeanceDate <= today);
     }
     return true;
   });

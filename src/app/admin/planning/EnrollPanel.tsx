@@ -1,4 +1,5 @@
 "use client";
+import { toParisDateString } from "@/lib/date-local";
 import ModaleMontantInscription from "./ModaleMontantInscription";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { ACOMPTE_PAR_ENFANT, montantsAcompteStage, acompteApplicable } from "@/lib/panier-reservation";
@@ -2097,7 +2098,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                           à encaisser quand le règlement arrive.
                           {payPlan === "1x"
                             ? " Un frère ou une sœur inscrit ensuite en 1× rejoint la même commande — un seul règlement pour la fratrie."
-                            : " En 3× ou 10×, chaque cavalier a son propre échéancier."}
+                            : " En 3× ou 10×, seule la 1re échéance (due aujourd'hui) y apparaît ; les suivantes sont dans l'onglet Échéances, et chaque cavalier a son propre échéancier."}
                         </div>
                       )}
                     </div>
@@ -2297,7 +2298,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           // programmé ou un chèque différé sont dus, pas impayés. Le bandeau
           // disait « 3 paiements en attente » à une famille qui venait de
           // choisir trois fois sans frais, et Impayés n'en montrait aucun.
-          const attentes = resumerAttentes(payments, enrolledFamilyIds, new Date().toISOString().split("T")[0]);
+          const attentes = resumerAttentes(payments, enrolledFamilyIds, toParisDateString());
           const tous = [...attentes.impayes, ...attentes.aVenir];
           if (tous.length === 0) return null;
           const familyNames = [...new Set(tous.map((p: any) => p.familyName))].join(", ");
