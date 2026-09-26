@@ -17,8 +17,9 @@ test("battement avant et après la pause : la fiche imprime les heures de la pau
   const j = calculerJournee([t("08:00", 225), t("12:00", 60, "pause"), t("13:30", 210)]);
   const f = plagesFicheHoraire(j);
   assert.deepEqual([f.debut, f.fin, f.debutAprem, f.finAprem], ["08:00", "12:00", "13:00", "17:00"]);
-  assert.equal(j.dureeMin, 435, "7 h 15 travaillées, inchangé");
-  assert.equal(f.pauseMin, 105, "tout le non-travaillé entre 8 h et 17 h");
+  assert.equal(j.dureeMin, 480, "8 h : seule la pause saisie est déduite, les battements sont travaillés");
+  assert.equal(f.pauseMin, 60);
+  assert.equal(j.battementsLongs.length, 0, "battements de 15 et 30 min : pas d'alerte");
 });
 
 test("pause courte au milieu d'une journée continue : elle coupe quand même la fiche", () => {
@@ -28,11 +29,13 @@ test("pause courte au milieu d'une journée continue : elle coupe quand même la
   assert.equal(f.pauseMin, 20);
 });
 
-test("sans pause saisie : la plus longue coupure, comme avant", () => {
+test("sans pause saisie : journée d'un bloc, travaillée, avec alerte au-delà d'une heure", () => {
   const j = calculerJournee([t("09:00", 180), t("14:00", 180)]);
   const f = plagesFicheHoraire(j);
-  assert.deepEqual([f.debut, f.fin, f.debutAprem, f.finAprem], ["09:00", "12:00", "14:00", "17:00"]);
-  assert.equal(f.pauseMin, 120);
+  assert.deepEqual([f.debut, f.fin, f.debutAprem, f.finAprem], ["09:00", "17:00", "", ""]);
+  assert.equal(f.pauseMin, 0);
+  assert.equal(j.dureeMin, 480);
+  assert.equal(j.battementsLongs.length, 1);
 });
 
 test("deux pauses : la plus longue fait le midi", () => {

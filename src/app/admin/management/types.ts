@@ -231,10 +231,9 @@ function _heureToMin(h: string): number {
  * Temps de travail effectif d'un ensemble de tâches **du même jour**.
  *
  * La règle vit dans lib/temps-travail.ts, source unique de tous les écrans qui
- * comptent des heures : périodes réellement travaillées, battements de moins
- * de 30 minutes comptés en travail, pauses saisies déduites, chevauchements
- * fusionnés. Elle a remplacé le 19/08/2026 un calcul en amplitude qui payait
- * les coupures du midi non saisies.
+ * comptent des heures : de la première tâche à la dernière, pauses saisies
+ * déduites, chevauchements fusionnés. Un battement sans pause saisie est du
+ * travail (règle du 26/09/2026) ; au-delà d'une heure, il est signalé.
  *
  * ⚠️ Pour un cumul semaine, sommer le résultat sur chaque jour. NE PAS appeler
  * avec toutes les tâches de la semaine : les jours se recouvriraient.

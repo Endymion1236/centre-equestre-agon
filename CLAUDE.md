@@ -127,6 +127,7 @@ responsabilité personnelle de Nicolas — inexacte.
 | Comptabilité de pilotage | `admin/comptabilite/` — `depenses` (doublons de relevé : garde-fou dans `api/admin/depenses`), `resultat` (CA caisse + CA repris de Celeris), `tresorerie` |
 | TVA | `lib/tva-a-payer.ts` (encart du trimestre, base factures), `lib/declaration-tva.ts` (CA3 case par case, bases encaissements **et** factures tant que le cabinet n'a pas tranché — audit C9), route `api/admin/tva/declaration`, écran `admin/comptabilite/PreparationDeclarationTva.tsx` |
 | Emails : remise | `lib/resend-webhook.ts` (signature Svix, lecture des événements), `lib/statut-email.ts`, route `api/webhooks/resend` (secret `RESEND_WEBHOOK_SECRET`) : statut de remise sur `emailsSent` et `payment-links`, `alerteEmail` sur la commande quand un email est rejeté |
+| Temps de travail salariés | `lib/temps-travail.ts` : de la première tâche à la dernière, **seules les tâches « pause » sont déduites** (un battement non saisi est travaillé, règle de Nicolas du 26/09/2026) ; battement de plus d'1 h sans pause signalé (fiche horaire, cartes du planning). Fiche : `plagesFicheHoraire`, le midi imprimé est la pause saisie |
 | SEPA | `admin/sepa/page.tsx`, échéances `echeances-sepa`, pré-notification `api/admin/sepa-prenotification` (mode `apercu`, à vérifier avant envoi : `components/admin/BandeauPrenotificationSepa.tsx`) |
 | Accès admin | `lib/admin-emails.ts` (repli par email ; l'autorité est le claim `admin`), `firestore.rules` garde sa propre copie de la liste |
 

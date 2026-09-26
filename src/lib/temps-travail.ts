@@ -1,27 +1,26 @@
 /**
  * Temps de travail d'une journée, à partir des tâches planifiées.
  *
- * La règle a changé le 19 août 2026. Elle comptait auparavant l'AMPLITUDE —
- * de la première tâche à la dernière — en n'en retirant que les pauses saisies
- * comme tâche « pause ». Une journée 9h–12h puis 14h–17h sans pause saisie
- * comptait donc 8 h au lieu de 6 : le trou du midi était payé. À l'échelle
- * d'un mois, cela faisait apparaître 33 h supplémentaires là où il n'y en
- * avait aucune, parce que le calcul dépendait d'une saisie qu'on oublie.
+ * Règle voulue par Nicolas (26 septembre 2026) : tant qu'un temps n'est pas
+ * saisi comme tâche « pause », il est travaillé. La journée compte donc de
+ * la première tâche à la dernière, pauses saisies déduites — un battement
+ * entre deux tâches, même long, est du travail (le salarié reste à
+ * disposition).
  *
- * La règle est maintenant celle du terrain :
+ * Contrepartie : une coupure du midi qu'on oublie de saisir est payée. D'où
+ * l'alerte : tout battement de plus d'une heure non couvert par une pause
+ * est signalé (fiche horaire et planning), pour ajouter la pause s'il
+ * n'était pas travaillé.
  *
- *   1. on additionne les périodes réellement travaillées ;
- *   2. une interruption de MOINS de 30 minutes reste comptée en travail —
- *      personne ne quitte son poste pour un quart d'heure ;
- *   3. les pauses explicitement saisies sont déduites, y compris courtes :
- *      les saisir est une déclaration, elle prime sur le seuil.
+ * Historique : du 19 août au 26 septembre 2026, un battement de 30 minutes
+ * ou plus n'était pas compté ; avant, déjà l'amplitude moins les pauses.
  *
  * Les chevauchements sont fusionnés : deux tâches qui se recouvrent ne
- * comptent pas double, ce qu'une simple somme des durées aurait fait.
+ * comptent pas double.
  */
 
-/** En deçà de ce battement, on considère que le salarié n'a pas quitté son poste. */
-export const SEUIL_BATTEMENT_MIN = 30;
+/** Au-delà de ce battement non couvert par une pause, on alerte. */
+export const SEUIL_ALERTE_BATTEMENT_MIN = 60;
 
 export interface TacheJour {
   heureDebut: string;
@@ -37,8 +36,10 @@ export interface JourneeCalculee {
   /** Début de la première tâche et fin de la dernière (minutes depuis minuit). */
   debutMin: number;
   finMin: number;
-  /** Périodes de présence après pontage des battements courts. */
+  /** Périodes de tâches (fusionnées). */
   segments: Intervalle[];
+  /** Battements de plus d'une heure comptés en travail, faute de pause saisie. */
+  battementsLongs: (Intervalle & { minutes: number })[];
   /** Minutes retirées au titre des pauses explicitement saisies. */
   pauseDeduiteMin: number;
   /** La plus longue interruption non travaillée — sert à couper matin / après-midi. */
@@ -73,7 +74,7 @@ function fusionner(list: Intervalle[]): Intervalle[] {
 
 export function calculerJournee(taches: TacheJour[]): JourneeCalculee {
   const vide: JourneeCalculee = {
-    travaille: false, debutMin: 0, finMin: 0, segments: [],
+    travaille: false, debutMin: 0, finMin: 0, segments: [], battementsLongs: [],
     pauseDeduiteMin: 0, coupure: null, pausesSaisies: [], dureeMin: 0,
   };
 
@@ -88,43 +89,34 @@ export function calculerJournee(taches: TacheJour[]): JourneeCalculee {
   const debutMin = travail[0].debut;
   const finMin = travail[travail.length - 1].fin;
 
-  // Pontage des battements courts : deux périodes séparées de moins du seuil
-  // n'en font qu'une. Au-delà, la coupure est une vraie coupure.
-  const segments: Intervalle[] = [];
-  for (const p of travail) {
-    const dernier = segments[segments.length - 1];
-    if (dernier && p.debut - dernier.fin < SEUIL_BATTEMENT_MIN) dernier.fin = p.fin;
-    else segments.push({ ...p });
-  }
-
-  // Pauses saisies : déduites de ce qui est compté comme présence.
-  const pauses = fusionner(taches.filter(t => t.categorie === "pause").map(enIntervalle));
-  let pauseDeduiteMin = 0;
-  for (const pause of pauses) {
-    for (const seg of segments) {
-      pauseDeduiteMin += Math.max(0, Math.min(pause.fin, seg.fin) - Math.max(pause.debut, seg.debut));
-    }
-  }
-
-  const presence = segments.reduce((s, seg) => s + (seg.fin - seg.debut), 0);
-
-  // Plus longue interruption entre deux segments : c'est elle qui sépare la
-  // matinée de l'après-midi sur la fiche imprimée.
-  let coupure: Intervalle | null = null;
-  for (let i = 1; i < segments.length; i++) {
-    const trou = { debut: segments[i - 1].fin, fin: segments[i].debut };
-    if (!coupure || trou.fin - trou.debut > coupure.fin - coupure.debut) coupure = trou;
-  }
-
-  const pausesSaisies = pauses
+  // Pauses saisies, ramenées à la journée de travail : seules déduites.
+  const pausesSaisies = fusionner(taches.filter(t => t.categorie === "pause").map(enIntervalle))
     .map((p) => ({ debut: Math.max(p.debut, debutMin), fin: Math.min(p.fin, finMin) }))
     .filter((p) => p.fin > p.debut);
+  const pauseDeduiteMin = pausesSaisies.reduce((s, p) => s + (p.fin - p.debut), 0);
+
+  // Battements entre deux tâches : comptés en travail. Plus longue
+  // interruption (coupure) et battements longs non couverts par une pause.
+  let coupure: Intervalle | null = null;
+  const battementsLongs: (Intervalle & { minutes: number })[] = [];
+  for (let i = 1; i < travail.length; i++) {
+    const trou = { debut: travail[i - 1].fin, fin: travail[i].debut };
+    if (!coupure || trou.fin - trou.debut > coupure.fin - coupure.debut) coupure = trou;
+    const couvert = pausesSaisies.reduce((s, p) => s + Math.max(0, Math.min(p.fin, trou.fin) - Math.max(p.debut, trou.debut)), 0);
+    const minutes = (trou.fin - trou.debut) - couvert;
+    if (minutes > SEUIL_ALERTE_BATTEMENT_MIN) battementsLongs.push({ ...trou, minutes });
+  }
 
   return {
     travaille: true,
-    debutMin, finMin, segments, pauseDeduiteMin, coupure, pausesSaisies,
-    dureeMin: Math.max(0, presence - pauseDeduiteMin),
+    debutMin, finMin, segments: travail, battementsLongs, pauseDeduiteMin, coupure, pausesSaisies,
+    dureeMin: Math.max(0, (finMin - debutMin) - pauseDeduiteMin),
   };
+}
+
+/** Raccourci : minutes travaillées d'une journée. */
+export function minutesTravaillees(taches: TacheJour[]): number {
+  return calculerJournee(taches).dureeMin;
 }
 
 /**
@@ -134,14 +126,15 @@ export function calculerJournee(taches: TacheJour[]): JourneeCalculee {
  * fiche coupait au plus long trou entre deux tâches, et un battement avant
  * ou après la pause (fin des soins à 11 h 45, pause 12 h–13 h, reprise à
  * 13 h 30) faisait imprimer 11 h 45 / 13 h 30 au lieu des heures de la pause.
- * Plusieurs pauses : la plus longue. Sans pause saisie, la plus longue
- * coupure. La durée travaillée ne change pas ; « pause » = tout le temps
- * non travaillé entre la première et la dernière tâche.
+ * Plusieurs pauses : la plus longue. Sans pause saisie, la journée est
+ * imprimée d'un bloc (le battement est travaillé). « pause » = le temps des
+ * pauses saisies.
  */
 export function plagesFicheHoraire(j: JourneeCalculee): { debut: string; fin: string; debutAprem: string; finAprem: string; pauseMin: number } {
   if (!j.travaille) return { debut: "", fin: "", debutAprem: "", finAprem: "", pauseMin: 0 };
   const pause = [...j.pausesSaisies].sort((a, b) => (b.fin - b.debut) - (a.fin - a.debut) || a.debut - b.debut)[0];
-  const midi = pause && pause.debut > j.debutMin && pause.fin < j.finMin ? pause : j.coupure;
+  // Sans pause saisie, la journée est travaillée d'un bloc : pas de coupure imprimée.
+  const midi = pause && pause.debut > j.debutMin && pause.fin < j.finMin ? pause : null;
   const pauseMin = Math.max(0, (j.finMin - j.debutMin) - j.dureeMin);
   if (!midi) return { debut: minutesEnHeure(j.debutMin), fin: minutesEnHeure(j.finMin), debutAprem: "", finAprem: "", pauseMin };
   return {
@@ -151,9 +144,4 @@ export function plagesFicheHoraire(j: JourneeCalculee): { debut: string; fin: st
     finAprem: minutesEnHeure(j.finMin),
     pauseMin,
   };
-}
-
-/** Raccourci : minutes travaillées d'une journée. */
-export function minutesTravaillees(taches: TacheJour[]): number {
-  return calculerJournee(taches).dureeMin;
 }

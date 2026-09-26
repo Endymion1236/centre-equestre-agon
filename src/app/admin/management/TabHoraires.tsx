@@ -64,6 +64,8 @@ type RowData = {
   isoWeek: string;
   absenceLabel?: string; // ex. "Congé payé" si une absence couvre ce jour
   absenceMin?: number;   // durée de l'absence (minutes)
+  /** Battements de plus d'1 h comptés en travail faute de pause saisie. */
+  battementsLongs?: { debut: number; fin: number; minutes: number }[];
 };
 /** Découpe pour les requêtes Firestore `in`, limitées à 10 valeurs. */
 function paquetsDe10<T>(arr: T[]): T[][] {
@@ -396,7 +398,7 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
 
       // Le midi imprimé est celui de la tâche « pause » saisie, sinon la plus
       // longue coupure entre deux tâches (lib/temps-travail, plagesFicheHoraire).
-      rows.push({ ...base, ...plagesFicheHoraire(j.calc), duree: j.duree });
+      rows.push({ ...base, ...plagesFicheHoraire(j.calc), duree: j.duree, battementsLongs: j.calc.battementsLongs });
     });
 
     // Heures par semaine, comptées sur les SEPT jours de la semaine — pas sur
@@ -572,6 +574,23 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
                 onDecloturer={decloturerSemaine}
                 onAjusterCompteur={ajusterCompteur}
               />
+              {/* Battements de plus d'une heure : comptés en travail tant qu'aucune
+                  pause n'est saisie. Alerte à l'écran seulement, pas à l'impression. */}
+              {(() => {
+                const alertes = rows.flatMap(r => (r.battementsLongs || []).map(b => ({ date: r.date, ...b })));
+                if (!alertes.length) return null;
+                return (
+                  <div className="print:hidden mb-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 font-body text-xs text-amber-900">
+                    <div className="font-semibold mb-1">⚠️ {alertes.length} battement{alertes.length > 1 ? "s" : ""} de plus d&apos;1 h compté{alertes.length > 1 ? "s" : ""} comme travail (aucune pause saisie)</div>
+                    <ul className="list-disc pl-5">
+                      {alertes.map((a, i) => (
+                        <li key={i}>{a.date.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "2-digit" })} : {minutesEnHeure(a.debut)}–{minutesEnHeure(a.fin)} ({fmtDuree(a.minutes)})</li>
+                      ))}
+                    </ul>
+                    <div className="mt-1">Si ce temps n&apos;était pas travaillé, ajoutez une tâche « Pause » dans le planning.</div>
+                  </div>
+                );
+              })()}
               {/* Header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10, paddingBottom: 8, borderBottom: "2px solid #1e3a5f" }}>
                 <div>

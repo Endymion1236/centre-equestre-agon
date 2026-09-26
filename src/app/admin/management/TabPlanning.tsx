@@ -16,6 +16,7 @@ import {
 } from "./planning-utils";
 import { TableauView, HoraireView, FicheView } from "./VuesPlanning";
 import { CATEGORIES, JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, formatDateCourte, fmtDuree, calcTempsTravailJour, bornesJournee } from "./types";
+import { calculerJournee, minutesEnHeure } from "@/lib/temps-travail";
 import { dateSaisieComplete } from "@/lib/date-saisie";
 import {
   emailLayout, emailButton, emailTitre, emailParagraphe as P, emailCouleurs as CE,
@@ -879,6 +880,22 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
     return map;
   }, [taches]);
 
+  /**
+   * Battements de plus d'une heure sans pause saisie : comptés en travail
+   * (lib/temps-travail). Signalés sur la carte du salarié, pour ajouter une
+   * pause si ce temps n'était pas travaillé.
+   */
+  const battementsParSalarie = useMemo(() => {
+    const map: Record<string, { jour: string; debut: number; fin: number; minutes: number }[]> = {};
+    for (const salId of [...new Set(taches.map(t => t.salarieId))]) {
+      for (const jour of JOURS) {
+        const j = calculerJournee(taches.filter(t => t.salarieId === salId && t.jour === jour));
+        for (const b of j.battementsLongs) (map[salId] ||= []).push({ jour, ...b });
+      }
+    }
+    return map;
+  }, [taches]);
+
   /** Heures du dimanche non affichées : à signaler plutôt qu'à taire. */
   const dimancheMasque = useMemo(() => {
     if (inclureDimanche) return {} as Record<string, number>;
@@ -1393,6 +1410,12 @@ Réponds de façon concise et pratique, en français.`,
                     <span className="font-display text-sm font-bold text-blue-800 truncate">{sal.nom}</span>
                   </div>
                   <div className="font-body text-lg font-bold text-blue-800">{fmtDuree(charge)}</div>
+                  {(battementsParSalarie[sal.id] || []).length > 0 && (
+                    <div className="font-body text-[10px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5"
+                      title={`Comptés comme travail, faute de pause saisie :\n${battementsParSalarie[sal.id].map(b => `${JOURS_LABELS[b.jour as keyof typeof JOURS_LABELS]} ${minutesEnHeure(b.debut)}–${minutesEnHeure(b.fin)} (${fmtDuree(b.minutes)})`).join("\n")}\nAjoutez une pause si ce temps n'était pas travaillé.`}>
+                      ⚠️ {battementsParSalarie[sal.id].length} battement{battementsParSalarie[sal.id].length > 1 ? "s" : ""} &gt; 1 h
+                    </div>
+                  )}
                   {total > 0 ? (
                     <>
                       <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
