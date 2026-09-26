@@ -380,7 +380,8 @@ export default function ModaleEncaisser({
 
         toast(
           `✅ ${nbEch} échéance${nbEch > 1 ? "s" : ""} SEPA créée${nbEch > 1 ? "s" : ""} pour ${p.familyName} (${montant.toFixed(2)}€)`
-          + (prevenue ? " — famille prévenue par email" : " — ⚠️ email de pré-notification non envoyé"),
+          + (prevenue ? " — famille prévenue par email" : " — ⚠️ email de pré-notification non envoyé")
+          + ". La commande sort des Impayés : échéancier dans Prélèvements SEPA › Échéancier.",
           prevenue ? "success" : "warning",
         );
         onClose();

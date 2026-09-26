@@ -154,6 +154,18 @@ export default function SepaPage() {
 
   useEffect(() => { fetchAll(); }, []);
 
+  // Arrivée depuis les Impayés d'une famille (« Voir l'échéancier ») :
+  // onglet Échéancier, recherche sur la famille.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const t = params.get("tab");
+      if (t === "mandats" || t === "echeancier" || t === "remises") setTab(t);
+      const q = params.get("q");
+      if (q) setSearch(q);
+    } catch { /* URL illisible : écran par défaut */ }
+  }, []);
+
   /**
    * Brouillon venu de la Boîte email (lecture assistée d'un RIB) : le
    * formulaire s'ouvre pré-rempli, l'admin relit et valide. Le brouillon

@@ -12,6 +12,7 @@ import { paymentModes } from "./types";
 import { verrouCommande } from "./commande-verrou";
 import { estEcheance } from "./echeances-utils";
 import { NoteField } from "./NoteField";
+import { BandeauPrelevementsFamille } from "./BandeauPrelevementsFamille";
 import { authFetch } from "@/lib/auth-fetch";
 import { useConfirm } from "@/components/ui/Confirm";
 import { estCompteProfessionnel } from "@/lib/facturx";
@@ -284,6 +285,9 @@ export function TabImpayes({
             <X size={13}/> Tous les impayés
           </button>
         </Card>
+      )}
+      {familyFilter && (
+        <BandeauPrelevementsFamille familyId={familyFilter} familyName={familyFilterLabel} payments={payments} />
       )}
 
       <div className="relative mb-3">
