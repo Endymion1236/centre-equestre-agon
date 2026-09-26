@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight, Printer, Plus, Trash2, Calendar, Wallet } fr
 import type { TachePlanifiee, Salarie, JourSemaine, Absence, BilanHebdo, TypeAbsence } from "./types";
 import { JOURS, JOURS_LABELS, getLundideSemaine, getISOWeek, fmtDuree, LIBELLE_ABSENCE } from "./types";
 import { MOIS_LISSES, MOIS_DECOMPTE_LISSAGE, soldeLissage, etatSemaine, lundiDansPeriodeLissee, type SoldeLissage } from "@/lib/lissage-ete";
-import { calculerJournee, minutesEnHeure } from "@/lib/temps-travail";
+import { calculerJournee, minutesEnHeure, plagesFicheHoraire } from "@/lib/temps-travail";
 
 interface Props {
   semaine: string;
@@ -394,30 +394,9 @@ export default function TabHoraires({ semaine, setSemaine, taches, salaries }: P
       }
       totalMois += j.duree;
 
-      // La coupure la plus longue sépare matin et après-midi sur la fiche
-      // imprimée — qu'elle ait été saisie en pause ou qu'elle soit un simple
-      // trou entre deux tâches. Avant, seule une pause saisie coupait la
-      // journée : une vraie coupure du midi passait pour du travail continu.
-      if (j.calc.coupure) {
-        rows.push({
-          ...base,
-          debut: minutesEnHeure(j.calc.debutMin),
-          fin: minutesEnHeure(j.calc.coupure.debut),
-          debutAprem: minutesEnHeure(j.calc.coupure.fin),
-          finAprem: minutesEnHeure(j.calc.finMin),
-          pauseMin: (j.calc.coupure.fin - j.calc.coupure.debut) + j.calc.pauseDeduiteMin,
-          duree: j.duree,
-        });
-      } else {
-        rows.push({
-          ...base,
-          debut: minutesEnHeure(j.calc.debutMin),
-          fin: minutesEnHeure(j.calc.finMin),
-          debutAprem: "", finAprem: "",
-          pauseMin: j.calc.pauseDeduiteMin,
-          duree: j.duree,
-        });
-      }
+      // Le midi imprimé est celui de la tâche « pause » saisie, sinon la plus
+      // longue coupure entre deux tâches (lib/temps-travail, plagesFicheHoraire).
+      rows.push({ ...base, ...plagesFicheHoraire(j.calc), duree: j.duree });
     });
 
     // Heures par semaine, comptées sur les SEPT jours de la semaine — pas sur
