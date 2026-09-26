@@ -264,6 +264,33 @@ function argentRecu(commandes: any[]): {
   return { etat, regle, total, reste };
 }
 
+/**
+ * Les commandes qui couvrent une inscription : celles du forfait annuel
+ * (toutes ses échéances) ou celles qui portent la séance. Les cartes de
+ * séances ne sont pas concernées (la séance est décomptée d'une carte).
+ * La même sélection que la pastille de couleur du planning.
+ */
+export function commandesDeLInscription(
+  enrolled: { childId: string; familyId?: string; stageKey?: string; paymentSource?: string; cardId?: string },
+  payments: any[],
+  creneau: { id?: string; activityTitle: string },
+): any[] {
+  const vivantes = payments.filter((p: any) => p.status !== "cancelled");
+  if (enrolled.paymentSource === "card" || enrolled.paymentSource === "celeris") return [];
+  if (enrolled.paymentSource === "forfait") {
+    return vivantes.filter((p: any) =>
+      p.familyId === enrolled.familyId &&
+      (p.items || []).some((i: any) => i.childId === enrolled.childId) &&
+      (!!p.forfaitRef || (p.items || []).some((i: any) =>
+        /forfait|adh[ée]sion|[ée]ch[ée]ance/i.test(String(i.activityTitle || "")))),
+    );
+  }
+  return vivantes.filter((p: any) =>
+    p.familyId === enrolled.familyId &&
+    (p.items || []).some((i: any) => itemMatchesCreneau(i, enrolled, creneau)),
+  );
+}
+
 export function statutPaiementCavalier(
   enrolled: { childId: string; familyId?: string; stageKey?: string; paymentSource?: string; cardId?: string },
   payments: any[],
@@ -307,12 +334,7 @@ export function statutPaiementCavalier(
   // qui décide, échéance par échéance — une seule encaissée sur dix, ce n'est
   // pas « réglé ».
   if (enrolled.paymentSource === "forfait") {
-    const echeances = vivantes.filter((p: any) =>
-      p.familyId === enrolled.familyId &&
-      (p.items || []).some((i: any) => i.childId === enrolled.childId) &&
-      (!!p.forfaitRef || (p.items || []).some((i: any) =>
-        /forfait|adh[ée]sion|[ée]ch[ée]ance/i.test(String(i.activityTitle || "")))),
-    );
+    const echeances = commandesDeLInscription(enrolled, payments, creneau);
 
     if (echeances.length === 0) {
       return habiller("impaye", "forfait à régler", "Forfait annuel enregistré, mais aucune commande retrouvée.");
@@ -363,10 +385,7 @@ export function statutPaiementCavalier(
   }
 
   // ── Commandes de la famille qui couvrent cette inscription ──────────────
-  const commandes = vivantes.filter((p: any) =>
-    p.familyId === enrolled.familyId &&
-    (p.items || []).some((i: any) => itemMatchesCreneau(i, enrolled, creneau)),
-  );
+  const commandes = commandesDeLInscription(enrolled, payments, creneau);
 
   if (commandes.length === 0) {
     return habiller("impaye", "non réglé", "Aucune commande enregistrée pour cette inscription.");

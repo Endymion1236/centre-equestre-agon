@@ -1,4 +1,5 @@
 import { prelevementPlanifie, resteHorsSepa } from "@/lib/sepa-remise";
+import { estEcheance } from "./echeances-utils";
 import { estBalade } from "@/lib/cgv-clauses";
 import { estCommandeInscriptionAnnuelle } from "@/lib/inscription-annuelle-paiement";
 export type ImpayeTypeFilter = "all" | "invoice" | "echeance";
@@ -114,7 +115,7 @@ export function listerImpayes(payments: any[], today: string): any[] {
     // (cf. prelevementPlanifie).
     if (prelevementPlanifie(payment) && typeof payment?.sepaRestant !== "number") return false;
     if (payment?.paymentMode === "cheque_differe") return false;
-    if (Number(payment?.echeancesTotal || 0) > 1) {
+    if (estEcheance(payment)) {
       return Boolean(payment?.echeanceDate && payment.echeanceDate < today);
     }
     return true;
@@ -128,7 +129,7 @@ export function filtrerImpayes(unpaid: any[], filters: ImpayeFilters): any[] {
   return unpaid.filter((payment) => {
     if (filters.familyFilter && payment.familyId !== filters.familyFilter) return false;
 
-    const isEcheance = Number(payment?.echeancesTotal || 0) > 1;
+    const isEcheance = estEcheance(payment);
     if (typeFilter === "invoice" && isEcheance) return false;
     if (typeFilter === "echeance" && !isEcheance) return false;
 
@@ -152,8 +153,8 @@ export function calculerResumeImpayes(unpaid: any[], filtered = unpaid) {
   return {
     totalDue: unpaid.reduce((total, payment) => total + duMaintenant(payment), 0),
     totalFiltre: filtered.reduce((total, payment) => total + duMaintenant(payment), 0),
-    nbInvoice: unpaid.filter((payment) => Number(payment?.echeancesTotal || 0) <= 1).length,
-    nbEcheance: unpaid.filter((payment) => Number(payment?.echeancesTotal || 0) > 1).length,
+    nbInvoice: unpaid.filter((payment) => !estEcheance(payment)).length,
+    nbEcheance: unpaid.filter((payment) => estEcheance(payment)).length,
   };
 }
 
@@ -215,7 +216,7 @@ export function preparerMultiEncaissements(unpaid: any[]): MultiEncaissementFami
     const reglable =
       payment?.paymentMode !== "cheque_differe" &&
       !prelevementPlanifie(payment) &&
-      Number(payment?.echeancesTotal || 0) <= 1 &&
+      !estEcheance(payment) &&
       soldeRestant(payment) > 0.005;
     if (!reglable) continue;
 

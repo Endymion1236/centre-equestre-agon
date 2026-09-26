@@ -91,7 +91,12 @@ export function lignesDuResteDu(restantes: any[], resteDuCentimes: number): Item
   return [...fusion.values()];
 }
 
-export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier): PlanRefaireEcheancier {
+/**
+ * `surcharge` : corriger aussi le MONTANT (panneau d'inscription, « 💶 Montant »).
+ * Les lignes corrigées remplacent celles des commandes, et le reste dû devient
+ * leur total moins ce qui est déjà payé.
+ */
+export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier, surcharge?: { lignes: ItemEcheance[]; totalTTC: number }): PlanRefaireEcheancier {
   const vide = { conservees: 0, resteDu: 0, miseAJour: [], creations: [], annulations: [], lienCbDejaOuvert: false, apercu: [] };
   const refus = (raison: string): PlanRefaireEcheancier => ({ possible: false, raison, ...vide });
   const nombre = Math.floor(Number(options.nombre) || 0);
@@ -111,12 +116,16 @@ export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier
   const entamee = restantes.find((e) => (Number(e.paidAmount) || 0) > 0);
   if (entamee) return refus(`L'échéance ${entamee.echeance} est déjà réglée en partie : encaissez-en le solde d'abord.`);
 
-  const resteDuCentimes = restantes.reduce((s, e) => s + centimes(e.totalTTC), 0);
+  const dejaPaye = payees.reduce((s, e) => s + centimes(e.totalTTC), 0);
+  const resteDuCentimes = surcharge
+    ? centimes(surcharge.totalTTC) - dejaPaye
+    : restantes.reduce((s, e) => s + centimes(e.totalTTC), 0);
+  if (surcharge && resteDuCentimes < 0) return refus(`Le nouveau total (${(centimes(surcharge.totalTTC) / 100).toFixed(2)} €) est inférieur à ce qui est déjà payé (${(dejaPaye / 100).toFixed(2)} €) : le trop-perçu passe par un avoir.`);
   if (resteDuCentimes <= 0) return refus("Rien à redécouper : le reste dû est nul.");
 
   const nouvelles = construireEcheancier({
     totalTTC: resteDuCentimes / 100,
-    items: lignesDuResteDu(restantes, resteDuCentimes),
+    items: surcharge ? surcharge.lignes : lignesDuResteDu(restantes, resteDuCentimes),
     nombre,
     dateDepart: options.dateDepart,
   });
@@ -132,6 +141,8 @@ export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier
     status: "pending",
     paidAmount: 0,
     forfaitRef: premiere.forfaitRef || "",
+    // Nouvel échéancier : la trace d'un SEPA annulé ne vaut plus.
+    echeancierAnnuleLe: null,
     // Le rappel « lien CB en fin de mois » n'a plus de sens hors carte.
     [CHAMP_LIEN_CB]: options.mode === "cb_terminal" ? restantes.some((e) => e[CHAMP_LIEN_CB] === true) : false,
   });

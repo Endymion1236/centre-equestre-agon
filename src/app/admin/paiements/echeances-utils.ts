@@ -40,6 +40,19 @@ export function estEcheanceSepa(payment: any): boolean {
   return payment?.paymentMode === "prelevement_sepa" || payment?.status === "sepa_scheduled";
 }
 
+/**
+ * La commande fait-elle partie d'un paiement en plusieurs fois ?
+ *
+ * Une commande de forfait planifiée en SEPA porte « échéance 1/10 », puis,
+ * son échéancier annulé (mauvais montant), gardait ces champs : Impayés la
+ * cachait jusqu'au lendemain et l'onglet Échéances la montrait comme une
+ * échéance de 10 (septembre 2026). Annulée, c'est une commande ordinaire.
+ */
+export function estEcheance(payment: any): boolean {
+  if (Number(payment?.echeancesTotal || 0) <= 1) return false;
+  return !(payment?.echeancierAnnuleLe && !estEcheanceSepa(payment));
+}
+
 export function computeDefaultDate(echeanceDate?: string, today = todayIso()): string {
   if (!echeanceDate) return today;
   return echeanceDate < today ? echeanceDate : today;
@@ -56,7 +69,7 @@ export function preparerEcheanciers(
   const threeMonthsEnd = dateIsoLocale(new Date(year, month - 1 + 3, day, 12, 0, 0));
 
   const echeances = payments.filter((payment) =>
-    Number(payment?.echeancesTotal || 0) > 1 &&
+    estEcheance(payment) &&
     !estEcheanceSepa(payment) &&
     payment?.status !== "cancelled",
   );

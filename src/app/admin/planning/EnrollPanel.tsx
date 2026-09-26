@@ -1,4 +1,5 @@
 "use client";
+import ModaleMontantInscription from "./ModaleMontantInscription";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { ACOMPTE_PAR_ENFANT, montantsAcompteStage, acompteApplicable } from "@/lib/panier-reservation";
 import { collection, getDocs, getDoc, updateDoc, doc, query, where } from "firebase/firestore";
@@ -104,6 +105,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   // Déplacer un cavalier d'un stage à un autre sans le désinscrire : la
   // commande et l'acompte suivent (cf. lib/changement-groupe).
   const [changerGroupePour, setChangerGroupePour] = useState<{ childId: string; childName: string } | null>(null);
+  // Corriger le montant de la commande d'un inscrit (ModaleMontantInscription).
+  const [montantPour, setMontantPour] = useState<any | null>(null);
   const convertirPreinscription = (e: any) => actions.convertirPreinscription(ctxActions(), rappelsActions(), e);
 
   /**
@@ -1031,6 +1034,13 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       className="flex items-center gap-1 font-body text-xs font-semibold text-blue-500 hover:text-blue-700 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-blue-50 flex-shrink-0">
                       <span>🔀</span>
                       <span className="hidden sm:inline">Changer de groupe</span>
+                    </button>
+                  )}
+                  {isAdmin && !(e as any).preinscription && (e as any).paymentSource !== "card" && (e as any).paymentSource !== "celeris" && (
+                    <button type="button" onClick={() => setMontantPour(e)}
+                      title={`Corriger le montant de la commande de ${e.childName} (prélèvements et échéances recalculés)`}
+                      className="flex items-center gap-1 font-body text-xs text-amber-600 hover:text-amber-800 bg-transparent border-none cursor-pointer px-2 py-1 rounded hover:bg-amber-50 flex-shrink-0">
+                      <span>💶</span>
                     </button>
                   )}
                   <button type="button" onClick={() => handleUnenroll(e.childId)} disabled={unenrolling===e.childId}
@@ -2318,6 +2328,18 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
           );
         })()}
       </div>
+
+      {montantPour && (
+        <ModaleMontantInscription
+          inscrit={montantPour}
+          payments={payments}
+          creneau={creneau}
+          toast={panelToast}
+          onClose={() => setMontantPour(null)}
+          onDone={async () => { await onRefresh?.(); }}
+          onPrenotification={(paymentId, familyName) => setPrenotificationEnAttente({ paymentId, familyName })}
+        />
+      )}
 
       {changerGroupePour && (
         <ModaleChangerGroupe

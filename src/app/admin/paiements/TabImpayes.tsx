@@ -9,6 +9,7 @@ import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
 import { emailTemplates } from "@/lib/email-templates";
 import { paymentModes } from "./types";
 import { verrouCommande } from "./commande-verrou";
+import { estEcheance } from "./echeances-utils";
 import { NoteField } from "./NoteField";
 import { authFetch } from "@/lib/auth-fetch";
 import { useConfirm } from "@/components/ui/Confirm";
@@ -369,7 +370,7 @@ export function TabImpayes({
                 const due = duMaintenant(p);
                 const daysLate = Math.floor((Date.now() - date.getTime()) / 86400000);
                 const isOpen = expanded.has(p.id);
-                const isEcheance = Number(p.echeancesTotal || 0) > 1;
+                const isEcheance = estEcheance(p);
                 const echeanceDateStr = p.echeanceDate;
                 const echeanceDaysLate = echeanceDateStr
                   ? Math.floor((Date.now() - new Date(echeanceDateStr).getTime()) / 86400000)

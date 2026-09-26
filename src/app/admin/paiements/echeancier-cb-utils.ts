@@ -21,7 +21,7 @@
  */
 
 import { construireEcheancier } from "@/lib/echeancier-paiement";
-import { CHAMP_LIEN_CB } from "./echeances-utils";
+import { CHAMP_LIEN_CB, estEcheance } from "./echeances-utils";
 
 export interface OptionsEcheancierCb {
   nombre: number;
@@ -57,7 +57,7 @@ export function preparerEcheancierCb(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(options.dateDepart || "")) return refus("Date de la première échéance invalide.");
   if (payment.invoiceNumber) return refus(`Facture ${payment.invoiceNumber} déjà émise : elle ne se découpe plus.`);
   if ((Number(payment.paidAmount) || 0) > 0) return refus("Un règlement a déjà été reçu sur cette commande : elle ne se découpe plus. Encaissez le reste en une fois, ou passez par un avoir.");
-  if (Number(payment.echeancesTotal || 0) > 1) return refus("Cette commande est déjà une échéance d'un paiement en plusieurs fois.");
+  if (estEcheance(payment)) return refus("Cette commande est déjà une échéance d'un paiement en plusieurs fois.");
   if (payment.status === "cancelled") return refus("Commande annulée.");
   if (payment.status === "sepa_scheduled" || payment.paymentMode === "prelevement_sepa") return refus("Commande planifiée en prélèvement SEPA : annulez d'abord l'échéancier SEPA.");
   const total = Math.round((Number(payment.totalTTC) || 0) * 100) / 100;
@@ -80,6 +80,8 @@ export function preparerEcheancierCb(
     paidAmount: 0,
     sourcePaymentId: paymentId,
     forfaitRef,
+    // Nouvel échéancier : la trace d'un SEPA annulé ne vaut plus.
+    echeancierAnnuleLe: null,
     [CHAMP_LIEN_CB]: options.lienCbMensuel === true,
   };
   const { id: _id, ...sansId } = payment;

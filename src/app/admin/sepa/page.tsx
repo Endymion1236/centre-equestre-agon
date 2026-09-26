@@ -788,6 +788,12 @@ export default function SepaPage() {
         paymentRef: plan.commande.paymentRef,
         ...(plan.commande.paymentMode !== undefined ? { paymentMode: plan.commande.paymentMode } : {}),
         echeancierAnnuleLe: new Date().toISOString(),
+        // Plus d'échéancier : la commande redevient ordinaire (plus de « 1/10 »,
+        // plus de pré-notification à vérifier pour un prélèvement qui n'aura pas lieu).
+        echeance: deleteField(),
+        echeancesTotal: deleteField(),
+        echeanceDate: deleteField(),
+        prenotificationSepa: deleteField(),
         updatedAt: serverTimestamp(),
       });
       toast(`Échéancier annulé : ${plan.aRetirer.length} échéance(s) supprimée(s). La commande est de retour dans les impayés.`, "success");
@@ -1257,7 +1263,7 @@ export default function SepaPage() {
 
               {/* Pré-notifications SEPA à vérifier : forfaits annuels dont
                   l'email d'échéancier n'a pas encore été confirmé. */}
-              {payments.filter((p: any) => p.prenotificationSepa === "a_verifier").map((p: any) => (
+              {payments.filter((p: any) => p.prenotificationSepa === "a_verifier" && !(p.echeancierAnnuleLe && p.status !== "sepa_scheduled")).map((p: any) => (
                 <BandeauPrenotificationSepa key={p.id} paymentId={p.id} familyName={p.familyName} toast={toast} onEnvoye={fetchAll} />
               ))}
 

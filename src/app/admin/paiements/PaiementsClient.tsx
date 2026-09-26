@@ -22,6 +22,7 @@ import { TabEncaisser } from "./TabEncaisser";
 import { TabJournal } from "./TabJournal";
 import { TabHistorique } from "./TabHistorique";
 import { TabEcheances } from "./TabEcheances";
+import { estEcheance } from "./echeances-utils";
 import { TabImpayes } from "./TabImpayes";
 import { TabOfferts } from "./TabOfferts";
 import { TabDeclarations } from "./TabDeclarations";
@@ -1044,7 +1045,7 @@ export default function PaiementsPage() {
                 if (p.status === "cancelled" || p.status === "paid") return false;
                 if ((p.paidAmount || 0) >= (p.totalTTC || 0)) return false;
                 if (estPrelevementSepa(p)) return false; // prélevé, pas à relancer
-                if ((p as any).echeancesTotal > 1) return (p as any).echeanceDate && (p as any).echeanceDate < todayBadge;
+                if (estEcheance(p)) return (p as any).echeanceDate && (p as any).echeanceDate < todayBadge;
                 return true;
               }).length;
               return count > 0 ? <span className="bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center">{count}</span> : null;
