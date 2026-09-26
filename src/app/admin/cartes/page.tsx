@@ -2,9 +2,12 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { reglementCarte } from "@/lib/carte-reglement";
+import { annulerDebitCarte, debitAnnulable, seancesUtilisees } from "@/lib/carte-annulation-debit";
+import { useConfirm } from "@/components/ui/Confirm";
+import { useToast } from "@/components/ui/Toast";
 import { Card, Badge } from "@/components/ui";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { authFetch } from "@/lib/auth-fetch";
@@ -25,7 +28,7 @@ interface Card10 {
   tvaTaux: number;
   priceTTC: number;
   status: string;
-  history: { date: string; activityTitle: string; deductedAt: string }[];
+  history: { date: string; activityTitle: string; deductedAt?: string; [cle: string]: any }[];
   createdAt: any;
 }
 
@@ -233,6 +236,42 @@ export default function CartesPage() {
     fetchData();
   };
 
+  // Débit posé par erreur (créneau fantôme clôturé au montoir, mauvaise
+  // carte…) : la séance est rendue, le débit reste visible, barré.
+  const confirmer = useConfirm();
+  const { toast } = useToast();
+  const [annulant, setAnnulant] = useState<string | null>(null);
+  const handleAnnulerDebit = async (card: Card10, index: number) => {
+    const ligne: any = (card.history || [])[index];
+    if (!debitAnnulable(ligne)) return;
+    const quand = ligne.creneauDate || ligne.date;
+    const ok = await confirmer({
+      titre: "Rendre cette séance à la carte ?",
+      details: [
+        `${ligne.activityTitle || "Séance"}${quand ? ` du ${new Date(quand).toLocaleDateString("fr-FR")}` : ""}${ligne.childName ? ` (${ligne.childName})` : ""}`,
+        "Le débit reste dans l'historique, barré, et la carte regagne une séance.",
+      ],
+      libelleConfirmer: "Recréditer +1",
+    });
+    if (!ok) return;
+    setAnnulant(`${card.id}-${index}`);
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "cartes", card.id);
+        const snap = await tx.get(ref);
+        if (!snap.exists()) throw new Error("Carte introuvable");
+        const r = annulerDebitCarte(snap.data() as any, index, { motif: "débit par erreur", maintenant: new Date().toISOString() });
+        if (!r.ok) throw new Error(r.raison);
+        tx.update(ref, { ...r.maj, updatedAt: serverTimestamp() });
+      });
+      toast("Séance rendue à la carte (+1).", "success");
+      fetchData();
+    } catch (e: any) {
+      toast(e?.message || "Impossible d'annuler ce débit", "error");
+    }
+    setAnnulant(null);
+  };
+
   const inp = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
 
   return (
@@ -354,19 +393,19 @@ export default function CartesPage() {
                     {/* Bouton détail + historique replié */}
                     <button type="button" onClick={() => setOpenCardId(openCardId === card.id ? null : card.id)}
                       className="w-full flex items-center justify-between mt-2 pt-2 border-t border-gray-100 font-body text-xs text-slate-500 hover:text-blue-500 bg-transparent border-none cursor-pointer px-0 pb-0">
-                      <span>{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length} séance{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""} utilisée{(card.history || []).filter((h:any) => !h.credit && h.presence !== "absent").length > 1 ? "s" : ""}</span>
+                      <span>{seancesUtilisees(card.history)} séance{seancesUtilisees(card.history) > 1 ? "s" : ""} utilisée{seancesUtilisees(card.history) > 1 ? "s" : ""}</span>
                       <span>{openCardId === card.id ? "▲ Masquer" : "▼ Voir le détail"}</span>
                     </button>
 
                     {/* Historique détaillé — visible uniquement si ouvert */}
                     {openCardId === card.id && (card.history || []).length > 0 && (
                       <div className="mt-2 flex flex-col gap-1.5">
-                        {[...(card.history as any[])].reverse().map((h: any, i: number) => (
-                          <div key={i} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-body ${h.credit ? "bg-green-50" : h.presence === "absent" ? "bg-red-50 opacity-60" : "bg-sand"}`}>
+                        {[...(card.history as any[])].map((h: any, index: number) => ({ h, index })).reverse().map(({ h, index }) => (
+                          <div key={index} className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-body ${h.credit ? "bg-green-50" : h.presence === "absent" || h.annule ? "bg-red-50 opacity-60" : "bg-sand"}`}>
                             <div className="flex items-center gap-2 min-w-0">
                               <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${h.credit ? "bg-green-400" : h.presence === "absent" ? "bg-red-400" : "bg-gold-400"}`} />
                               <div className="min-w-0">
-                                <div className="text-blue-800 font-semibold truncate">{h.activityTitle || "Séance"}</div>
+                                <div className={`text-blue-800 font-semibold truncate ${h.annule ? "line-through" : ""}`}>{h.activityTitle || "Séance"}</div>
                                 <div className="text-slate-500 text-[10px]">
                                   {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
                                   {h.horseName ? ` · ${h.horseName}` : ""}
@@ -375,8 +414,15 @@ export default function CartesPage() {
                               </div>
                             </div>
                             <span className={`font-semibold flex-shrink-0 ml-2 ${h.credit ? "text-green-500" : h.presence === "absent" ? "text-red-400" : "text-gold-500"}`}>
-                              {h.credit ? "+1" : h.presence === "absent" ? "Absent" : "Vérifié"}
+                              {h.credit ? "+1" : h.presence === "absent" ? "Absent" : h.annule ? "Annulé" : "Vérifié"}
                             </span>
+                            {debitAnnulable(h) && (
+                              <button type="button" onClick={() => handleAnnulerDebit(card, index)} disabled={annulant !== null}
+                                title="Débit par erreur : rendre la séance à la carte"
+                                className="ml-2 flex-shrink-0 px-2 py-0.5 rounded-md font-body text-[10px] font-semibold text-red-600 bg-white border border-red-200 cursor-pointer hover:bg-red-50 disabled:opacity-50">
+                                {annulant === `${card.id}-${index}` ? "…" : "Annuler"}
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
