@@ -369,10 +369,18 @@ export function statutPaiementCavalier(
       return habiller("regle", sepa ? "forfait (SEPA)" : "forfait", `Forfait annuel réglé — ${eur(regle || total)}.`);
     }
     if (regle > 0.009) {
+      // Échéancier SEPA posé depuis la modale Encaisser (Impayés) : la
+      // commande ne porte pas le nombre d'échéances, seul le module SEPA le
+      // connaît. Sans ce cas, le planning affichait « forfait partiellement
+      // réglé » à côté de cavaliers marqués « forfait 1/10 SEPA », alors que
+      // tous étaient en prélèvement (septembre 2026).
+      const libelle = nbEcheances > 1
+        ? `forfait ${payees}/${nbEcheances}${sepa ? " SEPA" : ""}`
+        : sepa ? "forfait SEPA en cours" : "forfait partiellement réglé";
       return habiller(
         "partiel",
-        nbEcheances > 1 ? `forfait ${payees}/${nbEcheances}${sepa ? " SEPA" : ""}` : "forfait partiellement réglé",
-        `${eur(regle)} reçus sur ${eur(total)} — reste ${eur(reste)} sur le forfait.${mention}`,
+        libelle,
+        `${eur(regle)} reçus sur ${eur(total)} — reste ${eur(reste)} sur le forfait${sepa ? ", prélevé selon l'échéancier" : ""}.${mention}`,
       );
     }
     return habiller(

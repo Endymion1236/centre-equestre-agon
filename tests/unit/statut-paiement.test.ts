@@ -144,6 +144,14 @@ console.log("\n✓ Un forfait annuel se juge échéance par échéance :");
   assert("le libellé compte les prélèvements", troisPreleves.label === "forfait 3/10 SEPA", troisPreleves.label);
   assert("le survol renvoie au module SEPA", troisPreleves.detail.includes("Prélèvements SEPA"), troisPreleves.detail);
 
+  // Échéancier SEPA posé depuis la modale Encaisser : la commande ne porte
+  // pas `echeancesTotal`. Le libellé doit quand même dire « SEPA ».
+  const sansNombre = statutPaiementCavalier(inscritForfait, [{ ...sepa(300, "sepa_scheduled")[0], echeancesTotal: undefined }], CRENEAU);
+  assert("SEPA posé depuis Encaisser : orange", sansNombre.etat === "partiel", sansNombre.etat);
+  assert("SEPA posé depuis Encaisser : le libellé dit SEPA", sansNombre.label === "forfait SEPA en cours", sansNombre.label);
+  const horsSepa = statutPaiementCavalier(inscritForfait, [{ ...sepa(300, "partial")[0], echeancesTotal: undefined, paymentMode: "cheque" }], CRENEAU);
+  assert("hors SEPA, le libellé reste « partiellement réglé »", horsSepa.label === "forfait partiellement réglé", horsSepa.label);
+
   const tousPreleves = statutPaiementCavalier(inscritForfait, sepa(680, "paid"), CRENEAU);
   assert("année soldée : vert", tousPreleves.etat === "regle", tousPreleves.etat);
 
