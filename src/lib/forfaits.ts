@@ -164,3 +164,19 @@ export function montantRegleForfait(paiements: any[], forfait: ForfaitRegle): nu
     }, 0);
   return Math.round(total * 100) / 100;
 }
+
+/**
+ * Prix du forfait d'après ses commandes : la part de ce cavalier dans chaque
+ * commande vivante du forfait (toutes échéances, licence et adhésion
+ * comprises, remises déduites). `null` si aucune commande n'est retrouvée.
+ *
+ * La fiche garde le prix de l'inscription ; corrigé ensuite sur la commande
+ * (699 € ramenés à 550 €, septembre 2026), il n'y était pas reporté.
+ */
+export function prixForfaitDepuisCommandes(paiements: any[], forfait: ForfaitRegle): number | null {
+  const commandes = (paiements || []).filter((p) => commandeDuForfait(p, forfait));
+  if (commandes.length === 0) return null;
+  const total = commandes.reduce((s: number, p: any) =>
+    s + (forfait.childId ? partEnfant(p, forfait.childId) : Number(p.totalTTC) || 0), 0);
+  return Math.round(total * 100) / 100;
+}

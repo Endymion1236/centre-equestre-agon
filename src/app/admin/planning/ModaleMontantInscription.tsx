@@ -4,6 +4,7 @@ import { collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, wh
 import { db } from "@/lib/firebase";
 import { Loader2, X } from "lucide-react";
 import { commandesDeLInscription } from "./types";
+import { forfaitsDesCommandes } from "./forfait-fiche-utils";
 import { analyserMontantInscription, planifierMontantInscription, type LigneMontant } from "./montant-inscription-utils";
 
 /**
@@ -59,6 +60,13 @@ export default function ModaleMontantInscription({ inscrit, payments, creneau, t
       for (const m of plan.miseAJour) await updateDoc(doc(db, "payments", m.id), { ...m.data, updatedAt: serverTimestamp() });
       for (const a of plan.annulations) await updateDoc(doc(db, "payments", a.id), { ...a.data, cancelledAt: serverTimestamp(), updatedAt: serverTimestamp() });
       for (const pr of plan.prelevements) await updateDoc(doc(db, "echeances-sepa", pr.id), { montant: pr.montant, updatedAt: serverTimestamp() });
+      // La fiche forfait (écran Forfaits) suit le nouveau prix : elle restait
+      // au montant d'origine (699 € affichés pour une commande à 550 €).
+      if (inscrit.childId) {
+        const fiches = await getDocs(query(collection(db, "forfaits"), where("childId", "==", inscrit.childId)));
+        const ids = forfaitsDesCommandes(fiches.docs.map((d) => ({ id: d.id, ...d.data() })), commandes, inscrit.childId);
+        for (const id of ids) await updateDoc(doc(db, "forfaits", id), { forfaitPriceTTC: plan.nouveauTotal, updatedAt: serverTimestamp() });
+      }
       toast(`Montant corrigé : ${eur(analyse!.total)} → ${eur(plan.nouveauTotal)}${plan.prelevements.length ? `, ${plan.prelevements.length} prélèvements recalculés` : ""}.`, "success", 6000);
       if (plan.prenotificationARevoir && premiere) onPrenotification?.(premiere.id, premiere.familyName || inscrit.familyName || "");
       await onDone();

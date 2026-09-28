@@ -35,6 +35,7 @@ import { estSemaineAttendue } from "@/lib/rythme";
 import { ACOMPTE_PAR_ENFANT } from "@/lib/panier-reservation";
 import { fmtDate, sameStage, type Creneau } from "./types";
 import { lignesInscriptionAnnuelle } from "./inscription-annuelle-lignes";
+import { forfaitDejaActif } from "./forfait-fiche-utils";
 import { programmerEnvoiConfirmation } from "./minuteries-confirmation";
 import { verrouCommande } from "@/app/admin/paiements/commande-verrou";
 
@@ -805,6 +806,18 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
     // Inscription annuelle : créer le forfait + inscrire dans le créneau
     try {
       const slotKey = `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`;
+      // Une fiche active existe déjà pour ce cavalier sur ce créneau : c'est
+      // une seconde tentative. La poursuivre créerait une seconde fiche ET une
+      // seconde commande — donc, en SEPA, un second échéancier prélevé.
+      const saison = (() => { const d = new Date(creneau.date); return d.getMonth() >= 8 ? d.getFullYear() : d.getFullYear() - 1; })();
+      const fichesSnap = await getDocs(query(collection(db, "forfaits"), where("childId", "==", selChild)));
+      const dejaActif = forfaitDejaActif(fichesSnap.docs.map(d => ({ id: d.id, ...d.data() })), { childId: selChild, slotKey, seasonStartYear: saison });
+      if (dejaActif) {
+        const le = dejaActif.createdAt?.seconds ? ` le ${new Date(dejaActif.createdAt.seconds * 1000).toLocaleDateString("fr-FR")}` : "";
+        panelToast(`${childName} a déjà un forfait actif sur ce créneau (créé${le}). Vérifiez ses commandes dans Paiements ; s'il faut recommencer, résiliez d'abord l'ancien forfait dans Forfaits.`, "error");
+        setEnrolling(false);
+        return;
+      }
       await addDoc(collection(db, "forfaits"), {
         familyId: fam.firestoreId,
         familyName: fam.parentName || "",

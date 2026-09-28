@@ -12,7 +12,7 @@ import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
-import { isForfaitActif, montantRegleForfait, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
+import { isForfaitActif, montantRegleForfait, prixForfaitDepuisCommandes, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
 import { estSemaineAttendue } from "@/lib/rythme";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 
@@ -1272,6 +1272,9 @@ export default function ForfaitsPage() {
             const isExp = expanded === f.id;
             const sc = statusConfig[f.status] || statusConfig.active;
             const paid = getPaidForForfait(f);
+            // Prix corrigé sur la commande mais pas sur la fiche : on le signale.
+            const prixCommandes = prixForfaitDepuisCommandes(payments, f as any);
+            const prixEcart = prixCommandes !== null && Math.abs(prixCommandes - (f.forfaitPriceTTC || 0)) >= 0.01;
             const pctPaid = f.forfaitPriceTTC > 0 ? Math.min(100, Math.round((paid / f.forfaitPriceTTC) * 100)) : 0;
             const pctSessions = (f.totalSessions || 35) > 0 ? Math.round(((f.attendedSessions || 0) / (f.totalSessions || 35)) * 100) : 0;
             const installment = f.paymentPlan === "3x" ? f.forfaitPriceTTC / 3 : f.paymentPlan === "10x" ? f.forfaitPriceTTC / 10 : f.forfaitPriceTTC;
@@ -1327,6 +1330,24 @@ export default function ForfaitsPage() {
                         <div className="font-body text-[10px] text-slate-500 mt-0.5">
                           {f.paymentPlan === "1x" ? "Paiement unique" : `${f.paymentPlan} · ${installment.toFixed(2)}€/échéance`}
                         </div>
+                        {prixEcart && (
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap font-body text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+                            <span>Les commandes de ce forfait totalisent <strong>{prixCommandes!.toFixed(2)}€</strong>, la fiche {(f.forfaitPriceTTC || 0).toFixed(2)}€.</span>
+                            <button type="button" disabled={saving}
+                              onClick={async () => {
+                                if (!confirm(`Aligner le prix du forfait de ${f.childName} sur ses commandes : ${(f.forfaitPriceTTC || 0).toFixed(2)}€ → ${prixCommandes!.toFixed(2)}€ ?\n\nSeule la fiche change : commandes, prélèvements et factures ne sont pas touchés.`)) return;
+                                setSaving(true);
+                                try {
+                                  await updateDoc(doc(db, "forfaits", f.id), { forfaitPriceTTC: prixCommandes, prixAvantAlignement: f.forfaitPriceTTC || 0, updatedAt: serverTimestamp() });
+                                  await fetchData();
+                                } catch (e) { console.error(e); }
+                                setSaving(false);
+                              }}
+                              className="font-body text-[11px] font-semibold text-white bg-orange-500 px-2 py-0.5 rounded border-none cursor-pointer hover:bg-orange-600 disabled:opacity-50">
+                              Aligner sur les commandes
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <div>
                         <div className="flex justify-between mb-1">
