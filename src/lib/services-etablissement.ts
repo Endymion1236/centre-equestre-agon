@@ -127,3 +127,32 @@ export function coordonneesFacturation(
     duService,
   };
 }
+
+export interface DestinataireFiche {
+  /** « principal » pour l'adresse de la fiche, sinon le nom du service. */
+  cle: string;
+  libelle: string;
+  email: string;
+}
+
+/**
+ * À qui écrire depuis la fiche client : l'adresse de la structure, puis
+ * chaque service qui a sa propre adresse (un directeur de centre de loisirs
+ * ne lit pas la boîte de la communauté de communes). Une adresse partagée
+ * n'apparaît qu'une fois ; un service sans email n'est pas proposé.
+ */
+export function destinatairesFiche(fiche: { parentName?: string; parentEmail?: string; services?: unknown }): DestinataireFiche[] {
+  const liste: DestinataireFiche[] = [];
+  const vus = new Set<string>();
+  const ajouter = (cle: string, libelle: string, email?: string) => {
+    const e = (email || "").trim();
+    if (!e.includes("@") || vus.has(e.toLowerCase())) return;
+    vus.add(e.toLowerCase());
+    liste.push({ cle, libelle, email: e });
+  };
+  ajouter("principal", fiche.parentName || "Adresse principale", fiche.parentEmail);
+  for (const s of normaliserServices(fiche.services)) {
+    ajouter(s.nom, s.contact ? `${s.nom} — ${s.contact}` : s.nom, s.email);
+  }
+  return liste;
+}

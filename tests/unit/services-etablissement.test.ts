@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { coordonneesFacturation, nomsServices, normaliserServices, serviceParNom } from "../../src/lib/services-etablissement";
+import { coordonneesFacturation, destinatairesFiche, nomsServices, normaliserServices, serviceParNom } from "../../src/lib/services-etablissement";
 
 const collectivite = {
   parentName: "COMMUNAUTÉ DE COMMUNES CÔTE OUEST",
@@ -19,6 +19,14 @@ const services = [
   { nom: "Centre de loisirs de Blainville", contact: "Mme Leroy", email: "blainville@ccco.fr", telephone: "02 33 11 11 11",
     adresse: "3 rue de l'École", codePostal: "50560", ville: "BLAINVILLE-SUR-MER", codeService: "ALSH-BLA", numeroEngagement: "ENG-2026-114" },
 ];
+
+test("email depuis la fiche : la structure, puis chaque service qui a sa propre adresse", () => {
+  const d = destinatairesFiche({ ...collectivite, services: [...services, { nom: "Antenne", email: "ACCUEIL@ccco.fr" }] });
+  assert.deepEqual(d.map(x => x.email), ["accueil@ccco.fr", "blainville@ccco.fr"], "service sans email ou adresse déjà proposée : écartés");
+  assert.equal(d[0].cle, "principal");
+  assert.equal(d[1].libelle, "Centre de loisirs de Blainville — Mme Leroy");
+  assert.deepEqual(destinatairesFiche({ parentName: "X", parentEmail: "" , services: [] }), []);
+});
 
 test("les anciens services en texte sont relus comme des fiches, sans rien perdre", () => {
   const liste = normaliserServices(services);

@@ -4,20 +4,36 @@ import { Loader2, Mail, X, Paperclip, FileSignature } from "lucide-react";
 import { emailTemplates } from "@/lib/email-templates";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
+import type { DestinataireFiche } from "@/lib/services-etablissement";
 
 interface Props {
   emailModal: { familyId: string; familyName: string; email: string };
   allPayments: any[];
   onClose: () => void;
+  /**
+   * Adresses proposées (structure + services d'un établissement, cf.
+   * destinatairesFiche). Sans elles, seule l'adresse de la fiche.
+   */
+  destinataires?: DestinataireFiche[];
 }
 
-export default function EmailModal({ emailModal, allPayments, onClose }: Props) {
+// Au-delà, la requête dépasse ce que le serveur accepte (pièces jointes
+// encodées : un tiers de plus que les fichiers).
+const TAILLE_MAX_PJ = 3 * 1024 * 1024;
+
+export default function EmailModal({ emailModal, allPayments, onClose, destinataires }: Props) {
+  // Plusieurs adresses possibles pour un établissement : la structure et
+  // chacun de ses services. Un email par destinataire coché.
+  const choix: DestinataireFiche[] = destinataires && destinataires.length > 0
+    ? destinataires
+    : [{ cle: "principal", libelle: emailModal.familyName, email: emailModal.email }];
+  const [coches, setCoches] = useState<Set<string>>(() => new Set([choix[0]?.email].filter(Boolean) as string[]));
   const [emailTemplate, setEmailTemplate] = useState("libre");
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   // Pièces jointes : { filename, content (base64 sans préfixe) }
-  const [attachments, setAttachments] = useState<{ filename: string; content: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ filename: string; content: string; taille?: number }[]>([]);
   const [attaching, setAttaching] = useState(false);
   const { toast } = useToast();
 
@@ -31,9 +47,9 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
 
   const handleAddFiles = async (files: FileList | null) => {
     if (!files) return;
-    const added: { filename: string; content: string }[] = [];
+    const added: { filename: string; content: string; taille?: number }[] = [];
     for (const file of Array.from(files)) {
-      try { added.push({ filename: file.name, content: await toBase64(file) }); }
+      try { added.push({ filename: file.name, content: await toBase64(file), taille: file.size }); }
       catch { toast(`Impossible de lire ${file.name}`, "error"); }
     }
     setAttachments(prev => [...prev, ...added]);
@@ -77,18 +93,27 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
     }
   };
 
+  const tailleJointe = attachments.reduce((s, a) => s + (a.taille ?? Math.round(a.content.length * 0.75)), 0);
+  const tropLourd = tailleJointe > TAILLE_MAX_PJ;
+  const destinatairesCoches = choix.filter(d => coches.has(d.email));
+
   const handleSend = async () => {
-    if (!emailSubject.trim() || !emailBody.trim()) return;
+    if (!emailSubject.trim() || !emailBody.trim() || destinatairesCoches.length === 0 || tropLourd) return;
     setEmailSending(true);
+    const envoyes: string[] = [];
+    const echecs: string[] = [];
     try {
       const htmlContent = emailTemplate === "libre"
         ? `<div style="font-family:sans-serif;font-size:14px;line-height:1.6;color:#333;white-space:pre-wrap;">${emailBody.replace(/</g, "&lt;")}</div>`
         : emailBody;
+      // Un envoi par destinataire : chaque service reçoit son propre email,
+      // sans voir les adresses des autres.
+      for (const dest of destinatairesCoches) {
       const res = await authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          to: emailModal.email, subject: emailSubject, html: htmlContent,
+          to: dest.email, subject: emailSubject, html: htmlContent,
           context: emailTemplate === "rappelImpaye"
             ? "admin_rappel_impaye"
             : emailTemplate === "bienvenue"
@@ -103,11 +128,16 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
           ...(attachments.length > 0 ? { attachments } : {}),
         }),
       });
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        toast(`❌ Erreur : ${data.error || "Envoi échoué"}`, "error");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.error) echecs.push(`${dest.email} (${data.error || "envoi échoué"})`);
+      else envoyes.push(data.testMode ? `${dest.email} → mode test ${data.sentTo}` : dest.email);
+      }
+      if (echecs.length > 0) {
+        toast(`❌ Non envoyé : ${echecs.join(", ")}${envoyes.length ? ` — envoyé : ${envoyes.join(", ")}` : ""}`, "error", 8000);
+        // Ne garder cochés que les envois ratés, pour relancer ceux-là seuls.
+        setCoches(new Set(destinatairesCoches.filter(d => !envoyes.some(e => e.startsWith(d.email))).map(d => d.email)));
       } else {
-        toast(`✅ Email envoyé${data.testMode ? ` (mode test → ${data.sentTo})` : ` à ${emailModal.email}`}`, "success");
+        toast(`✅ Email envoyé à ${envoyes.join(", ")}`, "success");
         onClose();
       }
     } catch {
@@ -123,11 +153,26 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
         <div className="p-5 border-b border-gray-100 flex items-center justify-between">
           <div>
             <h2 className="font-display text-lg font-bold text-blue-800">Envoyer un email</h2>
-            <p className="font-body text-xs text-slate-500 mt-0.5">{emailModal.email}</p>
+            <p className="font-body text-xs text-slate-500 mt-0.5">{destinatairesCoches.map(d => d.email).join(", ") || "Aucun destinataire coché"}</p>
           </div>
           <button type="button" onClick={onClose} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
         </div>
-        <div className="p-5 flex flex-col gap-4">
+        <div className="p-5 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
+          {choix.length > 1 && (
+            <div>
+              <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Destinataires</label>
+              <div className="flex flex-col gap-1">
+                {choix.map(d => (
+                  <label key={d.email} className="flex items-center gap-2 font-body text-xs text-slate-700 bg-sand rounded-lg px-3 py-1.5 cursor-pointer">
+                    <input type="checkbox" className="accent-blue-600 w-4 h-4" checked={coches.has(d.email)}
+                      onChange={e => setCoches(prev => { const n = new Set(prev); e.target.checked ? n.add(d.email) : n.delete(d.email); return n; })} />
+                    <span className="min-w-0 truncate"><strong>{d.libelle}</strong> · {d.email}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="font-body text-[10px] text-slate-400 mt-1">Un email distinct par destinataire coché : chacun ne voit que sa propre adresse.</p>
+            </div>
+          )}
           <div>
             <label className="font-body text-xs font-semibold text-slate-600 block mb-1">Template</label>
             <select value={emailTemplate} onChange={e => handleTemplateChange(e.target.value)}
@@ -180,14 +225,19 @@ export default function EmailModal({ emailModal, allPayments, onClose }: Props) 
                 ))}
               </div>
             )}
+            {tropLourd && (
+              <p className="font-body text-[11px] text-red-600 mt-1">
+                Pièces jointes trop lourdes ({(tailleJointe / 1024 / 1024).toFixed(1)} Mo, 3 Mo au plus) : retirez un fichier ou envoyez-le en plusieurs fois.
+              </p>
+            )}
           </div>
         </div>
         <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
           <button type="button" onClick={onClose} className="font-body text-sm text-slate-600 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-          <button type="button" disabled={!emailSubject.trim() || !emailBody.trim() || emailSending} onClick={handleSend}
+          <button type="button" disabled={!emailSubject.trim() || !emailBody.trim() || emailSending || destinatairesCoches.length === 0 || tropLourd} onClick={handleSend}
             className="flex items-center gap-2 font-body text-sm font-semibold text-white bg-green-500 px-5 py-2.5 rounded-lg border-none cursor-pointer hover:bg-green-600 disabled:opacity-50">
             {emailSending ? <Loader2 size={14} className="animate-spin"/> : <Mail size={14}/>}
-            Envoyer
+            Envoyer{destinatairesCoches.length > 1 ? ` (${destinatairesCoches.length})` : ""}
           </button>
         </div>
       </div>

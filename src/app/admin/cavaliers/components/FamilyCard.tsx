@@ -20,7 +20,7 @@ import LinkChildrenModal from "./LinkChildrenModal";
 import MoveChildModal from "./MoveChildModal";
 import EmailModal from "./EmailModal";
 import { libelleFournisseur, libelleFournisseurCourt } from "@/lib/fournisseur-connexion";
-import { normaliserServices, type ServiceEtablissement } from "@/lib/services-etablissement";
+import { destinatairesFiche, normaliserServices, type ServiceEtablissement } from "@/lib/services-etablissement";
 
 const galopLevels = ["—", "Poney Bronze", "Poney Argent", "Poney Or", "Bronze", "Argent", "Or", "G1", "G2", "G3", "G4", "G5", "G6", "G7"];
 const inputStyle = "w-full px-3 py-2.5 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-blue-400";
@@ -723,7 +723,7 @@ export default function FamilyCard({
                   <button type="button" onClick={() => setShowLinkChildren(true)} className="font-body text-xs text-teal-600 bg-teal-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-teal-100 flex items-center gap-1">
                     <UserPlus size={12}/> Lier cavaliers
                   </button>
-                  {family.parentEmail && (
+                  {destinatairesFiche(family as any).length > 0 && (
                     <button type="button" onClick={() => setEmailModal(true)} className="font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100 flex items-center gap-1">
                       <Mail size={12}/> Email
                     </button>
@@ -984,7 +984,8 @@ export default function FamilyCard({
         <LinkChildrenModal targetFamilyId={fid} families={families} onClose={() => setShowLinkChildren(false)} onDone={onRefresh}/>
       )}
       {emailModal && family.parentEmail && (
-        <EmailModal emailModal={{ familyId: fid, familyName: family.parentName, email: family.parentEmail }} allPayments={allPayments} onClose={() => setEmailModal(false)}/>
+        <EmailModal emailModal={{ familyId: fid, familyName: family.parentName, email: family.parentEmail }} allPayments={allPayments} onClose={() => setEmailModal(false)}
+          destinataires={destinatairesFiche(family as any)}/>
       )}
       {showEnroll && (
         <EnrollModal childId={showEnroll.childId} childName={showEnroll.childName} familyId={fid} familyName={family.parentName} creneaux={creneauxLoaded} onClose={() => setShowEnroll(null)} onDone={onRefresh}/>
