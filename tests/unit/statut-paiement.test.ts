@@ -149,6 +149,9 @@ console.log("\n✓ Un forfait annuel se juge échéance par échéance :");
   const sansNombre = statutPaiementCavalier(inscritForfait, [{ ...sepa(300, "sepa_scheduled")[0], echeancesTotal: undefined }], CRENEAU);
   assert("SEPA posé depuis Encaisser : orange", sansNombre.etat === "partiel", sansNombre.etat);
   assert("SEPA posé depuis Encaisser : le libellé dit SEPA", sansNombre.label === "forfait SEPA en cours", sansNombre.label);
+  // La modale Encaisser note le nombre dans la référence : il est affiché.
+  const avecRef = statutPaiementCavalier(inscritForfait, [{ ...sepa(300, "sepa_scheduled")[0], echeancesTotal: undefined, paymentRef: "2× SEPA · SEPA-A + SEPA-B" }], CRENEAU);
+  assert("SEPA 2× lu dans la référence", avecRef.label === "forfait SEPA 2×", avecRef.label);
   const horsSepa = statutPaiementCavalier(inscritForfait, [{ ...sepa(300, "partial")[0], echeancesTotal: undefined, paymentMode: "cheque" }], CRENEAU);
   assert("hors SEPA, le libellé reste « partiellement réglé »", horsSepa.label === "forfait partiellement réglé", horsSepa.label);
 

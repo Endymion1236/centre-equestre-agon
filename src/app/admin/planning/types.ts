@@ -374,9 +374,14 @@ export function statutPaiementCavalier(
       // connaît. Sans ce cas, le planning affichait « forfait partiellement
       // réglé » à côté de cavaliers marqués « forfait 1/10 SEPA », alors que
       // tous étaient en prélèvement (septembre 2026).
+      // Le nombre d'échéances se lit alors dans la référence posée par la
+      // modale (« 2× SEPA · mandat1 + mandat2 »). Pas de « 1/2 » : l'encaissé
+      // peut venir d'un acompte réglé avant, sans qu'aucun prélèvement soit passé.
+      const nbDansRef = Math.max(0, ...echeances.map((p: any) =>
+        Number(String(p.paymentRef || "").match(/^(\d+)× SEPA/)?.[1]) || 0));
       const libelle = nbEcheances > 1
         ? `forfait ${payees}/${nbEcheances}${sepa ? " SEPA" : ""}`
-        : sepa ? "forfait SEPA en cours" : "forfait partiellement réglé";
+        : sepa ? (nbDansRef > 0 ? `forfait SEPA ${nbDansRef}×` : "forfait SEPA en cours") : "forfait partiellement réglé";
       return habiller(
         "partiel",
         libelle,
