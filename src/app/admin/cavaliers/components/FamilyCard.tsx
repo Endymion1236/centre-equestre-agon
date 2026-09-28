@@ -458,8 +458,11 @@ export default function FamilyCard({
                 {family.parentEmail && (
                   <span className="inline-flex items-center gap-1">
                     <Mail size={10} />
-                    <a href={`mailto:${family.parentEmail}`} onClick={(e) => e.stopPropagation()}
-                      className="text-slate-600 no-underline hover:text-blue-500 hover:underline">{family.parentEmail}</a>
+                    {/* La fenêtre d'envoi du logiciel plutôt qu'un lien mailto:, qui
+                        ne fait rien sans messagerie installée sur l'ordinateur. */}
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setEmailModal(true); }}
+                      title="Écrire à cette adresse"
+                      className="text-slate-600 bg-transparent border-none p-0 cursor-pointer font-body text-xs hover:text-blue-500 hover:underline">{family.parentEmail}</button>
                     <button type="button"
                       onClick={(e) => {
                         e.stopPropagation();
@@ -740,7 +743,7 @@ export default function FamilyCard({
                 </div>
                 {/* Infos contact */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div><div className={labelStyle}>Email</div><div className="font-body text-sm break-all">{family.parentEmail ? <a href={`mailto:${family.parentEmail}`} className="text-blue-800 no-underline hover:underline">{family.parentEmail}</a> : "—"}</div></div>
+                  <div><div className={labelStyle}>Email</div><div className="font-body text-sm break-all">{family.parentEmail ? <button type="button" onClick={() => setEmailModal(true)} title="Écrire à cette adresse" className="text-blue-800 bg-transparent border-none p-0 cursor-pointer font-body text-sm text-left break-all hover:underline">{family.parentEmail}</button> : "—"}</div></div>
                   <div><div className={labelStyle}>Téléphone</div><div className="font-body text-sm">{family.parentPhone ? <a href={`tel:${family.parentPhone.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline">📞 {family.parentPhone}</a> : "Non renseigné"}{(family as any).parentPhone2 ? <a href={`tel:${(family as any).parentPhone2.replace(/[\s.]/g, "")}`} className="text-blue-800 no-underline hover:underline block mt-0.5">📞 {(family as any).parentPhone2}</a> : null}</div></div>
                   <div><div className={labelStyle}>Inscription</div><div className="font-body text-sm text-blue-800">{libelleFournisseur(family.authProvider)}</div></div>
                 </div>
@@ -983,7 +986,9 @@ export default function FamilyCard({
       {showLinkChildren && (
         <LinkChildrenModal targetFamilyId={fid} families={families} onClose={() => setShowLinkChildren(false)} onDone={onRefresh}/>
       )}
-      {emailModal && family.parentEmail && (
+      {/* Ouverte dès qu'une adresse existe, fût-ce celle d'un seul service :
+          le bouton s'affichait sans que la fenêtre s'ouvre. */}
+      {emailModal && destinatairesFiche(family as any).length > 0 && (
         <EmailModal emailModal={{ familyId: fid, familyName: family.parentName, email: family.parentEmail }} allPayments={allPayments} onClose={() => setEmailModal(false)}
           destinataires={destinatairesFiche(family as any)}/>
       )}
