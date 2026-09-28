@@ -17,6 +17,7 @@ import {
   type SortMode,
 } from "./echeances-utils";
 import RefaireEcheancier from "./RefaireEcheancier";
+import { SectionPrelevementsSepa } from "./SectionPrelevementsSepa";
 import { useConfirm } from "@/components/ui/Confirm";
 
 interface TabEcheancesProps {
@@ -94,8 +95,9 @@ export function TabEcheances({
       <div>
         <Card padding="lg" className="text-center">
           <CreditCard size={28} className="text-slate-400 mx-auto mb-3" />
-          <p className="font-body text-sm text-slate-600">Aucun paiement échelonné. Les échéanciers sont créés automatiquement quand un forfait est souscrit en 3x ou 10x depuis le planning.</p>
+          <p className="font-body text-sm text-slate-600">Aucun paiement échelonné par carte ou chèque. Les échéanciers sont créés automatiquement quand un forfait est souscrit en 3x ou 10x depuis le planning.</p>
         </Card>
+        <SectionPrelevementsSepa search="" />
       </div>
     );
   }
@@ -456,6 +458,7 @@ export function TabEcheances({
         })}
       </div>
     )}
+    <SectionPrelevementsSepa search={search} />
   </div>
   );
 }
