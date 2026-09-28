@@ -27,6 +27,7 @@ import { paymentModes } from "./types";
 import { Loader2, X } from "lucide-react";
 import { montantsEcheances, repartirEntreDeuxMandats, resteHorsSepa } from "@/lib/sepa-remise";
 import { maskIban } from "@/lib/sepa-validation";
+import { datesEcheances } from "@/lib/echeancier-paiement";
 import { preparerEcheancierCb } from "./echeancier-cb-utils";
 
 export interface ModaleEncaisserProps {
@@ -270,7 +271,7 @@ export default function ModaleEncaisser({
         // référence) : on le borne, plutôt que de risquer un NaN qui créerait
         // ZÉRO échéance tout en marquant la facture comme planifiée.
         const nbEch = Math.min(36, Math.max(1, parseInt(quickRef || "10") || 10));
-        const startDate = new Date(quickDate || new Date().toISOString().split("T")[0]);
+        const datesSepa = datesEcheances(quickDate || new Date().toISOString().split("T")[0], nbEch);
 
         // Échéances déjà créées pour cette facture ? Sans ce contrôle, un
         // second passage produisait un second échéancier — donc un double
@@ -329,9 +330,7 @@ export default function ModaleEncaisser({
           const montants = montantsEcheances(plan.montant, nbEch);
           const qui = plans.length > 1 ? ` (${plan.mandat.libelle || plan.mandat.titulaire || plan.mandat.mandatId})` : "";
           for (let i = 0; i < nbEch; i++) {
-            const d = new Date(startDate);
-            d.setMonth(d.getMonth() + i);
-            const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            const dateStr = datesSepa[i];
             await addDoc(collection(db, "echeances-sepa"), {
               familyId: p.familyId,
               familyName: p.familyName,
@@ -814,9 +813,7 @@ export default function ModaleEncaisser({
                         const lastDate = quickChequesDiffres[quickChequesDiffres.length - 1]?.dateEncaissementPrevue;
                         let nextDate = new Date().toISOString().split("T")[0];
                         if (lastDate) {
-                          const d = new Date(lastDate);
-                          d.setMonth(d.getMonth() + 1);
-                          nextDate = d.toISOString().split("T")[0];
+                          nextDate = datesEcheances(lastDate, 2)[1];
                         }
                         setQuickChequesDiffres([...quickChequesDiffres, { numero: "", banque: "", montant: reste > 0 ? reste.toFixed(2) : "", dateEncaissementPrevue: nextDate }]);
                       }}
@@ -830,13 +827,12 @@ export default function ModaleEncaisser({
                           if (n === 0) return;
                           const baseDate = quickChequesDiffres[0]?.dateEncaissementPrevue || new Date().toISOString().split("T")[0];
                           const parts = quickRepartirEnParts(montantCible, n);
+                          const dates = datesEcheances(baseDate, n);
                           const updated = quickChequesDiffres.map((c, i) => {
-                            const d = new Date(baseDate);
-                            d.setMonth(d.getMonth() + i);
                             return {
                               ...c,
                               montant: parts[i].toFixed(2),
-                              dateEncaissementPrevue: d.toISOString().split("T")[0],
+                              dateEncaissementPrevue: dates[i],
                             };
                           });
                           setQuickChequesDiffres(updated);

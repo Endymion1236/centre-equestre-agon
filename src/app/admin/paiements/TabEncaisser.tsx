@@ -1,4 +1,5 @@
 "use client";
+import { datesEcheances } from "@/lib/echeancier-paiement";
 import React, { useState, useEffect } from "react";
 import { updateDoc, addDoc, doc, getDoc, getDocs, query, where, collection, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -1141,9 +1142,7 @@ export function TabEncaisser({
                       const lastDate = chequesDiffres[chequesDiffres.length - 1]?.dateEncaissementPrevue;
                       let nextDate = new Date().toISOString().split("T")[0];
                       if (lastDate) {
-                        const d = new Date(lastDate);
-                        d.setMonth(d.getMonth() + 1);
-                        nextDate = d.toISOString().split("T")[0];
+                        nextDate = datesEcheances(lastDate, 2)[1];
                       }
                       setChequesDiffres([...chequesDiffres, { numero: "", banque: "", montant: reste > 0 ? reste.toFixed(2) : "", dateEncaissementPrevue: nextDate }]);
                     }}
@@ -1157,13 +1156,12 @@ export function TabEncaisser({
                       if (n === 0) return;
                       const baseDate = chequesDiffres[0]?.dateEncaissementPrevue || new Date().toISOString().split("T")[0];
                       const parts = repartirEnParts(basketTotal, n);
+                      const dates = datesEcheances(baseDate, n);
                       const updated = chequesDiffres.map((c, i) => {
-                        const d = new Date(baseDate);
-                        d.setMonth(d.getMonth() + i);
                         return {
                           ...c,
                           montant: parts[i].toFixed(2),
-                          dateEncaissementPrevue: d.toISOString().split("T")[0],
+                          dateEncaissementPrevue: dates[i],
                         };
                       });
                       setChequesDiffres(updated);

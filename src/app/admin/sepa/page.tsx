@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { generateSepaXml, regrouperParMandat, SEPA_CREDITOR } from "@/lib/sepa";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { etatCommandeApresRemise } from "@/lib/sepa-remise";
+import { datesEcheances } from "@/lib/echeancier-paiement";
 import { planifierAnnulationEcheancier } from "./annulation-echeancier-utils";
 import type { SepaTransaction, SepaRemise } from "@/lib/sepa";
 import { validateIban, validateBic, formatIban } from "@/lib/sepa-validation";
@@ -293,11 +294,9 @@ export default function SepaPage() {
   const genererEcheances = async (mandat: MandatSepa, total: number, nb: number, dateDebut: string, description: string, reference: string) => {
     const montantEcheance = Math.floor(total / nb * 100) / 100;
     const reste = Math.round((total - montantEcheance * nb) * 100) / 100;
-    const startDate = new Date(dateDebut);
+    const dates = datesEcheances(dateDebut, nb);
     for (let i = 0; i < nb; i++) {
-      const d = new Date(startDate);
-      d.setMonth(d.getMonth() + i);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const dateStr = dates[i];
       const montant = i === nb - 1 ? montantEcheance + reste : montantEcheance;
       await addDoc(collection(db, "echeances-sepa"), {
         familyId: mandat.familyId,
@@ -643,11 +642,7 @@ export default function SepaPage() {
   // exactement comme la correction du journal des paiements. Les deux lignes
   // se neutralisent dans les bordereaux de remise et le livre de caisse.
   const handleRejet = async (ech: EcheanceSepa) => {
-    const dateRepresentation = (() => {
-      const d = new Date(ech.dateEcheance);
-      d.setMonth(d.getMonth() + 1);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    })();
+    const dateRepresentation = datesEcheances(ech.dateEcheance, 2)[1];
 
     if (!confirm(
       `Prélèvement rejeté par la banque ?\n\n`
@@ -839,8 +834,7 @@ export default function SepaPage() {
       toast("Format invalide. Utilisez AAAA-MM-JJ (ex: 2026-09-01)", "error");
       return;
     }
-    const baseDate = new Date(nouvelleDateStr + "T12:00:00"); // midi pour eviter timezone
-    if (isNaN(baseDate.getTime())) {
+    try { datesEcheances(nouvelleDateStr, 1); } catch {
       toast("Date invalide", "error");
       return;
     }
@@ -853,16 +847,11 @@ export default function SepaPage() {
       return;
     }
     if (!confirm(`Décaler ${seriesEcheances.length} échéance(s) à partir du ${nouvelleDateStr} ?\n\nLes échéances seront espacées de 1 mois.`)) return;
+    const datesDecalees = datesEcheances(nouvelleDateStr, Math.max(...seriesEcheances.map(e => e.echeance || 1)));
     let updated = 0;
     for (const ech of seriesEcheances) {
       const idx = (ech.echeance || 1) - 1; // 1ere echeance = index 0
-      const newDate = new Date(baseDate);
-      newDate.setMonth(newDate.getMonth() + idx);
-      // Format YYYY-MM-DD (eviter toISOString qui peut decaler en UTC)
-      const yyyy = newDate.getFullYear();
-      const mm = String(newDate.getMonth() + 1).padStart(2, "0");
-      const dd = String(newDate.getDate()).padStart(2, "0");
-      const newDateStr = `${yyyy}-${mm}-${dd}`;
+      const newDateStr = datesDecalees[idx];
       try {
         await updateDoc(doc(db, "echeances-sepa", ech.id), { dateEcheance: newDateStr });
         updated++;
