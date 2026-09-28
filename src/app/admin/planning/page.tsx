@@ -18,6 +18,7 @@ import {
 import { Plus, ChevronLeft, ChevronRight, X, Check, Calendar, Loader2, Trash2, CalendarDays, Briefcase, Sparkles, Printer, Settings, MoreHorizontal, Copy } from "lucide-react";
 import type { Activity, Family } from "@/types";
 import { nomActuelInscrit } from "./enroll-panel-utils";
+import { avecAvancementSepa } from "./sepa-avancement";
 import { Creneau, EnrolledChild, typeColors, getWeekDates, fmtDate, fmtDateFR, fmtMonthFR, compareCreneaux, statutPaiementCavalier, sameStage, ageCavalier } from "./types";
 import { libellePrixCreneau } from "@/lib/tarif-forfaitaire";
 import EnrollPanel from "./EnrollPanel";
@@ -173,14 +174,17 @@ export default function PlanningPage() {
 
   const fetchData = async () => {
     try {
-      const [aS, fS, pS, cartesS, forfaitsS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments")), getDocs(collection(db, "cartes")), getDocs(query(collection(db, "forfaits"), where("status", "==", "actif")))]);
+      const [aS, fS, pS, cartesS, forfaitsS, sepaS] = await Promise.all([getDocs(collection(db, "activities")), getDocs(collection(db, "families")), getDocs(collection(db, "payments")), getDocs(collection(db, "cartes")), getDocs(query(collection(db, "forfaits"), where("status", "==", "actif"))),
+        // Prélèvements SEPA : le compteur « forfait 3/10 SEPA » se lit ici
+        // (cf. sepa-avancement.ts). Illisibles : le planning s'en passe.
+        getDocs(collection(db, "echeances-sepa")).catch(() => null)]);
       setActivities(aS.docs.map(d => ({ id: d.id, ...d.data() })) as Activity[]);
       // Une fiche absorbée par une fusion reste en base (réversible) mais ne
       // doit plus recevoir d'inscription : une commande posée dessus est
       // invisible sur la fiche conservée — Facturé 0, Payé 0, alors que
       // l'acompte est au journal (cas AMIARD, 21/09/2026).
       setFamilies(fS.docs.map(d => ({ firestoreId: d.id, ...d.data() })).filter((f: any) => f.status !== "merged") as any);
-      setPayments(pS.docs.map(d => ({ id: d.id, ...d.data() })));
+      setPayments(avecAvancementSepa(pS.docs.map(d => ({ id: d.id, ...d.data() })), sepaS ? sepaS.docs.map(d => d.data()) : []));
       setAllCartes(cartesS.docs.map(d => ({ id: d.id, ...d.data() })));
       setAllForfaits(forfaitsS.docs.map(d => ({ id: d.id, ...d.data() })));
 

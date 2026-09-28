@@ -364,6 +364,13 @@ export function statutPaiementCavalier(
           p.status === "paid" || (Number(p.paidAmount) || 0) >= (Number(p.totalTTC) || 0) - 0.01).length
       : parEcheance > 0 ? Math.round(regle / parEcheance) : 0;
     const mention = sepa ? " Les prélèvements sont suivis dans Paiements › Prélèvements SEPA." : "";
+    // Avancement lu dans le module SEPA (cf. sepa-avancement.ts, posé au
+    // chargement du planning) : il fait foi sur le compteur, pour tous les
+    // échéanciers, qu'ils viennent du planning ou de la modale Encaisser.
+    const avancements = echeances.map((p: any) => p.sepaAvancement).filter(Boolean) as { passes: number; total: number }[];
+    const avancement = avancements.length
+      ? avancements.reduce((a, b) => ({ passes: a.passes + b.passes, total: a.total + b.total }), { passes: 0, total: 0 })
+      : null;
 
     if ((payees >= nbEcheances && payees > 0) || (total > 0 && reste < 0.01)) {
       return habiller("regle", sepa ? "forfait (SEPA)" : "forfait", `Forfait annuel réglé — ${eur(regle || total)}.`);
@@ -379,13 +386,25 @@ export function statutPaiementCavalier(
       // peut venir d'un acompte réglé avant, sans qu'aucun prélèvement soit passé.
       const nbDansRef = Math.max(0, ...echeances.map((p: any) =>
         Number(String(p.paymentRef || "").match(/^(\d+)× SEPA/)?.[1]) || 0));
-      const libelle = nbEcheances > 1
+      const libelle = sepa && avancement
+        ? `forfait ${avancement.passes}/${avancement.total} SEPA`
+        : nbEcheances > 1
         ? `forfait ${payees}/${nbEcheances}${sepa ? " SEPA" : ""}`
         : sepa ? (nbDansRef > 0 ? `forfait SEPA ${nbDansRef}×` : "forfait SEPA en cours") : "forfait partiellement réglé";
       return habiller(
         "partiel",
         libelle,
         `${eur(regle)} reçus sur ${eur(total)} — reste ${eur(reste)} sur le forfait${sepa ? ", prélevé selon l'échéancier" : ""}.${mention}`,
+      );
+    }
+    // Prélèvement passé selon le module SEPA, mais la commande affiche 0 €
+    // réglé : l'écart signalé par Cohérence. Pas « rien prélevé » : l'argent
+    // est au journal, seul le compteur de la commande est en retard.
+    if (sepa && avancement && avancement.passes > 0) {
+      return habiller(
+        "partiel",
+        `forfait ${avancement.passes}/${avancement.total} SEPA`,
+        `${avancement.passes} prélèvement(s) passé(s), mais la commande affiche 0 € réglé : à recaler depuis l'onglet Cohérence.${mention}`,
       );
     }
     return habiller(
