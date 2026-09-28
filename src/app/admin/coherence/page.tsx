@@ -128,6 +128,32 @@ export default function CoherencePage() {
     setReparation("");
   };
 
+  const recaler = async (a: { paymentId?: string; famille?: string }) => {
+    if (!a.paymentId) return;
+    if (!window.confirm(
+      `Recaler la commande de « ${a.famille || "cette famille"} » sur le journal ?\n\n`
+      + "Le montant réglé et le statut de la commande seront recalculés à partir des encaissements du journal, "
+      + "qui fait foi. Le journal lui-même n'est pas modifié.",
+    )) return;
+    setReparation(a.paymentId);
+    try {
+      const res = await authFetch("/api/admin/recaler-commande", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentId: a.paymentId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error || "Échec");
+      if (!json?.deja) {
+        alert(`Commande recalée : ${Number(json.avant?.paidAmount || 0).toFixed(2)} € → ${Number(json.apres?.paidAmount || 0).toFixed(2)} € réglés (${json.apres?.status}).`);
+      }
+      await analyser();
+    } catch (e: any) {
+      alert(`Échec : ${e?.message || e}`);
+    }
+    setReparation("");
+  };
+
   const replacer = async (paymentId: string) => {
     setReparation(paymentId);
     try {
@@ -266,6 +292,17 @@ export default function CoherencePage() {
                                 ? <Loader2 size={11} className="animate-spin" />
                                 : <CalendarCheck size={11} />}
                               Rattacher à {a.familleCibleNom || "la fiche"}
+                            </button>
+                          )}
+                          {a.action === "recaler-sur-journal" && a.paymentId && (
+                            <button type="button" onClick={() => recaler(a)}
+                              disabled={reparation === a.paymentId}
+                              title="Recalculer le montant réglé de la commande à partir du journal (qui fait foi)"
+                              className="inline-flex items-center gap-1 font-body text-[11px] font-semibold text-white bg-red-600 px-2 py-1 rounded-md border-none cursor-pointer hover:bg-red-500 disabled:opacity-50">
+                              {reparation === a.paymentId
+                                ? <Loader2 size={11} className="animate-spin" />
+                                : <RefreshCw size={11} />}
+                              Recaler sur le journal
                             </button>
                           )}
                           {a.action === "attribuer-numero" && a.paymentId && (

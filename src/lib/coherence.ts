@@ -33,7 +33,7 @@ export interface Anomalie {
   /** Écran où le traiter. */
   lien?: string;
   /** Réparation proposée par l'écran, quand elle existe. */
-  action?: "replacer-au-planning" | "attribuer-numero" | "corriger-date-reservation" | "rejouer-fusion" | "rattacher-famille";
+  action?: "replacer-au-planning" | "attribuer-numero" | "corriger-date-reservation" | "rejouer-fusion" | "rattacher-famille" | "recaler-sur-journal";
   /** Réservation visée par la réparation, quand l'anomalie en concerne une. */
   reservationId?: string;
   /** Fusion à rejouer : la fiche absorbée et la fiche conservée. */
@@ -183,9 +183,17 @@ export function analyserCoherence(d: DonneesCoherence): Anomalie[] {
   // `paidAmount` doit être la somme des écritures. Un écart signale une
   // écriture perdue, une contre-passation oubliée, ou un montant forcé.
   const encParPaiement = new Map<string, number>();
+  // Nature des écritures (mode, référence) : dit d'où vient l'argent au
+  // journal — un prélèvement déposé, un virement pointé, un passage en caisse.
+  const originesParPaiement = new Map<string, Set<string>>();
   for (const e of d.encaissements || []) {
     if (!e?.paymentId) continue;
     encParPaiement.set(e.paymentId, arrondi((encParPaiement.get(e.paymentId) || 0) + (Number(e.montant) || 0)));
+    const origine = [e.modeLabel || e.mode, e.ref].filter(Boolean).join(", ");
+    if (origine) {
+      if (!originesParPaiement.has(e.paymentId)) originesParPaiement.set(e.paymentId, new Set());
+      originesParPaiement.get(e.paymentId)!.add(origine);
+    }
   }
   for (const p of paiements) {
     const journal = encParPaiement.get(p.id);
@@ -196,10 +204,13 @@ export function analyserCoherence(d: DonneesCoherence): Anomalie[] {
       code: "journal-different-de-la-commande",
       gravite: "bloquant",
       titre: "Le journal et la commande divergent",
-      detail: `${p.familyName || "Famille"} — ${eur(journal)} au journal contre ${eur(commande)} sur la commande (écart ${eur(Math.abs(journal - commande))}).`,
+      detail: `${p.familyName || "Famille"} — ${eur(journal)} au journal contre ${eur(commande)} sur la commande (écart ${eur(Math.abs(journal - commande))}).`
+        + (originesParPaiement.get(p.id)?.size ? ` Journal : ${[...originesParPaiement.get(p.id)!].slice(0, 3).join(" ; ")}.` : ""),
       famille: p.familyName,
       paymentId: p.id,
       lien: "/admin/paiements?tab=journal",
+      // Une commande annulée se traite par avoir ou remboursement.
+      ...(p.status !== "cancelled" ? { action: "recaler-sur-journal" as const } : {}),
     });
   }
 

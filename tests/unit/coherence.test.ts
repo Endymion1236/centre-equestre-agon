@@ -89,6 +89,24 @@ console.log("\n✓ Le journal et la commande divergent :");
   assert("signalée", codes(a).includes("journal-different-de-la-commande"), codes(a).join(", "));
   assert("l'écart est chiffré", a[0].detail.includes("143,40"), a[0].detail);
 
+  // Cas des quinze commandes de septembre 2026 : un prélèvement SEPA au
+  // journal, 0 € sur la commande. Le détail dit d'où vient l'écriture, et la
+  // réparation est proposée — sauf sur une commande annulée.
+  const sepa = analyserCoherence({
+    ...vide,
+    paiements: [{ id: "p3", familyName: "ANDRIEU", status: "sepa_scheduled", totalTTC: 1139, paidAmount: 0, items: [] }],
+    encaissements: [{ paymentId: "p3", montant: 113.9, modeLabel: "Prélèvement SEPA", ref: "Remise n°1 — SEPA-X" }],
+  });
+  const ecart = sepa.find(x => x.code === "journal-different-de-la-commande")!;
+  assert("l'origine de l'écriture est dite", ecart.detail.includes("Prélèvement SEPA, Remise n°1"), ecart.detail);
+  assert("recalage proposé", ecart.action === "recaler-sur-journal", String(ecart.action));
+  const annulee = analyserCoherence({
+    ...vide,
+    paiements: [{ id: "p4", familyName: "X", status: "cancelled", totalTTC: 100, paidAmount: 0, items: [] }],
+    encaissements: [{ paymentId: "p4", montant: 50 }],
+  }).find(x => x.code === "journal-different-de-la-commande");
+  assert("pas de recalage sur une commande annulée", !annulee || annulee.action === undefined, String(annulee?.action));
+
   const sansEcriture = analyserCoherence({
     ...vide,
     paiements: [{ id: "p2", status: "pending", totalTTC: 100, paidAmount: 0, items: [] }],
