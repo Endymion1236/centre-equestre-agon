@@ -15,6 +15,7 @@ import { verifyAuth } from "@/lib/api-auth";
 import { generateSEPAQR } from "@/lib/payment-qr";
 import { adminDb } from "@/lib/firebase-admin";
 import { construireAffichageReglementsFacture } from "@/lib/facture-reglements";
+import { echeancierSepaFacture, type EcheancierFacture } from "@/lib/echeancier-sepa-facture";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -169,9 +170,28 @@ export async function POST(request: NextRequest) {
     // Générer le QR SEPA pour paiement par virement (norme EPC069-12) :
     // uniquement si la facture n'est pas réglée ET qu'il reste un montant > 0.
     // Le client peut scanner avec son app bancaire pour pré-remplir le virement.
+    // Commande réglée par prélèvement SEPA : l'échéancier à venir est annoncé,
+    // et le virement (IBAN, QR) ne porte que sur ce qu'il ne couvre pas —
+    // sinon la famille était invitée à payer deux fois.
+    let echeancier: EcheancierFacture | null = null;
+    if (!estAvoir && !isPaid && resteDu > 0 && paymentId) {
+      try {
+        const paySnap = await adminDb.collection("payments").doc(String(paymentId)).get();
+        const orderId = paySnap.exists ? (paySnap.data() as any)?.orderId : null;
+        const [parPaiement, parCommande] = await Promise.all([
+          adminDb.collection("echeances-sepa").where("paymentId", "==", String(paymentId)).get(),
+          orderId ? adminDb.collection("echeances-sepa").where("orderId", "==", String(orderId)).get() : Promise.resolve(null),
+        ]);
+        const vues = new Map<string, any>();
+        for (const d of [...parPaiement.docs, ...(parCommande?.docs || [])]) vues.set(d.id, d.data());
+        echeancier = echeancierSepaFacture([...vues.values()], resteDu);
+      } catch (e) { console.warn("[invoice-pdf] échéancier SEPA illisible:", e); }
+    }
+    const resteAVirer = echeancier ? echeancier.resteHorsPrelevement : resteDu;
+
     const sepaLibelle = `${invoiceNumber} ${familyName || ""}`.trim().slice(0, 70);
-    const qrSEPAResult = (!estAvoir && !isPaid && resteDu > 0)
-      ? await generateSEPAQR(resteDu, sepaLibelle, "pdf")
+    const qrSEPAResult = (!estAvoir && !isPaid && resteAVirer > 0)
+      ? await generateSEPAQR(resteAVirer, sepaLibelle, "pdf")
       : null;
     const qrSEPADataUrl = qrSEPAResult?.dataUrl || null;
 
@@ -342,7 +362,7 @@ export async function POST(request: NextRequest) {
         // ── Statut paiement ──────────────────────────────────────────────
         React.createElement(View, { style: [s.payBox, isPaid ? s.payPaid : s.payUnpaid] },
           React.createElement(Text, { style: [s.payTitle, { color: isPaid ? GREEN : ORANGE }] },
-            isPaid ? "✓ Facture réglée" : "⏳ En attente de règlement"),
+            isPaid ? "✓ Facture réglée" : echeancier ? "⏳ Règlement par prélèvement SEPA" : "⏳ En attente de règlement"),
           !isPaid && paidAmount > 0
             ? React.createElement(Text, { style: s.payDetail }, `Acompte versé : ${paidAmount.toFixed(2)} € · Reste dû : ${resteDu.toFixed(2)} €`)
             : null,
@@ -354,9 +374,13 @@ export async function POST(request: NextRequest) {
           ...affichageReglements.lignes.map((ligne, idx) =>
             React.createElement(Text, { key: `reglement-${idx}`, style: s.payDetail }, ligne)
           ),
-          !isPaid && resteDu > 0 && CLUB.iban
+          echeancier
             ? React.createElement(Text, { style: s.payDetail },
-                `Solde à régler par virement :\nIBAN : ${CLUB.iban}\nBIC : ${CLUB.bic || ""}`)
+                `Prélèvements à venir (${echeancier.montantPrevu.toFixed(2)} €) :\n${echeancier.lignes.join("\n")}\nRien à régler de votre côté pour ce montant.`)
+            : null,
+          !isPaid && resteAVirer > 0 && CLUB.iban
+            ? React.createElement(Text, { style: s.payDetail },
+                `${echeancier ? `Reste à régler hors prélèvements : ${resteAVirer.toFixed(2)} €, par virement` : "Solde à régler par virement"} :\nIBAN : ${CLUB.iban}\nBIC : ${CLUB.bic || ""}`)
             : null,
           // QR SEPA : permet de scanner avec l'app bancaire pour pré-remplir
           // un virement (montant + IBAN + BIC + libellé). Norme EPC069-12.

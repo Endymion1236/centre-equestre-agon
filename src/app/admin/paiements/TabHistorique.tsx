@@ -9,6 +9,8 @@ import { downloadFacturX, downloadFacturXPdf } from "@/lib/download-facturx";
 import { facturxEnAttente } from "./facturx-depot-utils";
 import { paymentModes } from "./types";
 import { verrouCommande } from "./commande-verrou";
+import { envoyerDocumentCommande } from "./document-commande";
+import { useConfirm } from "@/components/ui/Confirm";
 import {
   preparerHistorique,
   type HistoriqueSort,
@@ -44,6 +46,10 @@ export function TabHistorique({
   initialSearch,
   familyFilterId,
 }: TabHistoriqueProps) {
+  // Envoi de la facture / proforma par email : une commande réglée par
+  // prélèvement SEPA n'est plus dans les Impayés, c'est ici qu'on la trouve.
+  const confirmer = useConfirm();
+  const [envoiDocumentPour, setEnvoiDocumentPour] = useState<string | null>(null);
   const [histSearch, setHistSearch] = useState(initialSearch || "");
   const [familyFilter, setFamilyFilter] = useState(familyFilterId || "");
   const [histModeFilter, setHistModeFilter] = useState("all");
@@ -235,7 +241,10 @@ export function TabHistorique({
                     paymentMode: mode?.label || payment.paymentMode || "",
                     paymentDate: payment.paidAmount > 0 ? date.toLocaleDateString("fr-FR") : "",
                     paymentId: payment.id,
-                    paidAmount: payment.paidAmount || payment.totalTTC || 0,
+                    // Repli sur le total réservé aux commandes RÉGLÉES sans montant
+                    // enregistré (anciennes fiches) : sur une commande en prélèvement
+                    // SEPA, il imprimait « PAYÉ » avant le moindre prélèvement.
+                    paidAmount: payment.paidAmount || (payment.status === "paid" ? payment.totalTTC || 0 : 0),
                     paymentDetails: paymentDetails.length > 0 ? paymentDetails : undefined,
                   });
                 };
@@ -292,6 +301,12 @@ export function TabHistorique({
                       ) : (
                         <span className="inline-flex items-center justify-center gap-1 whitespace-nowrap">
                           <button type="button" onClick={printInvoice} className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100"><Receipt size={12} /></button>
+                          <button type="button" disabled={envoiDocumentPour === payment.id}
+                            onClick={() => envoyerDocumentCommande({ families, confirmer }, { toast, setEnvoiDocumentPour }, payment)}
+                            title={`Envoyer ${payment.invoiceNumber ? "la facture" : "la proforma"} en PDF par email`}
+                            className="font-body text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded cursor-pointer border-none hover:bg-blue-100 disabled:opacity-50">
+                            {envoiDocumentPour === payment.id ? <Loader2 size={12} className="animate-spin" /> : "✉️"}
+                          </button>
                           {(payment.paidAmount || 0) > 0 && (
                             <button type="button"
                               title="Replacer les cavaliers au planning (place perdue avant le paiement)"

@@ -630,6 +630,8 @@ export const emailTemplates = {
     numero: string;
     montant: number;
     resteDu: number;
+    /** Part réglée par les prélèvements SEPA à venir : la famille n'a rien à faire pour elle. */
+    prelevementPrevu?: number;
     prestations: string;
   }) => ({
     subject: vars.nature === "facture"
@@ -645,6 +647,7 @@ export const emailTemplates = {
         <div>${montant(vars.resteDu > 0 ? vars.resteDu : vars.montant)}</div>
         ${p(`<span style="color:${C.gris};">${vars.prestations}</span>`, 13)}
       `)}
+      ${(vars.prelevementPrevu || 0) > 0 ? p(`${euros(vars.prelevementPrevu || 0)} seront prélevés sur votre compte selon l'échéancier indiqué sur le document : vous n'avez rien à régler pour ce montant.`, 13) : ""}
       ${vars.nature === "proforma" ? p("Une facture proforma n'est pas une facture définitive : elle détaille la commande et son montant. La facture vous sera adressée après règlement.", 13) : ""}
       ${vars.resteDu > 0 ? p("Vous pouvez régler par virement (coordonnées et QR code sur le document), par chèque, en espèces ou par carte au club.", 13) : ""}
       ${signature()}

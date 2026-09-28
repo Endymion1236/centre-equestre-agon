@@ -12,10 +12,14 @@ const dateFr = (iso: string | null) => (iso ? new Date(`${iso}T12:00:00`).toLoca
  * n'y figurent pas (règlement en cours). L'encart dit où elles sont passées
  * et mène à leur échéancier, dans Prélèvements SEPA.
  */
-export function BandeauPrelevementsFamille({ familyId, familyName, payments }: {
+export function BandeauPrelevementsFamille({ familyId, familyName, payments, onTelecharger, onEnvoyer, envoiEnCours }: {
   familyId: string;
   familyName: string;
   payments: any[];
+  /** Facture ou proforma de la commande : la famille peut la demander même réglée par prélèvement. */
+  onTelecharger?: (payment: any) => void;
+  onEnvoyer?: (payment: any) => void;
+  envoiEnCours?: string | null;
 }) {
   const [echeances, setEcheances] = useState<EcheanceSepaResume[] | null>(null);
 
@@ -49,7 +53,8 @@ export function BandeauPrelevementsFamille({ familyId, familyName, payments }: {
       </div>
       <div className="flex flex-col gap-1">
         {resume.commandes.map(c => (
-          <div key={c.paymentId} className="font-body text-sm text-slate-700">
+          <div key={c.paymentId} className="font-body text-sm text-slate-700 flex items-start justify-between gap-2">
+            <div className="min-w-0">
             <span className="font-semibold">{c.libelle}</span>
             <span className="text-slate-500"> · {c.totalTTC.toFixed(2)}€</span>
             {c.sansEcheance ? (
@@ -61,6 +66,29 @@ export function BandeauPrelevementsFamille({ familyId, familyName, payments }: {
                 {c.mandats.length > 1 && <> · réparti sur {c.mandats.length} mandats</>}
               </span>
             )}
+            </div>
+            {(() => {
+              const payment = payments.find(p => p.id === c.paymentId);
+              if (!payment || (!onTelecharger && !onEnvoyer)) return null;
+              const doc = payment.invoiceNumber ? "Facture" : "Proforma";
+              return (
+                <div className="shrink-0 flex gap-1">
+                  {onTelecharger && (
+                    <button type="button" onClick={() => onTelecharger(payment)}
+                      className="font-body text-[10px] text-green-600 bg-green-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-green-100">
+                      🧾 {doc}
+                    </button>
+                  )}
+                  {onEnvoyer && (
+                    <button type="button" disabled={envoiEnCours === payment.id} onClick={() => onEnvoyer(payment)}
+                      title={`Envoyer ${doc === "Facture" ? "la facture" : "la proforma"} en PDF par email`}
+                      className="font-body text-[10px] text-blue-600 bg-blue-50 px-2.5 py-1 rounded border-none cursor-pointer hover:bg-blue-100 disabled:opacity-50">
+                      {envoiEnCours === payment.id ? "…" : "✉️ Envoyer"}
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         ))}
         {resume.echeancesSansCommande > 0 && (
