@@ -36,6 +36,8 @@ interface Forfait {
   totalPaidTTC: number;
   paymentPlan: string;
   status: "active" | "actif" | "suspended" | "completed" | "cancelled";
+  /** Statut au moment de la résiliation, rétabli par « Réactiver ». */
+  statutAvantResiliation?: "active" | "actif" | "suspended";
   createdAt: any;
 }
 
@@ -1435,9 +1437,39 @@ export default function ForfaitsPage() {
                         </button>
                       )}
                       {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
-                        <button type="button" onClick={() => { if (confirm(`Résilier le forfait de ${f.childName} ?`)) handleStatusChange(f.id, "cancelled"); }} disabled={saving}
+                        <button type="button"
+                          onClick={async () => {
+                            if (!confirm(`Résilier CETTE fiche forfait de ${f.childName} (${f.slotKey || f.activityTitle || "—"}, créée le ${formatDate(f.createdAt)}) ?\n\nSeule cette fiche est résiliée : le planning, les commandes et les prélèvements ne changent pas. Elle pourra être réactivée.`)) return;
+                            setSaving(true);
+                            try {
+                              // Statut d'avant gardé : « Réactiver » le rétablit à l'identique.
+                              await updateDoc(doc(db, "forfaits", f.id), { status: "cancelled", statutAvantResiliation: f.status, resilieLe: serverTimestamp(), updatedAt: serverTimestamp() });
+                              await fetchData();
+                            } catch (e) { console.error(e); }
+                            setSaving(false);
+                          }}
+                          disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">
                           <XCircle size={12} /> Résilier
+                        </button>
+                      )}
+                      {/* Résiliation par erreur (septembre 2026 : trois fiches d'une
+                          cavalière résiliées au lieu d'une) : la fiche se rétablit. */}
+                      {f.status === "cancelled" && (
+                        <button type="button"
+                          onClick={async () => {
+                            if (!confirm(`Réactiver la fiche forfait de ${f.childName} (${f.slotKey || f.activityTitle || "—"}) ?\n\nSeule la fiche change. Si ${f.childName} avait été désinscrit(e) des cours (« Désinscrire de tous les cours »), la réactivation ne le/la réinscrit pas au planning.`)) return;
+                            setSaving(true);
+                            try {
+                              const statut = f.statutAvantResiliation || "actif";
+                              await updateDoc(doc(db, "forfaits", f.id), { status: statut, reactiveLe: serverTimestamp(), updatedAt: serverTimestamp() });
+                              await fetchData();
+                            } catch (e) { console.error(e); }
+                            setSaving(false);
+                          }}
+                          disabled={saving}
+                          className="flex items-center gap-1.5 font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100">
+                          <Play size={12} /> Réactiver
                         </button>
                       )}
                       {(f.status === "active" || f.status === "actif" || f.status === "suspended") && (
