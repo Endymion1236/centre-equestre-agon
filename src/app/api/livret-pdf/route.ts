@@ -73,6 +73,8 @@ export async function POST(request: NextRequest) {
       const nSnap = await adminDb.collection("notes-seance").where("creneauId", "in", grp).get();
       nSnap.docs.forEach(d => {
         const n = d.data() as any;
+        // Analyse IA d'une préparation : pas une note de fin de séance.
+        if (n.type === "analyse-preparation") return;
         (notesByCreneau[n.creneauId] = notesByCreneau[n.creneauId] || []).push(n);
       });
     }

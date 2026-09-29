@@ -6,6 +6,46 @@ import { authFetch } from "@/lib/auth-fetch";
 import { extensionAudio } from "@/lib/transcription-params";
 import { Mic, MicOff, Loader2, Trash2, ChevronDown, ChevronUp, Check, FileText, X, Eye, ZoomIn, ZoomOut, Sparkles } from "lucide-react";
 import { LIBELLES_ALERTE, prenomSeul, type AnalyseNoteSeance } from "@/lib/analyse-note-seance";
+import type { AnalysePreparationSeance } from "@/lib/analyse-preparation-seance";
+
+/** L'analyse IA d'une préparation : la note mise au propre, puis les idées en plus. */
+function AnalysePreparation({ analyse }: { analyse: AnalysePreparationSeance }) {
+  const bloc = (titre: string, items: string[], cls: string) => items.length > 0 && (
+    <div>
+      <div className={`font-body text-[11px] font-semibold ${cls}`}>{titre}</div>
+      <ul className="list-disc pl-4 font-body text-xs text-slate-700">{items.map((t, i) => <li key={i}>{t}</li>)}</ul>
+    </div>
+  );
+  return (
+    <div className="space-y-1.5">
+      {analyse.objectif && <p className="font-body text-xs text-slate-700">🎯 <b>Objectif :</b> {analyse.objectif}</p>}
+      {analyse.deroule.length > 0 && (
+        <div>
+          <div className="font-body text-[11px] font-semibold text-orange-700">🗂️ Déroulé</div>
+          <ol className="list-decimal pl-4 font-body text-xs text-slate-700">{analyse.deroule.map((d, i) => <li key={i}>{d.etape ? <b>{d.etape} : </b> : null}{d.contenu}</li>)}</ol>
+        </div>
+      )}
+      {bloc("🧰 Matériel à préparer", analyse.materiel, "text-slate-700")}
+      {analyse.vigilance.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5">
+          {analyse.vigilance.map((v, i) => <div key={i} className="font-body text-xs text-red-800">⚠️ {v}</div>)}
+        </div>
+      )}
+      {analyse.adaptations.length > 0 && (
+        <div>
+          <div className="font-body text-[11px] font-semibold text-purple-700">👤 Adaptations</div>
+          <ul className="list-disc pl-4 font-body text-xs text-slate-700">{analyse.adaptations.map((a, i) => <li key={i}><b>{a.prenom}</b> : {a.conseil}</li>)}</ul>
+        </div>
+      )}
+      {analyse.suggestions.length > 0 && (
+        <div className="rounded-lg border border-dashed border-teal-300 bg-teal-50/50 px-2.5 py-1.5">
+          <div className="font-body text-[11px] font-semibold text-teal-800">💡 Suggestions de l&apos;IA (pas dans ta note)</div>
+          <ul className="list-disc pl-4 font-body text-xs text-slate-700">{analyse.suggestions.map((t, i) => <li key={i}>{t}</li>)}</ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /** L'analyse IA d'une note, telle qu'affichée sous la note et dans le journal. */
 function AnalyseNote({ analyse }: { analyse: AnalyseNoteSeance }) {
@@ -51,12 +91,25 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
   const [prep, setPrep] = useState<string>(creneau.notePreparation || "");
   const [prepSaving, setPrepSaving] = useState(false);
   const [prepSaved, setPrepSaved] = useState(false);
+  // Analyse IA de la préparation. Elle parle des enfants par leur prénom :
+  // elle est rangée dans `notes-seance` (lisible par l'équipe seule), jamais
+  // sur le créneau, que toute famille connectée peut lire. Elle n'est
+  // enregistrée que si elle est celle du texte enregistré.
+  const [analysePrep, setAnalysePrep] = useState<AnalysePreparationSeance | null>(null);
+  const [analysePrepSource, setAnalysePrepSource] = useState<string>("");
+  const [analysingPrep, setAnalysingPrep] = useState(false);
+  const [analysePrepErr, setAnalysePrepErr] = useState("");
+  const prepRef = useRef(prep);
+  useEffect(() => { prepRef.current = prep; }, [prep]);
 
   // Notes de FIN DE SÉANCE (journal notes-seance)
   const [journal, setJournal] = useState<any[]>([]);
   const [fin, setFin] = useState("");
   const [finSaving, setFinSaving] = useState(false);
-  const [recording, setRecording] = useState(false);
+  // Dictée en cours, et pour quelle note : la préparation ou la fin de séance.
+  const [recording, setRecording] = useState<null | "prep" | "fin">(null);
+  // Note visée par la dernière dictée : où afficher « Transcription… ».
+  const [dicteeCible, setDicteeCible] = useState<"prep" | "fin">("fin");
   const [transcribing, setTranscribing] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Analyse IA de la note de fin de séance, lancée après la dictée.
@@ -80,15 +133,25 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
   const planIsPdf = /pdf/i.test(planType) || /\.pdf($|\?)/i.test(planUrl || "");
 
   useEffect(() => { setPrep(creneau.notePreparation || ""); }, [creneau.id, creneau.notePreparation]);
+  useEffect(() => { setAnalysePrep(null); setAnalysePrepSource(""); setAnalysePrepErr(""); }, [creneau.id]);
 
   useEffect(() => { if (lightbox) setZoom(1); }, [lightbox]);
 
   const loadJournal = () => {
     getDocs(query(collection(db, "notes-seance"), where("creneauId", "==", creneau.id)))
       .then(s => {
-        const items = s.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
-        items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-        setJournal(items);
+        const tous = s.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+        tous.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        // Les analyses de préparation vivent dans la même collection, à part
+        // du journal : on reprend la plus récente si elle correspond encore
+        // à la préparation enregistrée.
+        setJournal(tous.filter(n => n.type !== "analyse-preparation"));
+        const derniere = tous.find(n => n.type === "analyse-preparation");
+        const prepEnregistree = (creneau.notePreparation || "").trim();
+        if (derniere?.analyse && derniere.texteSource === prepEnregistree) {
+          setAnalysePrep(a => a || derniere.analyse);
+          setAnalysePrepSource(src => src || prepEnregistree);
+        }
       })
       .catch(() => setJournal([]));
   };
@@ -98,17 +161,31 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
   const savePrep = async () => {
     setPrepSaving(true);
     try {
+      const texte = prep.trim();
       await updateDoc(doc(db, "creneaux", creneau.id), {
-        notePreparation: prep.trim() || null,
+        notePreparation: texte || null,
         notePreparationUpdatedAt: new Date().toISOString(),
       });
+      // L'analyse ne part que si elle est celle du texte enregistré.
+      if (analysePrep && texte && analysePrepSource === texte) {
+        await addDoc(collection(db, "notes-seance"), {
+          creneauId: creneau.id,
+          type: "analyse-preparation",
+          texteSource: texte,
+          analyse: analysePrep,
+          createdAt: serverTimestamp(),
+          createdByEmail: auth.currentUser?.email || null,
+          creneauDate: creneau.date,
+          creneauActivityTitle: creneau.activityTitle,
+        });
+      }
       setPrepSaved(true); setTimeout(() => setPrepSaved(false), 2000);
       onChanged?.();
     } catch (e) { console.error("savePrep:", e); alert("Erreur lors de l'enregistrement de la préparation."); }
     setPrepSaving(false);
   };
 
-  const startRec = async () => {
+  const startRec = async (cible: "prep" | "fin") => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
@@ -130,11 +207,18 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
           // Une réponse non JSON (délai dépassé, fichier trop lourd) : le dire.
           const data = await res.json().catch(() => ({ error: res.status === 413 ? "Dictée trop longue : faites-la en plusieurs fois." : res.status === 504 ? "La transcription a pris trop de temps : réessayez avec une dictée plus courte." : `réponse inattendue du serveur (${res.status})` }));
           if (data.success) {
-            const avant = finRef.current.trim();
-            const complet = (avant ? avant + " " : "") + data.text;
-            setFin(complet);
             // La dictée terminée, l'analyse part d'elle-même sur la note entière.
-            void analyser(complet);
+            if (cible === "prep") {
+              const avant = prepRef.current.trim();
+              const complet = (avant ? avant + " " : "") + data.text;
+              setPrep(complet);
+              void analyserPrep(complet);
+            } else {
+              const avant = finRef.current.trim();
+              const complet = (avant ? avant + " " : "") + data.text;
+              setFin(complet);
+              void analyser(complet);
+            }
           }
           else alert(data.error || "Transcription impossible (erreur inconnue).");
         } catch (e: any) { alert("Erreur transcription : " + e.message); }
@@ -142,12 +226,40 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
       };
       recorderRef.current = rec;
       rec.start();
-      setRecording(true);
+      setRecording(cible);
+      setDicteeCible(cible);
     } catch (e: any) { alert("Micro indisponible : " + e.message); }
   };
   const stopRec = () => {
     if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
-    setRecording(false);
+    setRecording(null);
+  };
+
+  const analyserPrep = async (texte: string) => {
+    const t = texte.trim();
+    if (t.length < 5) return;
+    setAnalysingPrep(true); setAnalysePrepErr("");
+    try {
+      const res = await authFetch("/api/ia/preparation-seance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          texte: t,
+          seance: {
+            activityTitle: creneau.activityTitle, date: creneau.date, startTime: creneau.startTime, endTime: creneau.endTime,
+            monitor: creneau.monitor, themeStage: creneau.themeStage || "",
+            cavaliers: (creneau.enrolled || []).map((e: any) => ({
+              prenom: prenomSeul(e.childName), poney: e.horseName || "",
+              niveau: e.galopLevel && e.galopLevel !== "—" ? e.galopLevel : "",
+            })),
+          },
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) throw new Error(data.error || `Erreur ${res.status}`);
+      setAnalysePrep(data.analyse); setAnalysePrepSource(t);
+    } catch (e: any) { setAnalysePrepErr(e?.message || "Analyse indisponible"); }
+    setAnalysingPrep(false);
   };
 
   const analyser = async (texte: string) => {
@@ -276,13 +388,34 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
             <textarea value={prep} onChange={e => setPrep(e.target.value)} rows={2}
               placeholder="Ce que tu prévois pour la séance (objectifs, exercices…)"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400 resize-y" />
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <button type="button" onClick={() => recording === "prep" ? stopRec() : startRec("prep")} disabled={transcribing || recording === "fin"}
+                className={`flex items-center gap-1.5 font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50 ${recording === "prep" ? "bg-red-500 text-white hover:bg-red-400" : "bg-orange-100 text-orange-700 hover:bg-orange-200"}`}>
+                {recording === "prep" ? <><MicOff size={13} /> Arrêter la dictée</> : <><Mic size={13} /> Dicter</>}
+              </button>
+              {transcribing && dicteeCible === "prep" && <span className="font-body text-xs text-slate-500 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Transcription…</span>}
+              <button type="button" onClick={() => analyserPrep(prep)} disabled={analysingPrep || transcribing || prep.trim().length < 5}
+                title="Analyse IA de la préparation : déroulé, matériel, points de vigilance, adaptations, suggestions"
+                className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50">
+                {analysingPrep ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                {analysingPrep ? "Analyse…" : analysePrep && analysePrepSource === prep.trim() ? "Réanalyser" : "Analyser"}
+              </button>
               <button type="button" onClick={savePrep} disabled={prepSaving}
                 className="font-body text-xs font-semibold text-white bg-orange-500 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-400 disabled:opacity-50">
                 {prepSaving ? "Enregistrement…" : "Enregistrer"}
               </button>
               {prepSaved && <span className="font-body text-xs text-green-600 flex items-center gap-1"><Check size={12} /> Enregistré</span>}
             </div>
+            {analysePrepErr && <p className="font-body text-xs text-red-600 mt-1">{analysePrepErr}</p>}
+            {analysePrep && (
+              <div className="mt-2 rounded-xl border border-orange-200 bg-orange-50/40 p-3">
+                <div className="font-body text-[11px] font-semibold text-orange-700 uppercase tracking-wider mb-1.5 flex items-center gap-1"><Sparkles size={12} /> Analyse de la préparation</div>
+                {analysePrepSource !== prep.trim() && prep.trim() && (
+                  <p className="font-body text-[11px] text-amber-700 mb-1.5">La préparation a changé depuis l&apos;analyse : « Réanalyser » pour la mettre à jour, sinon elle ne sera pas enregistrée avec.</p>
+                )}
+                <AnalysePreparation analyse={analysePrep} />
+              </div>
+            )}
           </div>
 
           {/* FIN DE SÉANCE + dictée */}
@@ -292,11 +425,11 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
               placeholder="Ressenti, comportement de groupe, exercices à refaire…"
               className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400 resize-y" />
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              <button type="button" onClick={() => recording ? stopRec() : startRec()} disabled={transcribing}
-                className={`flex items-center gap-1.5 font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50 ${recording ? "bg-red-500 text-white hover:bg-red-400" : "bg-blue-100 text-blue-700 hover:bg-blue-200"}`}>
-                {recording ? <><MicOff size={13} /> Arrêter la dictée</> : <><Mic size={13} /> Dicter</>}
+              <button type="button" onClick={() => recording === "fin" ? stopRec() : startRec("fin")} disabled={transcribing || recording === "prep"}
+                className={`flex items-center gap-1.5 font-body text-xs font-semibold px-3 py-1.5 rounded-lg border-none cursor-pointer disabled:opacity-50 ${recording === "fin" ? "bg-red-500 text-white hover:bg-red-400" : "bg-blue-100 text-blue-700 hover:bg-blue-200"}`}>
+                {recording === "fin" ? <><MicOff size={13} /> Arrêter la dictée</> : <><Mic size={13} /> Dicter</>}
               </button>
-              {transcribing && <span className="font-body text-xs text-slate-500 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Transcription…</span>}
+              {transcribing && dicteeCible === "fin" && <span className="font-body text-xs text-slate-500 flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> Transcription…</span>}
               <button type="button" onClick={() => analyser(fin)} disabled={analysing || transcribing || fin.trim().length < 5}
                 title="Analyse IA de la note : ce qui a marché, les difficultés, à retravailler, les alertes"
                 className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50">

@@ -116,13 +116,14 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
       where("creneauId", "==", creneau.id),
       orderBy("createdAt", "desc")
     ))
-      .then(snap => setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance))))
+      // Les analyses IA de préparation partagent la collection : pas des notes.
+      .then(snap => setNotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance)).filter((n: any) => n.type !== "analyse-preparation")))
       .catch(e => {
         signalerErreur(e, "planning: notes de séance (tri serveur)", { creneauId: creneau.id });
         // Index composite manquant → fallback sans orderBy
         getDocs(query(collection(db, "notes-seance"), where("creneauId", "==", creneau.id)))
           .then(snap => {
-            const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance));
+            const items = snap.docs.map(d => ({ id: d.id, ...d.data() } as NoteSeance)).filter((n: any) => n.type !== "analyse-preparation");
             // Tri client par createdAt desc
             items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             setNotes(items);
@@ -147,6 +148,7 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
       .then(snap => {
         const items = snap.docs
           .map(d => ({ id: d.id, ...d.data() } as NoteSeance))
+          .filter((n: any) => n.type !== "analyse-preparation")
           // Exclure les notes de la seance courante (deja affichees au-dessus)
           .filter(n => n.creneauId !== creneau.id)
           // Garder le meme moniteur si renseigne (un meme creneau horaire peut
