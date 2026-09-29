@@ -26,6 +26,7 @@ import PoneyChargeView from "./PoneyChargeView";
 import ThemeSuggestion from "./ThemeSuggestion";
 import QuickAddRider from "./QuickAddRider";
 import SeanceNotes from "./SeanceNotes";
+import { reglementSeanceParCarte, type AjustementCommande } from "./seance-par-carte";
 import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp, AlertTriangle, Trash2, X, CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -565,10 +566,19 @@ export default function MontoirPage() {
 
     // 4. Débiter automatiquement les cartes des cavaliers présents
     let cartesDebitees = 0;
+    // Séances passées sur la carte et retirées de leur commande, et séances
+    // laissées à leur commande (déjà réglée) : dit à Nicolas en fin de clôture.
+    let seancesRetireesDesCommandes = 0;
+    const laisseesALaCommande: string[] = [];
+    // Inscriptions désormais réglées par une carte trouvée après coup : le
+    // planning doit le savoir, sinon il les montrerait « non réglé ».
+    const passeesSurCarte: { childId: string; cardId: string }[] = [];
     for (const child of presents) {
       // Cas 1 : paymentSource=card avec cardId explicite
       // Cas 2 : fallback — chercher une carte compatible (individuelle ou familiale)
       let carteId = (child as any).cardId;
+      // Cas 2 seulement : la commande de la séance, à solder par la carte.
+      let ajustements: AjustementCommande[] = [];
       const ps = (child as any).paymentSource;
       if (!carteId && ps !== "card" && ps !== "forfait" && ps !== "offert" && ps !== "celeris") {
         try {
@@ -588,7 +598,22 @@ export default function MontoirPage() {
             const ct = cd.activityType || "cours";
             return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
           });
-          if (carteDoc) carteId = carteDoc.id;
+          if (carteDoc) {
+            // Carte trouvée après coup : la séance a peut-être déjà une commande
+            // (inscrite « à payer » avant que la carte existe). Payée → on ne
+            // touche pas la carte ; encore vierge → la carte la remplace.
+            const familyId = (child as any).familyId || famDoc?.firestoreId || famDoc?.id;
+            const commandesSnap = familyId
+              ? await getDocs(query(collection(db, "payments"), where("familyId", "==", familyId)))
+              : { docs: [] as any[] };
+            const decision = reglementSeanceParCarte(commandesSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })), child.childId, cid);
+            if (decision.debiterCarte) {
+              carteId = carteDoc.id;
+              ajustements = decision.ajustements;
+            } else {
+              laisseesALaCommande.push(`${child.childName} (${decision.raison})`);
+            }
+          }
         } catch {}
       }
       if (!carteId) continue;
@@ -636,7 +661,31 @@ export default function MontoirPage() {
           });
         });
         cartesDebitees++;
+        if (!(child as any).cardId) passeesSurCarte.push({ childId: child.childId, cardId: carteId });
+        // La séance est sur la carte : elle quitte sa commande (annulée si
+        // elle n'avait que cette ligne), sinon elle resterait réclamée.
+        for (const aj of ajustements) {
+          try {
+            await updateDoc(doc(db, "payments", aj.paymentId), aj.annuler
+              ? { status: "cancelled", cancelledAt: serverTimestamp(), cancelReason: `Séance du ${c.date} réglée par la carte de séances`, updatedAt: serverTimestamp() }
+              : { items: aj.items, totalTTC: aj.totalTTC, updatedAt: serverTimestamp() });
+            seancesRetireesDesCommandes++;
+          } catch (e) { console.error("Retrait de la séance de sa commande:", e); }
+        }
       } catch (e) { console.error("Erreur débit carte montoir:", e); }
+    }
+
+    if (passeesSurCarte.length > 0) {
+      try {
+        const crSnap = await getDoc(doc(db, "creneaux", cid));
+        if (crSnap.exists()) {
+          const enrolled = (crSnap.data().enrolled || []).map((e: any) => {
+            const p = passeesSurCarte.find(x => x.childId === e.childId);
+            return p ? { ...e, paymentSource: "card", cardId: p.cardId } : e;
+          });
+          await updateDoc(doc(db, "creneaux", cid), { enrolled });
+        }
+      } catch (e) { console.error("Inscription passée sur la carte:", e); }
     }
 
     // 4b. Tracer les absents dans l'historique de leur carte (sans débiter)
@@ -785,6 +834,8 @@ export default function MontoirPage() {
     const parts = [`Reprise clôturée.`];
     if (notesCreated > 0) parts.push(`${notesCreated} trace${notesCreated > 1 ? "s" : ""} péda.`);
     if (cartesDebitees > 0) parts.push(`${cartesDebitees} carte${cartesDebitees > 1 ? "s" : ""} débitée${cartesDebitees > 1 ? "s" : ""}.`);
+    if (seancesRetireesDesCommandes > 0) parts.push(`${seancesRetireesDesCommandes} séance${seancesRetireesDesCommandes > 1 ? "s" : ""} retirée${seancesRetireesDesCommandes > 1 ? "s" : ""} des impayés (réglée${seancesRetireesDesCommandes > 1 ? "s" : ""} par la carte).`);
+    if (laisseesALaCommande.length > 0) parts.push(`Carte non débitée pour ${laisseesALaCommande.join(", ")}.`);
     if (cartesDebiteesNJ > 0) parts.push(`${cartesDebiteesNJ} séance${cartesDebiteesNJ > 1 ? "s" : ""} perdue${cartesDebiteesNJ > 1 ? "s" : ""} (NJ).`);
     if (rattrapagesCreated > 0) parts.push(`${rattrapagesCreated} rattrapage${rattrapagesCreated > 1 ? "s" : ""} créé${rattrapagesCreated > 1 ? "s" : ""}.`);
     if (absentsNonJustified.length > rattrapagesCreated && absentsNonJustified.length > 0) {
