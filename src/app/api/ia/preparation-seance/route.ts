@@ -6,6 +6,7 @@
  * Réponse : { success: true, analyse } ou { error }.
  */
 
+import { MODELE_PRINCIPAL } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { jsonSchemaOutputFormat } from "@anthropic-ai/sdk/helpers/json-schema";
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey });
     const response = await client.messages.parse({
-      model: "claude-opus-5-5",
+      model: MODELE_PRINCIPAL,
       max_tokens: 16000,
       // Mise au propre courte et bien cadrée : un effort bas suffit et répond vite.
       output_config: { effort: "low", format: jsonSchemaOutputFormat(SCHEMA_ANALYSE_PREPARATION) },

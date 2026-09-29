@@ -1,3 +1,4 @@
+import { MODELE_REDACTION, LIMITE_REPONSE } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import Anthropic from "@anthropic-ai/sdk";
@@ -55,8 +56,10 @@ export async function POST(req: NextRequest) {
         commentaire: avis.commentaire || "",
       };
       const msg = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 700,
+        model: MODELE_REDACTION,
+        // Réflexion courte, comptée dans la limite : la limite lui laisse la place.
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [
           {
             role: "user",

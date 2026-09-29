@@ -1,3 +1,4 @@
+import { MODELE_PRINCIPAL } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { verifyAuth } from "@/lib/api-auth";
@@ -213,8 +214,11 @@ export async function POST(req: NextRequest) {
       : { type: "image", source: { type: "base64", media_type: type, data } };
 
     const msg = await client.messages.create({
-      model: "claude-opus-5",
-      max_tokens: 4000,
+      model: MODELE_PRINCIPAL,
+      // Lecture d'un document bien cadrée : effort bas ; la réflexion compte
+      // dans la limite, qui lui laisse la place.
+      max_tokens: 16000,
+      output_config: { effort: "low" },
       system: SYSTEME,
       messages: [{ role: "user", content: [piece, { type: "text", text: "Extrais les coordonnées bancaires de ce document." }] }],
     });

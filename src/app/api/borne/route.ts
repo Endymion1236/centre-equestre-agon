@@ -1,3 +1,4 @@
+import { MODELE_REDACTION, texteReponse } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { verifierAccesBorne } from "@/lib/borne-acces-server";
@@ -98,8 +99,10 @@ Sinon pour une inscription générale : href = "/espace-cavalier/reserver".`;
     }
 
     let response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 512,
+      model: MODELE_REDACTION,
+      // Réponse parlée, rapide : réflexion courte, et place pour elle dans la limite.
+      max_tokens: 4000,
+      output_config: { effort: "low" },
       system: systemPrompt,
       tools,
       messages,
@@ -129,16 +132,17 @@ Sinon pour une inscription générale : href = "/espace-cavalier/reserver".`;
       messages.push({ role: "user", content: toolResults });
 
       response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 512,
+        model: MODELE_REDACTION,
+        // Réponse parlée, rapide : réflexion courte, et place pour elle dans la limite.
+        max_tokens: 4000,
+        output_config: { effort: "low" },
         system: systemPrompt,
         tools,
         messages,
       });
     }
 
-    const textBlock = response.content.find((b) => b.type === "text");
-    const raw = (textBlock as Anthropic.TextBlock | undefined)?.text || "";
+    const raw = texteReponse(response);
 
     // Parser le JSON structuré — fallback texte brut si le modèle a dérapé
     let text = raw.trim();

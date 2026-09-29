@@ -1,3 +1,4 @@
+import { MODELE_PRINCIPAL, MODELE_REDACTION, LIMITE_REPONSE, texteReponse } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { verifyAuth } from "@/lib/api-auth";
@@ -237,12 +238,13 @@ Fournis une analyse structurée en 3 parties :
 Sois concis, pratique, en français. Pas de markdown complexe, juste des titres en gras et des listes.`;
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1024,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const text = texteReponse(message);
 
       return NextResponse.json({
         success: true,
@@ -279,12 +281,13 @@ Fournis une analyse structurée en 3 parties :
 Ne brode pas au-delà de ce que dit l'observation. Sois concis et concret, en français. Titres en gras simple, listes à tirets.`;
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1024,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const text = texteReponse(message);
       // Extraire le mot aux parents pour le bouton "Utiliser" côté client
       const motMatch = text.match(/<mot>([\s\S]*?)<\/mot>/);
       return NextResponse.json({
@@ -323,12 +326,13 @@ Réponds directement à la question. Sois précis, chiffré si possible, et sugg
         : [{ role: "user", content: prompt }];
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 512,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages,
       });
 
-      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const text = texteReponse(message);
       return NextResponse.json({ success: true, answer: text });
     }
 
@@ -377,12 +381,13 @@ Fournis une analyse en 3 parties :
 Sois direct, pratique, en français. Chaque suggestion doit être immédiatement actionnable.`;
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1024,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const text = texteReponse(message);
 
       return NextResponse.json({
         success: true,
@@ -405,7 +410,7 @@ Sois direct, pratique, en français. Chaque suggestion doit être immédiatement
 
       const [emailMsg, subjectMsg] = await Promise.all([
         client.messages.create({
-          model: "claude-sonnet-4-5", max_tokens: 600,
+          model: MODELE_REDACTION, max_tokens: LIMITE_REPONSE, output_config: { effort: "low" },
           messages: [{ role: "user", content:
             `Tu es le responsable de communication du Centre Équestre d'Agon-Coutainville.
 Rédige un email professionnel mais chaleureux pour les familles d'une reprise équestre.
@@ -429,7 +434,7 @@ CONSIGNES :
 - Termine par "Cordialement,\nL'équipe du Centre Équestre d'Agon-Coutainville"` }],
         }),
         client.messages.create({
-          model: "claude-sonnet-4-5", max_tokens: 60,
+          model: MODELE_REDACTION, max_tokens: LIMITE_REPONSE, output_config: { effort: "low" },
           messages: [{ role: "user", content:
             `Propose un objet d'email court (max 60 caractères) pour cette reprise équestre : "${creneau.activityTitle}" le ${dateFormatee} à ${creneau.startTime}. Réponds uniquement avec l'objet, sans guillemets.` }],
         }),
@@ -437,8 +442,8 @@ CONSIGNES :
 
       return NextResponse.json({
         success: true,
-        emailBody: emailMsg.content[0].type === "text" ? emailMsg.content[0].text : "",
-        suggestedSubject: subjectMsg.content[0].type === "text" ? subjectMsg.content[0].text.trim() : "",
+        emailBody: texteReponse(emailMsg),
+        suggestedSubject: texteReponse(subjectMsg),
       });
     }
 
@@ -459,12 +464,13 @@ Ton accueillant et convivial, adapté à des familles avec enfants. Emojis perti
 Retourne UNIQUEMENT le HTML du body (pas de <html>, <body>, <head>). Styles inline CSS. Maximum 15 lignes. Pas de markdown ni backticks.`;
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1500,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const text = texteReponse(message);
       const cleaned = text.replace(/```html?\s*/g, "").replace(/```\s*/g, "").trim();
 
       return NextResponse.json({ success: true, generatedBody: cleaned });
@@ -528,12 +534,13 @@ Règles :
 Retourne UNIQUEMENT le texte demandé, rien d'autre.`;
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 400,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const text = message.content[0].type === "text" ? message.content[0].text : "";
+      const text = texteReponse(message);
       const cleaned = text.replace(/```\w*\s*/g, "").replace(/```/g, "").trim();
 
       return NextResponse.json({ success: true, description: cleaned });
@@ -577,12 +584,13 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
 }`;
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 800,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      const raw = texteReponse(message) || "{}";
       let parsed: any = {};
       try {
         // Nettoyer les éventuels backticks
@@ -659,12 +667,13 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
       ].join("\n");
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 600,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      const raw = texteReponse(message) || "{}";
       let parsed: any = {};
       try {
         parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
@@ -733,12 +742,13 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
       ].filter(Boolean).join("\n");
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 2000,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      const raw = texteReponse(message) || "{}";
       let parsed: any = {};
       try {
         parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
@@ -796,12 +806,13 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
       ].join("\n");
 
       const message = await client.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1500,
+        model: MODELE_REDACTION,
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: prompt }],
       });
 
-      const raw = message.content[0].type === "text" ? message.content[0].text.trim() : "{}";
+      const raw = texteReponse(message) || "{}";
       let parsed: any = {};
       try { parsed = JSON.parse(raw.replace(/```json|```/g, "").trim()); }
       catch { parsed = { actions: [], message: raw }; }
@@ -825,22 +836,14 @@ Génère une réponse JSON structurée (et UNIQUEMENT du JSON, sans markdown ni 
         return NextResponse.json({ error: "Prompt vide" }, { status: 400 });
       }
       const message = await client.messages.create({
-        model: "claude-opus-5",
-        max_tokens: 1500,
+        model: MODELE_PRINCIPAL,
+        max_tokens: 16000,
+        output_config: { effort: "low" },
         messages: [{ role: "user", content: consigne }],
       });
-      // Lire TOUS les blocs de texte, jamais `content[0]`.
-      //
-      // claude-opus-5 raisonne par défaut : le premier bloc de la réponse est
-      // un bloc `thinking`, et le texte vient après. Indexer [0] renvoyait donc
-      // une chaîne vide — « Génération impossible : réponse vide » — alors que
-      // le modèle avait bien répondu. Les autres cas de cette route lisent
-      // content[0] sans risque : ils utilisent claude-sonnet-4-5, qui ne
-      // raisonne pas. C'est la lecture de rib-extract, déjà éprouvée.
-      const text = message.content
-        .map((b) => (b.type === "text" ? b.text : ""))
-        .join("")
-        .trim();
+      // Lire TOUS les blocs de texte, jamais `content[0]` : le premier bloc
+      // peut être la réflexion du modèle, vide (cf. lib/ia-modeles).
+      const text = texteReponse(message);
       return NextResponse.json({ success: true, text, content: [{ type: "text", text }] });
     }
 

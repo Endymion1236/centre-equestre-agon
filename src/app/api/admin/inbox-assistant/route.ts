@@ -1,3 +1,4 @@
+import { MODELE_LEGER, MODELE_REDACTION } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
 import Anthropic from "@anthropic-ai/sdk";
@@ -84,7 +85,7 @@ Règles dates : "cette semaine" = lundi→dimanche de la semaine du jour ; "ce w
 ${periodesConnues ? `Vacances scolaires configurées (quand le mail nomme l'une d'elles — Toussaint, Noël, février/hiver, Pâques/printemps, été — utilise EXACTEMENT ses dates, la prochaine à venir) : ${periodesConnues}.` : ""}
 Règles cavaliers : uniquement ce qui est ÉCRIT (âge, niveau de galop, "débutant", "galop d'argent"…) ; n'invente ni âge ni niveau ; liste vide si aucun cavalier n'est décrit.`;
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: MODELE_LEGER,
       max_tokens: 300,
       system: sys,
       messages: [{ role: "user", content: `${subject || ""}\n${(body || "").slice(0, 1500)}` }],
@@ -363,15 +364,13 @@ ACTIVITÉS (à venir). ATTENTION : certaines portent "complet": true — elles E
 ${JSON.stringify(activitesFiltrees)}`;
 
     const message = await client.messages.create({
-      // Génération courante du même palier (Sonnet 4.5 → Sonnet 5) : mieux
-      // sur le raisonnement d'éligibilité, moins cher au jeton.
-      model: "claude-sonnet-5",
-      // Sonnet 5 réfléchit par défaut avant de répondre, et cette réflexion
-      // compte dans max_tokens : avec 2 000, le JSON arrivait tronqué
-      // (« réponse IA non parsable »). Réflexion coupée — la réponse est un
-      // JSON strict, pas un raisonnement — et budget élargi par sécurité.
-      thinking: { type: "disabled" },
-      max_tokens: 6000,
+      model: MODELE_REDACTION,
+      // La réflexion ne se coupe plus sur ce modèle (« disabled » est refusé)
+      // et elle compte dans max_tokens : avec 2 000 puis 6 000, le JSON
+      // pouvait arriver tronqué (« réponse IA non parsable »). Effort bas —
+      // la réponse est un JSON strict, pas un raisonnement — et limite large.
+      max_tokens: 16000,
+      output_config: { effort: "low" },
       system: systemPrompt,
       messages: [{ role: "user", content: userContent }],
     });

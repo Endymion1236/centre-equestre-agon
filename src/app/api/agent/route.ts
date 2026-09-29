@@ -1,3 +1,4 @@
+import { MODELE_PRINCIPAL, texteReponse } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
@@ -519,8 +520,10 @@ RÈGLES IMPORTANTES :
     }
 
     let response = await anthropic.messages.create({
-      model: "claude-opus-4-5",
-      max_tokens: 1024,
+      model: MODELE_PRINCIPAL,
+      // Réflexion toujours active sur ce modèle, comptée dans max_tokens.
+      max_tokens: 16000,
+      output_config: { effort: "medium" },
       system: systemPrompt,
       tools,
       messages,
@@ -560,16 +563,19 @@ RÈGLES IMPORTANTES :
       messages.push({ role: "user", content: toolResults });
 
       response = await anthropic.messages.create({
-        model: "claude-opus-4-5",
-        max_tokens: 512,
+        model: MODELE_PRINCIPAL,
+        // Réflexion toujours active sur ce modèle, comptée dans max_tokens.
+        max_tokens: 16000,
+        output_config: { effort: "medium" },
         system: systemPrompt,
         tools,
         messages,
       });
     }
 
-    const text = response.content.find(b => b.type === "text");
-    return NextResponse.json({ type: "answer", message: text?.text || "Je n'ai pas pu répondre." });
+    // Tous les blocs de texte : la réponse peut commencer par la réflexion.
+    const text = texteReponse(response);
+    return NextResponse.json({ type: "answer", message: text || "Je n'ai pas pu répondre." });
 
   } catch (error: any) {
     // Détail dans les journaux serveur uniquement : le message d'exception

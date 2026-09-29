@@ -20,6 +20,7 @@
  * Auth admin obligatoire.
  */
 
+import { MODELE_LEGER } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { controlerCoutEmployeur } from "@/lib/controle-bulletin";
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
 
       const anthropic = new Anthropic({ apiKey });
       const rep = await anthropic.messages.create({
-        model: "claude-haiku-4-5",
+        model: MODELE_LEGER,
         max_tokens: 500,
         messages: [{
           role: "user",
