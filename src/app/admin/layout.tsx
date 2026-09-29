@@ -55,6 +55,7 @@ import {
   Users,
   Wallet,
   X,
+  Eye,
 } from "lucide-react";
 import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import GlobalKeyboardShortcuts from "@/components/admin/GlobalKeyboardShortcuts";
@@ -129,6 +130,9 @@ const NAV_GROUPS: NavGroup[] = [
       // Ce que la machine vérifie seule : argent encaissé sans inscription,
       // commande soldée sans numéro de facture, journal en désaccord avec la
       // commande. À ouvrir le lundi matin.
+      // Le passage du matin sur tout le logiciel (lib/veille-club), aussi
+      // envoyé par email à 7 h 30 quand il y a quelque chose.
+      { href: "/admin/veille", icon: Eye, label: "Veille du club" },
       { href: "/admin/coherence", icon: ShieldCheck, label: "Cohérence" },
       { href: "/admin/doublons", icon: GitMerge, label: "Doublons" },
       { href: "/admin/comptes-orphelins", icon: UserX, label: "Comptes orphelins" },
