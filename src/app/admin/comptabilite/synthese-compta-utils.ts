@@ -1,3 +1,5 @@
+import { lignesAuTotal } from "@/lib/lignes-facture";
+
 export interface LigneFactureSynthese {
   priceHT?: number;
   priceTTC?: number;
@@ -46,7 +48,10 @@ export function calculerSyntheseFactures(factures: FactureSynthese[]) {
     totauxParMode[facture.paymentMode] = (totauxParMode[facture.paymentMode] || 0)
       + (facture.totalTTC || 0);
 
-    (facture.items || []).forEach((ligne) => {
+    // Lignes ramenées au total (lib/lignes-facture) : la 1re échéance d'un
+    // forfait en 3×/10× porte les lignes du forfait entier, sa TVA était
+    // comptée sur 699 € au lieu de 69,90 €.
+    lignesAuTotal(facture).forEach((ligne) => {
       const ht = ligne.priceHT || 0;
       const ttc = ligne.priceTTC || 0;
       const montantTva = ttc - ht;

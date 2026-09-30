@@ -101,6 +101,18 @@ test("les modes sont classés du montant le plus élevé au plus faible", () => 
   assert.deepEqual(resultat.byMode, [["cb_terminal", 157.75], ["virement", 120]]);
 });
 
+test("1re échéance d'un forfait en 10× : TVA sur l'échéance, pas sur le forfait entier", () => {
+  const resultat = calculerSyntheseFactures([{
+    status: "paid",
+    totalTTC: 69.9,
+    paymentMode: "sepa",
+    date: date(2026, 9, 5),
+    items: [{ priceHT: 662.56, priceTTC: 699, tva: 5.5 }],
+  }]);
+  assert.equal(Math.round(resultat.totalHT * 100) / 100, 66.26);
+  assert.equal(Math.round(resultat.totalTVA * 100) / 100, 3.64);
+});
+
 console.log("\n── Encaissements journaliers ──");
 
 test("les vrais encaissements sont regroupés par jour et mode", () => {
