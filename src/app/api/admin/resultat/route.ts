@@ -7,12 +7,12 @@
  *   - masse     : coût de la masse salariale (coût employeur, sinon brut,
  *                 + charges patronales versées à part) — écran Masse salariale ;
  *   - depenses  : total des factures saisies — écran Dépenses par poste ;
- *   - tvaCollectee : TVA des ventes du mois, calculée comme l'onglet
- *                 Comptabilité → TVA (mêmes factures, même exclusion des
- *                 annulées et en attente) PLUS la TVA des écritures importées
- *                 de Céleris pour les mois tenus dans l'ancien logiciel —
- *                 pour l'encart « TVA à payer ». `tvaCollecteeCeleris` en
- *                 donne la part Céleris.
+ *   - tvaCollectee : TVA sur les ENCAISSEMENTS du mois (prestations de
+ *                 services, art. 269-2-c du CGI) : chaque somme reçue porte
+ *                 la TVA de la facture qu'elle règle — calcul de la
+ *                 déclaration en base encaissements. Mois tenus dans Céleris :
+ *                 la TVA des écritures importées, seule. Pour l'encart
+ *                 « TVA à payer » ; `tvaCollecteeCeleris` en donne la part Céleris.
  *   - caExterne : CA encaissé AVANT la bascule, saisi à la main depuis
  *                 l'ancien logiciel (Celeris) pour les mois où la caisse de
  *                 l'application est incomplète (juillet-août 2026). Doc par
@@ -35,7 +35,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
-import { calculerSyntheseFactures } from "@/app/admin/comptabilite/synthese-compta-utils";
+import { collecteeEncaissementsParMois } from "@/lib/declaration-tva";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -57,11 +57,11 @@ export async function GET(req: NextRequest) {
   try {
     const [encSnap, msSnap, depSnap, paySnap, celSnap, extSnap] = await Promise.all([
       adminDb.collection("encaissements")
-        .select("montant", "mode", "isApportCaisse", "isVersementBanque", "date")
+        .select("montant", "mode", "isApportCaisse", "isVersementBanque", "date", "paymentId")
         .get(),
       adminDb.collection("masse-salariale").get(),
       adminDb.collection("depenses").get(),
-      adminDb.collection("payments").select("status", "totalTTC", "paymentMode", "date", "items").get(),
+      adminDb.collection("payments").select("totalTTC", "date", "items").get(),
       adminDb.collection("historiqueComptableCeleris").select("mois", "totaux").get(),
       adminDb.collection("resultat-ca-externe").get(),
     ]);
@@ -73,19 +73,19 @@ export async function GET(req: NextRequest) {
       return e;
     };
 
-    // TVA collectée : les factures du mois, hors annulées et en attente —
-    // exactement ce que l'onglet TVA additionne, pour que les deux écrans
-    // donnent le même chiffre.
-    const statutsExclus = new Set(["cancelled", "pending", "draft"]);
-    const facturesParMois = new Map<string, any[]>();
-    paySnap.docs.forEach((d) => {
-      const r = d.data() as any;
-      if (r.status && statutsExclus.has(r.status)) return;
-      const mois = moisParis(r.date);
-      if (!mois) return;
-      facturesParMois.set(mois, [...(facturesParMois.get(mois) || []), r]);
+    // TVA collectée : sur les encaissements du mois (prestations de
+    // services), exactement comme la déclaration en base encaissements et
+    // l'onglet Comptabilité → TVA. Les mois Céleris sont repris plus bas.
+    const moisCeleris = celSnap.docs.map((d) => String((d.data() as any).mois || "")).filter((m) => MOIS_RE.test(m));
+    const encTva = encSnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const moisEnc = [...new Set(encTva.map((e) => moisParis(e.date)).filter((m): m is string => !!m))];
+    const { collectee } = collecteeEncaissementsParMois({
+      mois: moisEnc,
+      payments: paySnap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })),
+      encaissements: encTva,
+      moisCeleris,
     });
-    for (const [m, factures] of facturesParMois) entree(m).tvaCollectee = calculerSyntheseFactures(factures).totalTVA;
+    for (const [m, tva] of Object.entries(collectee)) entree(m).tvaCollectee = tva;
 
     // Mois tenus dans Céleris (juillet–août 2026, avant la bascule) : la TVA
     // collectée est celle des écritures importées — comptes 445, en centimes.

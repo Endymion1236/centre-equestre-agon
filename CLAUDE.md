@@ -81,7 +81,7 @@ responsabilité personnelle de Nicolas — inexacte.
   unicité des clôtures journalières (C5, à faire dès la clôture de septembre terminée), chaînage
   transactionnel (C3), archive annuelle scellée puis attestation au modèle `BOI-LETTRE-000242`
   (C4), mentions obligatoires de facture (C8, attend les taux de Nicolas), TVA à l'encaissement
-  (C9, attend Keobiz), Factur-X conforme EN 16931 (C10, échéance 01/09/2027), test de
+  (C9 : encaissements retenus le 30/09/2026, à faire confirmer par Keobiz), Factur-X conforme EN 16931 (C10, échéance 01/09/2027), test de
   restauration (C12).
 - [`AUDIT-2026-08-29.md`](AUDIT-2026-08-29.md) — sécurité et chaîne de l'argent.
 - [`AUDIT-2026-04-10.md`](AUDIT-2026-04-10.md) — premier passage.
@@ -125,7 +125,7 @@ responsabilité personnelle de Nicolas — inexacte.
 | Promenades : niveau et sécurité | `lib/promenades-securite.ts` (règles), `lib/promenade-niveau.ts` (niveau d'un créneau, niveaux admissibles ou atteignables d'un cavalier) |
 | Assistant de la boîte mail | `api/admin/inbox-assistant/route.ts` : passe légère Haiku (dates + cavaliers décrits dans le mail), disponibilités `lib/dispo.ts`, promenades inaccessibles retirées côté serveur, réponse Sonnet 5.5 en JSON strict (effort bas, limite 16 000 : la réflexion compte dans la sortie), revalidation serveur des suggestions. Périodes de vacances nommées : `lib/periode-vacances.ts` |
 | Comptabilité de pilotage | `admin/comptabilite/` — `depenses` (doublons de relevé : garde-fou dans `api/admin/depenses`), `resultat` (CA caisse + CA repris de Celeris), `tresorerie` |
-| TVA | `lib/tva-a-payer.ts` (encart du trimestre, base factures), `lib/declaration-tva.ts` (CA3 case par case, bases encaissements **et** factures tant que le cabinet n'a pas tranché — audit C9), route `api/admin/tva/declaration`, écran `admin/comptabilite/PreparationDeclarationTva.tsx` |
+| TVA | Règle retenue par Nicolas le 30/09/2026 : TVA **sur les encaissements** (prestations de services, art. 269-2-c du CGI). `lib/tva-a-payer.ts` (encart du trimestre), collectée par `collecteeEncaissementsParMois()` de `lib/declaration-tva.ts` (même calcul que la CA3 en base encaissements ; mois Céleris : TVA des écritures importées), CA3 case par case avec la base factures en comparaison, route `api/admin/tva/declaration`, écran `admin/comptabilite/PreparationDeclarationTva.tsx` |
 | Emails : remise | `lib/resend-webhook.ts` (signature Svix, lecture des événements), `lib/statut-email.ts`, route `api/webhooks/resend` (secret `RESEND_WEBHOOK_SECRET`) : statut de remise sur `emailsSent` et `payment-links`, `alerteEmail` sur la commande quand un email est rejeté |
 | Temps de travail salariés | `lib/temps-travail.ts` : de la première tâche à la dernière, **seules les tâches « pause » sont déduites** (un battement non saisi est travaillé, règle de Nicolas du 26/09/2026) ; battement de plus d'1 h sans pause signalé (fiche horaire, cartes du planning). Fiche : `plagesFicheHoraire`, le midi imprimé est la pause saisie |
 | SEPA | `admin/sepa/page.tsx`, échéances `echeances-sepa`, pré-notification `api/admin/sepa-prenotification` (mode `apercu`, à vérifier avant envoi : `components/admin/BandeauPrenotificationSepa.tsx`) |

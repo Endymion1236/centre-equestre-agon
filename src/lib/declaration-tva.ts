@@ -8,9 +8,10 @@
  *   - « encaissements » : la règle des prestations de services (art. 269-2-c
  *     du CGI). Chaque somme reçue porte la TVA de la facture qu'elle règle,
  *     au prorata des lignes et de leurs taux ; un remboursement la réduit.
+ *     C'est le calcul de l'encart « TVA du trimestre » depuis le 30/09/2026
+ *     (collecteeEncaissementsParMois).
  *   - « factures » : la TVA des factures émises dans la période (option pour
- *     les débits, ou ce que Céleris faisait). C'est le calcul de l'encart
- *     « TVA du trimestre ».
+ *     les débits, ou ce que Céleris faisait).
  * Tant que le cabinet n'a pas tranché, l'écran montre les deux et l'écart.
  *
  * Mois tenus dans Céleris (juillet-août 2026) : seule la TVA des factures est
@@ -139,6 +140,78 @@ function repartir(p: PaiementTva, montantTtc: number, cumul: Cumul): boolean {
   return true;
 }
 
+const SANS_TAUX_FACTURE = "Sans facture rattachée : taux inconnu, à ventiler à la main";
+const SANS_TAUX_LIGNES = "Facture sans lignes lisibles : taux inconnu, à ventiler à la main";
+
+/**
+ * Base encaissements : chaque somme reçue d'un mois retenu porte la TVA de la
+ * facture qu'elle règle (art. 269-2-c du CGI). Partagé par la déclaration et
+ * par l'encart « TVA du trimestre », pour que les deux disent la même chose.
+ */
+function parcourirEncaissements(
+  encaissements: EncaissementTva[],
+  parId: Map<string, PaiementTva>,
+  tenusCeleris: Set<string>,
+  moisRetenus: Set<string>,
+  cumulDuMois: (mois: string) => Cumul,
+  ecarter: (raison: string, montant: number, mois: string) => void,
+) {
+  for (const e of encaissements) {
+    const m = moisParis(e.date?.seconds);
+    if (!m || !moisRetenus.has(m)) continue;
+    const montant = cts(e.montant);
+    if (montant === 0) continue;
+    // Mouvements internes : de l'argent déplacé, pas une recette.
+    if (e.isVersementBanque || e.isApportCaisse) continue;
+    // Règlement par avoir : la somme a déjà été encaissée, sa TVA comptée à ce moment-là.
+    if (e.mode === "avoir") { ecarter("Réglés avec un avoir (TVA déjà comptée à l'encaissement d'origine)", montant, m); continue; }
+    const p = e.paymentId ? parId.get(e.paymentId) : undefined;
+    if (!p) { ecarter(SANS_TAUX_FACTURE, montant, m); continue; }
+    const moisFacture = moisParis(p.date?.seconds);
+    if (moisFacture && tenusCeleris.has(moisFacture)) {
+      ecarter("Factures de Céleris réglées ensuite (TVA déjà déclarée sur la facture)", montant, m);
+      continue;
+    }
+    if (!repartir(p, montant, cumulDuMois(m))) ecarter(SANS_TAUX_LIGNES, montant, m);
+  }
+}
+
+/**
+ * TVA collectée sur les encaissements, mois par mois (euros), pour les mois
+ * tenus dans l'application. Les mois tenus dans Céleris n'y figurent pas :
+ * leur TVA est celle des écritures importées. Même règle que la déclaration
+ * en base « encaissements ».
+ */
+export function collecteeEncaissementsParMois(params: {
+  mois: string[];
+  payments: PaiementTva[];
+  encaissements: EncaissementTva[];
+  /** Mois tenus dans Céleris. */
+  moisCeleris: string[];
+}): { collectee: Record<string, number>; nonVentile: Record<string, number> } {
+  const tenusCeleris = new Set(params.moisCeleris);
+  const retenus = new Set(params.mois.filter((m) => !tenusCeleris.has(m)));
+  const parId = new Map(params.payments.map((p) => [p.id, p]));
+  const cumuls = new Map<string, Cumul>();
+  const nonVentileCts: Record<string, number> = {};
+  parcourirEncaissements(
+    params.encaissements,
+    parId,
+    tenusCeleris,
+    retenus,
+    (m) => { let c = cumuls.get(m); if (!c) { c = new Map(); cumuls.set(m, c); } return c; },
+    // Sommes dont le taux est inconnu : comptées à part, à ventiler à la main.
+    (raison, montant, m) => { if (raison === SANS_TAUX_FACTURE || raison === SANS_TAUX_LIGNES) nonVentileCts[m] = (nonVentileCts[m] || 0) + montant; },
+  );
+  const collectee: Record<string, number> = {};
+  const nonVentile: Record<string, number> = {};
+  for (const m of retenus) {
+    collectee[m] = eur([...(cumuls.get(m)?.values() || [])].reduce((s, v) => s + v.tva, 0));
+    if (nonVentileCts[m]) nonVentile[m] = eur(nonVentileCts[m]);
+  }
+  return { collectee, nonVentile };
+}
+
 export function preparerDeclarationTva(params: {
   mois: string[];
   base: BaseTva;
@@ -205,24 +278,7 @@ export function preparerDeclarationTva(params: {
       }
     }
   } else {
-    for (const e of params.encaissements) {
-      const m = moisParis(e.date?.seconds);
-      if (!m || !moisApplication.has(m)) continue;
-      const montant = cts(e.montant);
-      if (montant === 0) continue;
-      // Mouvements internes : de l'argent déplacé, pas une recette.
-      if (e.isVersementBanque || e.isApportCaisse) continue;
-      // Règlement par avoir : la somme a déjà été encaissée, sa TVA comptée à ce moment-là.
-      if (e.mode === "avoir") { ecarter("Réglés avec un avoir (TVA déjà comptée à l'encaissement d'origine)", montant); continue; }
-      const p = e.paymentId ? parId.get(e.paymentId) : undefined;
-      if (!p) { ecarter("Sans facture rattachée : taux inconnu, à ventiler à la main", montant); continue; }
-      const moisFacture = moisParis(p.date?.seconds);
-      if (moisFacture && tenusCeleris.has(moisFacture)) {
-        ecarter("Factures de Céleris réglées ensuite (TVA déjà déclarée sur la facture)", montant);
-        continue;
-      }
-      if (!repartir(p, montant, cumul)) ecarter("Facture sans lignes lisibles : taux inconnu, à ventiler à la main", montant);
-    }
+    parcourirEncaissements(params.encaissements, parId, tenusCeleris, moisApplication, () => cumul, ecarter);
   }
 
   // ── Totaux et cases ─────────────────────────────────────────────────

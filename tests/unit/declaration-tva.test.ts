@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { deductibleParNature, type LigneMois } from "../../src/lib/bilan-justificatifs";
-import { euroDeclaration, preparerDeclarationTva, tauxDePiece, type PaiementTva } from "../../src/lib/declaration-tva";
+import { collecteeEncaissementsParMois, euroDeclaration, preparerDeclarationTva, tauxDePiece, type PaiementTva } from "../../src/lib/declaration-tva";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -161,6 +161,25 @@ test("deductibleParNature : une immobilisation justifiée va en ligne 19", () =>
   const tracteur: LigneMois = { id: "t", mois: "2026-09", dateOperation: "2026-09-01", montant: 360, suivie: true, immobilisation: true, piece: facture } as any;
   const foin: LigneMois = { id: "h", mois: "2026-09", dateOperation: "2026-09-02", montant: 120, suivie: true, fournisseur: "Foin", piece: { ...facture, id: "g", extraction: { ...facture.extraction, ht: 100, tva: 20, ttc: 120, numero: "F120" } } } as any;
   assert.deepEqual(deductibleParNature([tracteur, foin]), { immobilisations: 60, autresBiensServices: 20 });
+});
+
+test("encart du trimestre : TVA des seules échéances encaissées, mois par mois, comme la déclaration", () => {
+  const encaissements = [
+    { paymentId: "p1", montant: 351.67, mode: "sepa", date: sec("2026-09-10T10:00:00Z") },
+    { paymentId: "p1", montant: 351.67, mode: "sepa", date: sec("2026-10-10T10:00:00Z") },
+    { montant: 30, mode: "especes", date: sec("2026-09-12T10:00:00Z") },
+  ];
+  const r = collecteeEncaissementsParMois({ mois: ["2026-09", "2026-10"], payments: [forfait, pension], encaissements, moisCeleris: [] });
+  assert.deepEqual(r.collectee, { "2026-09": 18.33, "2026-10": 18.33 });
+  assert.deepEqual(r.nonVentile, { "2026-09": 30 });
+  const decl = preparerDeclarationTva({ ...base, base: "encaissements", encaissements });
+  assert.equal(decl.collectee, r.collectee["2026-09"]);
+});
+
+test("encart du trimestre : un mois tenu dans Céleris n'est pas calculé sur les encaissements", () => {
+  const r = collecteeEncaissementsParMois({ mois: ["2026-08", "2026-09"], payments: [forfait], moisCeleris: ["2026-08"],
+    encaissements: [{ paymentId: "p1", montant: 100, mode: "cb_terminal", date: sec("2026-08-20T10:00:00Z") }] });
+  assert.deepEqual(r.collectee, { "2026-09": 0 });
 });
 
 console.log(`\n${process.exitCode ? "❌" : "✅"} ${passes} tests passés`);

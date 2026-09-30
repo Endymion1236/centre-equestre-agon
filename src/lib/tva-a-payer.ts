@@ -16,7 +16,7 @@
  */
 
 export interface EntreeTvaAPayer {
-  /** TVA collectée sur les ventes du mois (euros), Céleris compris. */
+  /** TVA collectée du mois (euros) : sur les encaissements, Céleris compris. */
   collectee: number;
   /** Part de `collectee` venant des écritures importées de Céleris (mois tenus dans l'ancien logiciel). */
   collecteeCeleris?: number;

@@ -72,7 +72,7 @@ export default function EncartTvaAPayer({ moisReference, parMois, chargement }: 
             </p>
           )}
           <p className="font-body text-[11px] text-slate-400 mt-2">
-            Collectée : ventes du mois, comme l&apos;onglet Comptabilité → TVA, plus la TVA des écritures importées de Céleris pour les mois tenus dans l&apos;ancien logiciel. Déductible : uniquement la TVA prouvée par une pièce associée sur la page Dépenses.
+            Collectée : TVA sur les sommes encaissées dans le mois (prestations de services : chaque échéance payée rend sa part de TVA exigible), au taux de la facture qu&apos;elle règle ; pour les mois tenus dans l&apos;ancien logiciel, la TVA des écritures importées de Céleris. Déductible : uniquement la TVA prouvée par une pièce associée sur la page Dépenses.
           </p>
         </>
       )}

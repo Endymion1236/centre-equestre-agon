@@ -15,6 +15,7 @@ import OngletRemise from "./OngletRemise";
 import { useRapprochement } from "./useRapprochement";
 import OngletRapprochement from "./OngletRapprochement";
 import { modeLabels } from "./libelles-modes";
+import { collecteeEncaissementsParMois } from "@/lib/declaration-tva";
 import EncartTvaAPayer from "./EncartTvaAPayer";
 import PreparationDeclarationTva from "./PreparationDeclarationTva";
 import { bilanTvaMois, type LigneMois } from "@/lib/bilan-justificatifs";
@@ -133,14 +134,16 @@ export default function ComptabilitePage() {
   // collectée des factures déjà chargées ici.
   const [lignesTva, setLignesTva] = useState<Record<string, LigneMois[]> | null>(null);
   // TVA des mois tenus dans Céleris (écritures importées, comptes 445, en centimes).
-  const [tvaCeleris, setTvaCeleris] = useState<Record<string, number>>({});
+  // null tant que la liste n'est pas lue : sans elle, juillet-août seraient
+  // comptés sur les encaissements en plus de Céleris.
+  const [tvaCeleris, setTvaCeleris] = useState<Record<string, number> | null>(null);
   useEffect(() => {
     if (tab !== "tva") return;
     let actif = true;
     authFetch("/api/admin/comptabilite/celeris")
       .then(r => (r.ok ? r.json() : null))
-      .then(d => { if (actif && d?.imports) setTvaCeleris(Object.fromEntries((d.imports as { mois: string; totaux?: { tva?: number } }[]).map(i => [i.mois, (Number(i.totaux?.tva) || 0) / 100]))); })
-      .catch(() => {});
+      .then(d => { if (actif) setTvaCeleris(d?.imports ? Object.fromEntries((d.imports as { mois: string; totaux?: { tva?: number } }[]).map(i => [i.mois, (Number(i.totaux?.tva) || 0) / 100])) : {}); })
+      .catch(() => { if (actif) setTvaCeleris({}); });
     return () => { actif = false; };
   }, [tab]);
   useEffect(() => {
@@ -152,16 +155,23 @@ export default function ComptabilitePage() {
       .then(ds => { if (actif) setLignesTva(Object.fromEntries(mois.map((m, i) => [m, ds[i]?.lignes || []]))); });
     return () => { actif = false; };
   }, [tab, period]);
+  // Collectée : sur les ENCAISSEMENTS du mois (prestations de services, art.
+  // 269-2-c du CGI) — même calcul que la déclaration en base encaissements.
+  // Mois tenus dans Céleris : la TVA des écritures importées.
   const tvaParMois = useMemo(() => {
     const out: Record<string, { collectee: number; collecteeCeleris?: number; deductibleJustifiee: number; aVerifier: { nb: number; ttc: number } } | null> = {};
-    for (const m of trimestreDe(period).mois) {
-      if (!lignesTva) { out[m] = null; continue; }
+    const mois = trimestreDe(period).mois;
+    const { collectee } = tvaCeleris
+      ? collecteeEncaissementsParMois({ mois, payments: payments as any[], encaissements: encaissementsCompta, moisCeleris: Object.keys(tvaCeleris) })
+      : { collectee: {} as Record<string, number> };
+    for (const m of mois) {
+      if (!lignesTva || !tvaCeleris) { out[m] = null; continue; }
       const bilan = bilanTvaMois(lignesTva[m] || []);
       const celeris = tvaCeleris[m] || 0;
-      out[m] = { collectee: calculerSyntheseFactures(filtrerFacturesPeriode(payments, m)).totalTVA + celeris, collecteeCeleris: celeris, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
+      out[m] = { collectee: (collectee[m] || 0) + celeris, collecteeCeleris: celeris, deductibleJustifiee: bilan.deductibleJustifiee, aVerifier: bilan.aVerifier };
     }
     return out;
-  }, [lignesTva, payments, period, tvaCeleris]);
+  }, [lignesTva, payments, encaissementsCompta, period, tvaCeleris]);
   const dailyTotals = useMemo(
     () => calculerTotauxJournaliers(encaissementsCompta, period),
     [encaissementsCompta, period],
@@ -559,7 +569,7 @@ export default function ComptabilitePage() {
       {/* ─── TVA ─── */}
       {!loading && tab === "tva" && (
         <div className="flex flex-col gap-5">
-          <EncartTvaAPayer moisReference={period} parMois={tvaParMois} chargement={!lignesTva} />
+          <EncartTvaAPayer moisReference={period} parMois={tvaParMois} chargement={!lignesTva || !tvaCeleris} />
           <PreparationDeclarationTva moisReference={period} />
           <Card className="!p-0 overflow-hidden">
             <div className="px-5 py-3 bg-sand border-b border-blue-500/8 flex font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
