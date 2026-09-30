@@ -8,10 +8,11 @@
  *        est oublié : RIEN n'est stocké — ni le fichier, ni son texte). Retourne
  *        une PROPOSITION que l'admin valide ou corrige avant enregistrement.
  * POST { action: "enregistrer", mois, salarie, brut, net?, coutEmployeur?, heures? }
- *      → pose la ligne (un document par mois × salarié). Écrase la ligne du
- *        même salarié pour le même mois : une fiche de paie remplace la
- *        précédente version d'elle-même.
- * POST { action: "supprimer", mois, salarie }
+ *      → pose la ligne (un document par mois × salarié × contrat, `contrat`
+ *        facultatif). Écrase la ligne du même salarié, même mois, même
+ *        contrat : une fiche de paie remplace la précédente version d'elle-même.
+ *        Deux contrats le même mois (fin d'apprentissage puis CDD) = deux lignes.
+ * POST { action: "supprimer", mois, salarie, contrat? }
  *
  * La fiche de paie contient des données personnelles (NIR, adresse, salaire) :
  * ne conserver QUE les agrégats nécessaires au pilotage est un choix délibéré,
@@ -27,21 +28,12 @@ import { controlerCoutEmployeur } from "@/lib/controle-bulletin";
 import Anthropic from "@anthropic-ai/sdk";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
+import { cleSalarie, idLigneSalaire } from "@/app/admin/comptabilite/masse-salariale/masse-salariale-utils";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
-
-function cleSalarie(nom: string): string {
-  return nom
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 60);
-}
 
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true });
@@ -55,6 +47,7 @@ export async function GET(req: NextRequest) {
         type: r.type === "charge" ? "charge" : "salaire",
         mois: r.mois || "",
         salarie: r.salarie || "",
+        contrat: r.contrat || "",
         libelle: r.libelle || "",
         montant: r.montant != null ? Number(r.montant) : null,
         decaissement: r.decaissement != null ? Number(r.decaissement) : null,
@@ -106,7 +99,7 @@ export async function POST(req: NextRequest) {
               type: "text",
               text:
                 "Ce document est soit une FICHE DE PAIE française, soit un RÉCAPITULATIF DE COTISATIONS sociales (DSN, TESA, MSA, URSSAF). Identifie lequel et réponds par un objet JSON seul, sans autre texte.\n" +
-                'Fiche de paie → { "typeDoc": "fiche", "salarie": "Prénom Nom", "mois": "AAAA-MM (période de paie)", "brut": nombre, "net": nombre (net à payer avant impôt si distinct, sinon net payé), "coutImprime": nombre ou null (montant imprimé à côté de « Coût global », « Coût total employeur », « Coût employeur » ou « Total versé » pour le MOIS — recopié tel quel, JAMAIS additionné au brut), "chargesPatronales": nombre ou null (total des charges patronales du mois, exonérations déduites, ex. colonne « Ch. patronales »), "heures": nombre ou null }\n' +
+                'Fiche de paie → { "typeDoc": "fiche", "salarie": "Prénom Nom", "contrat": "type de contrat imprimé, en un ou deux mots (ex. Apprentissage, CDD, CDI, Saisonnier) ou null", "mois": "AAAA-MM (période de paie)", "brut": nombre, "net": nombre (net à payer avant impôt si distinct, sinon net payé), "coutImprime": nombre ou null (montant imprimé à côté de « Coût global », « Coût total employeur », « Coût employeur » ou « Total versé » pour le MOIS — recopié tel quel, JAMAIS additionné au brut), "chargesPatronales": nombre ou null (total des charges patronales du mois, exonérations déduites, ex. colonne « Ch. patronales »), "heures": nombre ou null }\n' +
                 'Récapitulatif de cotisations → { "typeDoc": "cotisations", "mois": "AAAA-MM (période concernée)", "organisme": "MSA/URSSAF/TESA…", "partPatronale": nombre, "reductionPatronale": nombre ou 0 (exonérations et réductions sur la part patronale), "partOuvriere": nombre ou null, "totalAPayer": nombre ou null }\n' +
                 "Montants en euros, point décimal, sans séparateur de milliers ; null si introuvable. Si le document n'est ni l'un ni l'autre, réponds {\"erreur\": \"document non reconnu\"}.",
             },
@@ -155,6 +148,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         proposition: {
           salarie: String(data.salarie || "").trim(),
+          contrat: String(data.contrat || "").trim().slice(0, 40),
           mois: MOIS_RE.test(String(data.mois)) ? String(data.mois) : "",
           brut: Number.isFinite(Number(data.brut)) ? Math.round(Number(data.brut) * 100) / 100 : null,
           net: Number.isFinite(Number(data.net)) ? Math.round(Number(data.net) * 100) / 100 : null,
@@ -176,8 +170,9 @@ export async function POST(req: NextRequest) {
         const n = Number(String(v ?? "").toString().replace(",", "."));
         return Number.isFinite(n) && String(v ?? "").trim() !== "" ? Math.round(n * 100) / 100 : null;
       };
-      await adminDb.collection("masse-salariale").doc(`${mois}_${cleSalarie(salarie)}`).set({
-        mois, salarie,
+      const contrat = String(body.contrat || "").trim().slice(0, 40);
+      await adminDb.collection("masse-salariale").doc(idLigneSalaire(mois, salarie, contrat)).set({
+        mois, salarie, contrat: contrat || null,
         brut: Math.round(brut * 100) / 100,
         net: opt(body.net),
         coutEmployeur: opt(body.coutEmployeur),
@@ -226,7 +221,7 @@ export async function POST(req: NextRequest) {
       if (!MOIS_RE.test(mois) || !salarie) {
         return NextResponse.json({ error: "Mois ou salarié invalide" }, { status: 400 });
       }
-      await adminDb.collection("masse-salariale").doc(`${mois}_${cleSalarie(salarie)}`).delete();
+      await adminDb.collection("masse-salariale").doc(idLigneSalaire(mois, salarie, String(body.contrat || "").trim().slice(0, 40))).delete();
       return NextResponse.json({ ok: true });
     }
 

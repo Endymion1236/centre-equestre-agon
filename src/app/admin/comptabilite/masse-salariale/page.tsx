@@ -10,8 +10,10 @@ import {
   MOIS_EXERCICE as MOIS_SAISON,
   NOMS_MOIS_MASSE as NOMS_MOIS,
   calculerMasseParMois,
+  effetEnregistrementSalaire,
   exerciceDe as saisonDe,
   exercicesDisponiblesMasse,
+  idLigneSalaire,
   lignesChargeDuMois,
   lignesSalaireDuMois,
   moisCourantMasse as moisCourant,
@@ -30,9 +32,9 @@ import {
  * autres années ? ».
  */
 
-interface Ligne { id: string; type: "salaire" | "charge"; mois: string; salarie: string; libelle: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; montant: number | null; decaissement: number | null; source: string; }
+interface Ligne { id: string; type: "salaire" | "charge"; mois: string; salarie: string; contrat?: string; libelle: string; brut: number; net: number | null; coutEmployeur: number | null; heures: number | null; montant: number | null; decaissement: number | null; source: string; }
 interface PropositionCharge { mois: string; libelle: string; montant: number | null; decaissement: number | null; partPatronale: number | null; reductionPatronale: number; partOuvriere: number | null; totalAPayer: number | null; fichier: string; }
-interface Proposition { salarie: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; /** Coût employeur douteux à la lecture (lib/controle-bulletin). */ alerte?: string | null; }
+interface Proposition { salarie: string; contrat?: string; mois: string; brut: number | null; net: number | null; coutEmployeur: number | null; heures: number | null; fichier: string; etat?: "ok" | "erreur"; message?: string; /** Coût employeur douteux à la lecture (lib/controle-bulletin). */ alerte?: string | null; }
 
 const eur = (v: number) => v.toLocaleString("fr-FR", { maximumFractionDigits: 0 }) + " €";
 // Les heures s'additionnent en flottants (152.92 + …) : sans arrondi, le total
@@ -55,7 +57,7 @@ export default function MasseSalarialePage() {
   const [lecture, setLecture] = useState(0); // nb de PDF en cours de lecture
   const [saving, setSaving] = useState(false);
   // Saisie / correction manuelle d'une ligne
-  const [form, setForm] = useState<{ salarie: string; brut: string; net: string; coutEmployeur: string; heures: string } | null>(null);
+  const [form, setForm] = useState<{ salarie: string; contrat: string; ancien?: { salarie: string; contrat: string }; brut: string; net: string; coutEmployeur: string; heures: string } | null>(null);
 
   const api = useCallback(async (body?: any) => {
     const token = await user!.getIdToken();
@@ -120,7 +122,7 @@ export default function MasseSalarialePage() {
     if (saving) return;
     setSaving(true); setError("");
     try {
-      await api({ action: "enregistrer", mois: p.mois, salarie: p.salarie, brut: p.brut, net: p.net, coutEmployeur: p.coutEmployeur, heures: p.heures, source: "fiche-paie" });
+      await api({ action: "enregistrer", mois: p.mois, salarie: p.salarie, contrat: p.contrat || "", brut: p.brut, net: p.net, coutEmployeur: p.coutEmployeur, heures: p.heures, source: "fiche-paie" });
       setPropositions(prev => prev.filter((_, i) => i !== idx));
       if (p.mois) setMoisDetail(p.mois);
       await load();
@@ -161,7 +163,12 @@ export default function MasseSalarialePage() {
     if (!form || saving) return;
     setSaving(true); setError("");
     try {
-      await api({ action: "enregistrer", mois: moisDetail, ...form });
+      const { ancien, ...valeurs } = form;
+      await api({ action: "enregistrer", mois: moisDetail, ...valeurs });
+      // Nom ou contrat corrigé : la ligne change d'identifiant, l'ancienne part.
+      if (ancien && idLigneSalaire(moisDetail, ancien.salarie, ancien.contrat) !== idLigneSalaire(moisDetail, valeurs.salarie, valeurs.contrat)) {
+        await api({ action: "supprimer", mois: moisDetail, salarie: ancien.salarie, contrat: ancien.contrat });
+      }
       setForm(null);
       await load();
     } catch (e: any) { setError(e?.message || String(e)); }
@@ -169,8 +176,8 @@ export default function MasseSalarialePage() {
   };
 
   const supprimer = async (l: Ligne) => {
-    if (!confirm(`Retirer la ligne de ${l.salarie} pour ${NOMS_MOIS[l.mois.slice(5)]} ?`)) return;
-    try { await api({ action: "supprimer", mois: l.mois, salarie: l.salarie }); await load(); }
+    if (!confirm(`Retirer la ligne de ${l.salarie}${l.contrat ? ` (${l.contrat})` : ""} pour ${NOMS_MOIS[l.mois.slice(5)]} ?`)) return;
+    try { await api({ action: "supprimer", mois: l.mois, salarie: l.salarie, contrat: l.contrat || "" }); await load(); }
     catch (e: any) { setError(e?.message || String(e)); }
   };
 
@@ -303,6 +310,8 @@ export default function MasseSalarialePage() {
                   <span className="text-slate-400">{p.fichier}</span>
                   <input value={p.salarie} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, salarie: e.target.value } : x))}
                     className="font-semibold border border-gray-200 rounded px-2 py-1 w-40" placeholder="Salarié" />
+                  <input value={p.contrat || ""} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, contrat: e.target.value } : x))}
+                    className="border border-gray-200 rounded px-2 py-1 w-28" placeholder="Contrat (CDD…)" title="Deux bulletins le même mois (fin d'apprentissage puis CDD) : un contrat différent pour chacun, sinon le second remplace le premier" />
                   <input value={p.mois} onChange={e => setPropositions(prev => prev.map((x, i) => i === idx ? { ...x, mois: e.target.value } : x))}
                     className="border border-gray-200 rounded px-2 py-1 w-20" placeholder="AAAA-MM" />
                   {([["brut", "Brut"], ["net", "Net"], ["coutEmployeur", "Coût empl."], ["heures", "Heures"]] as const).map(([k, lab]) => (
@@ -320,6 +329,7 @@ export default function MasseSalarialePage() {
                   </button>
                 </div>
                 {p.alerte && <p className="mt-1.5 font-body text-[11px] text-amber-800">⚠️ {p.alerte}</p>}
+                <EffetBulletin lignes={lignes} p={p} />
               </div>
             ))}
           </div>
@@ -458,7 +468,7 @@ export default function MasseSalarialePage() {
               <h2 className="font-display text-base font-bold text-blue-800">
                 Détail — {NOMS_MOIS[moisDetail.slice(5)]} {moisDetail.slice(0, 4)}
               </h2>
-              <button type="button" onClick={() => setForm({ salarie: "", brut: "", net: "", coutEmployeur: "", heures: "" })}
+              <button type="button" onClick={() => setForm({ salarie: "", contrat: "", brut: "", net: "", coutEmployeur: "", heures: "" })}
                 className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-purple-100">
                 <Plus size={13} /> Ajouter une ligne
               </button>
@@ -468,6 +478,8 @@ export default function MasseSalarialePage() {
               <div className="mb-3 rounded-lg border border-purple-200 bg-purple-50/50 px-3 py-2 flex flex-wrap items-center gap-2 font-body text-xs">
                 <input autoFocus value={form.salarie} onChange={e => setForm({ ...form, salarie: e.target.value })}
                   placeholder="Salarié" className="font-semibold border border-gray-200 rounded px-2 py-1 w-40" />
+                <input value={form.contrat} onChange={e => setForm({ ...form, contrat: e.target.value })}
+                  placeholder="Contrat (facultatif)" className="border border-gray-200 rounded px-2 py-1 w-32" />
                 {([["brut", "Brut *"], ["net", "Net"], ["coutEmployeur", "Coût empl."], ["heures", "Heures"]] as const).map(([k, lab]) => (
                   <label key={k} className="flex items-center gap-1 text-slate-500">
                     {lab}
@@ -500,6 +512,7 @@ export default function MasseSalarialePage() {
                     <tr key={l.id} className="border-b border-gray-100">
                       <td className="px-2 py-1.5 font-medium text-slate-700">
                         {l.salarie}
+                        {l.contrat && <span className="ml-1.5 text-[11px] font-normal text-slate-500">· {l.contrat}</span>}
                         {l.source === "fiche-paie" && <span title="Issu d'une fiche de paie" className="ml-1.5 text-[10px] text-purple-500">📄</span>}
                       </td>
                       <td className="px-2 py-1.5 text-right font-semibold text-slate-800">{eur(l.brut)}</td>
@@ -507,7 +520,7 @@ export default function MasseSalarialePage() {
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.coutEmployeur != null ? eur(l.coutEmployeur) : "—"}{l.coutEmployeur != null && controlerCoutEmployeur({ brut: l.brut, coutImprime: l.coutEmployeur }).alerte ? <span title="Coût incohérent avec le brut (brut compté deux fois ?) : corrigez avec le « coût global » du bulletin" className="ml-1 text-amber-600 cursor-help">⚠️</span> : null}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600">{l.heures != null ? hrs(l.heures) : "—"}</td>
                       <td className="px-2 py-1.5 text-right">
-                        <button type="button" onClick={() => setForm({ salarie: l.salarie, brut: String(l.brut), net: l.net != null ? String(l.net) : "", coutEmployeur: l.coutEmployeur != null ? String(l.coutEmployeur) : "", heures: l.heures != null ? String(l.heures) : "" })}
+                        <button type="button" onClick={() => setForm({ salarie: l.salarie, contrat: l.contrat || "", ancien: { salarie: l.salarie, contrat: l.contrat || "" }, brut: String(l.brut), net: l.net != null ? String(l.net) : "", coutEmployeur: l.coutEmployeur != null ? String(l.coutEmployeur) : "", heures: l.heures != null ? String(l.heures) : "" })}
                           title="Corriger" className="text-slate-400 hover:text-blue-600 bg-transparent border-none cursor-pointer p-1"><Pencil size={13} /></button>
                         <button type="button" onClick={() => supprimer(l)} title="Retirer"
                           className="text-slate-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={13} /></button>
@@ -646,5 +659,24 @@ export default function MasseSalarialePage() {
         </>
       )}
     </div>
+  );
+}
+
+/** Avant d'enregistrer un bulletin : remplace-t-il une ligne, ou s'ajoute-t-il à côté ? */
+function EffetBulletin({ lignes, p }: { lignes: Ligne[]; p: Proposition }) {
+  if (!p.salarie || !/^\d{4}-\d{2}$/.test(p.mois)) return null;
+  const { effet, existantes } = effetEnregistrementSalaire(lignes, p);
+  if (effet === "nouvelle") return null;
+  const eurs = (n: number) => `${Math.round(n).toLocaleString("fr-FR")} €`;
+  const desc = existantes.map(l => `${l.contrat ? `${l.contrat}, ` : ""}${eurs(l.brut)} brut`).join(" ; ");
+  return effet === "remplace" ? (
+    <p className="mt-1.5 font-body text-[11px] text-amber-800">
+      ⚠️ {p.salarie} a déjà une ligne ce mois-ci ({desc}) : ce bulletin la <strong>remplacera</strong>.
+      Si c&apos;est un deuxième contrat (fin d&apos;apprentissage puis CDD…), indique un contrat différent pour qu&apos;il s&apos;ajoute à côté.
+    </p>
+  ) : (
+    <p className="mt-1.5 font-body text-[11px] text-blue-800">
+      ℹ️ {p.salarie} a déjà une ligne ce mois-ci ({desc}) : ce bulletin <strong>s&apos;ajoutera à côté</strong> (contrat différent).
+    </p>
   );
 }

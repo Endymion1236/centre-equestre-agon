@@ -85,3 +85,42 @@ export function lignesChargeDuMois<T extends { type: "salaire" | "charge"; mois:
     .filter((ligne) => ligne.type === "charge" && ligne.mois === mois)
     .sort((a, b) => a.libelle.localeCompare(b.libelle, "fr"));
 }
+
+/** Nom → morceau d'identifiant (sans accents, minuscules, tirets). */
+export function cleSalarie(nom: string): string {
+  return nom
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
+/**
+ * Identifiant d'une ligne de salaire : un document par mois × salarié ×
+ * contrat. Septembre 2026 : Emeline Panella finit son apprentissage à la
+ * mi-septembre et commence un CDD — deux bulletins le même mois, le second
+ * écrasait le premier. Sans contrat, l'identifiant reste l'ancien (les lignes
+ * déjà saisies gardent le leur).
+ */
+export function idLigneSalaire(mois: string, salarie: string, contrat?: string | null): string {
+  const c = cleSalarie(String(contrat || ""));
+  return c ? `${mois}_${cleSalarie(salarie)}__${c}` : `${mois}_${cleSalarie(salarie)}`;
+}
+
+/**
+ * Ce que fera l'enregistrement d'un bulletin, à dire AVANT de cliquer :
+ * « remplace » la ligne du même contrat, « ajoute » une ligne à côté d'un
+ * autre bulletin du même salarié ce mois-ci, ou « nouvelle ».
+ */
+export function effetEnregistrementSalaire<T extends { type: "salaire" | "charge"; mois: string; salarie: string; contrat?: string | null; brut: number }>(
+  lignes: T[],
+  p: { mois: string; salarie: string; contrat?: string | null },
+): { effet: "nouvelle" | "remplace" | "ajoute"; existantes: T[] } {
+  const id = idLigneSalaire(p.mois, p.salarie, p.contrat);
+  const memeSalarie = lignes.filter((l) => l.type !== "charge" && l.mois === p.mois && cleSalarie(l.salarie) === cleSalarie(p.salarie));
+  if (!memeSalarie.length) return { effet: "nouvelle", existantes: [] };
+  const meme = memeSalarie.filter((l) => idLigneSalaire(l.mois, l.salarie, l.contrat) === id);
+  return meme.length ? { effet: "remplace", existantes: meme } : { effet: "ajoute", existantes: memeSalarie };
+}

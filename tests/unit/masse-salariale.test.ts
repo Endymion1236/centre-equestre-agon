@@ -3,6 +3,8 @@ import {
   REF_CHARGES_PERSONNEL_AN,
   MOIS_EXERCICE,
   calculerMasseParMois,
+  effetEnregistrementSalaire,
+  idLigneSalaire,
   exerciceDe,
   exercicesDisponiblesMasse,
   lignesChargeDuMois,
@@ -76,6 +78,24 @@ test("les salariés et charges sont filtrés et triés séparément", () => {
   ];
   assert.deepEqual(lignesSalaireDuMois(donnees, "2026-08").map(x => x.salarie), ["Alice", "Zoé"]);
   assert.deepEqual(lignesChargeDuMois(donnees, "2026-08").map(x => x.libelle), ["MSA", "TESA"]);
+});
+
+test("deux contrats le même mois = deux lignes ; sans contrat, l'identifiant d'avant", () => {
+  assert.equal(idLigneSalaire("2026-09", "Emeline Panella"), "2026-09_emeline-panella");
+  assert.equal(idLigneSalaire("2026-09", "Emeline Panella", ""), "2026-09_emeline-panella");
+  assert.equal(idLigneSalaire("2026-09", "Emeline Panella", "Apprentissage"), "2026-09_emeline-panella__apprentissage");
+  assert.notEqual(idLigneSalaire("2026-09", "Emeline Panella", "CDD"), idLigneSalaire("2026-09", "Emeline Panella", "Apprentissage"));
+});
+
+test("avant d'enregistrer : remplace la même fiche, s'ajoute à côté d'un autre contrat", () => {
+  const lignes = [
+    { type: "salaire" as const, mois: "2026-09", salarie: "Emeline Panella", contrat: "Apprentissage", brut: 697 },
+    { type: "salaire" as const, mois: "2026-09", salarie: "Lilou Douillard", brut: 586 },
+  ];
+  assert.equal(effetEnregistrementSalaire(lignes, { mois: "2026-09", salarie: "Émeline Panella", contrat: "CDD" }).effet, "ajoute");
+  assert.equal(effetEnregistrementSalaire(lignes, { mois: "2026-09", salarie: "Emeline Panella", contrat: "apprentissage" }).effet, "remplace");
+  assert.equal(effetEnregistrementSalaire(lignes, { mois: "2026-09", salarie: "Lilou Douillard" }).effet, "remplace");
+  assert.equal(effetEnregistrementSalaire(lignes, { mois: "2026-10", salarie: "Lilou Douillard" }).effet, "nouvelle");
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
