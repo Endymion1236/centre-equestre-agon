@@ -1,3 +1,5 @@
+import { ecartLignes, lignesAuTotal } from "@/lib/lignes-facture";
+
 export const MOIS_EXPORT_CA = [
   "janvier", "février", "mars", "avril", "mai", "juin",
   "juillet", "août", "septembre", "octobre", "novembre", "décembre",
@@ -27,10 +29,60 @@ export function filtrerFacturesExport(
   });
 }
 
+/**
+ * Les lignes de toutes les factures, ramenées au total de leur facture
+ * (lib/lignes-facture) : sans cela, la 1re échéance d'un forfait en 3× ou
+ * 10× portait le forfait entier et le CA ventilé dépassait les factures.
+ */
 export function aplatirLignesFactures<T extends Record<string, any>>(factures: T[]) {
   return factures.flatMap((facture) =>
-    (facture.items || []).map((item: any) => ({ ...item, facture })),
+    lignesAuTotal(facture).map((item: any) => ({ ...item, facture })),
   );
+}
+
+export interface FactureEnEcart {
+  id: string;
+  piece: string;
+  familyName: string;
+  date: Date | null;
+  totalTTC: number;
+  lignesTTC: number;
+  ecart: number;
+  cause: string;
+}
+
+/**
+ * Factures dont les lignes, telles que saisies, ne retombent pas sur le
+ * total — la plus grosse différence d'abord. L'export les ramène au total ;
+ * la liste dit lesquelles, et pourquoi le plus souvent.
+ */
+export function facturesEnEcart(factures: any[]): FactureEnEcart[] {
+  return factures
+    .map((f): FactureEnEcart => {
+      const ecart = arrondirExportCa(ecartLignes(f));
+      const total = Number(f?.totalTTC) || 0;
+      const lignesTTC = arrondirExportCa(total - ecart);
+      const enPlusieursFois = Number(f?.echeancesTotal) > 1;
+      const cause = enPlusieursFois && Number(f?.echeance) === 1 && ecart < 0
+        ? `1re échéance d'un paiement en ${f.echeancesTotal} fois : porte les lignes du forfait entier`
+        : lignesTTC === 0 && total !== 0
+        ? "Lignes sans prix lisible (ancienne inscription en ligne, ou saisie incomplète)"
+        : ecart > 0
+        ? "Lignes inférieures au total (ligne sans prix, ou ajout sur la facture)"
+        : "Remise posée sur la facture entière, ou ligne modifiée après coup";
+      return {
+        id: f?.id || "",
+        piece: f?.invoiceNumber || `PF-${String(f?.orderId || f?.id || "").slice(-6).toUpperCase()}`,
+        familyName: f?.familyName || "",
+        date: dateFacture(f),
+        totalTTC: arrondirExportCa(total),
+        lignesTTC,
+        ecart,
+        cause,
+      };
+    })
+    .filter((f) => Math.abs(f.ecart) > 0.009)
+    .sort((a, b) => Math.abs(b.ecart) - Math.abs(a.ecart));
 }
 
 export function arrondirExportCa(valeur: number): number {

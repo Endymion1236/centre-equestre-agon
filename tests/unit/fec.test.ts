@@ -149,7 +149,26 @@ test("une facture dont le détail ne retombe pas sur le total reste équilibrée
   assert.equal(anomalies.length, 1);
   assert.equal(anomalies[0].familyName, "Famille Remise");
   assert.equal(anomalies[0].ecart, -15.5);
-  assert.ok(contenu.includes("Écart de ventilation"));
+  // Les lignes sont ramenées au total au prorata : plus besoin de ligne
+  // d'écart, et la TVA porte sur les 90 € facturés, pas sur 105,50 €.
+  assert.ok(!contenu.includes("Écart de ventilation"));
+  assert.ok(contenu.includes("\t4.69\t"), "TVA 5,5 % de 90 € TTC = 4,69 €");
+});
+
+test("1re échéance d'un forfait en 10× : TVA sur l'échéance, pas sur le forfait entier", () => {
+  const { contenu, anomalies } = analyserFecVentes([{
+    familyName: "Famille Dix Fois",
+    totalTTC: 69.9,
+    echeance: 1, echeancesTotal: 10,
+    date: { seconds: Date.UTC(2026, 8, 15, 12) / 1000 },
+    items: [
+      { activityTitle: "Forfait annuel", priceHT: 606.64, priceTTC: 640, tva: 5.5 },
+      { activityTitle: "Adhésion", priceHT: 59, priceTTC: 59, tva: 0 },
+    ],
+  } as any]);
+  for (const [numero, s] of soldes(contenu)) assert.equal(s.debit, s.credit, `écriture ${numero} déséquilibrée`);
+  assert.ok(!contenu.includes("Écart de ventilation"));
+  assert.equal(anomalies.length, 1);
 });
 
 test("une facture conforme ne remonte aucune anomalie", () => {

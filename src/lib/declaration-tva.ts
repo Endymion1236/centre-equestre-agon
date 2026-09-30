@@ -26,6 +26,7 @@
  */
 
 import { tauxTva } from "./tva-taux";
+import { lignesAuTotal } from "@/lib/lignes-facture";
 
 export type BaseTva = "encaissements" | "factures";
 
@@ -194,8 +195,10 @@ export function preparerDeclarationTva(params: {
       if (p.status && STATUTS_NON_FACTURES.has(p.status)) continue;
       const m = moisParis(p.date?.seconds);
       if (!m || !moisApplication.has(m)) continue;
-      // Base factures : le HT et la TVA des lignes, comme l'encart du trimestre.
-      for (const l of p.items || []) {
+      // Base factures : le HT et la TVA des lignes, comme l'encart du trimestre,
+      // ramenées au total de la facture (lib/lignes-facture) — la 1re échéance
+      // d'un forfait en 3×/10× portait le forfait entier.
+      for (const l of lignesAuTotal(p)) {
         const ht = cts(l.priceHT), ttc = cts(l.priceTTC);
         if (!ht && !ttc) continue;
         ajouter(cumul, tauxTva(l.tva), ht, ttc - ht);

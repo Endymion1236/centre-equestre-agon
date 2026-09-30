@@ -13,6 +13,7 @@ import {
 import {
   MOIS_EXPORT_CA as MOIS,
   aplatirLignesFactures,
+  facturesEnEcart,
   filtrerFacturesExport,
   libellePeriodeExport,
   resumerExportCa,
@@ -120,6 +121,9 @@ export default function ExportCaPage() {
   );
 
   const ventilation = useMemo(() => ventiler(lignes, regles), [lignes, regles]);
+  // Factures dont les lignes saisies ne retombaient pas sur le total :
+  // ramenées au total dans l'export, listées pour le comptable.
+  const enEcart = useMemo(() => facturesEnEcart(factures), [factures]);
   const aVentiler = useMemo(() => groupesNonVentiles(lignes, regles), [lignes, regles]);
   const {
     totalTTC,
@@ -205,9 +209,46 @@ export default function ExportCaPage() {
             <Card padding="sm" className="mb-5 !bg-orange-50 !border-orange-200">
               <p className="font-body text-xs text-orange-800">
                 <strong>Écart de {ecart.toFixed(2)}€</strong> entre le total des factures ({totalFactures.toFixed(2)}€)
-                et la somme de leurs lignes ({totalTTC.toFixed(2)}€). Cause habituelle : une remise posée sur la facture
-                entière, qui n&apos;apparaît sur aucune ligne. À signaler au comptable.
+                et la ventilation ({totalTTC.toFixed(2)}€) : des factures n&apos;ont aucune ligne chiffrée lisible,
+                leur montant ne peut pas être ventilé (voir la liste ci-dessous). À régler avec le comptable.
               </p>
+            </Card>
+          )}
+
+          {enEcart.length > 0 && (
+            <Card padding="sm" className="mb-5 !bg-slate-50 !border-slate-200">
+              <details>
+                <summary className="font-body text-xs text-slate-700 cursor-pointer">
+                  <strong>{enEcart.length} facture(s)</strong> dont les lignes saisies ne retombaient pas sur le total
+                  ({enEcart.reduce((s, f) => s + f.ecart, 0).toFixed(2)}€ au total) : dans cet export, leurs lignes sont
+                  ramenées au total de la facture, au prorata. Cliquer pour la liste.
+                </summary>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full font-body text-[11px] text-slate-700">
+                    <thead>
+                      <tr className="text-left text-slate-500">
+                        <th className="py-1 pr-2">Pièce</th><th className="py-1 pr-2">Famille</th><th className="py-1 pr-2">Date</th>
+                        <th className="py-1 pr-2 text-right">Facture</th><th className="py-1 pr-2 text-right">Lignes saisies</th>
+                        <th className="py-1 pr-2 text-right">Écart</th><th className="py-1">Cause probable</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enEcart.slice(0, 100).map(f => (
+                        <tr key={f.id || f.piece} className="border-t border-slate-200">
+                          <td className="py-1 pr-2 whitespace-nowrap">{f.piece}</td>
+                          <td className="py-1 pr-2">{f.familyName}</td>
+                          <td className="py-1 pr-2 whitespace-nowrap">{f.date ? f.date.toLocaleDateString("fr-FR") : "—"}</td>
+                          <td className="py-1 pr-2 text-right">{f.totalTTC.toFixed(2)}€</td>
+                          <td className="py-1 pr-2 text-right">{f.lignesTTC.toFixed(2)}€</td>
+                          <td className="py-1 pr-2 text-right font-semibold">{f.ecart.toFixed(2)}€</td>
+                          <td className="py-1">{f.cause}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {enEcart.length > 100 && <p className="font-body text-[11px] text-slate-500 mt-1">… et {enEcart.length - 100} autre(s).</p>}
+                </div>
+              </details>
             </Card>
           )}
 

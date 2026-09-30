@@ -134,6 +134,14 @@ test("trimestre : les mois s'additionnent, un mois d'achats illisible est signal
   assert.equal(caseDe(r, "28")?.tva, 85);
 });
 
+test("sur factures, la 1re échéance d'un forfait en 10× ne compte que pour son montant", () => {
+  // Le forfait entier (1 055 € TTC à 5,5 %) porté par une échéance de 105,50 €.
+  const echeance1: PaiementTva = { id: "e1", status: "paid", totalTTC: 105.5, date: sec("2026-09-03T10:00:00Z"),
+    items: [{ priceHT: 1000, priceTTC: 1055, tva: 5.5 }] } as PaiementTva;
+  const r = preparerDeclarationTva({ ...base, payments: [echeance1], base: "factures", encaissements: [] });
+  assert.equal(r.collectee, 5.5, "TVA de 105,50 € TTC, pas de 1 055 €");
+});
+
 test("un taux 0 n'est jamais transformé en 5,5 %", () => {
   const licence: PaiementTva = { id: "l", status: "paid", totalTTC: 50, date: sec("2026-09-05T10:00:00Z"), items: [{ priceHT: 50, priceTTC: 50, tva: 0 }] };
   const r = preparerDeclarationTva({ ...base, payments: [licence], base: "encaissements",

@@ -1,3 +1,5 @@
+import { ecartLignes, lignesAuTotal } from "@/lib/lignes-facture";
+
 /**
  * Fichier des Écritures Comptables (FEC) — journal des ventes.
  *
@@ -154,7 +156,9 @@ export function analyserFecVentes(
     const lignesEcriture: string[] = [];
     let creditsCentimes = 0;
 
-    (paiement.items || []).forEach((item) => {
+    // Lignes ramenées au total de la facture (lib/lignes-facture) : la TVA de
+    // la 1re échéance d'un forfait en 3×/10× se calculait sur le forfait entier.
+    (lignesAuTotal(paiement) as NonNullable<typeof paiement.items>).forEach((item) => {
       const htCentimes = centimes(item.priceHT);
       if (htCentimes !== 0) {
         lignesEcriture.push(
@@ -190,6 +194,21 @@ export function analyserFecVentes(
 
     const debitCentimes = centimes(paiement.totalTTC);
     const ecart = debitCentimes - creditsCentimes;
+
+    // Lignes saisies qui ne retombaient pas sur le total, mais qu'on a pu
+    // ramener au prorata : l'écriture est juste, on le signale quand même
+    // au comptable (remise globale, 1re échéance d'un 3×/10×…).
+    const ecartSaisie = centimes(ecartLignes(paiement));
+    if (ecart === 0 && ecartSaisie !== 0) {
+      anomalies.push({
+        piece,
+        familyName: paiement.familyName,
+        ecart: ecartSaisie / 100,
+        message:
+          `Le détail saisi (${euros(debitCentimes - ecartSaisie)} €) ne retombait pas sur le total ` +
+          `de la facture : lignes ramenées au total au prorata (écart ${euros(ecartSaisie)} €).`,
+      });
+    }
 
     // Équilibrage : le fichier doit rester valide même quand le détail des
     // articles ne retombe pas sur le total (remise saisie sur la facture,
