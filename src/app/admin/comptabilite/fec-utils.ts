@@ -115,6 +115,16 @@ export function cote(centimesSignes: number, sensNaturel: "debit" | "credit"): {
   return sens === "debit" ? { debit: Math.abs(centimesSignes) } : { credit: Math.abs(centimesSignes) };
 }
 
+/**
+ * Texte d'une colonne : une tabulation ou un retour à la ligne (libellé de
+ * prestation sur deux lignes, nom saisi avec un retour) couperait la ligne et
+ * décalerait les colonnes — Test Compta Démat rejette alors tout le fichier
+ * (« nombre de séparateurs »). Ils deviennent des espaces.
+ */
+export function texteFec(t: unknown): string {
+  return String(t ?? "").replace(/[\t\r\n\u2028\u2029]+/g, " ").replace(/ {2,}/g, " ").trim();
+}
+
 function ligne(champs: {
   numero: number;
   dateEcriture: string;
@@ -134,12 +144,13 @@ function ligne(champs: {
     String(champs.numero),
     champs.dateEcriture,
     champs.compte.compte,
-    champs.compte.libelle,
-    champs.auxNum || "",
-    champs.auxLib || "",
-    champs.piece,
+    texteFec(champs.compte.libelle),
+    texteFec(champs.auxNum),
+    texteFec(champs.auxLib),
+    texteFec(champs.piece),
     champs.dateEcriture,
-    champs.libelle,
+    // EcritureLib est obligatoire : jamais vide.
+    texteFec(champs.libelle) || "(sans libellé)",
     d,
     c,
     "", // EcritureLet

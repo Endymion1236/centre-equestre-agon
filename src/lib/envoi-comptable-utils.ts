@@ -21,6 +21,7 @@ import {
   construireExportFactures,
 } from "@/app/admin/comptabilite/exports-csv-utils";
 import { lignesAuTotal } from "@/lib/lignes-facture";
+import { controlerStructureFec } from "@/lib/controle-fec";
 import { construireFecCeleris, construireFecComplet, nomFichierFec, type CompteFec } from "@/lib/fec-complet";
 import type { ReglesVentilation } from "@/lib/ventilation-comptable";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
@@ -208,6 +209,7 @@ export function fecDuMois(params: {
       fichier, contenu: c.contenu, source: "celeris",
       ecrituresVentes: c.ecritures, ecrituresReglements: 0, comptesAConfirmer: [], compteAttente: 0,
       anomalies: [
+        ...controlerStructureFec(c.contenu).map((e) => `Structure du FEC : ${e}`),
         ...c.anomalies,
         ...(doublons ? [`Mois tenu dans Céleris : ${params.factures.length} facture(s) et ${params.encaissements.length} encaissement(s) saisis aussi dans l'application ne sont pas repris, pour ne pas les compter deux fois.`] : []),
       ],
@@ -222,7 +224,9 @@ export function fecDuMois(params: {
   return {
     fichier, contenu: f.contenu, source: "application",
     ecrituresVentes: f.resume.ventes.ecritures, ecrituresReglements: f.resume.reglements.ecritures,
-    anomalies: f.anomalies, comptesAConfirmer: f.resume.comptesAConfirmer, compteAttente: f.resume.compteAttente,
+    // Le contrôle de Test Compta Démat, refait ici : une anomalie de structure passe en tête.
+    anomalies: [...controlerStructureFec(f.contenu).map((e) => `Structure du FEC : ${e}`), ...f.anomalies],
+    comptesAConfirmer: f.resume.comptesAConfirmer, compteAttente: f.resume.compteAttente,
   };
 }
 

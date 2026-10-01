@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { construireFecComplet, tvaDuReglement, type EncaissementFec } from "../../src/lib/fec-complet";
 import { preparerDeclarationTva } from "../../src/lib/declaration-tva";
+import { controlerStructureFec } from "../../src/lib/controle-fec";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -40,6 +41,7 @@ function fec(factures: Facture[], encaissements: EncaissementFec[], opts: { tous
 
 /** Les règles qui valent pour TOUT fichier produit. */
 function controlesGeneraux(f: ReturnType<typeof fec>) {
+  assert.deepEqual(controlerStructureFec(f.r.contenu), [], "structure Test Compta Démat");
   const parNumero = new Map<string, number>();
   for (const c of f.lignes) {
     assert.equal(c.length, 18, "18 colonnes");

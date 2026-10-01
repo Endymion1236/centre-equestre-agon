@@ -83,7 +83,7 @@ function ligneFec(c: {
 }): string {
   return [
     c.journal.code, c.journal.libelle, String(c.numero), c.date, c.compte.compte, propre(c.compte.libelle),
-    propre(c.auxNum), propre(c.auxLib), propre(c.piece), c.date, propre(c.libelle),
+    propre(c.auxNum), propre(c.auxLib), propre(c.piece), c.date, propre(c.libelle) || "(sans libellé)",
     c.debit !== undefined ? euros(c.debit) : "", c.credit !== undefined ? euros(c.credit) : "",
     "", "", c.date, "", "",
   ].join("\t");
