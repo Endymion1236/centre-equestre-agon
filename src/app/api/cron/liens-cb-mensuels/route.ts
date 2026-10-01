@@ -12,6 +12,7 @@
  * Déclenchable à la main (GET + Bearer CRON_SECRET).
  */
 
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { adminDb } from "@/lib/firebase-admin";
@@ -34,7 +35,7 @@ export async function GET(req: NextRequest) {
   if (req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://centre-equestre-agon.vercel.app";
+  const appUrl = URL_APP;
   const today = parisYMD();
   const demain = parisYMD(new Date(Date.now() + 24 * 3600 * 1000));
   if (!demain.endsWith("-01") && req.nextUrl.searchParams.get("force") !== "1") {

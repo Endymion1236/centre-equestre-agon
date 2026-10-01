@@ -13,6 +13,7 @@
  *   - Envoi Resend + journalisation
  */
 
+import { URL_APP } from "@/lib/url-app";
 import { Resend } from "resend";
 import { adminAuth, adminDb } from "./firebase-admin";
 import { logEmail } from "./email-log";
@@ -20,7 +21,7 @@ import { isRecipientAllowed, blockedLog, refreshEmailMode } from "./email-guard"
 import { createActivationToken } from "./activation-token";
 import { REPLY_TO } from "@/lib/email-reply-to";
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+const APP_URL = URL_APP;
 const FROM_EMAIL_RAW = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev";
 const BCC = process.env.RESEND_BCC || "ceagon50@gmail.com";
 

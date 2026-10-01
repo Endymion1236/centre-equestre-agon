@@ -6,11 +6,12 @@
  * La structure reste en tableaux et styles inline pour Outlook/Gmail.
  */
 
+import { URL_APP } from "@/lib/url-app";
 const CLUB_NAME = "Centre Équestre d'Agon-Coutainville";
 const CLUB_TEL = "02 44 84 99 96";
 const CLUB_EMAIL = "ceagon50@gmail.com";
 const CLUB_MOBILE = "06 09 02 71 59";
-const SITE_URL = "https://centre-equestre-agon.vercel.app";
+const SITE_URL = URL_APP;
 const SITE_VITRINE = "https://www.centreequestreagon.com";
 const ADRESSE = { rue: "56 Charrière du Commerce", cp: "50230", ville: "Agon-Coutainville" } as const;
 

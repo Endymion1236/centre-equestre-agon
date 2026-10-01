@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb, adminMessaging } from "@/lib/firebase-admin";
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
       notification: { title: "🐴 Test notification", body: "Les push fonctionnent !" },
       webpush: {
         notification: { icon: "/icons/icon-192x192.png" },
-        fcmOptions: { link: "https://centre-equestre-agon.vercel.app/espace-cavalier" },
+        fcmOptions: { link: `${URL_APP}/espace-cavalier` },
       },
     });
     return NextResponse.json({ success: true });

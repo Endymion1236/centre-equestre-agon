@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
 import { tracerExecution } from "@/lib/cron-trace";
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   const resendKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+  const appUrl = URL_APP;
 
   const results = {
     processed: 0,

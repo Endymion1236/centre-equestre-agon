@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { verifyAuth } from "@/lib/api-auth";
@@ -186,7 +187,7 @@ export async function POST(request: NextRequest) {
         } as any).catch(() => {});
         return NextResponse.json({ ok: true, skipped: "desabonne" });
       }
-      const base = process.env.NEXT_PUBLIC_SITE_URL || "https://centre-equestre-agon.vercel.app";
+      const base = URL_APP;
       htmlFinal = inserer(html, piedDesabonnement(familyId, base));
     }
 

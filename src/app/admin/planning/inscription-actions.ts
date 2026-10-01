@@ -17,6 +17,7 @@
  * changé.
  */
 
+import { URL_APP } from "@/lib/url-app";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs, setDoc,
   query, where, serverTimestamp,
@@ -704,7 +705,7 @@ export async function notifierListeAttenteSiPlaceLibre(
                   emailLigne("Horaire", `${c.startTime}–${c.endTime}`),
                 ].join("")),
                 P(`<strong>Cette place vous est réservée pendant 24 h</strong>, jusqu'au ${new Date(holdUntil).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} à ${new Date(holdUntil).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}. Passé ce délai, elle sera proposée aux autres familles.`),
-                emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(cid)}`),
+                emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : URL_APP}/espace-cavalier/reserver?creneau=${encodeURIComponent(cid)}`),
                 P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
                 encadreConditionsPourType(c.activityType),
                 emailSignature(),

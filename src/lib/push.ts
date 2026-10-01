@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { adminMessaging, adminDb } from "@/lib/firebase-admin";
 
 interface PushOptions {
@@ -28,7 +29,7 @@ export async function sendPush({ token, title, body, url, icon }: PushOptions): 
           requireInteraction: false,
         },
         fcmOptions: {
-          link: url || `${process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app"}/espace-cavalier`,
+          link: url || `${URL_APP}/espace-cavalier`,
         },
       },
       android: {
@@ -91,7 +92,7 @@ export async function sendPushBatch(
             requireInteraction: false,
           },
           fcmOptions: {
-            link: url || `${process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app"}/espace-cavalier`,
+            link: url || `${URL_APP}/espace-cavalier`,
           },
         },
         android: {

@@ -17,6 +17,7 @@
  * Debug manuel : GET ?date=YYYY-MM-DD (cible une date précise)
  *                GET ?dry=1 (calcule sans écrire ni envoyer)
  */
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
@@ -36,7 +37,7 @@ import {
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+const APP_URL = URL_APP;
 
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;

@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { tracerExecution } from "@/lib/cron-trace";
 import { cleanupOldEmailLogs } from "@/lib/email-log";
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
   }
   const declencheur = parVercel ? "vercel" : "externe";
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+  const appUrl = URL_APP;
   const cronSecret = process.env.CRON_SECRET || "";
 
   const modules = [
@@ -128,7 +129,7 @@ export async function GET(req: NextRequest) {
           }
         }
         for (const cid of parCreneau.keys()) {
-          const base = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+          const base = URL_APP;
           await fetch(`${base}/api/waitlist/propose-interne`, {
             method: "POST", headers: { "Content-Type": "application/json", "x-cron-secret": process.env.CRON_SECRET || "" },
             body: JSON.stringify({ creneauId: cid }),

@@ -3,6 +3,7 @@
  * Partagée par /api/cron/satisfaction-stages (CRON_SECRET) et
  * /api/admin/satisfaction-stages (admin connecté, pour tester).
  */
+import { URL_APP } from "@/lib/url-app";
 import { adminDb } from "@/lib/firebase-admin";
 import { Resend } from "resend";
 import { isRecipientAllowed, blockedLog, refreshEmailMode } from "@/lib/email-guard";
@@ -20,7 +21,7 @@ const FROM = process.env.RESEND_FROM_EMAIL || process.env.RESEND_FROM || "onboar
 // consultent dans admin/satisfaction, et chaque envoi est journalisé dans
 // emails-log. Le BCC reste en place ailleurs (paiements, SEPA), où un
 // email isolé a une valeur de preuve.
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+const APP_URL = URL_APP;
 
 const norm = (s: string) => (s || "")
   .normalize("NFD").replace(/[\u0300-\u036f]/g, "")

@@ -1,5 +1,6 @@
 "use client";
 
+import { URL_APP } from "@/lib/url-app";
 import { useState } from "react";
 import Link from "next/link";
 
@@ -253,7 +254,7 @@ export default function LaunchPage() {
       <div className="container" style={{ display: "flex", width: "100%", height: "100%", position: "relative" }}>
 
         {/* ── CÔTÉ GAUCHE — Centre Équestre ── */}
-        <Link href="https://centre-equestre-agon.vercel.app" className="split split-equestre" style={{ textDecoration: "none" }}>
+        <Link href={URL_APP} className="split split-equestre" style={{ textDecoration: "none" }}>
           {/* Background photo */}
           <div
             className="split-bg"

@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { adminDb } from "@/lib/firebase-admin";
 
 // ═══════════════════════════════════════════════════════════════════
@@ -19,7 +20,7 @@ const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 
 export function gmailRedirectUri(): string {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+  const base = URL_APP;
   return `${base.replace(/\/$/, "")}/api/auth/gmail/callback`;
 }
 

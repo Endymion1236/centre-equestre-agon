@@ -1,4 +1,5 @@
 "use client";
+import { URL_APP } from "@/lib/url-app";
 import { useState, useMemo, useEffect } from "react";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -1147,7 +1148,7 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
       const semaineNum = semaine.split("-W")[1];
       const dateDebut = formatDateCourte(lundi);
       const dateFin = formatDateCourte(new Date(lundi.getTime() + (joursLabels.length - 1) * 86400000));
-      const siteUrl = "https://centre-equestre-agon.vercel.app";
+      const siteUrl = URL_APP;
 
       let sent = 0;
       for (const mon of moniteurs) {

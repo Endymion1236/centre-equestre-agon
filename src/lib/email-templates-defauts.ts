@@ -10,12 +10,13 @@
  * `settings/emailTemplates` les remplace, gabarit par gabarit.
  */
 
+import { URL_APP } from "@/lib/url-app";
 import {
   emailButton, emailPanneau, emailLigne, emailTitre,
   emailParagraphe as P, emailEtat, emailSignature, emailCouleurs as C,
 } from "@/lib/email-templates";
 
-const SITE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://centre-equestre-agon.vercel.app";
+const SITE_URL = URL_APP;
 
 // ── Templates par défaut (fallback si rien dans Firestore) ──
 //

@@ -16,6 +16,7 @@
  * de le saisir deux fois.
  */
 
+import { URL_APP } from "@/lib/url-app";
 import { useState, useEffect, useCallback } from "react";
 import {
   collection, addDoc, updateDoc, deleteDoc, deleteField, doc, getDocs, query, where, serverTimestamp,
@@ -218,7 +219,7 @@ export default function PanneauListeAttente({
               emailLigne("Horaire", `${creneau.startTime}–${creneau.endTime}`),
             ].join("")),
             P("<strong>Cette place vous est réservée pendant 24 heures.</strong> Confirmez l'inscription depuis votre espace famille : passé ce délai, elle sera proposée aux autres familles en attente."),
-            emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : "https://centre-equestre-agon.vercel.app"}/espace-cavalier/reserver?creneau=${encodeURIComponent(creneau.id!)}`),
+            emailButton("Confirmer l'inscription", `${typeof window !== "undefined" ? window.location.origin : URL_APP}/espace-cavalier/reserver?creneau=${encodeURIComponent(creneau.id!)}`),
             P("Un souci pour réserver en ligne, ou une question ? Appelez-nous au <strong>02 44 84 99 96</strong> ou répondez à ce message — nous prendrons l'inscription avec vous.", 13),
             emailSignature(),
           ].join("\n"), `Place disponible — ${creneau.activityTitle}`),

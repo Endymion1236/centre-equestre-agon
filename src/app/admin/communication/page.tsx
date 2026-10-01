@@ -1,5 +1,6 @@
 "use client";
 
+import { URL_APP } from "@/lib/url-app";
 import { useEffect, useMemo, useState } from "react";
 import { addDoc, collection, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import {
@@ -233,7 +234,7 @@ export default function CommunicationPage() {
     .replace(/\[nom_famille\]/g, family.parentName || "")
     .replace(/\[prenom_enfant\]/g, (family.children || [])[0]?.firstName || "")
     .replace(/\[nb_enfants\]/g, (family.children || []).length.toString())
-    .replace(/\[lien_reservation\]/g, "https://centre-equestre-agon.vercel.app/espace-cavalier/reserver");
+    .replace(/\[lien_reservation\]/g, `${URL_APP}/espace-cavalier/reserver`);
 
   const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

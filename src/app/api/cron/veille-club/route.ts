@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { messageErreur } from "@/lib/message-erreur";
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const forcer = req.nextUrl.searchParams.get("forcer") === "1";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://centre-equestre-agon.vercel.app";
+  const appUrl = URL_APP;
 
   try {
     const maintenant = new Date();

@@ -1,3 +1,4 @@
+import { URL_APP } from "@/lib/url-app";
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
 import { FieldValue } from "firebase-admin/firestore";
@@ -252,7 +253,7 @@ export async function POST(req: NextRequest) {
       })(),
       emailPanneau("Votre espace famille", [
         P("Nous changeons d'outil de gestion cette saison. Vous disposez désormais d'un espace en ligne pour consulter le planning et vos réservations, retrouver vos factures, suivre la progression et les galops de votre enfant, et réserver stages et balades.", 14),
-        emailButton("Accéder à mon espace", "https://centre-equestre-agon.vercel.app/espace-cavalier"),
+        emailButton("Accéder à mon espace", `${URL_APP}/espace-cavalier`),
         P("À partir du 1<sup>er</sup> octobre, l'adresse deviendra <strong>centreequestreagon.com</strong>. Vous serez redirigé automatiquement.", 12),
       ].join("")),
       P("Vous pouvez répondre directement à ce message, il nous parviendra.", 13),
