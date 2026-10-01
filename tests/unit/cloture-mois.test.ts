@@ -55,6 +55,19 @@ test("un mois complet rend les quatre contrôles de données au vert", () => {
   assert.deepEqual(points.slice(0, 4).map((p) => p.etat), ["ok", "ok", "ok", "ok"]);
 });
 
+test("FEC : un montant au compte d'attente 471 bloque la clôture, un compte vide passe", () => {
+  const base = { mois: "2026-08", releves, comptes: ["CIC", "CA", "Livret"], horsTotal: ["Livret"], lignesMS, resultat };
+  const bloque = construirePointsCloture({ ...base, fec: { compteAttente: 47.39, anomalies: ["Ventes au compte d'attente 47100000 (prestation non reconnue) : Halloween"] } });
+  const point = bloque.find((p) => /compte d'attente/.test(p.titre))!;
+  assert.equal(point.etat, "manque");
+  assert.match(point.detail, /47,39 €/);
+  assert.match(point.detail, /Halloween/);
+  assert.equal(resumerCloture(bloque).boucle, false);
+  const vide = construirePointsCloture({ ...base, fec: { compteAttente: 0, anomalies: [] } });
+  assert.equal(vide.find((p) => /compte d'attente/.test(p.titre))!.etat, "ok");
+  assert.ok(!construirePointsCloture(base).some((p) => /compte d'attente/.test(p.titre)), "sans FEC lu, pas de point");
+});
+
 test("un relevé manquant reste bloquant", () => {
   const points = construirePointsCloture({
     mois: "2026-08",

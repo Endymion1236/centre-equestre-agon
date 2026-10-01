@@ -35,6 +35,12 @@ export type ItemFec = NonNullable<PaiementFec["items"]>[number];
 export interface OptionsFecVentes {
   /** Compte de produit d'une ligne. Absent : le compte historique unique. */
   compteProduit?: (item: ItemFec) => { compte: string; libelle: string };
+  /**
+   * TVA sur les encaissements (prestations de services) : la TVA de la
+   * facture part au compte d'attente 44574000, et chaque règlement la vire
+   * au 4457x du taux (fec-complet). Absent : TVA collectée dès la facture.
+   */
+  tvaEnAttente?: boolean;
   /** Premier numéro d'écriture, pour enchaîner plusieurs journaux dans un fichier. */
   premierNumero?: number;
 }
@@ -50,6 +56,10 @@ export interface AnomalieFec {
 export const ENTETE_FEC = "JournalCode\tJournalLib\tEcritureNum\tEcritureDate\tCompteNum\tCompteLib\tCompAuxNum\tCompAuxLib\tPieceRef\tPieceDate\tEcritureLib\tDebit\tCredit\tEcritureLet\tDateLet\tValidDate\tMontantdevise\tIdevise";
 
 const COMPTE_PRODUIT = { compte: "70611400", libelle: "Stages équitation" };
+/** Ce que le détail de la facture n'explique pas : à ventiler, jamais rangé d'office en produit. */
+export const COMPTE_ATTENTE = { compte: "47100000", libelle: "Compte d'attente — à ventiler" };
+/** TVA facturée, pas encore encaissée (TVA sur les encaissements). */
+export const COMPTE_TVA_EN_ATTENTE = { compte: "44574000", libelle: "TVA collectée en attente d'encaissement" };
 const COMPTE_CLIENT = { compte: "41100000", libelle: "Clients" };
 
 /**
@@ -91,6 +101,18 @@ function centimes(n: number): number {
 
 function euros(centimes: number): string {
   return (centimes / 100).toFixed(2);
+}
+
+/**
+ * Un montant signé posé du bon côté, toujours en positif : une remise (montant
+ * négatif) qui réduit un produit passe AU DÉBIT de ce produit, pas au crédit
+ * en négatif. Le FEC tolère les montants signés, mais les logiciels du cabinet
+ * les importent mal.
+ */
+export function cote(centimesSignes: number, sensNaturel: "debit" | "credit"): { debit?: number; credit?: number } {
+  const positif = centimesSignes >= 0;
+  const sens = positif ? sensNaturel : sensNaturel === "debit" ? "credit" : "debit";
+  return sens === "debit" ? { debit: Math.abs(centimesSignes) } : { credit: Math.abs(centimesSignes) };
 }
 
 function ligne(champs: {
@@ -158,34 +180,50 @@ export function analyserFecVentes(
 
     // Lignes ramenées au total de la facture (lib/lignes-facture) : la TVA de
     // la 1re échéance d'un forfait en 3×/10× se calculait sur le forfait entier.
-    (lignesAuTotal(paiement) as NonNullable<typeof paiement.items>).forEach((item) => {
+    const lignesFacture = lignesAuTotal(paiement) as NonNullable<typeof paiement.items>;
+    const compteDe = (item: ItemFec) => (options.compteProduit ? options.compteProduit(item) : COMPTE_PRODUIT);
+    // Une remise sans compte reconnu réduit le produit qu'elle accompagne :
+    // le compte de la plus grosse ligne de la facture, pas le compte d'attente.
+    const principale = [...lignesFacture]
+      .filter((l) => centimes(l.priceHT) > 0)
+      .map((l) => ({ l, compte: compteDe(l) }))
+      .filter((x) => x.compte.compte !== COMPTE_ATTENTE.compte)
+      .sort((a, b) => centimes(b.l.priceHT) - centimes(a.l.priceHT))[0];
+    lignesFacture.forEach((item) => {
       const htCentimes = centimes(item.priceHT);
       if (htCentimes !== 0) {
-        lignesEcriture.push(
-          ligne({
-            numero,
-            dateEcriture,
-            compte: options.compteProduit ? options.compteProduit(item) : COMPTE_PRODUIT,
-            piece,
-            libelle: item.activityTitle,
-            credit: htCentimes,
-          }),
-        );
-        creditsCentimes += htCentimes;
-      }
-
-      const tvaCentimes = centimes(item.priceTTC) - htCentimes;
-      if (tvaCentimes > 0) {
-        const taux = item.tva ?? 0;
-        const compte = compteTvaCollectee(taux);
+        let compte = compteDe(item);
+        if (htCentimes < 0 && compte.compte === COMPTE_ATTENTE.compte && principale) compte = principale.compte;
+        else if (htCentimes < 0 && compte.compte === COMPTE_ATTENTE.compte) {
+          anomalies.push({ piece, familyName: paiement.familyName, ecart: 0, message: `Remise « ${item.activityTitle} » (${euros(-htCentimes)} € HT) sans ligne de produit reconnue sur la facture : passée au 47100000, à ventiler.` });
+        }
         lignesEcriture.push(
           ligne({
             numero,
             dateEcriture,
             compte,
             piece,
-            libelle: `TVA ${taux}%`,
-            credit: tvaCentimes,
+            libelle: htCentimes < 0 ? `Remise — ${item.activityTitle}` : item.activityTitle,
+            ...cote(htCentimes, "credit"),
+          }),
+        );
+        creditsCentimes += htCentimes;
+      }
+
+      // TVA de la ligne, positive ou NÉGATIVE (remise) : une TVA de remise
+      // oubliée déséquilibrait l'écriture, d'où les « écarts de ventilation ».
+      const tvaCentimes = centimes(item.priceTTC) - htCentimes;
+      if (tvaCentimes !== 0) {
+        const taux = item.tva ?? 0;
+        const compte = options.tvaEnAttente ? COMPTE_TVA_EN_ATTENTE : compteTvaCollectee(taux);
+        lignesEcriture.push(
+          ligne({
+            numero,
+            dateEcriture,
+            compte,
+            piece,
+            libelle: `TVA ${taux}%${options.tvaEnAttente ? " — exigible à l'encaissement" : ""}${tvaCentimes < 0 ? " (remise)" : ""}`,
+            ...cote(tvaCentimes, "credit"),
           }),
         );
         creditsCentimes += tvaCentimes;
@@ -210,20 +248,18 @@ export function analyserFecVentes(
       });
     }
 
-    // Équilibrage : le fichier doit rester valide même quand le détail des
-    // articles ne retombe pas sur le total (remise saisie sur la facture,
-    // article sans prix…). L'écart part sur le compte de produit sous un
-    // libellé qui le nomme, et remonte dans les anomalies pour être corrigé.
+    // Reste un écart seulement quand le détail est illisible (lignes sans
+    // prix) : ce que la facture n'explique pas part au compte d'attente, à
+    // ventiler par le cabinet — jamais rangé d'office dans un produit.
     if (ecart !== 0) {
       lignesEcriture.push(
         ligne({
           numero,
           dateEcriture,
-          compte: COMPTE_PRODUIT,
+          compte: COMPTE_ATTENTE,
           piece,
-          libelle: "Écart de ventilation",
-          credit: ecart > 0 ? ecart : undefined,
-          debit: ecart < 0 ? -ecart : undefined,
+          libelle: "Détail de facture illisible — à ventiler",
+          ...cote(ecart, "credit"),
         }),
       );
       anomalies.push({
@@ -232,8 +268,7 @@ export function analyserFecVentes(
         ecart: ecart / 100,
         message:
           `Le détail des articles ne retombe pas sur le total de la facture ` +
-          `(écart ${euros(ecart)} €). Une ligne « Écart de ventilation » a été ` +
-          `ajoutée pour garder l'écriture équilibrée.`,
+          `(écart ${euros(ecart)} €) : l'écart est passé au 47100000, à ventiler.`,
       });
     }
 
@@ -245,7 +280,7 @@ export function analyserFecVentes(
         compte: COMPTE_CLIENT,
         piece,
         libelle: `Créance ${paiement.familyName}`,
-        debit: debitCentimes,
+        ...cote(debitCentimes, "debit"),
         auxNum: paiement.familyName,
         auxLib: paiement.familyName,
       }),

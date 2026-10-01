@@ -14,6 +14,12 @@
  *        caisse, du compte de trésorerie du mode vers le 41100000 ; plus
  *        les versements d'espèces en banque et les apports de caisse.
  *
+ * TVA sur les encaissements (prestations de services, art. 269-2-c du CGI,
+ * règle retenue le 30/09/2026) : à la facture, la TVA part au 44574000
+ * « en attente d'encaissement » ; chaque règlement en vire sa part au 4457x
+ * du taux (une facture de 180 € réglée 30 € ne rend exigible que la TVA de
+ * 30 €). Le 44571x du mois = la TVA de la déclaration en base encaissements.
+ *
  * Les achats n'y sont pas : le cabinet les saisit sur pièces, qui partent
  * avec le même envoi (archive des justificatifs du mois).
  *
@@ -22,13 +28,14 @@
  * inconnu aussi, et chacune remonte dans les anomalies.
  */
 
-import { analyserFecVentes, ENTETE_FEC, type PaiementFec } from "@/app/admin/comptabilite/fec-utils";
+import { analyserFecVentes, COMPTE_ATTENTE as ATTENTE, COMPTE_TVA_EN_ATTENTE, compteTvaCollectee, cote, ENTETE_FEC, type PaiementFec } from "@/app/admin/comptabilite/fec-utils";
+import { lignesAuTotal } from "@/lib/lignes-facture";
 import { compteDeLigne, libelleCompte, NON_VENTILE, type ReglesVentilation } from "@/lib/ventilation-comptable";
 
 export interface CompteFec { compte: string; libelle: string }
 
 export const COMPTE_CLIENTS: CompteFec = { compte: "41100000", libelle: "Clients" };
-export const COMPTE_ATTENTE: CompteFec = { compte: "47100000", libelle: "Compte d'attente — à ventiler" };
+export const COMPTE_ATTENTE: CompteFec = ATTENTE;
 
 /**
  * Compte de trésorerie débité par mode de règlement.
@@ -82,6 +89,35 @@ function ligneFec(c: {
   ].join("\t");
 }
 
+const MOIS_PARIS = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit" });
+function moisFecParis(secondes: number | undefined): string | null {
+  return secondes ? MOIS_PARIS.format(new Date(secondes * 1000)).slice(0, 7) : null;
+}
+
+/**
+ * Part de TVA d'un règlement, par taux (centimes signés) : la TVA de chaque
+ * ligne de la facture au prorata de la somme reçue sur le total. Mêmes lignes
+ * que l'écriture de vente (lignesAuTotal), pour que le 44574000 se solde
+ * exactement quand la facture est payée en entier. Calcul en cumul (ce qui
+ * est dû après ce règlement, moins ce qui l'était avant) : les arrondis des
+ * échéances se compensent, sans centime orphelin.
+ */
+export function tvaDuReglement(facture: PaiementFec, centimesRecus: number, centimesDejaRecus = 0): [number, number][] {
+  const total = Math.round((Number(facture.totalTTC) || 0) * 100);
+  if (total === 0 || centimesRecus === 0) return [];
+  const parTaux = new Map<number, number>();
+  for (const l of lignesAuTotal(facture)) {
+    const tva = Math.round((Number(l.priceTTC) || 0) * 100) - Math.round((Number(l.priceHT) || 0) * 100);
+    if (tva === 0) continue;
+    const taux = Number(l.tva ?? 0);
+    parTaux.set(taux, (parTaux.get(taux) || 0) + tva);
+  }
+  const exigible = (tva: number, recu: number) => Math.round((tva * recu) / total);
+  return [...parTaux.entries()]
+    .map(([taux, tva]): [number, number] => [taux, exigible(tva, centimesDejaRecus + centimesRecus) - exigible(tva, centimesDejaRecus)])
+    .filter(([, tva]) => tva !== 0);
+}
+
 export interface EncaissementFec {
   id?: string;
   paymentId?: string;
@@ -104,6 +140,8 @@ export interface ResultatFecComplet {
     reglements: { ecritures: number; total: number };
     /** Comptes de trésorerie employés et encore à confirmer par le cabinet. */
     comptesAConfirmer: CompteFec[];
+    /** Montants passés au 47100000 « à ventiler » (euros, débits + crédits). */
+    compteAttente: number;
   };
 }
 
@@ -115,16 +153,36 @@ export function construireFecComplet(params: {
   maintenant?: Date;
   /** Règles de ventilation posées par le gérant (settings/ventilationVentes). */
   regles?: ReglesVentilation | null;
+  /**
+   * TVA sur les encaissements : toutes les commandes (une facture peut être
+   * réglée un autre mois) et les mois tenus dans Céleris (TVA déjà déclarée
+   * à la facture, rien à virer). Absent : TVA collectée dès la facture.
+   */
+  tvaEncaissements?: {
+    payments: (PaiementFec & { id: string })[];
+    moisCeleris: string[];
+    /** Tous les encaissements, pour savoir ce qu'une facture avait déjà reçu avant ce mois. */
+    tousEncaissements?: EncaissementFec[];
+  };
 }): ResultatFecComplet {
   const maintenant = params.maintenant || new Date();
   const anomalies: string[] = [];
 
   // ── VE : ventes ─────────────────────────────────────────────────────
   const aVentiler = new Set<string>();
+  const tvaEnc = params.tvaEncaissements;
+  const facturesParId = new Map((tvaEnc?.payments || []).map((p) => [String(p.id), p]));
+  const moisCeleris = new Set(tvaEnc?.moisCeleris || []);
   const ventes = analyserFecVentes(params.factures, maintenant, {
+    tvaEnAttente: !!tvaEnc,
     compteProduit: (item) => {
       const { code } = compteDeLigne(item, params.regles);
-      if (code === NON_VENTILE) { aVentiler.add(item.activityTitle || "(sans libellé)"); return COMPTE_ATTENTE; }
+      if (code === NON_VENTILE) {
+        // Une remise (montant négatif) prend le compte de la ligne principale
+        // de sa facture (fec-utils) : elle n'est signalée que si elle n'en a pas.
+        if (!(Number(item.priceHT) < 0)) aVentiler.add(item.activityTitle || "(sans libellé)");
+        return COMPTE_ATTENTE;
+      }
       return { compte: code, libelle: libelleCompte(code) };
     },
   });
@@ -139,6 +197,13 @@ export function construireFecComplet(params: {
   const debut = numero;
   let totalRg = 0;
   const comptesUtilises = new Map<string, CompteFec>();
+  // Ce qu'une facture avait reçu avant un règlement (même ordre de tri).
+  const avant = (a: EncaissementFec, b: EncaissementFec) => (a.date?.seconds || 0) - (b.date?.seconds || 0) || String(a.id || "").localeCompare(String(b.id || ""));
+  const reglementsClients = (tvaEnc?.tousEncaissements || params.encaissements)
+    .filter((x) => x.paymentId && !x.isVersementBanque && !x.isApportCaisse && x.mode !== "avoir");
+  const dejaRecu = (e: EncaissementFec) => reglementsClients
+    .filter((x) => x.paymentId === e.paymentId && (x.id && e.id ? x.id !== e.id : x !== e) && avant(x, e) < 0)
+    .reduce((s, x) => s + Math.round((Number(x.montant) || 0) * 100), 0);
   const tries = [...params.encaissements].sort((a, b) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
   for (const e of tries) {
     const centimes = Math.round((Number(e.montant) || 0) * 100);
@@ -177,10 +242,34 @@ export function construireFecComplet(params: {
     const auxCredit = compteCredit === COMPTE_CLIENTS ? aux : {};
     lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: compteDebit, piece, libelle, debit: m, ...auxDebit }));
     lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: compteCredit, piece, libelle, credit: m, ...auxCredit }));
+
+    // TVA devenue exigible avec ce règlement : 44574000 → 4457x du taux.
+    if (tvaEnc && !sensFixe && e.mode !== "avoir") {
+      const facture = e.paymentId ? facturesParId.get(String(e.paymentId)) : undefined;
+      const moisFacture = moisFecParis(facture?.date?.seconds);
+      if (!facture) {
+        anomalies.push(`Règlement de ${propre(e.familyName) || "?"} (${euros(centimes)} €) sans facture rattachée : sa TVA n'a pas pu être rendue exigible, à voir.`);
+      } else if (!(moisFacture && moisCeleris.has(moisFacture))) {
+        for (const [taux, tva] of tvaDuReglement(facture, centimes, dejaRecu(e))) {
+          const lib = `TVA ${taux}% exigible — ${propre(e.familyName)}`;
+          lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: COMPTE_TVA_EN_ATTENTE, piece, libelle: lib, ...cote(tva, "debit") }));
+          lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: compteTvaCollectee(taux), piece, libelle: lib, ...cote(tva, "credit") }));
+        }
+      }
+    }
     if (!e.isVersementBanque && !e.isApportCaisse) totalRg += centimes;
     numero++;
   }
 
+  // Compte de TVA en attente : nouveau dans le plan du cabinet, à valider.
+  if (tvaEnc && [...ventes.lignes, ...lignesRg].some((l) => l.split("\t")[4] === COMPTE_TVA_EN_ATTENTE.compte)) {
+    comptesUtilises.set(COMPTE_TVA_EN_ATTENTE.compte, COMPTE_TVA_EN_ATTENTE);
+  }
+  // Tout ce qui est parti au compte d'attente : à traiter avant de clôturer.
+  const compteAttente = [...ventes.lignes, ...lignesRg]
+    .map((l) => l.split("\t"))
+    .filter((c) => c[4] === COMPTE_ATTENTE.compte)
+    .reduce((s, c) => s + Math.round((Number(c[11]) || 0) * 100) + Math.round((Number(c[12]) || 0) * 100), 0) / 100;
   const totalTTC = params.factures.reduce((s, f) => s + Math.round((Number(f.totalTTC) || 0) * 100), 0);
   return {
     contenu: [ENTETE_FEC, ...ventes.lignes, ...lignesRg].join("\n") + "\n",
@@ -189,6 +278,7 @@ export function construireFecComplet(params: {
       ventes: { ecritures: ventes.nbEcritures, totalTTC: totalTTC / 100 },
       reglements: { ecritures: numero - debut, total: totalRg / 100 },
       comptesAConfirmer: [...comptesUtilises.values()],
+      compteAttente,
     },
   };
 }

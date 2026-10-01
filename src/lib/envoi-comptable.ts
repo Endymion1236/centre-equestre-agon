@@ -82,20 +82,27 @@ export async function chargerReglesVentilation(): Promise<Record<string, string>
   return regles && typeof regles === "object" ? regles : {};
 }
 
+/** Mois tenus dans Céleris (un document par mois importé). */
+async function chargerMoisCeleris(): Promise<string[]> {
+  const snap = await adminDb.collection("historiqueComptableCeleris").select().get().catch(() => null);
+  return (snap?.docs || []).map((d) => d.id).filter((m) => /^\d{4}-\d{2}$/.test(m));
+}
+
 export async function chargerFecMois(mois: string) {
-  const [paySnap, encSnap, celerisSnap, club, regles] = await Promise.all([
+  const [paySnap, encSnap, celerisSnap, club, regles, moisCeleris] = await Promise.all([
     adminDb.collection("payments").get(),
     adminDb.collection("encaissements").get(),
     adminDb.collection("historiqueComptableCeleris").doc(mois).get().catch(() => null),
     getClubInfo(),
     chargerReglesVentilation(),
+    chargerMoisCeleris(),
   ]);
   const payments = paySnap.docs.map(normaliserDoc);
   const encaissements = encSnap.docs.map(normaliserDoc);
   const celerisDoc = celerisSnap?.exists ? (celerisSnap.data() as any) : null;
   const factures = facturesDuMois(payments, mois).sort((a: any, b: any) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
   return fecDuMois({
-    mois, factures, encaissements: encaissementsDuMois(encaissements, mois), payments,
+    mois, factures, encaissements: encaissementsDuMois(encaissements, mois), payments, tousEncaissements: encaissements, moisCeleris,
     celeris: celerisDoc && Array.isArray(celerisDoc.lignes) ? { lignes: celerisDoc.lignes } : null,
     siret: club.siret,
     regles,
@@ -149,8 +156,8 @@ export async function envoyerEcrituresComptable(params: {
     ? { lignes: celerisDoc.lignes, totaux: { ht: Number(celerisDoc.totaux.ht) || 0, tva: Number(celerisDoc.totaux.tva) || 0, ttc: Number(celerisDoc.totaux.ttc) || 0 } }
     : null;
 
-  const regles = await chargerReglesVentilation();
-  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles });
+  const [regles, moisCeleris] = await Promise.all([chargerReglesVentilation(), chargerMoisCeleris()]);
+  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles, moisCeleris });
   if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0 && !colis.resume.ventilationAchats?.total && !colis.resume.celeris) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
   }

@@ -1,6 +1,6 @@
 /**
  * GET /api/admin/fec?mois=AAAA-MM
- *   → { fichier, contenu, source, ecrituresVentes, ecrituresReglements, anomalies } : le FEC du mois, le même que
+ *   → { fichier, contenu, source, ecrituresVentes, ecrituresReglements, anomalies, compteAttente } : le FEC du mois, le même que
  *     celui de l'envoi mensuel au cabinet (lib/envoi-comptable → chargerFecMois).
  *     Pour juillet-août 2026, il reprend les écritures Céleris importées.
  * Auth admin obligatoire.
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   try {
     const fec = await chargerFecMois(mois);
     return NextResponse.json({ fichier: fec.fichier, contenu: fec.contenu, source: fec.source,
-      ecrituresVentes: fec.ecrituresVentes, ecrituresReglements: fec.ecrituresReglements, anomalies: fec.anomalies },
+      ecrituresVentes: fec.ecrituresVentes, ecrituresReglements: fec.ecrituresReglements, anomalies: fec.anomalies, compteAttente: fec.compteAttente },
       { headers: { "Cache-Control": "private, no-store" } });
   } catch (e) {
     console.error("[fec]", e);

@@ -20,6 +20,7 @@ import {
   construireExportEncaissements,
   construireExportFactures,
 } from "@/app/admin/comptabilite/exports-csv-utils";
+import { lignesAuTotal } from "@/lib/lignes-facture";
 import { construireFecCeleris, construireFecComplet, nomFichierFec, type CompteFec } from "@/lib/fec-complet";
 import type { ReglesVentilation } from "@/lib/ventilation-comptable";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
@@ -110,6 +111,8 @@ export function construireColisComptable(params: {
   siret?: string;
   /** Règles de ventilation des ventes posées par le gérant. */
   regles?: ReglesVentilation | null;
+  /** Mois tenus dans Céleris (identifiants de historiqueComptableCeleris). */
+  moisCeleris?: string[];
 }): ColisComptable {
   const { mois, maintenant = new Date() } = params;
   const lignesJustificatifs = params.lignesJustificatifs?.filter(l => (l.mois || l.dateOperation?.slice(0, 7)) === mois);
@@ -122,7 +125,8 @@ export function construireColisComptable(params: {
   const resume: ResumeColis = {
     nbFactures: factures.length,
     totalTTC: arrondi(factures.reduce((s, f) => s + (f.totalTTC || 0), 0)),
-    totalHT: arrondi(factures.reduce((s, f) => s + (f.items || []).reduce((ss: number, i: any) => ss + (i.priceHT || 0), 0), 0)),
+    // Lignes ramenées au total : la 1re échéance d'un 3×/10× porte le forfait entier.
+    totalHT: arrondi(factures.reduce((s, f) => s + lignesAuTotal(f).reduce((ss: number, i: any) => ss + (i.priceHT || 0), 0), 0)),
     nbEncaissements: encaissements.length,
     totalEncaisse: arrondi(encaissements.reduce((s, e) => s + (e.montant || 0), 0)),
     nbDepenses: depenses.length,
@@ -140,7 +144,7 @@ export function construireColisComptable(params: {
     resume.celeris = { nombre: celeris.lignes.length, ht: arrondi(celeris.totaux.ht / 100), tva: arrondi(celeris.totaux.tva / 100), ttc: arrondi(celeris.totaux.ttc / 100) };
   }
 
-  const fec = fecDuMois({ mois, factures, encaissements, payments: params.payments, celeris, siret: params.siret, maintenant, regles: params.regles });
+  const fec = fecDuMois({ mois, factures, encaissements, payments: params.payments, tousEncaissements: params.encaissements, moisCeleris: params.moisCeleris, celeris, siret: params.siret, maintenant, regles: params.regles });
   const fichierFec = fec.fichier;
   resume.fec = {
     fichier: fec.fichier,
@@ -187,18 +191,22 @@ export function fecDuMois(params: {
   encaissements: any[];
   /** Toutes les commandes, pour retrouver le numéro de facture d'un règlement. */
   payments: any[];
+  /** Tous les encaissements : ce qu'une facture avait déjà reçu avant le mois (TVA exigible en cumul). */
+  tousEncaissements?: any[];
+  /** Mois tenus dans Céleris : leurs factures ont déjà leur TVA déclarée. */
+  moisCeleris?: string[];
   celeris?: { lignes: EcritureCelerisColis[] } | null;
   siret?: string;
   maintenant?: Date;
   regles?: ReglesVentilation | null;
-}): { fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; anomalies: string[]; comptesAConfirmer: CompteFec[] } {
+}): { fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; anomalies: string[]; comptesAConfirmer: CompteFec[]; compteAttente: number } {
   const fichier = nomFichierFec(params.siret, params.mois);
   if (params.celeris && params.celeris.lignes.length) {
     const c = construireFecCeleris(params.celeris.lignes);
     const doublons = params.factures.length + params.encaissements.length;
     return {
       fichier, contenu: c.contenu, source: "celeris",
-      ecrituresVentes: c.ecritures, ecrituresReglements: 0, comptesAConfirmer: [],
+      ecrituresVentes: c.ecritures, ecrituresReglements: 0, comptesAConfirmer: [], compteAttente: 0,
       anomalies: [
         ...c.anomalies,
         ...(doublons ? [`Mois tenu dans Céleris : ${params.factures.length} facture(s) et ${params.encaissements.length} encaissement(s) saisis aussi dans l'application ne sont pas repris, pour ne pas les compter deux fois.`] : []),
@@ -206,11 +214,15 @@ export function fecDuMois(params: {
     };
   }
   const numeros = new Map<string, string>(params.payments.filter((p) => p?.id && p?.invoiceNumber).map((p) => [String(p.id), String(p.invoiceNumber)]));
-  const f = construireFecComplet({ factures: params.factures, encaissements: params.encaissements, numeroFactureDe: (id) => numeros.get(id), maintenant: params.maintenant, regles: params.regles });
+  const f = construireFecComplet({
+    factures: params.factures, encaissements: params.encaissements, numeroFactureDe: (id) => numeros.get(id), maintenant: params.maintenant, regles: params.regles,
+    // TVA sur les encaissements (règle du 30/09/2026) : 44574000 à la facture, virée au 4457x à chaque règlement.
+    tvaEncaissements: { payments: params.payments.filter((p) => p?.id), moisCeleris: params.moisCeleris || [], tousEncaissements: params.tousEncaissements },
+  });
   return {
     fichier, contenu: f.contenu, source: "application",
     ecrituresVentes: f.resume.ventes.ecritures, ecrituresReglements: f.resume.reglements.ecritures,
-    anomalies: f.anomalies, comptesAConfirmer: f.resume.comptesAConfirmer,
+    anomalies: f.anomalies, comptesAConfirmer: f.resume.comptesAConfirmer, compteAttente: f.resume.compteAttente,
   };
 }
 
@@ -249,7 +261,8 @@ export function corpsEmailComptable(params: {
       ${resume.ventilationAchats ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventilation des achats</td><td>${resume.ventilationAchats.total} opérations, <b>${resume.ventilationAchats.aVentiler} à ventiler</b> (${eur(resume.ventilationAchats.montantAVentiler)}). Comptes proposés à valider.</td></tr>` : ""}
     </table>
     ${resume.tvaDeductibleJustifiee != null ? "<p>Les paiements fractionnés et les factures partagées restent à vérifier, hors total TVA automatique. La TVA totale de la facture ne doit pas être cumulée entre paiements.</p>" : ""}
-    ${resume.fec?.comptesAConfirmer.length ? `<p style="font-size:13px;color:#374151;"><b>Comptes de règlement à valider</b> (plan comptable général, faute de numéro dans votre plan) : ${resume.fec.comptesAConfirmer.map((c) => `${c.compte} ${c.libelle}`).join(" · ")}. Dites-nous s'il faut en changer : le fichier suivra.</p>` : ""}
+    ${resume.fec?.source === "application" ? `<p style="font-size:13px;color:#374151;"><b>TVA sur les encaissements</b> (prestations de services, art. 269-2-c du CGI) : à la facture, la TVA est portée au 44574000 « TVA collectée en attente d'encaissement » ; chaque règlement en vire sa part au 4457x du taux. Le 4457x du mois correspond ainsi à la TVA exigible, et le solde du 44574000 à la TVA des factures non encaissées. Merci de nous confirmer que le club n'a pas opté pour les débits.</p>` : ""}
+    ${resume.fec?.comptesAConfirmer.length ? `<p style="font-size:13px;color:#374151;"><b>Comptes à valider</b> (plan comptable général, faute de numéro dans votre plan) : ${resume.fec.comptesAConfirmer.map((c) => `${c.compte} ${c.libelle}`).join(" · ")}. Dites-nous s'il faut en changer : le fichier suivra.</p>` : ""}
     ${resume.fec?.nbAnomalies ? `<p style="font-size:13px;color:#b45309;"><b>Points à regarder dans le FEC :</b><br/>${resume.fec.anomalies.map((a) => `• ${a.replace(/&/g, "&amp;").replace(/</g, "&lt;")}`).join("<br/>")}${resume.fec.nbAnomalies > resume.fec.anomalies.length ? `<br/>… et ${resume.fec.nbAnomalies - resume.fec.anomalies.length} autre(s).` : ""}</p>` : ""}
     ${archive ? `<p style="font-size:13px;color:#374151;">L'archive des pièces contient <b>${archive.nb}</b> justificatif(s), nommés « date - fournisseur - montant ».${archive.nonJointes ? ` <span style="color:#b45309;">${archive.nonJointes} pièce(s) n'ont pas pu être jointes (taille) : elles restent consultables dans l'application.</span>` : ""}</p>` : ""}
     <p style="font-size:13px;color:#374151;"><b>Pièces jointes :</b><br/>${pieces.map((p) => `• ${p}`).join("<br/>")}</p>
