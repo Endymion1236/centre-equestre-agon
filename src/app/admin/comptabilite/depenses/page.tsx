@@ -66,7 +66,8 @@ export default function DepensesPage() {
     if (d.limite) setMessage("Affichage partiel : limite de 2 000 lignes ou pièces atteinte.");
   }, [mois]);
   useEffect(() => { if (user && isAdmin && vue === "tableau") { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); } }, [user, isAdmin, vue, charger]);
-  async function post(url: string, body: object) { const r = await authFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const d = await r.json(); if (!r.ok) throw new Error(d.error); return d; }
+  // Une réponse sans JSON (délai dépassé côté hébergeur) garde un message lisible.
+  async function post(url: string, body: object) { const r = await authFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || (r.status === 504 ? "La lecture a pris trop de temps. La pièce est bien déposée : relancez la lecture." : `Erreur ${r.status}`)); return d; }
   /**
    * Rapprochement automatique du mois : aperçu d'abord, écriture seulement
    * après confirmation, rapport ensuite. Les pièces non associées sont
@@ -196,7 +197,7 @@ export default function DepensesPage() {
     setMode("normal"); setCible(l.id); setChoix(null); setCorrection(null); setBusy(true); setMessage("Import et lecture de cette pièce…");
     try {
       const form = new FormData(); form.append("fichier", f);
-      const r = await authFetch(justifs, { method: "POST", body: form }); const d = await r.json(); if (!r.ok) throw new Error(d.error);
+      const r = await authFetch(justifs, { method: "POST", body: form }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || (r.status === 413 ? "Fichier trop lourd : 4 Mo maximum (scannez en 150-200 ppp)." : `Dépôt impossible (erreur ${r.status}).`));
       async function lire() { const r = await authFetch(`${justifs}?piece=${d.id}`); const x = await r.json(); if (!r.ok || !x.pieces?.[0]) throw new Error(x.error || "Pièce indisponible"); return x.pieces[0] as Piece; }
       let p = await lire(); setChoix(p);
       if (!p.extraction && !p.retire) { await post(justifs, { action: "analyser", id: d.id }); p = await lire(); }
