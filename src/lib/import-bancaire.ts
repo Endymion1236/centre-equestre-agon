@@ -1,5 +1,6 @@
 /** Import des débits : lecture stricte et rapprochement sans mutation.
  * Les centimes sont entiers ; aucun mouvement illisible n'est omis silencieusement. */
+import { estCreditReleve } from "./import-releve-pages";
 import { fournisseurNormalise } from "./doublons-depenses";
 import { compteBanque } from "./plan-comptable-achats";
 import { posteCommissionCarte, POSTE_HORS_DEPENSES, POSTES_DEPENSES, estVersementCompteFfe } from "./postes-depenses";
@@ -178,6 +179,22 @@ export function verifierDecisionsImport(value: unknown, refs: Set<string>): Deci
 }
 const banque = (e: ExistanteImport) => e.compteBanqueConfirme || compteBanque(e.compte).compte;
 const cle = (date: string, centimes: number, libelle: string) => `${date}|${centimes}|${fournisseurNormalise(libelle)}`;
+/** Mots porteurs d'un libellé bancaire : noms et numéros, sans les mots génériques de la banque. */
+const MOTS_GENERIQUES = new Set(["paiement", "par", "carte", "virement", "vir", "emis", "inst", "sepa", "prelevement", "prlv", "vers", "facture", "remboursement", "echeance", "ech", "avis", "debit", "operation", "web", "les", "des", "pour", "sur", "avec"]);
+export function motsPorteurs(libelle: string): Set<string> {
+  const t = String(libelle ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ");
+  return new Set(t.split(" ").filter(m => (/^\d+$/.test(m) ? m.length >= 4 : m.length >= 3) && !MOTS_GENERIQUES.has(m)));
+}
+/** Deux libellés de la même opération, l'un abrégé : au moins un mot porteur commun (ou l'un préfixe de l'autre, « interets » / « inter »). */
+export function libellesCompatibles(a: string, b: string): boolean {
+  const ma = motsPorteurs(a), mb = motsPorteurs(b);
+  for (const x of ma) for (const y of mb) {
+    if (x === y) return true;
+    if (!/^\d/.test(x) && !/^\d/.test(y) && Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x))) return true;
+  }
+  return false;
+}
+
 export function rapprocherImportBancaire(source: SourceImport, existantes: ExistanteImport[], liens: Record<string, LienImport>, decisions: DecisionsImport = {}) {
   const refs = new Set(source.operations.map(o => o.ref));
   if (refs.size !== source.operations.length) throw new ErreurImportBancaire("Opération chargée deux fois dans le même import.");
@@ -211,6 +228,9 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
       if (!sameAmount(directe) || !inAccount(directe) || (lien ? (lien.date !== o.date || lien.centimes !== o.centimes || lien.libelle !== o.libelle) : (directe.dateOperation !== o.date || !sameLabel(directe)))) return { ...r, etat: "ambigu", cible: directe.id, motif: "Les informations diffèrent de la source déjà importée. Contrôler l’écart." };
       return { ...r, candidats: [directe], etat: "deja", cible: directe.id, motif: "Déjà importé ; catégorie et justificatifs conservés." };
     }
+    // Un crédit (remise de cartes ou de chèques, prélèvements émis, virement
+    // reçu) lu à tort comme un débit sur le PDF : jamais une dépense.
+    if (source.format === "pdf" && !d.mode && estCreditReleve(o.libelle)) return { ...r, operation: { ...r.operation, poste: POSTE_HORS_DEPENSES }, etat: "ignore", motif: "Crédit (remise, prélèvements émis, virement reçu) lu comme un débit : écarté, ce n'est pas une dépense." };
     if (d.mode === "ignorer") return d.motif?.trim() ? { ...r, etat: "ignore", motif: d.motif.trim(), manuel: true } : { ...r, etat: "ambigu", motif: "Motif requis pour ignorer une opération." };
     if (d.mode === "lier") {
       const cible = proche.find(e => e.id === d.cible && !e.archive && !e.rapprochementExclu && sameAmount(e));
@@ -225,6 +245,16 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
     }
     if (exactes.length === 1 && counts.get(cle(o.date, o.centimes, o.libelle)) === 1) {
       const e = exactes[0]; return { ...r, candidats: [e], etat: e.archive || e.rapprochementExclu ? "archive" : "rapproche", cible: e.id, motif: e.archive || e.rapprochementExclu ? "Déjà archivé ou exclu : aucune réactivation." : "Même compte, date, montant et fournisseur ; informations existantes conservées." };
+    }
+    // Relevé PDF après les CSV quotidiens : la banque abrège ses libellés
+    // (« Com Carte 8067954 » pour « Commission CARTE 8067954 001 155179 01/09 »).
+    // Même compte, même montant, MÊME JOUR et un mot ou numéro commun : c'est
+    // la même opération. Une seule candidate, sinon le choix reste au gérant ;
+    // une date décalée reste toujours à vérifier.
+    if (source.format === "pdf" && (counts.get(cle(o.date, o.centimes, o.libelle)) || 0) === 1) {
+      const memeJour = proche.filter(e => banque(e) === source.compte && sameAmount(e) && !e.archive && !e.rapprochementExclu
+        && e.dateOperation === o.date && libellesCompatibles(e.fournisseur, o.libelle));
+      if (memeJour.length === 1) return { ...r, candidats: [memeJour[0]], etat: "rapproche", cible: memeJour[0].id, motif: "Même compte, jour et montant ; libellé abrégé par la banque. Informations existantes conservées." };
     }
     if (proche.length || (counts.get(cle(o.date, o.centimes, o.libelle)) || 0) > 1) return { ...r, etat: "ambigu", motif: "Plusieurs correspondances possibles ou un écart de date, montant ou libellé : choisir l’action." };
     return r;

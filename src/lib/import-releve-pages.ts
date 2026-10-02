@@ -15,9 +15,29 @@ export function estVirementPlateforme(libelle: unknown): boolean {
   if (/\b(commission|commissions|com|frais|prlv|prelevement|prelvt|cotis)\b/.test(t)) return false;
   return /\b(stripe|stp|cawl|worldline|sumup|helloasso)\b/.test(t);
 }
+/**
+ * Crédit du relevé lu à tort comme un débit. Octobre 2026 : le relevé de
+ * septembre, rapproché après les CSV quotidiens, proposait comme dépenses
+ * « Remise Carte 8067954 » (117 €), « Rem Chq 2123509 » (70 €) ou « A.p.
+ * Emis Prel Ech Du » (300 €, avis de prélèvements SEPA émis par le club) :
+ * de l'argent qui entre. Remises de cartes et de chèques, prélèvements émis,
+ * virements reçus, versements d'espèces : jamais un débit. Une commission ou
+ * des frais sur ces opérations (« Com Carte », « Frais remise chèque ») en
+ * restent un.
+ */
+export function estCreditReleve(libelle: unknown): boolean {
+  const t = String(libelle ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  if (/\b(commission|commissions|com|frais|cotis|cotisation|impaye|rejet)\b/.test(t)) return false;
+  if (estVirementPlateforme(t)) return true;
+  return /\b(remise|rem)\b.*\b(carte|cartes|cb|chq|cheque|cheques|tpe)\b/.test(t)
+    || /\bemis\s+prel/.test(t) || /\bavis de prelevements?\s+emis\b/.test(t) || /\bremise\s+(sepa|prlv|prelevement)/.test(t)
+    || /\ben votre faveur\b/.test(t) || /\bvir(ement)?\s+((sepa|inst)\s+)?recu\b/.test(t)
+    || /\bversement\s+(d\s+)?especes\b/.test(t);
+}
+
 export function separerVirementsPlateforme<T extends { libelle: string }>(operations: T[]): { operations: T[]; ecartees: T[] } {
-  const ecartees = operations.filter(o => estVirementPlateforme(o.libelle));
-  return { operations: operations.filter(o => !estVirementPlateforme(o.libelle)), ecartees };
+  const ecartees = operations.filter(o => estCreditReleve(o.libelle));
+  return { operations: operations.filter(o => !estCreditReleve(o.libelle)), ecartees };
 }
 export interface PageLue { index: number; resultat: ResultatPage; }
 /** Remplace une page lors d'une relance : ne concatène jamais deux lectures de la même page. */

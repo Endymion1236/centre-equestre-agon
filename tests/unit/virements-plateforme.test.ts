@@ -20,3 +20,8 @@ test("regrouperPages remonte les écartées avec leur page", () => {
   assert.deepEqual(r.ecartees, [{ ...op, pageReleve: 2 }]);
   assert.equal(r.manquantes.length, 0);
 });
+test("crédits du relevé : remises cartes/chèques, prélèvements émis, virements reçus — mais pas leurs commissions", async () => {
+  const { estCreditReleve } = await import("../../src/lib/import-releve-pages");
+  for (const l of ["Remise Carte 8067954", "Rem Chq 2123509", "A.p. Emis Prel Ech Du", "Avis de prélèvement émis", "Virement en votre faveur", "VIR SEPA RECU CLIENT", "Remise chèques", "VIR STRIPE"]) assert.equal(estCreditReleve(l), true, l);
+  for (const l of ["Com Carte 8067954", "Commission vente à distance", "Frais remise chèque", "VIR INST vers leduc anne", "Virement émis WEB NICOLAS RICHARD", "Ech Prêt Intérêts", "Bricomarché"]) assert.equal(estCreditReleve(l), false, l);
+});

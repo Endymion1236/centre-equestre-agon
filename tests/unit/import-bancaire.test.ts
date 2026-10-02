@@ -193,3 +193,41 @@ test("Un mouvement distinct confirmé peut être promu sans être pris pour un d
   const a = { ...existante(), id: "a", operationsDistinctesDe: ["b"] }, b = { ...a, id: "b", operationsDistinctesDe: ["a"] };
   assert.equal(decisionCategorie({ estDepense: false, poste: "Assurances", categories: ["Assurances"], postesCharges: ["Assurances"], ligne: a, depensesDuMois: [b] }).decision, "promouvoir");
 });
+
+// Octobre 2026 : relevé PDF de septembre rapproché après les CSV quotidiens.
+const pdfDe = (ops: { date: string; libelle: string; centimes: number }[]): SourceImport => preparerSourceImport({ format: "pdf", compte: "51200000", nom: "releve.pdf", empreinte: "e".repeat(64), debut: "2026-09-01", fin: "2026-09-30",
+  operations: ops.map((o, i) => ({ ...o, poste: POSTE_HORS_DEPENSES, ref: `${"e".repeat(64)}:0:${i}` })) });
+const csvDe = (id: string, dateOperation: string, fournisseur: string, montant: number): ExistanteImport => ({ id, collection: "mouvements-rapprochement", source: "releve-bancaire", origineBancaire: "csv", mois: "2026-09", dateOperation, fournisseur, montant, poste: "Frais bancaires & commissions (CB, Stripe)", compte: "51200000" });
+
+test("libellé abrégé par la banque sur le PDF : même opération que le CSV, retrouvée sans « à vérifier »", () => {
+  const p = pdfDe([
+    { date: "2026-09-01", libelle: "Com Carte 8067954", centimes: 59 },
+    { date: "2026-09-01", libelle: "Ech Prêt Intérêts", centimes: 1375 },
+    { date: "2026-09-01", libelle: "Commission vente à distance", centimes: 40 },
+    { date: "2026-09-03", libelle: "Commission vente à distance", centimes: 40 },
+  ]);
+  const plan = rapprocherImportBancaire(p, [
+    csvDe("a", "2026-09-01", "Commission CARTE 8067954 001 155179 01/09", 0.59),
+    csvDe("b", "2026-09-01", "Remboursement de prêt 10003551300 01/09/26 INTERETS", 13.75),
+    csvDe("c", "2026-09-01", "Prélèvement Commission vente à distance - Facture N°2624300035248", 0.40),
+    csvDe("d", "2026-09-03", "Prélèvement Commission vente à distance - Facture N°2624500014496", 0.40),
+  ], {});
+  assert.deepEqual(plan.lignes.map(l => [l.etat, l.cible]), [["rapproche", "a"], ["rapproche", "b"], ["rapproche", "c"], ["rapproche", "d"]]);
+  assert.equal(plan.nonRetrouves.length, 0, "plus de « débits CSV non retrouvés »");
+});
+
+test("même montant mais autre fournisseur : pas de rapprochement automatique", () => {
+  const plan = rapprocherImportBancaire(pdfDe([{ date: "2026-09-02", libelle: "Orange", centimes: 4200 }]), [csvDe("x", "2026-09-02", "Paiement par carte X4673 BRICOMARCHE", 42)], {});
+  assert.equal(plan.lignes[0].etat, "ambigu");
+});
+
+test("remises de cartes et de chèques, prélèvements émis lus comme débits sur le PDF : écartés, jamais des dépenses", () => {
+  const plan = rapprocherImportBancaire(pdfDe([
+    { date: "2026-09-01", libelle: "Remise Carte 8067954", centimes: 11700 },
+    { date: "2026-09-01", libelle: "Rem Chq 2123509", centimes: 7000 },
+    { date: "2026-09-02", libelle: "A.p. Emis Prel Ech Du", centimes: 30000 },
+    { date: "2026-09-02", libelle: "Com Carte 8067954", centimes: 59 },
+  ]), [], {});
+  assert.deepEqual(plan.lignes.map(l => l.etat), ["ignore", "ignore", "ignore", "nouveau"]);
+  assert.equal(plan.nouveaux, 1);
+});
