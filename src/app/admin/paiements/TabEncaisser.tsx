@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { nouveauReglementGroupe } from "./journal-utils";
+import { commandeAvecPanier, commandesRegroupables, questionRegroupement } from "./regroupement-commande";
 import { updateDoc, addDoc, doc, getDoc, getDocs, query, where, collection, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
@@ -372,29 +373,43 @@ export function TabEncaisser({
       return;
     }
 
-    const paid = paidAmount ? safeNumber(paidAmount) : revisedTotal;
-
-    const payRef = await addDoc(collection(db, "payments"), {
-      orderId: generateOrderId(),
-      familyId: selectedFamily,
-      familyName: selectedFam?.parentName || "—",
-      items: revisedBasket,
-      totalTTC: revisedTotal,
-      paymentMode: "",
-      paymentRef: "",
-      status: "pending",
-      paidAmount: 0,
-      date: encaissementDate ? Timestamp.fromDate(new Date(encaissementDate + "T12:00:00")) : serverTimestamp(),
-      createdAt: serverTimestamp(), // heure réelle de création (pour tri chronologique)
-    });
+    // Commande déjà « à régler » pour cette famille (carte vendue depuis l'écran
+    // Cartes, par exemple) : on propose d'y ajouter le panier, pour UNE facture
+    // et UN encaissement au lieu de deux (regroupement-commande).
+    const regroupables = commandesRegroupables(payments, encaissements, selectedFamily, estPrelevementSepa);
+    const cible = regroupables.length === 1 && confirm(questionRegroupement(regroupables[0], revisedTotal)) ? regroupables[0] : null;
+    let commandeId: string;
+    let itemsCommande: any[] = revisedBasket;
+    let totalCommande = revisedTotal;
+    if (cible) {
+      const r = commandeAvecPanier(cible, revisedBasket, revisedTotal);
+      await updateDoc(doc(db, "payments", cible.id), { items: r.items, totalTTC: r.totalTTC, panierAjouteLe: serverTimestamp(), updatedAt: serverTimestamp() });
+      commandeId = cible.id; itemsCommande = r.items; totalCommande = r.totalTTC;
+    } else {
+      const payRef = await addDoc(collection(db, "payments"), {
+        orderId: generateOrderId(),
+        familyId: selectedFamily,
+        familyName: selectedFam?.parentName || "—",
+        items: revisedBasket,
+        totalTTC: revisedTotal,
+        paymentMode: "",
+        paymentRef: "",
+        status: "pending",
+        paidAmount: 0,
+        date: encaissementDate ? Timestamp.fromDate(new Date(encaissementDate + "T12:00:00")) : serverTimestamp(),
+        createdAt: serverTimestamp(), // heure réelle de création (pour tri chronologique)
+      });
+      commandeId = payRef.id;
+    }
+    const paid = paidAmount ? safeNumber(paidAmount) : totalCommande;
     if (paid > 0) {
-      await enregistrerEncaissement(payRef.id, {
+      await enregistrerEncaissement(commandeId, {
         familyId: selectedFamily,
         familyName: selectedFam?.parentName || "—",
         ...(serviceFacture ? { serviceFacture } : {}),
-        items: revisedBasket,
-        totalTTC: revisedTotal,
-      }, paid, paymentMode, paymentRef, revisedBasket.map(i => i.activityTitle).join(", "), encaissementDate);
+        items: itemsCommande,
+        totalTTC: totalCommande,
+      }, paid, paymentMode, paymentRef, itemsCommande.map((i: any) => i.activityTitle).join(", "), encaissementDate);
     }
     // Génération des bons cadeaux vendus (un bon par article "bon cadeau" du panier).
     const bonsGeneres: string[] = [];
@@ -405,7 +420,7 @@ export function TabEncaisser({
         code, montant: item.priceTTC, solde: item.priceTTC, statut: "actif",
         recipientName: (item as any).recipientName || "",
         fromName: selectedFam?.parentName || "",
-        source: "vente", paymentId: payRef.id, acheteurFamilyId: selectedFamily,
+        source: "vente", paymentId: commandeId, acheteurFamilyId: selectedFamily,
         createdAt: serverTimestamp(),
       });
       bonsGeneres.push(code);
