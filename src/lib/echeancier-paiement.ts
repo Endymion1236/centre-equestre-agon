@@ -49,6 +49,9 @@ export function datesEcheances(dateDepart: string, nombre: number): string[] {
   const annee = Number(match[1]);
   const mois = Number(match[2]) - 1;
   const jour = Number(match[3]);
+  if (mois < 0 || mois > 11 || jour < 1 || jour > new Date(annee, mois + 1, 0).getDate()) {
+    throw new Error("Date de départ d'échéancier invalide");
+  }
 
   return Array.from({ length: nombre }, (_, index) => {
     const premier = new Date(annee, mois + index, 1, 12, 0, 0);
