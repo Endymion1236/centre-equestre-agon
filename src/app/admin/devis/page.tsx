@@ -4,12 +4,13 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, serverT
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { useAgentContext } from "@/hooks/useAgentContext";
-import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Trash2, Send, Check, Loader2, X, Copy, FileText, ChevronDown, ChevronUp, Pencil } from "lucide-react";
 import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { calculerForfaitAnnuel, type ForfaitTarifs, type FamilyDiscountRule } from "@/lib/forfait-pricing";
 import { coordonneesFacturation, nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import { estClientEtablissement, nouveauJetonDevis } from "@/lib/devis-reponse";
+import { avertissementModification, etatApresModification, peutModifierDevis } from "./devis-modification";
 import {
   emailLayout, emailPanneau, emailTitre, emailParagraphe as P,
   emailSignature, emailCouleurs as CE, emailButton,
@@ -51,6 +52,8 @@ interface Devis {
   items: DevisItem[];
   totalTTC: number;
   status: "draft" | "sent" | "accepted" | "refused" | "converted";
+  /** Modifié après envoi ou réponse : à renvoyer (devis-modification). */
+  modifieApresEnvoi?: boolean;
   note?: string;
   createdAt?: any;
   sentAt?: any;
@@ -82,6 +85,8 @@ export default function DevisPage() {
   const [families, setFamilies] = useState<(Family & { firestoreId: string })[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  /** Devis en cours de modification (null = nouveau devis). */
+  const [enEdition, setEnEdition] = useState<Devis | null>(null);
   const [saving, setSaving] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -225,10 +230,49 @@ export default function DevisPage() {
     return `DEV-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}-${String(devisList.length + 1).padStart(3,"0")}`;
   };
 
+  const viderFormulaire = () => {
+    setShowForm(false); setEnEdition(null);
+    setItems([{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
+    setSelFamily(""); setSelChild(""); setNote(""); setFamilySearch(""); setServiceFacture("");
+  };
+
+  /** Ouvre le formulaire sur un devis existant, lignes et note comprises. */
+  const ouvrirModification = (d: Devis) => {
+    if (!peutModifierDevis(d.status)) return;
+    const avert = avertissementModification(d.status);
+    if (avert && !confirm(avert)) return;
+    setEnEdition(d);
+    setSelFamily(d.familyId); setSelChild(""); setFamilySearch(nomClient(d));
+    setServiceFacture(d.serviceFacture || "");
+    setItems(d.items.length ? d.items.map(i => ({ ...i })) : [{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
+    setNote(d.note || "");
+    if (d.validUntil) setValidUntil(d.validUntil);
+    setShowForm(true);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSave = async () => {
     if (!selFamily || !fam || items.every(i => !i.label)) return;
     setSaving(true);
     try {
+      if (enEdition?.id) {
+        // Même numéro ; un devis déjà parti repasse en brouillon avec un nouveau lien.
+        await updateDoc(doc(db, "devis", enEdition.id), {
+          familyId: selFamily,
+          familyName: fam.parentName || "",
+          familyEmail: coordonneesFacturation(fam as any, serviceParNom((fam as any).services, serviceFacture)).email,
+          serviceFacture: serviceFacture || null,
+          items: items.filter(i => i.label),
+          totalTTC: Math.round(totalTTC * 100) / 100,
+          note,
+          validUntil,
+          ...etatApresModification(enEdition, nouveauJetonDevis, new Date().toISOString()),
+        });
+        await fetchData();
+        viderFormulaire();
+        setSaving(false);
+        return;
+      }
       const payload: Omit<Devis, "id"> = {
         numero: genNumero(),
         familyId: selFamily,
@@ -250,9 +294,7 @@ export default function DevisPage() {
       };
       await addDoc(collection(db, "devis"), payload);
       await fetchData();
-      setShowForm(false);
-      setItems([{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
-      setSelFamily(""); setSelChild(""); setNote(""); setFamilySearch(""); setServiceFacture("");
+      viderFormulaire();
     } catch (e) { console.error(e); }
     setSaving(false);
   };
@@ -364,7 +406,7 @@ export default function DevisPage() {
         }),
       });
 
-      await updateDoc(doc(db, "devis", d.id!), { status: "sent", sentAt: serverTimestamp(), familyName: nomEnvoi });
+      await updateDoc(doc(db, "devis", d.id!), { status: "sent", sentAt: serverTimestamp(), familyName: nomEnvoi, modifieApresEnvoi: false });
       await fetchData();
     } catch (e) { console.error(e); alert("Erreur envoi email"); }
     setSendingId(null);
@@ -426,7 +468,7 @@ export default function DevisPage() {
           <h1 className="font-display text-2xl font-bold text-blue-800">Devis</h1>
           <p className="font-body text-sm text-slate-500 mt-1">Créez et envoyez des devis aux familles</p>
         </div>
-        <button type="button" onClick={() => setShowForm(!showForm)}
+        <button type="button" onClick={() => { if (showForm) viderFormulaire(); else { setEnEdition(null); setShowForm(true); } }}
           className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2.5 rounded-xl font-body text-sm font-semibold border-none cursor-pointer hover:bg-blue-400">
           <Plus size={16} /> Nouveau devis
         </button>
@@ -436,8 +478,8 @@ export default function DevisPage() {
       {showForm && (
         <Card padding="md" className="mb-6 border-blue-500/20">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="font-body text-base font-semibold text-blue-800">Nouveau devis</h3>
-            <button type="button" onClick={() => setShowForm(false)} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
+            <h3 className="font-body text-base font-semibold text-blue-800">{enEdition ? `Modifier le devis ${enEdition.numero}` : "Nouveau devis"}</h3>
+            <button type="button" onClick={viderFormulaire} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={20}/></button>
           </div>
           <div className="flex flex-col gap-4">
             {/* Famille */}
@@ -633,7 +675,7 @@ export default function DevisPage() {
               <button type="button" onClick={handleSave} disabled={!selFamily || saving || items.every(i => !i.label)}
                 className={`flex items-center gap-2 px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer ${(!selFamily || saving || items.every(i => !i.label)) ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
                 {saving ? <Loader2 size={16} className="animate-spin"/> : <Check size={16}/>}
-                Créer le devis
+                {enEdition ? "Enregistrer les modifications" : "Créer le devis"}
               </button>
             </div>
           </div>
@@ -666,6 +708,9 @@ export default function DevisPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-body text-xs text-slate-400">{d.numero}</span>
                     <Badge color={statusColors[d.status]}>{statusLabels[d.status]}</Badge>
+                    {d.modifieApresEnvoi && d.status === "draft" && (
+                      <span className="font-body text-[10px] text-orange-700 bg-orange-50 px-2 py-0.5 rounded" title="Modifié après envoi : l'ancien lien ne permet plus de l'accepter">Modifié — à renvoyer</span>
+                    )}
                     {d.validUntil && new Date(d.validUntil) < new Date() && d.status !== "converted" && (
                       <span className="font-body text-[10px] text-red-500 bg-red-50 px-2 py-0.5 rounded">Expiré</span>
                     )}
@@ -740,6 +785,12 @@ export default function DevisPage() {
                       ✕ Refusé
                     </button>
                   </>
+                )}
+                {peutModifierDevis(d.status) && (
+                  <button type="button" onClick={() => ouvrirModification(d)}
+                    className="font-body text-xs text-blue-700 bg-blue-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                    <Pencil size={12} className="inline mr-1"/>Modifier
+                  </button>
                 )}
                 {d.status === "draft" && (
                   <button type="button" onClick={() => handleDelete(d)}
