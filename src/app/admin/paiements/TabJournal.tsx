@@ -7,7 +7,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Search } from "lucide-react";
 import { paymentModes } from "./types";
-import { preparerJournal } from "./journal-utils";
+import { preparerJournal, libelleReglementGroupe } from "./journal-utils";
 
 interface TabJournalProps {
   loading: boolean;
@@ -125,6 +125,7 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
                         {encaissement.activityTitle || "—"}
                         {encaissement.correctionDe && <span className="text-red-400 ml-1">(annule #{encaissement.correctionDe.slice(-4)})</span>}
                         {encaissement.raison && <span className="text-orange-400 ml-1">— {encaissement.raison}</span>}
+                        {libelleReglementGroupe(encaissement) && <div className="text-[10px] text-blue-600 mt-0.5">🔗 {libelleReglementGroupe(encaissement)}</div>}
                       </td>
                       <td className={`px-2 py-2.5 font-body text-sm font-bold whitespace-nowrap ${(encaissement.montant || 0) < 0 ? "text-red-500" : "text-green-600"}`}>{(encaissement.montant || 0).toFixed(2)}€</td>
                       <td className="px-2 py-2.5 whitespace-nowrap"><Badge color={(encaissement.montant || 0) < 0 ? "red" : "blue"}>{encaissement.modeLabel || encaissement.mode || "—"}</Badge></td>

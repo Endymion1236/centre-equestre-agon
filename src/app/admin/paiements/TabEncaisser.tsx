@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import { nouveauReglementGroupe } from "./journal-utils";
 import { updateDoc, addDoc, doc, getDoc, getDocs, query, where, collection, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { emailTemplates } from "@/lib/email-templates";
@@ -39,7 +40,8 @@ interface TabEncaisserProps {
   loading: boolean;
   enregistrerEncaissement: (
     paymentId: string, paymentData: any, montant: number,
-    mode: string, ref?: string, activityTitle?: string, customDate?: string
+    mode: string, ref?: string, activityTitle?: string, customDate?: string,
+    extra?: Record<string, unknown>,
   ) => Promise<any>;
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
   setTab: React.Dispatch<React.SetStateAction<"encaisser" | "journal" | "historique" | "echeances" | "impayes" | "offerts" | "declarations" | "cheques_differes" | "facturx">>;
@@ -864,6 +866,12 @@ export function TabEncaisser({
                       updatedAt: serverTimestamp(),
                     });
                   }
+                  // Plusieurs factures réglées par UN paiement (un passage de carte,
+                  // un chèque) : chaque facture garde son encaissement, tous portent
+                  // la même marque pour que le journal montre le paiement unique.
+                  const parts: number[] = [];
+                  { let r = montant; for (const p of familyPending) { if (r <= 0) break; const du = pendingDiscount > 0 && p.id === familyPending[0].id ? Math.max(0, (p.totalTTC || 0) - pendingDiscount) - (p.paidAmount || 0) : (p.totalTTC || 0) - (p.paidAmount || 0); const x = Math.min(du, r); parts.push(x); r -= x; } }
+                  const groupe = nouveauReglementGroupe(parts, `rg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`);
                   let resteARegler = montant;
                   for (const p of familyPending) {
                     if (resteARegler <= 0) break;
@@ -873,7 +881,7 @@ export function TabEncaisser({
                     const paye = Math.min(du, resteARegler);
                     // Passer encaissementDate (6e arg) pour permettre la saisie en différé.
                     // Sans ce param, enregistrerEncaissement utilise serverTimestamp() = aujourd'hui.
-                    await enregistrerEncaissement(p.id!, p, paye, paymentMode, paymentRef, "", encaissementDate);
+                    await enregistrerEncaissement(p.id!, p, paye, paymentMode, paymentRef, "", encaissementDate, groupe ? { reglementGroupe: groupe } : {});
                     resteARegler -= paye;
                   }
                   const resteFinal = totalPendingAfterDiscount - montant;

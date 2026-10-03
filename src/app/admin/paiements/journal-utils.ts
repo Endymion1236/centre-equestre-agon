@@ -109,3 +109,26 @@ export function preparerJournal(payments: any[], encaissements: any[], filters: 
   const filtered = filtrerJournal(lines, filters);
   return { filtered, ...calculerTotauxJournal(filtered) };
 }
+
+/**
+ * Règlement groupé : un seul paiement (un passage de carte, un chèque) qui
+ * règle plusieurs factures de la même famille. Octobre 2026 : une carte de
+ * séances (247 €) et une adhésion (60 €) encaissées ensemble, 307 € au TPE,
+ * apparaissaient au journal comme deux encaissements sans lien. Chaque
+ * facture garde son encaissement (une écriture par facture réglée) ; elles
+ * portent la même marque `reglementGroupe`, que le journal affiche.
+ */
+export interface ReglementGroupe { id: string; total: number; nbFactures: number }
+
+export function nouveauReglementGroupe(montants: number[], id: string): ReglementGroupe | null {
+  const utiles = montants.filter((m) => Math.round(m * 100) > 0);
+  if (utiles.length < 2) return null;
+  return { id, total: Math.round(utiles.reduce((s, m) => s + m, 0) * 100) / 100, nbFactures: utiles.length };
+}
+
+/** « Réglé en une fois : 307,00 € pour 2 factures », ou "" pour un encaissement seul. */
+export function libelleReglementGroupe(enc: { reglementGroupe?: Partial<ReglementGroupe> | null }): string {
+  const g = enc?.reglementGroupe;
+  if (!g || !Number(g.total) || Number(g.nbFactures) < 2) return "";
+  return `Réglé en une fois : ${Number(g.total).toFixed(2).replace(".", ",")} € pour ${g.nbFactures} factures`;
+}

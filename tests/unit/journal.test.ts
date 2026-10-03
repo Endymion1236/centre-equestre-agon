@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  libelleReglementGroupe,
+  nouveauReglementGroupe,
   calculerTotauxJournal,
   creerLignesJournalFallback,
   filtrerJournal,
@@ -76,6 +78,15 @@ test("les totaux sont ventilés par mode", () => {
   ]);
   assert.deepEqual(result.totalsByMode, { cheque: 40, virement: 20 });
   assert.equal(result.grandTotal, 60);
+});
+
+test("carte 247 € + adhésion 60 € passées en une fois au TPE : les deux lignes disent « 307 € pour 2 factures »", () => {
+  const g = nouveauReglementGroupe([247, 60], "rg_1")!;
+  assert.deepEqual(g, { id: "rg_1", total: 307, nbFactures: 2 });
+  assert.equal(libelleReglementGroupe({ reglementGroupe: g }), "Réglé en une fois : 307,00 € pour 2 factures");
+  assert.equal(nouveauReglementGroupe([247], "x"), null, "une seule facture : pas de groupe");
+  assert.equal(nouveauReglementGroupe([247, 0], "x"), null);
+  assert.equal(libelleReglementGroupe({}), "");
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
