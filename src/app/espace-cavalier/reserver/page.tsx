@@ -10,6 +10,7 @@ import { db } from "@/lib/firebase";
 import { BasculeReserver } from "@/components/espace-cavalier/BasculeReserver";
 import { NotePetitComite } from "./NotePetitComite";
 import { estPromenadeADefinir, niveauDuCreneau, titreAvecNiveau, libelleNiveauCreneau, type NiveauPromenade } from "@/lib/promenade-niveau";
+import { estSurDemande, formuleDuCreneau, formulesProposees, privatisePourAutreFamille, type IdFormule } from "@/lib/creneau-sur-demande";
 import { estBalade, CONSIGNE_ARRIVEE_BALADE, CONSIGNE_ARRIVEE_BALADE_COURTE } from "@/lib/cgv-clauses";
 import { useAuth } from "@/lib/auth-context";
 import { Card, Badge } from "@/components/ui";
@@ -374,7 +375,7 @@ export default function ReserverPage() {
   const rappelsAjout: RappelsAjout = { setCart, setSelectedChildren, setSelectedCreneau, setShowCart, setBookingCreneau, toast };
   const addStageToCart = (stageCreneaux: Creneau[], prixJourParam?: number, totalJoursStageParam?: number, childIdsParam?: string[]) =>
     ajouterStageAuPanier(ctxAjout(), rappelsAjout, stageCreneaux, prixJourParam, totalJoursStageParam, childIdsParam);
-  const addCoursToCart = (creneau: Creneau, childId: string, opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade }) =>
+  const addCoursToCart = (creneau: Creneau, childId: string, opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade; formuleSurDemande?: IdFormule }) =>
     ajouterCoursAuPanier(ctxAjout(), rappelsAjout, creneau, childId, opts);
 
 
@@ -406,6 +407,8 @@ export default function ReserverPage() {
   // Places visibles : la place sous hold est masquée pour les autres familles,
   // mais reste disponible pour la famille notifiée (elle peut réserver).
   const spotsLeft = (c: Creneau) => {
+    // Créneau sur demande déjà réservé par une autre famille : plus de place.
+    if (privatisePourAutreFamille(c as any, familyId)) return 0;
     const base = c.maxPlaces - (c.enrolled?.length || 0);
     if (holdActive(c) && (c as any).waitlistHold?.familyId !== familyId) return Math.max(0, base - 1);
     return base;
@@ -1362,6 +1365,9 @@ export default function ReserverPage() {
                               <div>
                                 <div className="font-body text-sm font-semibold text-blue-800">{titreAvecNiveau(c as any)}</div>
                                 <div className="font-body text-xs text-slate-600">{c.startTime}–{c.endTime} · {c.monitor}</div>
+                                {estSurDemande(c as any) && !formuleDuCreneau(c as any) && (
+                                  <div className="font-body text-[11px] text-amber-700 mt-0.5">Vous choisissez la formule en réservant — le créneau est alors réservé pour votre famille.</div>
+                                )}
                                 {estPromenadeADefinir(c as any) && !niveauDuCreneau(c as any) && (
                                   <div className="font-body text-[11px] text-amber-700 mt-0.5">{libelleNiveauCreneau(c as any)} — premier arrivé, premier servi.</div>
                                 )}
@@ -1399,7 +1405,7 @@ export default function ReserverPage() {
                                   }
                                   return (
                                     <button key={ch.id}
-                                      onClick={(e) => { e.stopPropagation(); if (estPromenadeADefinir(c as any)) { setBookingCreneau(c); return; } addCoursToCart(c, ch.id); }}
+                                      onClick={(e) => { e.stopPropagation(); if (estPromenadeADefinir(c as any) || (estSurDemande(c as any) && !formuleDuCreneau(c as any))) { setBookingCreneau(c); return; } addCoursToCart(c, ch.id); }}
                                       disabled={tooYoung}
                                       title={tooYoung ? "Promenades réservées aux 12 ans et plus" : undefined}
                                       className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-body text-xs cursor-pointer ${
@@ -1484,7 +1490,7 @@ export default function ReserverPage() {
           setShowCart={setShowCart} spotsLeft={spotsLeft} enAttente={enAttente}
           addCoursToCart={addCoursToCart} addToWaitlist={addToWaitlist}
           waitlistLoading={waitlistLoading} waitlistSuccess={waitlistSuccess}
-          family={family} activities={activities} />
+          family={family} activities={activities} familyId={familyId} />
       )}
 
       {/* PANIER MODAL */}

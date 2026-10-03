@@ -7,6 +7,8 @@ import { Check, Loader2, X, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Activity } from "@/types";
 import { Creneau, fmtDate, moniteursUniques } from "./types";
 import ActivityPicker from "./ActivityPicker";
+import EditeurFormulesSurDemande from "./EditeurFormulesSurDemande";
+import { FORMULES_SUR_DEMANDE_DEFAUT, nettoyerFormules, placesSurDemande, type FormuleSurDemande } from "@/lib/creneau-sur-demande";
 
 function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   activities: Activity[];
@@ -25,6 +27,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [multiDay, setMultiDay] = useState(false);
   // Promenade au niveau fixé par la première inscription.
   const [niveauADefinir, setNiveauADefinir] = useState(false);
+  // Créneau sur demande : la première famille choisit la formule (anniversaire, cours particulier).
+  const [surDemande, setSurDemande] = useState(false);
+  const [formules, setFormules] = useState<FormuleSurDemande[]>(() => FORMULES_SUR_DEMANDE_DEFAUT.map(f => ({ ...f })));
   // Dates supplémentaires choisies à la main via le mini-calendrier (réplication
   // du créneau sur des dates exactes, en plus de la date principale).
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -112,6 +117,11 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         return;
       }
     }
+    const formulesValides = surDemande ? nettoyerFormules(formules).filter(f => f.priceTTC > 0) : [];
+    if (surDemande && formulesValides.length === 0) {
+      alert("Créneau sur demande : indique le prix d'au moins une formule (anniversaire ou cours particulier).");
+      return;
+    }
     setSaving(true);
     const ttc = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux ?? 5.5) / 100);
     // Mode simple : date principale + dates supplémentaires choisies au
@@ -137,6 +147,8 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         monitor: [...new Set(((multiDay && customMonitors[idx] !== undefined ? customMonitors[idx] : mon) || "").split(",").map(x => x.trim()).filter(Boolean))].join(", "), maxPlaces: mp, enrolledCount: 0, enrolled: [],
         status: "planned",
         ...(act.type === "balade" && niveauADefinir ? { niveauADefinir: true, niveauFixe: null } : {}),
+        // Places ouvertes = la plus grande formule ; la formule choisie les ajuste.
+        ...(surDemande ? { surDemande: true, formules: nettoyerFormules(formules), formuleChoisie: null, formuleFamilyId: null, maxPlaces: placesSurDemande(formulesValides) } : {}),
         ...(color ? { color } : {}),
         priceHT: ttc / (1 + (act.tvaTaux ?? 5.5) / 100),
         priceTTC: ttc, tvaTaux: act.tvaTaux ?? 5.5,
@@ -264,6 +276,22 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
               </div>
             </div>
           </label>
+        )}
+
+        {act && act.type !== "stage" && act.type !== "stage_journee" && !multiDay && (
+          <div className="bg-purple-50 rounded-xl p-3 flex flex-col gap-3">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input type="checkbox" checked={surDemande} onChange={e => setSurDemande(e.target.checked)} className="accent-purple-600 w-4 h-4 mt-0.5"/>
+              <div>
+                <div className="font-body text-sm font-semibold text-purple-800">Créneau sur demande — anniversaire ou cours particulier</div>
+                <div className="font-body text-xs text-slate-600 mt-0.5">
+                  La première famille qui réserve choisit la formule : le créneau en prend le titre et le prix, et lui est réservé.
+                  S&apos;il se vide, il redevient « sur demande ».
+                </div>
+              </div>
+            </label>
+            {surDemande && <EditeurFormulesSurDemande formules={formules} onChange={setFormules} />}
+          </div>
         )}
 
         <div>

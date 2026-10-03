@@ -85,6 +85,9 @@ export async function payerPanier(ctx: ContextePaiement, rappels: RappelsPaiemen
             // Promenade « niveau à définir » : le serveur verrouille ce
             // niveau à la première inscription, ou refuse s'il diffère.
             ...(item.niveauPromenade ? { niveauPromenade: item.niveauPromenade } : {}),
+            // Créneau sur demande : la formule choisie, fixée par le serveur à
+            // la première réservation (refus si le créneau a été pris entre-temps).
+            ...(item.formuleSurDemande ? { formuleSurDemande: item.formuleSurDemande } : {}),
             // Carte de séances : le serveur la vérifie et rend la place ferme.
             ...(item.cardId ? { cardId: item.cardId } : {}),
           }],

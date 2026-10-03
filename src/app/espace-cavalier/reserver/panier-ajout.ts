@@ -12,6 +12,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { estPromenadeADefinir, niveauDuCreneau, LIBELLE_NIVEAU, type NiveauPromenade } from "@/lib/promenade-niveau";
 import { choisirCarte, compterReservationsParCarte, libelleCarte, type CarteLike } from "@/lib/cartes-seances";
 import { prixInscriptionCavalier } from "@/lib/tarif-forfaitaire";
+import { creneauAvecFormule, estSurDemande, formuleDuCreneau, formulesProposees, privatisePourAutreFamille, type IdFormule } from "@/lib/creneau-sur-demande";
 import { todayLocalString } from "@/lib/date-local";
 import type { CartItem, Creneau } from "./types";
 
@@ -234,7 +235,7 @@ export function ajouterCoursAuPanier(
   rappels: RappelsAjout,
   creneau: Creneau,
   childId: string,
-  opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade },
+  opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade; formuleSurDemande?: IdFormule },
 ) {
 const { creneaux, cart, children, user, familyCartes, reservationsFermees, messageFermeture, stageGroups } = ctx;
 const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toast } = rappels;
@@ -276,6 +277,23 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
     const fixe = niveauDuCreneau(creneau as any);
     if (fixe) niveauPromenade = fixe;
     else if (!niveauPromenade) { setBookingCreneau(creneau); return; }
+  }
+
+  // ── Créneau sur demande (anniversaire, cours particulier) ─────────
+  // La première famille choisit la formule dans la fenêtre de choix ; le
+  // créneau prend alors son titre et son prix, et lui est réservé. Le
+  // serveur pose le verrou et refuse si une autre famille a été plus rapide.
+  let formuleSurDemande: IdFormule | undefined;
+  if (estSurDemande(creneau as any)) {
+    if (privatisePourAutreFamille(creneau as any, user?.uid)) {
+      toast("Ce créneau est déjà réservé par une autre famille.", "warning");
+      return;
+    }
+    const fixee = formuleDuCreneau(creneau as any);
+    const choisie = fixee || formulesProposees(creneau as any).find(f => f.id === opts?.formuleSurDemande) || null;
+    if (!choisie) { setBookingCreneau(creneau); return; }
+    formuleSurDemande = choisie.id;
+    creneau = creneauAvecFormule(creneau as any, choisie) as Creneau;
   }
 
   // ── Règle métier : 12 ans minimum pour les promenades ──────────────
@@ -333,7 +351,8 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
     // ne pas réserver au-delà de la carte. Le serveur revérifie tout.
     const reservees = compterReservationsParCarte(creneaux as any[], todayLocalString());
     for (const i of prev) if (i.cardId) reservees[i.cardId] = (reservees[i.cardId] || 0) + 1;
-    const carte = !(creneau as any).tarifForfaitaire && prix > 0
+    // Une formule sur demande (cours particulier…) a son propre prix : pas de carte.
+    const carte = !(creneau as any).tarifForfaitaire && !formuleSurDemande && prix > 0
       ? choisirCarte(familyCartes, { childId, activityType: creneau.activityType, date: creneau.date }, reservees)
       : null;
     return [...prev, {
@@ -345,6 +364,7 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
           : creneau.activityTitle)
         + ((creneau as any).tarifForfaitaire && prix <= 0 ? " — inclus au forfait" : ""),
       ...(niveauPromenade ? { niveauPromenade } : {}),
+      ...(formuleSurDemande ? { formuleSurDemande } : {}),
       dates: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),
       childId,
       childName: cleanName,

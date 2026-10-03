@@ -21,6 +21,7 @@
 
 import { ageFromBirth, galopToNumber } from "./eligibilite";
 import { REGLES_PROMENADE, niveauDepuisTitre, type NiveauPromenade } from "./promenades-securite";
+import { champsSurDemandeApresRetrait, estSurDemande, titreSurDemande, type CreneauSurDemande } from "./creneau-sur-demande";
 
 export type { NiveauPromenade } from "./promenades-securite";
 
@@ -79,6 +80,8 @@ export function libelleNiveauCreneau(c: CreneauNiveau | null | undefined): strin
  * ajouté au titre, sinon la mention « niveau à définir ».
  */
 export function titreAvecNiveau(c: CreneauNiveau | null | undefined): string {
+  // Créneau sur demande : les formules proposées, puis celle choisie.
+  if (estSurDemande(c as CreneauSurDemande)) return titreSurDemande(c as CreneauSurDemande);
   const titre = String(c?.activityTitle || "").trim();
   if (!estPromenadeADefinir(c)) return titre;
   const n = niveauDuCreneau(c);
@@ -179,10 +182,13 @@ export function niveauConseille(cavalier: { birthDate?: any; galopLevel?: any })
 export function champsNiveauApresRetrait(
   c: CreneauNiveau | null | undefined,
   enrolledRestants: unknown[],
-): { niveauFixe: null } | Record<string, never> {
-  if (!estPromenadeADefinir(c)) return {};
-  if (enrolledRestants.length > 0) return {};
-  return c?.niveauFixe ? { niveauFixe: null } : {};
+): Record<string, unknown> {
+  // Même règle pour un créneau « sur demande » vidé : il redevient libre
+  // (lib/creneau-sur-demande). Un seul appel aux endroits qui retirent des inscrits.
+  const surDemande = champsSurDemandeApresRetrait(c as CreneauSurDemande, enrolledRestants);
+  if (!estPromenadeADefinir(c)) return surDemande;
+  if (enrolledRestants.length > 0) return surDemande;
+  return c?.niveauFixe ? { ...surDemande, niveauFixe: null } : surDemande;
 }
 
 /**

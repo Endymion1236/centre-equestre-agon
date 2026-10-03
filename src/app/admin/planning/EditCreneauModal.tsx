@@ -1,4 +1,6 @@
 "use client";
+import EditeurFormulesSurDemande from "./EditeurFormulesSurDemande";
+import { FORMULES_SUR_DEMANDE_DEFAUT, type FormuleSurDemande, type IdFormule } from "@/lib/creneau-sur-demande";
 import { X, Loader2, Copy } from "lucide-react";
 import { useState, useEffect } from "react";
 import { collection, getDocs } from "firebase/firestore";
@@ -36,6 +38,11 @@ export interface EditForm {
   niveauADefinir?: boolean;
   /** Niveau verrouillé ("" = à définir). */
   niveauFixe?: string;
+  /** Créneau sur demande : la première famille choisit la formule. */
+  surDemande?: boolean;
+  formules?: FormuleSurDemande[];
+  /** Formule fixée par le club ("" = choisie par la première famille). */
+  formuleForcee?: IdFormule | "";
 }
 
 interface Props {
@@ -311,6 +318,37 @@ export default function EditCreneauModal({
               <div className="font-body text-[10px] text-purple-500">
                 Utilisé par l'IA pour recommander les thèmes non encore vus par les cavaliers.
               </div>
+            </div>
+          )}
+
+          {/* Créneau sur demande — anniversaire ou cours particulier */}
+          {creneau.activityType !== "stage" && creneau.activityType !== "stage_journee" && (
+            <div className="bg-purple-50 rounded-xl p-3 flex flex-col gap-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input type="checkbox" checked={!!form.surDemande}
+                  onChange={e => onFormChange({ ...form, surDemande: e.target.checked, formules: form.formules?.length ? form.formules : FORMULES_SUR_DEMANDE_DEFAUT.map(f => ({ ...f })) })}
+                  className="accent-purple-600 w-4 h-4 mt-0.5"/>
+                <div>
+                  <div className="font-body text-sm font-semibold text-purple-800">Créneau sur demande — anniversaire ou cours particulier</div>
+                  <div className="font-body text-xs text-slate-600 mt-0.5">
+                    La première famille qui réserve choisit la formule ; le créneau lui est alors réservé. S&apos;il se vide, il redevient « sur demande ».
+                  </div>
+                </div>
+              </label>
+              {form.surDemande && (
+                <>
+                  <EditeurFormulesSurDemande formules={form.formules || []} onChange={formules => onFormChange({ ...form, formules })} />
+                  <div>
+                    <label className="font-body text-xs font-semibold text-purple-800 block mb-1">Formule</label>
+                    <select value={form.formuleForcee || ""} onChange={e => onFormChange({ ...form, formuleForcee: e.target.value as IdFormule | "" })}
+                      className="w-full px-3 py-2 rounded-lg border border-purple-200 font-body text-sm bg-white focus:border-purple-500 focus:outline-none cursor-pointer">
+                      <option value="">Choisie par la première famille qui réserve</option>
+                      {(form.formules || []).filter(f => f.priceTTC > 0).map(f => <option key={f.id} value={f.id}>Fixée par le club : {f.label}</option>)}
+                    </select>
+                    <div className="font-body text-[10px] text-slate-500 mt-1">Réservation prise par téléphone : fixe la formule ici, puis inscris le cavalier depuis le planning.</div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

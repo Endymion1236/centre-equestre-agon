@@ -1,5 +1,6 @@
 /** Types partagés de la réservation en ligne (page, panier, ajout, paiement). */
 import type { NiveauPromenade } from "@/lib/promenade-niveau";
+import type { IdFormule } from "@/lib/creneau-sur-demande";
 
 /** Un créneau tel que l'écran de réservation le manipule. */
 export interface Creneau {
@@ -21,6 +22,8 @@ export interface CartItem {
   prixFinal: number;
   isStage: boolean;
   niveauPromenade?: NiveauPromenade;
+  /** Créneau sur demande : formule choisie (anniversaire, cours particulier). */
+  formuleSurDemande?: IdFormule;
   /** Cavalier lié : famille d'origine. */
   sourceFamilyId?: string;
   /** Séance prise sur une carte de séances : rien à payer. */

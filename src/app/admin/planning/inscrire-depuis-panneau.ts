@@ -22,6 +22,7 @@
  * Tout ce que l'inscription lit du formulaire et de l'écran, et tout ce
  * qu'elle remet à zéro une fois l'inscription faite.
  */
+import { estSurDemande, formuleDuCreneau } from "@/lib/creneau-sur-demande";
 import {
   collection, addDoc, updateDoc, doc, getDoc, getDocs, query, where, serverTimestamp,
 } from "firebase/firestore";
@@ -222,6 +223,13 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
     setShowPay,
     setUseRattrapage,
   } = ctx;
+
+  // Créneau sur demande sans formule : le prix n'est pas connu. La formule se
+  // fixe d'abord dans la fenêtre du créneau (⚙️), puis on inscrit.
+  if (estSurDemande(creneau) && !formuleDuCreneau(creneau)) {
+    panelToast("Créneau sur demande : choisis d'abord la formule (anniversaire ou cours particulier) dans les réglages du créneau ⚙️, puis inscris.", "error");
+    return;
+  }
 
   // Mode non-stage, non-compétition, ponctuel, 2+ enfants sélectionnés :
   // inscrire un par un avec un paiement séparé par enfant (plus simple pour

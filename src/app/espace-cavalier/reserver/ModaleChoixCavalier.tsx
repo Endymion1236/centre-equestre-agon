@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { estSurDemande, formuleDuCreneau, formulesProposees, privatisePourAutreFamille, type IdFormule } from "@/lib/creneau-sur-demande";
 import { NIVEAUX_PROMENADE, LIBELLE_NIVEAU, resumeNiveau, estPromenadeADefinir, niveauDuCreneau, compatibiliteCavalier, type NiveauPromenade } from "@/lib/promenade-niveau";
 import { NotePetitComite } from "./NotePetitComite";
 
@@ -30,7 +31,7 @@ export interface ModaleChoixCavalierProps {
   spotsLeft: (c: any) => number;
   /** Le cavalier est-il déjà en liste d'attente sur ce créneau ? */
   enAttente: (creneauId: string, childId: string) => boolean;
-  addCoursToCart: (creneau: any, childId: string, opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade }) => void;
+  addCoursToCart: (creneau: any, childId: string, opts?: { viaHold?: boolean; niveauPromenade?: NiveauPromenade; formuleSurDemande?: IdFormule }) => void;
   addToWaitlist: (c: any, childId: string) => void | Promise<void>;
   waitlistLoading: string | null;
   waitlistSuccess: string | null;
@@ -38,12 +39,14 @@ export interface ModaleChoixCavalierProps {
   activities?: any[];
   /** La famille connectée — son identifiant sert aux inscriptions. */
   family: any;
+  /** Famille connectée : un créneau sur demande privatisé pour une autre n'est plus réservable. */
+  familyId?: string;
 }
 
 export default function ModaleChoixCavalier({
   bookingCreneau, onClose, children, cart, filter, selCavaliers, setSelCavaliers,
   setShowCart, spotsLeft, enAttente, addCoursToCart, addToWaitlist,
-  waitlistLoading, waitlistSuccess, family, activities = [],
+  waitlistLoading, waitlistSuccess, family, activities = [], familyId,
 }: ModaleChoixCavalierProps) {
   const setBookingCreneau = (v: any) => { if (!v) onClose(); };
 
@@ -55,8 +58,17 @@ export default function ModaleChoixCavalier({
   const niveauVerrouille = promenadeADefinir ? niveauDuCreneau(bookingCreneau) : null;
   const [niveauChoisi, setNiveauChoisi] = useState<NiveauPromenade | null>(null);
   const niveauEffectif: NiveauPromenade | null = niveauVerrouille || niveauChoisi;
-  const niveauManquant = promenadeADefinir && !niveauEffectif;
-  const ajouter = (cid: string) => addCoursToCart(bookingCreneau, cid, niveauEffectif ? { niveauPromenade: niveauEffectif } : undefined);
+  // ── Créneau sur demande : la première famille choisit la formule ──
+  const surDemande = estSurDemande(bookingCreneau);
+  const formuleFixee = surDemande ? formuleDuCreneau(bookingCreneau) : null;
+  const [formuleChoisie, setFormuleChoisie] = useState<IdFormule | null>(null);
+  const formuleEffective = formuleFixee?.id || formuleChoisie;
+  const privatise = surDemande && privatisePourAutreFamille(bookingCreneau, familyId);
+  const niveauManquant = (promenadeADefinir && !niveauEffectif) || (surDemande && !formuleEffective);
+  const ajouter = (cid: string) => addCoursToCart(bookingCreneau, cid, {
+    ...(niveauEffectif ? { niveauPromenade: niveauEffectif } : {}),
+    ...(formuleEffective ? { formuleSurDemande: formuleEffective } : {}),
+  });
 
   return (
       <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center sm:p-4"
@@ -77,7 +89,13 @@ export default function ModaleChoixCavalier({
             )}
           </div>
           <div className="p-5">
-            {spotsLeft(bookingCreneau) === 0 ? (
+            {privatise ? (
+              <div className="text-center py-2">
+                <p className="font-body text-sm text-slate-600 mb-4">Ce créneau a déjà été réservé par une autre famille. Choisissez un autre horaire.</p>
+                <button type="button" onClick={() => setBookingCreneau(null)}
+                  className="w-full py-2.5 rounded-xl font-body text-sm font-semibold text-white bg-blue-500 border-none cursor-pointer hover:bg-blue-400">Fermer</button>
+              </div>
+            ) : spotsLeft(bookingCreneau) === 0 ? (
               /* ── Créneau complet : inscription en liste d'attente ── */
               waitlistSuccess === bookingCreneau.id ? (
                 <div className="text-center py-2">
@@ -159,6 +177,32 @@ export default function ModaleChoixCavalier({
               )
             ) : (
             <>
+            {surDemande && !formuleFixee && (
+              <div className="mb-4">
+                <div className="font-body text-sm font-semibold text-slate-700 mb-2">Quelle formule souhaitez-vous ?</div>
+                <div className="flex flex-col gap-2">
+                  {formulesProposees(bookingCreneau).map((f) => (
+                    <button type="button" key={f.id} onClick={() => setFormuleChoisie(f.id)}
+                      className={`text-left px-4 py-3 rounded-xl border font-body cursor-pointer transition-all ${
+                        formuleChoisie === f.id ? "border-green-500 bg-green-50" : "border-gray-200 bg-white hover:border-blue-300"}`}>
+                      <div className="flex justify-between gap-2">
+                        <span className={`text-sm font-bold ${formuleChoisie === f.id ? "text-green-800" : "text-blue-800"}`}>{formuleChoisie === f.id ? "✓ " : ""}{f.label}</span>
+                        <span className="text-sm font-bold text-blue-500 whitespace-nowrap">{f.priceTTC.toFixed(f.priceTTC % 1 ? 2 : 0).replace(".", ",")} €{f.forfait ? " le groupe" : " / cavalier"}</span>
+                      </div>
+                      {f.descriptif && <div className="text-xs text-slate-600 mt-0.5 leading-snug">{f.descriptif}</div>}
+                    </button>
+                  ))}
+                </div>
+                <p className="font-body text-[11px] text-slate-500 mt-2 leading-snug">
+                  En réservant, ce créneau devient le vôtre : il n&apos;est plus proposé aux autres familles.
+                </p>
+              </div>
+            )}
+            {surDemande && formuleFixee && (
+              <div className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-body text-xs font-semibold text-blue-800">
+                {formuleFixee.label} — réservé pour votre famille
+              </div>
+            )}
             {promenadeADefinir && !niveauVerrouille && (
               <div className="mb-4">
                 <div className="font-body text-sm font-semibold text-slate-700 mb-2">Quel est le niveau de votre cavalier ?</div>
@@ -260,7 +304,7 @@ export default function ModaleChoixCavalier({
                     : "text-white bg-green-600 hover:bg-green-500 cursor-pointer"
                 }`}>
                 {niveauManquant
-                  ? "Choisissez d’abord le niveau"
+                  ? (surDemande ? "Choisissez d’abord la formule" : "Choisissez d’abord le niveau")
                   : selCavaliers.size === 0
                   ? "Sélectionnez un cavalier ci-dessus"
                   : `Valider — ${selCavaliers.size} cavalier${selCavaliers.size > 1 ? "s" : ""} au panier`}

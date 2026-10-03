@@ -22,6 +22,7 @@ import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
 import { dateExpirationHold } from "@/lib/places-tenues";
 import { isForfaitActif } from "@/lib/forfaits";
+import { champsFixationFormule, deciderInscriptionSurDemande, type FormuleSurDemande } from "@/lib/creneau-sur-demande";
 import { deciderInscriptionNiveau, compatibiliteCavalier, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
 import { carteCouvreCreneau, compterReservationsParCarte, libelleCarte, seancesDisponibles, type CarteLike } from "@/lib/cartes-seances";
 import { toParisDateString } from "@/lib/date-local";
@@ -40,6 +41,8 @@ interface EnrollItem {
   paymentMethod?: string;
   /** Promenade « niveau à définir » : niveau déclaré par la famille pour ce cavalier. */
   niveauPromenade?: string;
+  /** Créneau « sur demande » : formule choisie par la famille (anniversaire, cours particulier). */
+  formuleSurDemande?: string;
 }
 
 export async function POST(req: NextRequest) {
@@ -198,6 +201,7 @@ export async function POST(req: NextRequest) {
           const snaps = await Promise.all(refs.map((r) => tx.get(r)));
           // 1) Vérifier tous les créneaux avant toute écriture
           const aFixer = new Map<number, string>();
+          const formulesAFixer = new Map<number, { formule: FormuleSurDemande; familyId: string | null }>();
           for (let i = 0; i < snaps.length; i++) {
             const s = snaps[i];
             if (!s.exists) return { status: "missing" as const, cid: creneauIds[i] };
@@ -209,8 +213,14 @@ export async function POST(req: NextRequest) {
             // « pré-inscrit » survivait au paiement et la famille était
             // relancée pour un dossier déjà réglé.
             if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit (ou pré-inscrit : sa place est déjà comptée) = ok
-            const maxP = typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
+            // Créneau sur demande : la première famille choisit la formule et
+            // privatise le créneau ; décidé dans la transaction, comme le niveau.
+            const surDemande = deciderInscriptionSurDemande(cr, item.formuleSurDemande, uid, estStaff);
+            if (!surDemande.ok) return { status: `sur_demande_${surDemande.code}` as const, cid: creneauIds[i], formule: surDemande.formule?.label || "" };
+            const maxP = surDemande.fixer ? surDemande.fixer.formule.places
+              : typeof cr.maxPlaces === "number" ? cr.maxPlaces : Number.POSITIVE_INFINITY;
             if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
+            if (surDemande.fixer) formulesAFixer.set(i, surDemande.fixer);
             // La carte doit couvrir CE créneau (type cours/balade, cavalier, validité).
             if (carteValide && !carteCouvreCreneau(carteValide, { childId: item.childId, activityType: cr.activityType, date: cr.date })) {
               return { status: "carte_inapte" as const, cid: creneauIds[i] };
@@ -283,10 +293,13 @@ export async function POST(req: NextRequest) {
             }
             if (item.niveauPromenade && estNiveauPromenade(item.niveauPromenade)) entry.niveauPromenade = item.niveauPromenade;
             const fixer = aFixer.get(i);
+            const formule = formulesAFixer.get(i);
+            if (formule) entry.formuleSurDemande = formule.formule.id;
             tx.update(refs[i], {
               enrolled: [...list, entry],
               enrolledCount: list.length + 1,
               ...(fixer ? { niveauFixe: fixer, niveauFixeLe: new Date().toISOString(), niveauFixePar: childName } : {}),
+              ...(formule ? champsFixationFormule(cr, formule.formule, formule.familyId, new Date().toISOString()) : {}),
             });
           }
           return { status: "ok" as const };
@@ -300,6 +313,16 @@ export async function POST(req: NextRequest) {
           );
         }
         else if (outcome.status === "missing") missing.push(outcome.cid);
+        else if (String(outcome.status).startsWith("sur_demande_")) {
+          // Créneau sur demande : formule à choisir, déjà prise, ou réservé à une autre famille.
+          const formule = (outcome as any).formule || "";
+          const error = outcome.status === "sur_demande_prive"
+            ? "Ce créneau vient d'être réservé par une autre famille. Choisissez un autre horaire."
+            : outcome.status === "sur_demande_formule_differente"
+              ? `Ce créneau a déjà été réservé pour : ${formule}.`
+              : "Choisissez la formule (anniversaire ou cours particulier) pour ce créneau.";
+          return NextResponse.json({ error, code: "SUR_DEMANDE", creneauId: outcome.cid }, { status: 409 });
+        }
         else if (outcome.status === "niveau_requis" || outcome.status === "niveau_different" || outcome.status === "niveau_inapte") {
           // Refus lié au niveau de la promenade : message clair, rien d'inscrit.
           const fixe = estNiveauPromenade(outcome.niveauFixe) ? LIBELLE_NIVEAU[outcome.niveauFixe] : "";

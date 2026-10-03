@@ -1,4 +1,5 @@
 import { titreAvecNiveau } from "./promenade-niveau";
+import { familleDuCreneau } from "./creneau-sur-demande";
 
 /**
  * Renseignements publics repris de la fiche activité (Admin → Activités) :
@@ -160,7 +161,8 @@ export function toPublicPlanningSlot(id: string, data: Record<string, unknown>):
     startTime: text(data.startTime),
     endTime: text(data.endTime),
     monitor: text(data.monitor),
-    maxPlaces: Math.max(0, number(data.maxPlaces)),
+    // Créneau sur demande privatisé pour une famille : complet pour les autres.
+    maxPlaces: familleDuCreneau(data as any) ? enrolledCount : Math.max(0, number(data.maxPlaces)),
     enrolledCount,
     status: status || undefined,
     // Fiche du catalogue : l'API y joint la description publique.
