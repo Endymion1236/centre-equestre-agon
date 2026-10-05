@@ -22,6 +22,7 @@ import {
   apparierRemiseCarte, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
   encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
+  estEncaissementCarte,
 } from "./rapprochement-utils";
 import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
@@ -839,12 +840,16 @@ export default function OngletRapprochement({
                 //    contrairement au pointage d'une facture. Plusieurs cases
                 //    peuvent être cochées : un seul virement pour deux commandes.
                 const dateLigne = parserDateBancaire(ligne.date);
+                // Une remise carte se pointe sur les encaissements CB (terminal
+                // ou en ligne) des jours précédents : plusieurs factures payées
+                // en un seul passage de carte = plusieurs écritures à cocher.
+                const remiseCarte = /remise\s*carte/i.test(ligne.label || "");
                 const encsVirement = (encaissementsCompta || [])
-                  .filter((e: any) => (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa") && !e.reconciledByBank)
+                  .filter((e: any) => (remiseCarte ? estEncaissementCarte(e.mode) && !e.remiseId : (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa")) && !e.reconciledByBank)
                   .filter((e: any) => {
                     if (!dateLigne || !e.date?.seconds) return true;
                     const ecart = Math.abs(dateLigne.getTime() - e.date.seconds * 1000) / 86_400_000;
-                    return ecart <= 45;
+                    return ecart <= (remiseCarte ? 7 : 45);
                   })
                   .filter((e: any) => {
                     if (!q) return true;
@@ -882,7 +887,9 @@ export default function OngletRapprochement({
                     ...updated[showManualMatch!],
                     matched: true,
                     matchType: "Manuel",
-                    matchDetail: encsCoches.length === 1
+                    matchDetail: remiseCarte
+                      ? `Remise carte — ${encsCoches.length} écriture${encsCoches.length > 1 ? "s" : ""} CB (${encsCoches.map((e: any) => (e.montant || 0).toFixed(2)).join(" + ")} = ${totalCoche.toFixed(2)}€)`
+                      : encsCoches.length === 1
                       ? `Virement ${familles} — écriture du ${encaissementEnDetail(encsCoches[0]).date} (${totalCoche.toFixed(2)}€)`
                       : `Virement ${familles} — ${encsCoches.length} écritures (${encsCoches.map((e: any) => (e.montant || 0).toFixed(2)).join(" + ")} = ${totalCoche.toFixed(2)}€)`,
                     matchedEncs: encsCoches.map(encaissementEnDetail),
@@ -902,10 +909,12 @@ export default function OngletRapprochement({
 
                 return (
                   <div className="flex flex-col gap-1.5">
-                    {encsVirement.length > 0 && titre(`Virements déjà encaissés, à relier (${encsVirement.length})`)}
+                    {encsVirement.length > 0 && titre(remiseCarte ? `Encaissements CB de la semaine, à relier (${encsVirement.length})` : `Virements déjà encaissés, à relier (${encsVirement.length})`)}
                     {encsVirement.length > 0 && (
                       <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
-                        Cochez une ou plusieurs écritures : un virement peut régler deux commandes d'un coup. Rien n'est ré-encaissé.
+                        {remiseCarte
+                          ? "Cochez les écritures CB contenues dans cette remise (plusieurs factures payées en un seul passage de carte comprises). Rien n'est ré-encaissé."
+                          : "Cochez une ou plusieurs écritures : un virement peut régler deux commandes d'un coup. Rien n'est ré-encaissé."}
                       </p>
                     )}
                     {encsVirement.map((e: any) => {
@@ -917,7 +926,7 @@ export default function OngletRapprochement({
                           className={`flex items-center gap-3 px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${coche ? "border-blue-400 bg-blue-50/50" : amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}>
                           <input type="checkbox" checked={coche} onChange={() => basculerEnc(e.id)} className="cursor-pointer" />
                           <div className="flex-1 min-w-0">
-                            <div className="font-body text-sm font-semibold text-blue-800 truncate">🏦 {e.familyName || "—"}</div>
+                            <div className="font-body text-sm font-semibold text-blue-800 truncate">{remiseCarte ? "💳" : "🏦"} {e.familyName || "—"}</div>
                             <div className="font-body text-xs text-slate-500 truncate">
                               {d} · {e.activityTitle || "—"}{e.ref ? ` · ${e.ref}` : ""}
                             </div>
@@ -1217,7 +1226,7 @@ export default function OngletRapprochement({
                       ...updated[showCADetailModal!],
                       matched: true,
                       matchType: "Manuel",
-                      matchDetail: `Détail CA : ${caDetailPreview.found.length}/${parsed.length} transactions trouvées = ${foundSum.toFixed(2)}€${caDetailPreview.missing.length > 0 ? ` (${caDetailPreview.missing.length} manquant(s))` : ""}`,
+                      matchDetail: `Détail CA : ${parsed.length - caDetailPreview.missing.length}/${parsed.length} transactions trouvées = ${foundSum.toFixed(2)}€${caDetailPreview.missing.length > 0 ? ` (${caDetailPreview.missing.length} manquant(s))` : ""}`,
                       matchedEncs: caDetailPreview.found.map((e: any) => ({
                         familyName: e.familyName || "",
                         montant: e.montant || 0,

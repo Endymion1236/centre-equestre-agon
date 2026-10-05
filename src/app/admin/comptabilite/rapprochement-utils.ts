@@ -1,3 +1,6 @@
+
+import { toParisDateString } from "@/lib/date-local";
+
 export interface LigneBancaireImportee {
   date: string;
   label: string;
@@ -332,17 +335,61 @@ export interface AppariementRemise<T> {
   canal: CanalRemiseCarte | null;
 }
 
-/** Associe chaque montant à un encaissement libre du vivier, sans réemploi. */
+/**
+ * Associe chaque montant à un encaissement libre du vivier, sans réemploi.
+ *
+ * Octobre 2026 : une carte (247 €) et une adhésion (60 €) payées en un seul
+ * passage de carte font UNE transaction de 307 € sur la remise, mais deux
+ * encaissements au journal (un par facture). Un montant sans encaissement
+ * égal est donc ensuite cherché comme la somme de plusieurs encaissements :
+ * d'abord ceux d'un même « règlement groupé » (journal-utils), puis ceux
+ * d'une même famille le même jour.
+ */
 function apparier<T extends { montant?: number }>(montants: number[], pool: T[]): AppariementRemise<T> {
   const pris = new Set<number>();
   const trouves: { encaissement: T; montant: number }[] = [];
-  const manquants: number[] = [];
+  const restants: number[] = [];
   for (const montant of montants) {
     const i = pool.findIndex((e, idx) => !pris.has(idx) && Math.abs((e?.montant || 0) - montant) < 0.02);
     if (i >= 0) { pris.add(i); trouves.push({ encaissement: pool[i], montant }); }
+    else restants.push(montant);
+  }
+  const manquants: number[] = [];
+  for (const montant of restants) {
+    const groupe = encaissementsDuMemePaiement(pool, pris, montant);
+    if (groupe) { for (const i of groupe) { pris.add(i); trouves.push({ encaissement: pool[i], montant }); } }
     else manquants.push(montant);
   }
   return { trouves, manquants, canal: null };
+}
+
+const jourDe = (e: any): string => (e?.date?.seconds ? toParisDateString(new Date(e.date.seconds * 1000)) : "");
+
+/** Indices des encaissements libres qui, ensemble, font ce montant payé en une fois — ou null. */
+function encaissementsDuMemePaiement(pool: any[], pris: Set<number>, montant: number): number[] | null {
+  const cible = Math.round(montant * 100);
+  const libres = pool.map((e, i) => ({ e, i })).filter(({ i }) => !pris.has(i));
+  // 1. Même règlement groupé (posé à l'encaissement de plusieurs factures).
+  const parGroupe = new Map<string, { e: any; i: number }[]>();
+  for (const x of libres) { const id = x.e?.reglementGroupe?.id; if (id) parGroupe.set(id, [...(parGroupe.get(id) || []), x]); }
+  for (const membres of parGroupe.values()) {
+    const somme = membres.reduce((s, x) => s + Math.round((x.e?.montant || 0) * 100), 0);
+    if (membres.length >= 2 && Math.abs(somme - cible) <= 2) return membres.map((x) => x.i);
+  }
+  // 2. Même famille, même jour : une seule combinaison possible, sinon on laisse choisir.
+  const parFamille = new Map<string, { e: any; i: number }[]>();
+  for (const x of libres) {
+    const cle = `${String(x.e?.familyId || x.e?.familyName || "")}|${jourDe(x.e)}`;
+    if (!x.e?.familyId && !x.e?.familyName) continue;
+    parFamille.set(cle, [...(parFamille.get(cle) || []), x]);
+  }
+  const solutions: number[][] = [];
+  for (const membres of parFamille.values()) {
+    if (membres.length < 2) continue;
+    const combi = trouverSousEnsembleMontant(membres.map((x) => ({ montant: x.e?.montant, i: x.i })), cible);
+    if (combi && combi.length >= 2) solutions.push(combi.map((c) => c.i));
+  }
+  return solutions.length === 1 ? solutions[0] : null;
 }
 
 /**

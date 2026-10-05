@@ -321,4 +321,38 @@ test("fusionner avec rien ne perd rien", () => {
   assert.equal(fusionnerLignesBancaires([], [], "csv-import").length, 0);
 });
 
+test("remise carte : 307 € payés en une fois = carte 247 € + adhésion 60 € de la même famille, plus un « manquant »", () => {
+  const jour = (h: number) => ({ seconds: Math.floor(Date.UTC(2026, 9, 3, h) / 1000) });
+  const encs = [
+    { id: "carte", familyId: "golliot", familyName: "GOLLIOT", montant: 247, mode: "cb_terminal", date: jour(9) },
+    { id: "adh", familyId: "golliot", familyName: "GOLLIOT", montant: 60, mode: "cb_terminal", date: jour(9) },
+    { id: "balade", familyId: "passage", familyName: "DE PASSAGE", montant: 15, mode: "cb_terminal", date: jour(10) },
+  ];
+  const r = apparierRemiseCarte([307, 15], encs);
+  assert.deepEqual(r.manquants, []);
+  assert.deepEqual(r.trouves.map(t => [t.encaissement.id, t.montant]), [["balade", 15], ["carte", 307], ["adh", 307]]);
+  assert.equal(r.canal, "terminal");
+});
+
+test("règlement groupé marqué à l'encaissement : retrouvé même si la famille a d'autres écritures ce jour-là", () => {
+  const d = { seconds: Math.floor(Date.UTC(2026, 9, 3, 9) / 1000) };
+  const g = { id: "rg_1", total: 307, nbFactures: 2 };
+  const encs = [
+    { id: "a", familyId: "f", montant: 247, mode: "cb_terminal", date: d, reglementGroupe: g },
+    { id: "b", familyId: "f", montant: 60, mode: "cb_terminal", date: d, reglementGroupe: g },
+    { id: "c", familyId: "f", montant: 247, mode: "cb_terminal", date: d },
+  ];
+  const r = apparierRemiseCarte([307], encs);
+  assert.deepEqual(r.trouves.map(t => t.encaissement.id).sort(), ["a", "b"]);
+});
+
+test("deux familles possibles pour la même somme : on ne devine pas, le montant reste à pointer", () => {
+  const d = { seconds: Math.floor(Date.UTC(2026, 9, 3, 9) / 1000) };
+  const encs = [
+    { id: "a1", familyId: "a", montant: 100, mode: "cb_terminal", date: d }, { id: "a2", familyId: "a", montant: 50, mode: "cb_terminal", date: d },
+    { id: "b1", familyId: "b", montant: 75, mode: "cb_terminal", date: d }, { id: "b2", familyId: "b", montant: 75, mode: "cb_terminal", date: d },
+  ];
+  assert.deepEqual(apparierRemiseCarte([150], encs).manquants, [150]);
+});
+
 console.log(`\n✅ ${passes} tests passés\n`);
