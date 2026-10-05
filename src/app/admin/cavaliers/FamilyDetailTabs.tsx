@@ -1,4 +1,5 @@
 "use client";
+import { montantRegle } from "@/lib/montant-regle";
 import { useState } from "react";
 import ProgressionEditor from "@/components/ProgressionEditor";
 import PedaSuiviCard from "@/components/PedaSuiviCard";
@@ -229,7 +230,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
   const today = new Date().toISOString().split("T")[0];
   const reservations = allReservations.filter((r: any) => r.familyId === fid || r.sourceFamilyId === fid);
   const payments = allPayments.filter((p: any) => p.familyId === fid && p.status !== "cancelled");
-  const totalPaid = payments.reduce((s: number, p: any) => s + (p.paidAmount || p.totalTTC || 0), 0);
+  const totalPaid = payments.reduce((s: number, p: any) => s + montantRegle(p), 0);
   const totalFacture = payments.reduce((s: number, p: any) => s + (p.totalTTC || 0), 0);
   const totalDue = Math.max(0, totalFacture - totalPaid);
   const avoirs = allAvoirs.filter((a: any) => a.familyId === fid);
@@ -651,7 +652,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                           // que soit le taux : faux dès qu'une ligne est à 20 %
                           // ou exonérée.
                           const ht = i.priceHT || Math.round((ttc / (1 + taux / 100)) * 100) / 100;
-                          return { label: i.activityTitle || "Prestation", priceHT: ht, tva: taux, priceTTC: ttc };
+                          return { label: i.activityTitle || i.label || i.description || "Prestation", priceHT: ht, tva: taux, priceTTC: ttc };
                         });
                         const totalHT = items.reduce((s: number, i: any) => s+(i.priceHT||0), 0);
 
@@ -682,7 +683,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
                           familyEmail: family.parentEmail||"", familyAddress: adresseLines,
                           serviceFacture: (p as any).serviceFacture || undefined,
                           items, totalHT, totalTVA: (p.totalTTC||0)-totalHT, totalTTC: p.totalTTC||0,
-                          paidAmount: p.paidAmount||p.totalTTC||0,
+                          paidAmount: montantRegle(p),
                           paymentMode: modeLabels[p.paymentMode]||p.paymentMode||"",
                           paymentDate: p.status==="paid" ? invDate.toLocaleDateString("fr-FR") : "",
                           paymentId: p.id,

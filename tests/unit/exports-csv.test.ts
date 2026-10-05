@@ -29,6 +29,9 @@ const paiements = [
   {
     familyName: "Famille Martin",
     totalTTC: 50,
+    // Chèque réglé, ancien enregistrement sans montant payé noté : compte pour
+    // son total parce qu'il est « réglé » (lib/montant-regle), pas parce que 0 est « faux ».
+    status: "paid",
     paidAmount: 0,
     paymentMode: "cheque",
     date: null,

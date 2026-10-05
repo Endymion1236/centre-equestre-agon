@@ -1,4 +1,5 @@
 "use client";
+import { authFetch } from "@/lib/auth-fetch";
 import { useState } from "react";
 import { collection, getDoc, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -98,6 +99,21 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
               className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100">Effacer</button>
           )}
           <span className="font-body text-xs text-slate-600">{filtered.length} mouvement{filtered.length > 1 ? "s" : ""}</span>
+          <button type="button" onClick={async () => {
+            // Paiement réussi chez CAWL mais absent du journal (page fermée trop tôt) :
+            // on rejoue la vérification auprès de CAWL avec sa référence.
+            const reference = window.prompt("Référence CAWL du paiement manquant (colonne « Référence commerçant », ex. CE-1790940007421-olz1b) :")?.trim();
+            if (!reference) return;
+            try {
+              const r = await authFetch("/api/admin/cawl-rattraper", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reference }) });
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok) { toast(d.error || `Erreur ${r.status}`, "error", 9000); return; }
+              toast(d.message || "Vérification faite.", d.ok ? "success" : "warning", 9000);
+              if (d.ok && !d.deja) await refreshAll();
+            } catch (e: any) { toast(e?.message || "Vérification impossible", "error"); }
+          }} className="ml-auto font-body text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-blue-100">
+            🔎 Récupérer un paiement CAWL
+          </button>
         </div>
       </Card>
 

@@ -1,3 +1,5 @@
+import { montantRegle } from "@/lib/montant-regle";
+
 export type TypeExportComptable = "ventes" | "reglements" | "clients";
 
 export interface PaiementExportComptable {
@@ -62,7 +64,7 @@ function exportClients(paiements: PaiementExportComptable[]) {
   paiements.forEach((paiement) => {
     if (!clients[paiement.familyName]) clients[paiement.familyName] = { facture: 0, paye: 0 };
     clients[paiement.familyName].facture += paiement.totalTTC || 0;
-    clients[paiement.familyName].paye += paiement.paidAmount || paiement.totalTTC || 0;
+    clients[paiement.familyName].paye += montantRegle(paiement as any);
   });
 
   const lignes = ["Client;Total facturé;Total payé;Solde dû"];
