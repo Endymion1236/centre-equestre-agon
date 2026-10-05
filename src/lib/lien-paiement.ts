@@ -327,6 +327,10 @@ export async function ouvrirLienPaiement(token: string, origin: string): Promise
         familyEmail: lien.recipientEmail || payData.familyEmail || "",
         familyName: familyName || payData.familyName,
         paymentId: paySnap.id,
+        // Montant choisi par l'admin en envoyant le lien (règlement partiel
+        // compris) : le contrôle des prix ne doit pas le prendre pour un
+        // sous-paiement de la commande entière.
+        lienPaiement: true,
       }),
     });
     cawlBody = await cawlRes.json().catch(() => ({}));

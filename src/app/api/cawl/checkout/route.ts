@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const {
       items, familyId, familyEmail, familyName,
-      depositPercent: depositPercentDemande, paymentId, stageDate, totalTTC, adminInitiated,
+      depositPercent: depositPercentDemande, paymentId, stageDate, totalTTC, adminInitiated, lienPaiement,
     } = body;
     // Réassignés plus bas si le serveur ramène le montant à l'acompte dû.
     let depositPercent: number = Number(depositPercentDemande) || 0;
@@ -126,7 +126,14 @@ export async function POST(req: NextRequest) {
         isDeposit: !!isDeposit,
       });
       if (audit) {
-        const decision = evaluatePaymentEnforcement(audit);
+        // Déjà encaissé : le plancher porte sur le reste dû. Lien envoyé par
+        // l'admin (appel serveur authentifié) : son montant est un choix.
+        const pSnapAudit = await adminDb.collection("payments").doc(String(paymentId)).get().catch(() => null);
+        const dejaPaye = Number((pSnapAudit?.data() as any)?.paidAmount) || 0;
+        const decision = evaluatePaymentEnforcement(audit, {
+          dejaPaye,
+          montantChoisiParAdmin: !!lienPaiement && (auth as any)?.service === true,
+        });
         const willBlock = ENFORCE && decision.block;
         await logPricingAudit(audit, {
           route: "cawl/checkout",

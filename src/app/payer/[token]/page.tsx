@@ -91,7 +91,12 @@ export default async function PayerPage({ params, searchParams }: Props) {
   const h = await headers();
   const proto = h.get("x-forwarded-proto") || "https";
   const host = h.get("x-forwarded-host") || h.get("host") || "";
-  const origin = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || (host ? `${proto}://${host}` : "");
+  // Le paiement s'ouvre en appelant ce même site : on prend l'adresse par
+  // laquelle la famille est arrivée (elle répond forcément), pas l'adresse
+  // publique configurée. Octobre 2026 : pendant la bascule vers
+  // www.centreequestreagon.com, l'adresse configurée ne répondait pas encore,
+  // et chaque lien tombait sur « Régler depuis mon espace client ».
+  const origin = (host ? `${proto}://${host}` : "") || process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
 
   const r = await ouvrirLienPaiement(token, origin);
   if (r.ok) redirect(r.url);

@@ -410,14 +410,26 @@ export async function logPricingAudit(
  * UNIQUEMENT si l'audit est fiable (toutes les bornes calculées). Sinon
  * fail-open : on laisse passer et on logue, jamais de blocage à l'aveugle.
  */
-export function evaluatePaymentEnforcement(result: PricingAuditResult): {
+export function evaluatePaymentEnforcement(result: PricingAuditResult, contexte: {
+  /** Déjà encaissé sur la commande : le plancher porte sur ce qui reste dû. */
+  dejaPaye?: number;
+  /** Lien de paiement envoyé par l'admin : son montant est un choix, pas une fraude. */
+  montantChoisiParAdmin?: boolean;
+} = {}): {
   block: boolean;
   reason: string | null;
   floorTTC: number;
 } {
-  const floorTTC = result.isDeposit
+  const brut = result.isDeposit
     ? result.expectedDepositTTC ?? result.minLegitTotalTTC
     : result.minLegitTotalTTC;
+  // Octobre 2026 : un lien de 30 € sur une commande de 180 €, ou le solde
+  // d'une commande déjà réglée en partie, était comparé au prix de TOUTE la
+  // commande et pouvait être refusé comme « sous-paiement ».
+  const floorTTC = Math.max(0, Math.round((brut - (Number(contexte.dejaPaye) || 0)) * 100) / 100);
+  if (contexte.montantChoisiParAdmin) {
+    return { block: false, reason: "montant choisi par l'admin (lien de paiement)", floorTTC };
+  }
 
   if (!result.reliable) {
     return { block: false, reason: "audit non fiable (créneau source manquant)", floorTTC };
