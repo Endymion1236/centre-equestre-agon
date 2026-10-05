@@ -50,11 +50,17 @@ interface TabEncaisserProps {
   /** Pré-remplissage du panier (flux « Dupliquer » du journal). */
   prefill?: { familyId: string; familySearch: string; items: BasketItem[] } | null;
   onPrefillConsumed?: () => void;
+  /**
+   * Ouvre la fenêtre « Encaisser » d'une commande. Utilisé pour le
+   * prélèvement SEPA : il ne s'encaisse pas sur le moment, il se programme
+   * (mandat, échéancier) — ce que fait cette fenêtre.
+   */
+  ouvrirEncaisser?: (payment: any, mode?: string) => void;
 }
 
 export function TabEncaisser({
   families, activities, payments, encaissements, avoirs, promos, loading,
-  enregistrerEncaissement, toast, setTab, refreshAll, prefill, onPrefillConsumed,
+  enregistrerEncaissement, toast, setTab, refreshAll, prefill, onPrefillConsumed, ouvrirEncaisser,
 }: TabEncaisserProps) {
   // Répartit un montant total en n parts égales avec ajustement du reliquat
   // sur la première part pour que la somme soit EXACTEMENT le total.
@@ -244,6 +250,10 @@ export function TabEncaisser({
       toast("Le panier est vide", "warning");
       return;
     }
+    if (paymentMode === "prelevement_sepa" && basket.some((i: any) => i.isBonCadeau)) {
+      toast("Un bon cadeau se règle comptant, pas par prélèvement SEPA.", "warning");
+      return;
+    }
     // Avant toute écriture : une date future ferait échouer l'encaissement
     // APRÈS la création de la commande, qui resterait impayée.
     const refusDate = refusDateEncaissement(encaissementDate);
@@ -400,6 +410,21 @@ export function TabEncaisser({
         createdAt: serverTimestamp(), // heure réelle de création (pour tri chronologique)
       });
       commandeId = payRef.id;
+    }
+    // Prélèvement SEPA : rien n'est encaissé aujourd'hui. Octobre 2026 : choisi
+    // ici, il créait un encaissement « Prélèvement SEPA » immédiat — facture
+    // « réglée », sans échéance, donc jamais prélevée (commande DUHEM, 650 €).
+    // La commande est créée, puis la fenêtre Encaisser programme le
+    // prélèvement (mandat, échéancier), comme depuis les Impayés.
+    if (paymentMode === "prelevement_sepa") {
+      await consommerPromo();
+      setBasket([]); setPaymentRef(""); setPaidAmount("");
+      setAppliedPromo(null); setPromoCode("");
+      await refreshAll();
+      const commande = { id: commandeId, familyId: selectedFamily, familyName: selectedFam?.parentName || "—", items: itemsCommande, totalTTC: totalCommande, paidAmount: 0, status: "pending" };
+      if (ouvrirEncaisser) ouvrirEncaisser(commande, "prelevement_sepa");
+      else toast("Commande créée : programmez le prélèvement depuis Impayés → Encaisser → SEPA.", "info");
+      return;
     }
     const paid = paidAmount ? safeNumber(paidAmount) : totalCommande;
     if (paid > 0) {
@@ -868,6 +893,13 @@ export function TabEncaisser({
               <button type="button" onClick={async () => {
                 const montant = paidAmount ? safeNumber(paidAmount) : totalPendingAfterDiscount;
                 if (montant <= 0) return;
+                // Prélèvement SEPA : il se programme commande par commande (mandat,
+                // échéancier), jamais comme un encaissement immédiat.
+                if (paymentMode === "prelevement_sepa") {
+                  if (familyPending.length === 1 && ouvrirEncaisser) ouvrirEncaisser(familyPending[0], "prelevement_sepa");
+                  else toast("Prélèvement SEPA : programmez-le commande par commande depuis l'onglet Impayés (Encaisser → SEPA).", "warning", 7000);
+                  return;
+                }
                 try {
                   // Si réduction appliquée, d'abord réduire le totalTTC du premier impayé
                   if (pendingDiscount > 0) {

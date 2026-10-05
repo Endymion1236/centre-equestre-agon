@@ -45,6 +45,20 @@ test("1-2. SEPA : date passée jamais remise (rouge) ; remise à préparer dans 
   assert.ok(pointDe(d, "sepa-a-remettre")!.titre.includes("150,00 €"));
 });
 
+test("1 bis. « Prélèvement SEPA » encaissé à la main sans échéance : signalé ; vrai prélèvement, annulé ou ancien : non", () => {
+  const d = vide();
+  d.encaissements = [
+    { id: "duhem", familyName: "DUHEM Julie", montant: 650, mode: "prelevement_sepa", date: ts("2026-09-29") },
+    { id: "vrai", familyName: "LECONTE", montant: 55, mode: "prelevement_sepa", sepaEcheanceId: "e1", date: ts("2026-09-29") },
+    { id: "annule", familyName: "X", montant: 40, mode: "prelevement_sepa", date: ts("2026-09-28") },
+    { id: "contre", familyName: "X", montant: -40, mode: "prelevement_sepa", correctionDe: "annule", date: ts("2026-09-28") },
+    { id: "ancien", familyName: "Y", montant: 30, mode: "prelevement_sepa", date: ts("2026-09-01") },
+  ];
+  const p = pointDe(d, "sepa-encaisse-sans-echeance")!;
+  assert.equal(p.nb, 1);
+  assert.ok(p.lignes[0].includes("DUHEM Julie") && p.lignes[0].includes("650,00 €"));
+});
+
 test("4. impayé de plus de 7 jours signalé, impayé récent non", () => {
   const d = vide();
   d.paiements = [

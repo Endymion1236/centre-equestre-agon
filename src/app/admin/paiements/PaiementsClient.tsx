@@ -57,7 +57,7 @@ export default function PaiementsPage() {
       : "encaisser"
   );
   const [editPayment, setEditPayment] = useState<any | null>(null);
-  const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any } | null>(null);
+  const [quickEncaisser, setQuickEncaisser] = useState<{ payment: any; mode?: string } | null>(null);
   const [payLinkModal, setPayLinkModal] = useState<any | null>(null); // payment pour la modale
   const [payLinkEmail, setPayLinkEmail] = useState("");
   const [payLinkAmount, setPayLinkAmount] = useState("");
@@ -1067,6 +1067,7 @@ export default function PaiementsPage() {
           enregistrerEncaissement={enregistrerEncaissement}
           toast={toast} setTab={setTab} refreshAll={refreshAll}
           prefill={encaisserPrefill} onPrefillConsumed={() => setEncaisserPrefill(null)}
+          ouvrirEncaisser={(payment, mode) => setQuickEncaisser({ payment, mode })}
         />
       )}
 
@@ -1571,7 +1572,7 @@ export default function PaiementsPage() {
       {/* ─── Modale Encaisser (commande unique) ─── */}
       {quickEncaisser && (
         <ModaleEncaisser
-          payment={quickEncaisser.payment} onClose={() => setQuickEncaisser(null)}
+          payment={quickEncaisser.payment} onClose={() => setQuickEncaisser(null)} modeInitial={quickEncaisser.mode}
           payments={payments} encaissements={encaissements} avoirs={avoirs}
           refreshAll={refreshAll} toast={toast} />
       )}

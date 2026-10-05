@@ -42,12 +42,14 @@ export interface ModaleEncaisserProps {
    */
   refreshAll: (changedPaymentIds?: string[]) => Promise<void>;
   toast: (message: string, type?: any) => void;
+  /** Mode présélectionné (ex. « prelevement_sepa » depuis l'onglet Encaisser). */
+  modeInitial?: string;
 }
 
 export default function ModaleEncaisser({
-  payment, onClose, payments, encaissements, avoirs, refreshAll, toast,
+  payment, onClose, payments, encaissements, avoirs, refreshAll, toast, modeInitial,
 }: ModaleEncaisserProps) {
-  const [quickMode, setQuickMode] = useState("cheque");
+  const [quickMode, setQuickMode] = useState(modeInitial || "cheque");
   const [quickMontant, setQuickMontant] = useState("");
   const [quickDate, setQuickDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [quickRef, setQuickRef] = useState("");

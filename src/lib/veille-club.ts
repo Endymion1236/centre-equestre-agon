@@ -102,6 +102,23 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
     nonRemis.map(e => `${e.familyName || "Famille"} — ${eur(e.montant)}, prévu le ${dateFr(e.dateEcheance)}`),
     "/admin/sepa?tab=echeancier"));
 
+  // ── 🔴 1 bis. « Prélèvement SEPA » encaissé à la main, sans échéance ──
+  // Octobre 2026 : choisi dans l'onglet Encaisser, le mode SEPA écrivait un
+  // encaissement immédiat (facture « réglée ») sans aucune échéance : rien
+  // n'était jamais prélevé (DUHEM, 650 €). Un vrai prélèvement porte
+  // `sepaEcheanceId`. Une écriture annulée par contre-passation ne compte plus.
+  const encs = d.encaissements || [];
+  const annules = new Set(encs.map(e => e?.correctionDe).filter(Boolean));
+  const sepaSansEcheance = encs.filter(e => (e?.mode === "prelevement_sepa" || e?.mode === "sepa")
+    && Number(e?.montant) > 0 && !e?.sepaEcheanceId && !e?.correctionDe && !annules.has(e?.id)
+    // Le lien à l'échéance existe depuis le 08/09/2026 : avant, un vrai
+    // prélèvement ne le portait pas encore.
+    && jourParis(e?.date) >= "2026-09-09");
+  points.push(point(1, "sepa-encaisse-sans-echeance", "rouge",
+    "« Prélèvement SEPA » enregistré comme encaissé sans échéance : l'argent ne sera jamais prélevé",
+    sepaSansEcheance.map(e => `${e.familyName || "Famille"} — ${eur(e.montant)}, saisi le ${dateFr(jourParis(e.date))} : annulez l'écriture au Journal, puis programmez le prélèvement (Impayés → Encaisser → SEPA)`),
+    "/admin/paiements?tab=journal"));
+
   // ── 🔴 2. Remise SEPA à préparer dans les 5 jours ──
   const aRemettre = ech.filter(e => e?.status === "pending" && e?.dateEcheance >= J && e.dateEcheance <= decalerJours(J, 5));
   if (aRemettre.length) {
