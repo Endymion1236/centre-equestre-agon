@@ -1536,7 +1536,7 @@ export default function PaiementsPage() {
                   différé / SEPA, qui sont des règlements échelonnés) */}
               <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">Mode de paiement</label>
               <div className="grid grid-cols-2 gap-2 mb-4">
-                {paymentModes.filter(m => ["cheque", "especes", "cb_terminal", "virement", "cheque_vacances", "pass_sport"].includes(m.id)).map(m => (
+                {paymentModes.filter(m => ["cheque", "especes", "cb_terminal", "virement", "cheque_vacances", "cheque_vacances_connect", "pass_sport"].includes(m.id)).map(m => (
                   <button type="button" key={m.id} onClick={() => setMultiMode(m.id)}
                     className={`font-body text-sm py-2 rounded-lg border cursor-pointer ${multiMode === m.id ? "bg-blue-500 text-white border-blue-500 font-semibold" : "bg-white text-slate-600 border-gray-200 hover:border-gray-300"}`}>
                     {m.label}

@@ -32,7 +32,7 @@ interface Impaye {
 
 const LIBELLE_MODE: Record<string, string> = {
   cheque: "chèque", especes: "espèces", virement: "virement",
-  ancv: "chèques vacances", avoir: "avoir",
+  ancv: "chèques vacances", cheque_vacances: "chèques vacances", cheque_vacances_connect: "chèques vacances Connect", avoir: "avoir",
 };
 
 function jolieDate(d: string) {

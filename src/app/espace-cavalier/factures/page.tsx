@@ -124,6 +124,7 @@ const modeLabels: Record<string, string> = {
   cheque: "Chèque",
   especes: "Espèces",
   cheque_vacances: "Chèque-Vacances",
+  cheque_vacances_connect: "Chèque-Vacances Connect",
   pass_sport: "Pass'Sport",
   ancv: "ANCV",
   virement: "Virement",

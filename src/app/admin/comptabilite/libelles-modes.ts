@@ -8,7 +8,7 @@
 export const modeLabels: Record<string, string> = {
   cb_terminal: "CB Terminal", cb_online: "CB en ligne", cb_cawl: "CB en ligne", cb: "CB en ligne",
   cheque: "Chèque", especes: "Espèces",
-  cheque_vacances: "Chèques Vacances", pass_sport: "Pass'Sport", ancv: "ANCV",
+  cheque_vacances: "Chèques Vacances", cheque_vacances_connect: "Chq. Vacances Connect", pass_sport: "Pass'Sport", ancv: "ANCV",
   virement: "Virement", avoir: "Avoir", prelevement_sepa: "Prélèvement SEPA",
 };
 

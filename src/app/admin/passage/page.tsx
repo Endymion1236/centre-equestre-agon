@@ -26,7 +26,8 @@ const MODES_PAIEMENT = [
   { id: "cb_terminal", label: "💳 CB Terminal", icon: "💳" },
   { id: "especes", label: "💵 Espèces", icon: "💵" },
   { id: "cheque", label: "📝 Chèque", icon: "📝" },
-  { id: "cheque_vacances", label: "🏖️ Chèques Vacances", icon: "🏖️" },
+  { id: "cheque_vacances", label: "🏖️ Chèques Vacances papier", icon: "🏖️" },
+  { id: "cheque_vacances_connect", label: "📱 Chèques Vacances Connect", icon: "📱" },
   { id: "pass_sport", label: "⚽ Pass'Sport", icon: "⚽" },
   { id: "ancv", label: "🎫 ANCV", icon: "🎫" },
 ];

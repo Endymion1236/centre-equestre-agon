@@ -512,7 +512,7 @@ export default function StatistiquesPage() {
   const modeLabels: Record<string, string> = {
     cb_online: "Carte (en ligne)", cb: "Carte", carte: "Carte", especes: "Espèces", cheque: "Chèque",
     cheques: "Chèques", sepa: "Prélèvement SEPA", virement: "Virement", avoir: "Avoir", offert: "Offert",
-    passsport: "Pass'Sport", ancv: "Chèques Vacances",
+    passsport: "Pass'Sport", ancv: "Chèques Vacances", cheque_vacances: "Chèques Vacances", cheque_vacances_connect: "Chèques Vacances Connect",
   };
 
   const tabs = [

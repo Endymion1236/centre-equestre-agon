@@ -77,6 +77,7 @@ const MODE_LABELS: Record<string, string> = {
   prelevement_sepa: "Prélèvement SEPA",
   sepa: "Prélèvement SEPA",
   cheque_vacances: "Chèques vacances",
+  cheque_vacances_connect: "Chèques vacances Connect",
   pass_sport: "Pass'Sport",
   ancv: "ANCV",
   avoir: "Avoir",

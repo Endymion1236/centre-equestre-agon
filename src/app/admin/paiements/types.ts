@@ -1,6 +1,6 @@
 export type PaymentMode =
   | "cb_terminal" | "cb_online" | "cheque" | "cheque_differe" | "especes"
-  | "cheque_vacances" | "pass_sport" | "ancv" | "virement"
+  | "cheque_vacances" | "cheque_vacances_connect" | "pass_sport" | "ancv" | "virement"
   | "avoir" | "prelevement_sepa";
 
 export interface BasketItem {
@@ -57,7 +57,8 @@ export const paymentModes: { id: PaymentMode; label: string }[] = [
   { id: "cheque", label: "Chèque" },
   { id: "cheque_differe", label: "Chèques différés" },
   { id: "especes", label: "Espèces" },
-  { id: "cheque_vacances", label: "Chèques vacances" },
+  { id: "cheque_vacances", label: "Chèques vacances papier" },
+  { id: "cheque_vacances_connect", label: "Chèques vacances Connect" },
   { id: "pass_sport", label: "Pass'Sport" },
   { id: "ancv", label: "ANCV" },
   { id: "virement", label: "Virement" },

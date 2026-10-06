@@ -39,6 +39,7 @@ const MODE_LABELS: Record<string, string> = {
   cheque: "chèque",
   cb_terminal: "carte bancaire",
   cheque_vacances: "chèques-vacances",
+  cheque_vacances_connect: "chèques-vacances Connect",
   pass_sport: "Pass'Sport",
   ancv: "chèques-vacances ANCV",
   virement: "virement",

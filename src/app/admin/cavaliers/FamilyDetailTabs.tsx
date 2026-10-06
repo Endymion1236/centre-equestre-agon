@@ -20,7 +20,7 @@ import { tauxTva } from "@/lib/tva-taux";
 
 const modeLabels: Record<string, string> = {
   cb_terminal: "CB", cb_online: "CB en ligne", cheque: "Chèque",
-  especes: "Espèces", cheque_vacances: "Chq. Vac.", pass_sport: "Pass'Sport",
+  especes: "Espèces", cheque_vacances: "Chq. Vac.", cheque_vacances_connect: "Chq. Vac. Connect", pass_sport: "Pass'Sport",
   ancv: "ANCV", virement: "Virement", avoir: "Avoir", prelevement_sepa: "SEPA",
 };
 

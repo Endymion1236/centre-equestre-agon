@@ -23,6 +23,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Printer } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
+import { passeParRemise } from "@/lib/modes-remise";
 import { createEncaissement } from "@/lib/compta-encaissement";
 
 export interface OngletRemiseProps {
@@ -148,7 +149,7 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
     // Modes exclus des remises physiques : rien à porter à la banque, la
     // banque les crédite directement. « cb » est l'ancien code des ventes de
     // bons cadeaux en ligne, conservé pour les écritures déjà au journal.
-    if (["virement", "prelevement_sepa", "cb_online", "cb_cawl", "cb", "avoir"].includes(e.mode)) return false;
+    if (!passeParRemise(e.mode)) return false;
     // Montant positif uniquement (pas de remboursements)
     if ((e.montant || 0) <= 0) return false;
     // Neutralisé par une contre-passation de montant opposé
@@ -440,7 +441,7 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
                             for (const payId of affectedPaymentIds) {
                               const allEncsOfPayment = (encaissementsCompta || []).filter(
                                 (x: any) => x.paymentId === payId
-                                && !["virement", "prelevement_sepa", "cb_online", "avoir"].includes(x.mode)
+                                && passeParRemise(x.mode)
                                 && (x.montant || 0) > 0
                               );
                               const allRemis = allEncsOfPayment.every((x: any) =>
@@ -518,7 +519,7 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
               const payIdSet = new Set(r.paymentIds);
               rEncaissements = (encaissementsCompta || []).filter((e: any) =>
                 payIdSet.has(e.paymentId)
-                && !["virement", "prelevement_sepa", "cb_online", "avoir"].includes(e.mode)
+                && passeParRemise(e.mode)
                 && (e.montant || 0) > 0
               );
             }
@@ -605,7 +606,7 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
               if (enc.paymentId) {
                 const allEncsOfPayment = (encaissementsCompta || []).filter(
                   (x: any) => x.paymentId === enc.paymentId
-                  && !["virement", "prelevement_sepa", "cb_online", "avoir"].includes(x.mode)
+                  && passeParRemise(x.mode)
                   && (x.montant || 0) > 0
                 );
                 const allNowRemis = allEncsOfPayment.every((x: any) => x.id === enc.id || x.remiseId);

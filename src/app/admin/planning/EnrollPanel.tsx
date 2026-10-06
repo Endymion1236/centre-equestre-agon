@@ -1428,7 +1428,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                               {/* Mêmes moyens qu'à la caisse — les chèques-vacances
                                   sont acceptés par le centre (cf. CGV) et manquaient ici. */}
                               <div className="grid grid-cols-2 gap-2">
-                                {([["cb_terminal", "💳 CB"], ["cheque", "📝 Chèque"], ["especes", "💶 Espèces"], ["cheque_vacances", "🎫 Chèques vacances"], ["bon_cadeau", "🎁 Bon cadeau"]] as const).map(([id, label]) => (
+                                {([["cb_terminal", "💳 CB"], ["cheque", "📝 Chèque"], ["especes", "💶 Espèces"], ["cheque_vacances", "🎫 Chq. vacances papier"], ["cheque_vacances_connect", "📱 Chq. vacances Connect"], ["bon_cadeau", "🎁 Bon cadeau"]] as const).map(([id, label]) => (
                                   <button key={id} onClick={() => setAcompteMode(id)}
                                     className={`py-1.5 px-2 rounded-lg font-body text-xs font-semibold border cursor-pointer ${acompteMode === id ? "bg-blue-500 text-white border-blue-500" : "bg-white text-slate-600 border-gray-200"}`}>
                                     {label}

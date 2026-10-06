@@ -873,7 +873,7 @@ export function TabEncaisser({
               </div>
 
               {/* Référence */}
-              {["cheque", "cheque_vacances", "pass_sport", "ancv", "virement"].includes(paymentMode) && (
+              {["cheque", "cheque_vacances", "cheque_vacances_connect", "pass_sport", "ancv", "virement"].includes(paymentMode) && (
                 <div className="mb-3">
                   <input value={paymentRef} onChange={e => setPaymentRef(e.target.value)}
                     placeholder="N° de chèque, référence..."
@@ -1111,7 +1111,7 @@ export function TabEncaisser({
           </div>
 
           {/* Reference for cheque/pass sport */}
-          {["cheque", "cheque_vacances", "pass_sport", "ancv", "virement"].includes(paymentMode) && (
+          {["cheque", "cheque_vacances", "cheque_vacances_connect", "pass_sport", "ancv", "virement"].includes(paymentMode) && (
             <div className="mb-3">
               <label className="font-body text-xs font-semibold text-slate-600 block mb-1">
                 Référence ({paymentModes.find((m) => m.id === paymentMode)?.label})

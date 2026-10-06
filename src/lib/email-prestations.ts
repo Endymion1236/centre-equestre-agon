@@ -54,6 +54,7 @@ export function libelleModePaiement(mode?: string | null): string {
     case "avoir": return "Avoir";
     case "ancv":
     case "cheque_vacances": return "Chèques vacances ANCV";
+    case "cheque_vacances_connect": return "Chèques vacances ANCV Connect";
     case "pass_sport": return "Pass'Sport";
     default: return "Carte bancaire en ligne";
   }

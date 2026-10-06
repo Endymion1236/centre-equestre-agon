@@ -33,6 +33,7 @@ export type ModePaiement =
   | "avoir"
   | "ancv"
   | "cheque_vacances"
+  | "cheque_vacances_connect"
   | "pass_sport";
 
 /** Une ligne de commande. Porte les créneaux : c'est ce qui permet à

@@ -38,7 +38,7 @@ export const HOLD_PAIEMENT_MINUTES = 30;
 export const HOLD_REGLEMENT_DIFFERE_MINUTES = 7 * 24 * 60;
 
 /** Modes de règlement dont l'encaissement se fait hors ligne. */
-const MODES_DIFFERES = ["cheque", "especes", "virement", "cb_terminal", "ancv", "cheque_vacances", "pass_sport"];
+const MODES_DIFFERES = ["cheque", "especes", "virement", "cb_terminal", "ancv", "cheque_vacances", "cheque_vacances_connect", "pass_sport"];
 
 export function dateExpirationHold(depuis: Date = new Date(), paymentMethod?: string): string {
   const minutes = paymentMethod && MODES_DIFFERES.includes(paymentMethod)

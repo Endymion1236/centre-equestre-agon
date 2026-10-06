@@ -55,6 +55,7 @@ export const COMPTES_REGLEMENT: Record<string, CompteFec & { aConfirmer?: boolea
   cb_online: { compte: "51150000", libelle: "Cartes bancaires à encaisser", aConfirmer: true },
   cb_cawl: { compte: "51150000", libelle: "Cartes bancaires à encaisser", aConfirmer: true },
   cheque_vacances: { compte: "51180000", libelle: "Chèques vacances à encaisser", aConfirmer: true },
+  cheque_vacances_connect: { compte: "51180000", libelle: "Chèques vacances à encaisser", aConfirmer: true },
   ancv: { compte: "51180000", libelle: "Chèques vacances à encaisser", aConfirmer: true },
   pass_sport: { compte: "44180000", libelle: "État — Pass'Sport à recevoir", aConfirmer: true },
   virement: { compte: "51200000", libelle: "Crédit Agricole" },
