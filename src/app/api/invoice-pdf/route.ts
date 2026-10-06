@@ -142,7 +142,8 @@ export async function POST(request: NextRequest) {
       paymentDetails, // [{ mode, modeLabel, montant, date }] — sinon reconstruit via paymentId
       paymentId,
       remise,
-      documentType, // "avoir" | "proforma" ; déduit du préfixe sinon
+      documentType, // "avoir" | "proforma" | "devis" ; déduit du préfixe sinon
+      validUntil, // devis : fin de validité, jj/mm/aaaa
     } = body;
 
     // Le titre était écrit en dur : un avoir comme un devis proforma
@@ -152,17 +153,22 @@ export async function POST(request: NextRequest) {
     // Le type explicite prime ; à défaut, le préfixe du numéro fait foi
     // (AV-YYYY-NNNN pour la séquence des avoirs, PF-xxxxxx pour un proforma).
     const numeroTexte = String(invoiceNumber || "");
-    const estAvoir = documentType === "avoir" || /^AV-/i.test(numeroTexte);
+    // Un devis n'est pas une pièce comptable non plus : ni règlement, ni IBAN,
+    // ni tampon PAYÉ, mais une validité et une place pour le bon pour accord.
+    const estDevis = documentType === "devis";
+    const estAvoir = !estDevis && (documentType === "avoir" || /^AV-/i.test(numeroTexte));
     const estProforma =
-      !estAvoir && (documentType === "proforma" || /^PF-/i.test(numeroTexte));
-    const titreDocument = estAvoir
-      ? "AVOIR"
-      : estProforma
-        ? "FACTURE PROFORMA"
-        : "FACTURE";
-    const nomFichier = estAvoir ? "avoir" : estProforma ? "proforma" : "facture";
+      !estAvoir && !estDevis && (documentType === "proforma" || /^PF-/i.test(numeroTexte));
+    const titreDocument = estDevis
+      ? "DEVIS"
+      : estAvoir
+        ? "AVOIR"
+        : estProforma
+          ? "FACTURE PROFORMA"
+          : "FACTURE";
+    const nomFichier = estDevis ? "devis" : estAvoir ? "avoir" : estProforma ? "proforma" : "facture";
 
-    const isPaid = (paidAmount || 0) >= (totalTTC || 0);
+    const isPaid = !estDevis && (paidAmount || 0) >= (totalTTC || 0);
     const resteDu = Math.max(0, (totalTTC || 0) - (paidAmount || 0));
     const tvaRecap = getTvaRecap(items);
     const isTVAApplicable = totalTVA > 0;
@@ -174,7 +180,7 @@ export async function POST(request: NextRequest) {
     // et le virement (IBAN, QR) ne porte que sur ce qu'il ne couvre pas —
     // sinon la famille était invitée à payer deux fois.
     let echeancier: EcheancierFacture | null = null;
-    if (!estAvoir && !isPaid && resteDu > 0 && paymentId) {
+    if (!estAvoir && !estDevis && !isPaid && resteDu > 0 && paymentId) {
       try {
         const paySnap = await adminDb.collection("payments").doc(String(paymentId)).get();
         const orderId = paySnap.exists ? (paySnap.data() as any)?.orderId : null;
@@ -190,7 +196,7 @@ export async function POST(request: NextRequest) {
     const resteAVirer = echeancier ? echeancier.resteHorsPrelevement : resteDu;
 
     const sepaLibelle = `${invoiceNumber} ${familyName || ""}`.trim().slice(0, 70);
-    const qrSEPAResult = (!estAvoir && !isPaid && resteAVirer > 0)
+    const qrSEPAResult = (!estAvoir && !estDevis && !isPaid && resteAVirer > 0)
       ? await generateSEPAQR(resteAVirer, sepaLibelle, "pdf")
       : null;
     const qrSEPADataUrl = qrSEPAResult?.dataUrl || null;
@@ -201,7 +207,7 @@ export async function POST(request: NextRequest) {
     // Détail des règlements : si non fourni explicitement, on le reconstruit
     // depuis les encaissements liés au paiement (ex. acompte CB + solde prélevé).
     let resolvedDetails: any[] = Array.isArray(paymentDetails) ? paymentDetails : [];
-    if (resolvedDetails.length === 0 && paymentId) {
+    if (resolvedDetails.length === 0 && paymentId && !estDevis) {
       try {
         const encSnap = await adminDb.collection("encaissements").where("paymentId", "==", String(paymentId)).get();
         resolvedDetails = encSnap.docs
@@ -228,7 +234,7 @@ export async function POST(request: NextRequest) {
       paymentDetails: resolvedDetails,
     });
 
-    const doc = React.createElement(Document, { title: `${estAvoir ? "Avoir" : estProforma ? "Facture proforma" : "Facture"} ${invoiceNumber}`, author: CLUB.nom },
+    const doc = React.createElement(Document, { title: `${estDevis ? "Devis" : estAvoir ? "Avoir" : estProforma ? "Facture proforma" : "Facture"} ${invoiceNumber}`, author: CLUB.nom },
       React.createElement(Page, { size: "A4", style: s.page },
 
         // ── En-tête ──────────────────────────────────────────────────────
@@ -252,7 +258,13 @@ export async function POST(request: NextRequest) {
             estProforma
               ? React.createElement(Text, { style: s.invMeta }, "Document non comptable — ne vaut pas facture")
               : null,
-            React.createElement(Text, { style: s.invMeta }, `Émise le : ${date}`),
+            estDevis
+              ? React.createElement(Text, { style: s.invMeta }, "Document non comptable — ne vaut pas facture")
+              : null,
+            React.createElement(Text, { style: s.invMeta }, `${estDevis ? "Établi" : "Émise"} le : ${date}`),
+            estDevis && validUntil
+              ? React.createElement(Text, { style: s.invMeta }, `Valable jusqu'au : ${validUntil}`)
+              : null,
             prestationDate
               ? React.createElement(Text, { style: s.invMeta }, `Prestation du : ${prestationDate}`)
               : null,
@@ -261,7 +273,7 @@ export async function POST(request: NextRequest) {
 
         // ── Client ───────────────────────────────────────────────────────
         React.createElement(View, { style: { marginBottom: 20 } },
-          React.createElement(Text, { style: s.partyLabel }, "Facturé à"),
+          React.createElement(Text, { style: s.partyLabel }, estDevis ? "Destinataire" : "Facturé à"),
           React.createElement(Text, { style: s.partyName }, familyName || ""),
           serviceFacture ? React.createElement(Text, { style: s.partySub }, `Service : ${serviceFacture}`) : null,
           familyEmail ? React.createElement(Text, { style: s.partySub }, familyEmail) : null,
@@ -282,7 +294,9 @@ export async function POST(request: NextRequest) {
           const disc = item.remise || item.discount || 0;
           // Construire le sous-titre : planning du stage (si présent) sinon vide
           let subtitle = "";
-          if (item.stageSchedule) {
+          if (item.sousTitre) {
+            subtitle = String(item.sousTitre);
+          } else if (item.stageSchedule) {
             subtitle = item.stageSchedule;
           } else if (Array.isArray(item.stageDates) && item.stageDates.length > 0) {
             // Fallback : construire à partir des dates brutes
@@ -310,7 +324,7 @@ export async function POST(request: NextRequest) {
               subtitle ? React.createElement(Text, { style: s.cellSubtitle }, subtitle) : null,
             ),
             React.createElement(Text, { style: [s.cellGray, s.cQty] }, `${item.quantity || 1}`),
-            React.createElement(Text, { style: [s.cellGray, s.cPUHT] }, `${(item.priceHT || 0).toFixed(2)} €`),
+            React.createElement(Text, { style: [s.cellGray, s.cPUHT] }, `${(item.puHT ?? item.priceHT ?? 0).toFixed(2)} €`),
             React.createElement(Text, { style: [s.cellGray, s.cRemise] }, disc > 0 ? `-${disc.toFixed(2)} €` : "—"),
             React.createElement(Text, { style: [s.cellGray, s.cTVA] }, `${taux} %`),
             React.createElement(Text, { style: [s.cellBold, s.cTTC] }, `${(item.priceTTC || 0).toFixed(2)} €`),
@@ -359,8 +373,19 @@ export async function POST(request: NextRequest) {
           ? React.createElement(Text, { style: s.mentionTVA }, "TVA non applicable en vertu de l'article 293B du CGI.")
           : null,
 
+        // ── Devis : bon pour accord, à la place du statut de paiement ────
+        estDevis
+          ? React.createElement(View, { style: [s.payBox, { borderColor: "#d1d5db" }] },
+              React.createElement(Text, { style: [s.payTitle, { color: BLUE }] }, "Bon pour accord"),
+              React.createElement(Text, { style: s.payDetail },
+                `${validUntil ? `Devis valable jusqu'au ${validUntil}. ` : ""}Pour l'accepter, retournez-le daté et signé, précédé de la mention « Bon pour accord », ou répondez depuis l'email reçu.`),
+              React.createElement(Text, { style: [s.payDetail, { marginTop: 10 }] }, "Date :                                        Signature :"),
+              React.createElement(View, { style: { height: 50 } }),
+            )
+          : null,
+
         // ── Statut paiement ──────────────────────────────────────────────
-        React.createElement(View, { style: [s.payBox, isPaid ? s.payPaid : s.payUnpaid] },
+        estDevis ? null : React.createElement(View, { style: [s.payBox, isPaid ? s.payPaid : s.payUnpaid] },
           React.createElement(Text, { style: [s.payTitle, { color: isPaid ? GREEN : ORANGE }] },
             isPaid ? "✓ Facture réglée" : echeancier ? "⏳ Règlement par prélèvement SEPA" : "⏳ En attente de règlement"),
           !isPaid && paidAmount > 0

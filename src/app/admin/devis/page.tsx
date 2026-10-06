@@ -11,6 +11,8 @@ import { calculerForfaitAnnuel, type ForfaitTarifs, type FamilyDiscountRule } fr
 import { coordonneesFacturation, nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import { estClientEtablissement, nouveauJetonDevis } from "@/lib/devis-reponse";
 import { avertissementModification, etatApresModification, peutModifierDevis } from "./devis-modification";
+import { paramsPdfDevis } from "./devis-pdf";
+import { facturePdfEnBase64 } from "@/lib/download-invoice";
 import {
   emailLayout, emailPanneau, emailTitre, emailParagraphe as P,
   emailSignature, emailCouleurs as CE, emailButton,
@@ -369,7 +371,7 @@ export default function DevisPage() {
         emailTitre(`Devis ${d.numero}`),
         P(`Bonjour <strong>${d.familyName}</strong>,`),
         d.serviceFacture ? P(`Service : <strong>${d.serviceFacture}</strong>`) : "",
-        P("Voici votre devis pour la saison équestre."),
+        P("Voici votre devis pour la saison équestre. Vous le trouverez aussi en PDF, en pièce jointe."),
         `<table style="width:100%;border-collapse:collapse;margin:18px 0;">
           <thead><tr>
             ${["Prestation", "Qté", "Prix unit.", "Total"].map((t, n) =>
@@ -393,22 +395,36 @@ export default function DevisPage() {
         emailSignature(),
       ].join("\n"), `Devis ${d.numero} — ${d.totalTTC.toFixed(2).replace(".", ",")} €`);
 
-      await authFetch("/api/send-email", {
+      // Le devis en PDF, joint à l'email : il partait sans pièce jointe, et le
+      // client n'avait rien à imprimer, signer ni transmettre (octobre 2026).
+      let pdf = "";
+      try {
+        const adresse = coordonneesFacturation(fiche as any, serviceParNom((fiche as any)?.services, d.serviceFacture)).adresse;
+        pdf = await facturePdfEnBase64(paramsPdfDevis(d, adresse, new Date().toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" })));
+      } catch (e: any) {
+        console.error("[devis] PDF :", e);
+        if (!confirm(`Le PDF du devis n'a pas pu être créé (${e?.message || e}).\n\nEnvoyer quand même l'email, sans pièce jointe ?`)) { setSendingId(null); return; }
+      }
+
+      const res = await authFetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: d.familyEmail,
           subject: `Devis ${d.numero} — Centre Équestre d'Agon-Coutainville`,
           html,
+          ...(pdf ? { attachments: [{ filename: `devis-${d.numero}.pdf`, content: pdf }] } : {}),
           context: "admin_devis",
           template: "devis",
           familyId: d.familyId,
         }),
       });
+      // Un refus du serveur passait inaperçu : le devis était marqué « envoyé ».
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `erreur ${res.status}`);
 
       await updateDoc(doc(db, "devis", d.id!), { status: "sent", sentAt: serverTimestamp(), familyName: nomEnvoi, modifieApresEnvoi: false });
       await fetchData();
-    } catch (e) { console.error(e); alert("Erreur envoi email"); }
+    } catch (e: any) { console.error(e); alert(`Erreur envoi email : ${e?.message || e}`); }
     setSendingId(null);
   };
 

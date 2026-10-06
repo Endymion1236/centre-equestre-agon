@@ -31,7 +31,9 @@ export interface ParamsFacturePdf {
    * Nature de la pièce. À défaut, le serveur la déduit du préfixe du numéro :
    * AV- pour un avoir, PF- pour un proforma, facture sinon.
    */
-  documentType?: "facture" | "avoir" | "proforma";
+  documentType?: "facture" | "avoir" | "proforma" | "devis";
+  /** Devis : date de fin de validité, déjà au format jj/mm/aaaa. */
+  validUntil?: string;
 }
 
 /** Le PDF de la pièce, tel que le serveur le produit (même rendu partout). */
