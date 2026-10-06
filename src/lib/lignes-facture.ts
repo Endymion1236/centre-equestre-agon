@@ -86,3 +86,37 @@ function htRamene(l: any, ttc: number): number | undefined {
   }
   return undefined;
 }
+
+/**
+ * Lignes et totaux à imprimer sur la facture PDF.
+ *
+ * Octobre 2026 : la 1re échéance d'un forfait en 3× (236,67 €) s'imprimait
+ * avec les lignes du forfait entier (710 €) — total HT 675,07 €, TVA
+ * −438,40 €, et la mention « TVA non applicable » puisque la TVA n'était pas
+ * positive. Le PDF prend désormais les lignes ramenées au total, comme le
+ * FEC et la déclaration de TVA, et recalcule HT et TVA depuis elles.
+ */
+export function lignesPourPdf(facture: { totalTTC?: number; items?: any[]; totalHT?: number; totalTVA?: number }): {
+  items: LigneRamenee[];
+  totalHT: number;
+  totalTVA: number;
+  /** Somme des lignes d'origine quand elles ont été ramenées au total, sinon null. */
+  totalLignesOrigine: number | null;
+} {
+  const items = lignesAuTotal(facture);
+  const totalTTC = Math.round((Number(facture.totalTTC) || 0) * 100) / 100;
+  const ecart = ecartLignes(facture);
+  const chiffrees = (facture.items || []).some((l: any) => cts(ttcDeLigne(l)) !== 0);
+  if (ecart === 0 || !chiffrees) {
+    return { items, totalHT: Number(facture.totalHT) || 0, totalTVA: Number(facture.totalTVA) || 0, totalLignesOrigine: null };
+  }
+  const htLigne = (l: LigneRamenee) =>
+    l.priceHT !== undefined ? l.priceHT : Math.round((l.priceTTC / (1 + tauxTva(l.tva, l.tvaTaux) / 100)) * 100) / 100;
+  const totalHT = Math.round(items.reduce((s, l) => s + htLigne(l), 0) * 100) / 100;
+  return {
+    items,
+    totalHT,
+    totalTVA: Math.round((totalTTC - totalHT) * 100) / 100,
+    totalLignesOrigine: Math.round((totalTTC - ecart) * 100) / 100,
+  };
+}

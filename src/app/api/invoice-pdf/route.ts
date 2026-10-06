@@ -16,6 +16,7 @@ import { generateSEPAQR } from "@/lib/payment-qr";
 import { adminDb } from "@/lib/firebase-admin";
 import { construireAffichageReglementsFacture } from "@/lib/facture-reglements";
 import { echeancierSepaFacture, type EcheancierFacture } from "@/lib/echeancier-sepa-facture";
+import { lignesPourPdf } from "@/lib/lignes-facture";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -29,7 +30,7 @@ export const maxDuration = 30;
  * ajouté que s'il manque.
  */
 function libelleLigne(item: any): string {
-  const titre = String(item?.activityTitle || item?.description || item?.name || "").trim();
+  const titre = String(item?.activityTitle || item?.label || item?.description || item?.name || "").trim();
   const enfant = String(item?.childName || "").trim();
   const enfantAffichable = enfant && !enfant.startsWith("child_") && enfant !== "—";
   if (!titre) return enfantAffichable ? `Prestation — ${enfant}` : "Prestation";
@@ -137,7 +138,7 @@ export async function POST(request: NextRequest) {
       // Site facturé quand le client est une structure à plusieurs services
       // (une collectivité qui règle pour plusieurs centres de loisirs).
       serviceFacture,
-      items = [], totalHT = 0, totalTVA = 0, totalTTC = 0,
+      items: itemsRecus = [], totalHT: totalHTRecu = 0, totalTVA: totalTVARecu = 0, totalTTC = 0,
       paidAmount = 0, paymentMode, paymentDate,
       paymentDetails, // [{ mode, modeLabel, montant, date }] — sinon reconstruit via paymentId
       paymentId,
@@ -145,6 +146,14 @@ export async function POST(request: NextRequest) {
       documentType, // "avoir" | "proforma" | "devis" ; déduit du préfixe sinon
       validUntil, // devis : fin de validité, jj/mm/aaaa
     } = body;
+
+    // Lignes ramenées au total de la facture (lib/lignes-facture) : la 1re
+    // échéance d'un forfait en 3× portait les lignes du forfait entier, d'où
+    // un HT plus grand que le TTC et une TVA négative sur le PDF.
+    const lignes = lignesPourPdf({ totalTTC, items: Array.isArray(itemsRecus) ? itemsRecus : [], totalHT: totalHTRecu, totalTVA: totalTVARecu });
+    const items: any[] = lignes.items;
+    const totalHT = lignes.totalHT;
+    const totalTVA = lignes.totalTVA;
 
     // Le titre était écrit en dur : un avoir comme un devis proforma
     // s'imprimaient tous deux « FACTURE ». Un avoir annule une vente, un
@@ -367,6 +376,11 @@ export async function POST(request: NextRequest) {
             React.createElement(Text, { style: s.totTTCVal }, `${(totalTTC || 0).toFixed(2)} €`),
           ),
         ),
+
+        lignes.totalLignesOrigine !== null
+          ? React.createElement(Text, { style: s.mentionTVA },
+              `Montants des lignes répartis au prorata du montant de ce document (prestations au total : ${lignes.totalLignesOrigine.toFixed(2)} €, réglées en plusieurs fois).`)
+          : null,
 
         // ── Non applicable TVA ───────────────────────────────────────────
         !isTVAApplicable

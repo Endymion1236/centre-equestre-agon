@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { ecartLignes, lignesAuTotal } from "../../src/lib/lignes-facture";
+import { ecartLignes, lignesAuTotal, lignesPourPdf } from "../../src/lib/lignes-facture";
 import { aplatirLignesFactures, facturesEnEcart, resumerExportCa } from "../../src/app/admin/comptabilite/export-ca/export-ca-utils";
 import { ventiler, NON_VENTILE } from "../../src/lib/ventilation-comptable";
 
@@ -61,6 +61,33 @@ test("export du CA : ventilation = total des factures, écart nul ; la facture e
   assert.equal(liste.length, 1);
   assert.ok(liste[0].cause.includes("1re échéance"), liste[0].cause);
   assert.equal(liste[0].lignesTTC, 699);
+});
+
+test("PDF de la 1re échéance d'un forfait en 3× : lignes au prorata, TVA positive, libellés gardés", () => {
+  // Cas de Rachel TREBERT (F-2026-0222) : 60 + 40 + 610 = 710 € de lignes pour 236,67 €.
+  const facture = {
+    totalTTC: 236.67, totalHT: 675.07, totalTVA: -438.4,
+    items: [
+      { label: "Adhésion annuelle (enfant 1)", priceHT: 56.87, tva: 5.5, priceTTC: 60 },
+      { label: "Licence FFE +18ans", priceHT: 40, tva: 0, priceTTC: 40 },
+      { label: "Forfait Adultes G1 à G4", priceHT: 578.2, tva: 5.5, priceTTC: 610 },
+    ],
+  };
+  const r = lignesPourPdf(facture);
+  assert.equal(Math.round(r.items.reduce((s, l) => s + l.priceTTC, 0) * 100) / 100, 236.67);
+  assert.deepEqual(r.items.map((l) => l.priceTTC), [20, 13.33, 203.34]);
+  assert.equal(r.items[0].activityTitle, "Adhésion annuelle (enfant 1)");
+  assert.equal(r.items[1].priceHT, 13.33, "la licence reste à 0 %");
+  assert.ok(r.totalTVA > 0 && r.totalTVA < 12, `TVA ${r.totalTVA}`);
+  assert.equal(Math.round((r.totalHT + r.totalTVA) * 100) / 100, 236.67);
+  assert.equal(r.totalLignesOrigine, 710);
+});
+
+test("PDF d'une facture ordinaire : totaux transmis gardés, pas de mention de prorata", () => {
+  const r = lignesPourPdf({ totalTTC: 60, totalHT: 56.87, totalTVA: 3.13, items: [{ activityTitle: "Adhésion", priceHT: 56.87, tva: 5.5, priceTTC: 60 }] });
+  assert.equal(r.totalHT, 56.87);
+  assert.equal(r.totalTVA, 3.13);
+  assert.equal(r.totalLignesOrigine, null);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
