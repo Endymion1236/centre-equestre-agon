@@ -225,9 +225,9 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
   } = ctx;
 
   // Créneau sur demande sans formule : le prix n'est pas connu. La formule se
-  // fixe d'abord dans la fenêtre du créneau (⚙️), puis on inscrit.
+  // choisit d'abord en haut du panneau (ChoixFormuleSurDemande), puis on inscrit.
   if (estSurDemande(creneau) && !formuleDuCreneau(creneau)) {
-    panelToast("Créneau sur demande : choisis d'abord la formule (anniversaire ou cours particulier) dans les réglages du créneau ⚙️, puis inscris.", "error");
+    panelToast("Créneau sur demande : choisis d'abord la formule (anniversaire ou cours particulier) en haut de « Inscrire », puis inscris.", "error");
     return;
   }
 

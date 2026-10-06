@@ -41,6 +41,8 @@ import { FormulaireAjoutCavalier } from "./FormulaireAjoutCavalier";
 import { PanneauJoursSupplementaires } from "./PanneauJoursSupplementaires";
 import { ModaleChangerGroupe } from "./ModaleChangerGroupe";
 import * as actions from "./enroll-panel-actions";
+import { ChoixFormuleSurDemande } from "./ChoixFormuleSurDemande";
+import { estSurDemande } from "@/lib/creneau-sur-demande";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
   libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche,
@@ -1109,6 +1111,10 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             setInscriptionFaite={setInscriptionFaite} rechargerToken={rechargerAttente} />
 
           {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
+            {/* Créneau sur demande : la formule se choisit ici (rien pour un cours ordinaire) */}
+            <ChoixFormuleSurDemande creneau={creneau}
+              onChoisir={(id) => actions.choisirFormuleSurDemande(ctxActions(), rappelsActions(), id)}
+              onRendre={() => actions.rendreFormuleAuChoix(ctxActions(), rappelsActions())} />
             {/* Recherche famille */}
             <div className="relative"><Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/><input value={search} onChange={e=>{setSearch(e.target.value);setSelFam("");setSelChild("");setInscriptionFaite(false);}} placeholder="Nom parent, prénom enfant, email..." className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/></div>
             <select value={selFam} onChange={e=>{setSelFam(e.target.value);setSelChild("");}} className="w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream"><option value="">Famille ({filteredFamilies.length})</option>{filteredFamilies.map(f=>{const n=(f.children||[]).map((c:any)=>c.firstName).join(", ");return<option key={f.firestoreId} value={f.firestoreId}>{f.parentName} {n?`(${n})`:""}</option>})}</select>
@@ -1584,7 +1590,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className={`grid gap-2 ${estSurDemande(creneau) ? "grid-cols-1" : "grid-cols-2"}`}>
                   <button onClick={() => setInscriptionMode("ponctuel")}
                     className={`p-3 rounded-lg border-2 text-left cursor-pointer transition-all ${inscriptionMode === "ponctuel" ? "border-gold-400 bg-gold-50" : "border-gray-200 bg-white"}`}>
                     <div className="font-body text-sm font-semibold text-blue-800">Séance ponctuelle</div>
@@ -1600,7 +1606,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                       </>
                     )}
                   </button>
-                  <button onClick={() => {
+                  {/* Pas de forfait à l'année sur un créneau sur demande */}
+                  {!estSurDemande(creneau) && <button onClick={() => {
                     setInscriptionMode("annuel");
                     // Le mode annuel ne supporte qu'un enfant à la fois : on garde le premier sélectionné
                     if (selectedChildren.length > 1) {
@@ -1620,7 +1627,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         {prorata < 1 && <div className="font-body text-[10px] text-orange-500 mt-0.5">Prorata : {Math.round(prorata * 100)}% du tarif annuel</div>}
                       </>
                     )}
-                  </button>
+                  </button>}
                 </div>
 
                 {/* Inscription Établissement : disponible même sans prix de séance.

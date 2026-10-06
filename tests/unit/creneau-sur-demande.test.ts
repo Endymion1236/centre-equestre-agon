@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  champsEditionSurDemande, champsFixationFormule, champsSurDemandeApresRetrait, creneauAvecFormule, deciderInscriptionSurDemande,
+  champsChoixFormuleAdmin, champsEditionSurDemande, champsFixationFormule, champsRetourAuChoix, champsSurDemandeApresRetrait, creneauAvecFormule, deciderInscriptionSurDemande,
   formuleDuCreneau, formulesProposees, nettoyerFormules, placesSurDemande, privatisePourAutreFamille, titreSurDemande,
   type FormuleSurDemande,
 } from "../../src/lib/creneau-sur-demande";
@@ -100,6 +100,24 @@ test("formule fixée par le club, famille inscrite au planning : une autre famil
   assert.equal(deciderInscriptionSurDemande(c, undefined, "famB", false).ok, false);
   assert.equal(privatisePourAutreFamille(c, "famB"), true);
   assert.equal(privatisePourAutreFamille(c, "famX"), false);
+});
+
+test("planning : le club choisit la formule depuis le panneau, et peut revenir au choix tant que personne n'est inscrit", () => {
+  const champs = champsChoixFormuleAdmin(libre(), "anniversaire", "t")!;
+  assert.equal(champs.activityTitle, "Anniversaire");
+  assert.equal(champs.priceTTC, 180);
+  assert.equal(champs.formuleFamilyId, undefined, "la famille sera celle que le club inscrit");
+  assert.equal(champs.formuleForcee, undefined, "pas forcée : le créneau vidé redevient libre");
+  assert.equal(champsChoixFormuleAdmin(libre(), "poney-game", "t"), null);
+  assert.equal(champsChoixFormuleAdmin({ activityTitle: "Cours" }, "anniversaire", "t"), null);
+  const fixe = { ...libre(), ...champs } as any;
+  const retour = champsRetourAuChoix(fixe)!;
+  assert.equal(retour.activityTitle, "Créneau sur demande");
+  assert.equal(retour.formuleChoisie, null);
+  assert.equal(champsRetourAuChoix({ ...fixe, enrolled: [{ familyId: "famA" }] }), null, "déjà un inscrit : on ne change plus");
+  const force = { ...libre(), ...champsEditionSurDemande(libre(), [anniv, cours], "cours-particulier", "t") } as any;
+  assert.equal(champsRetourAuChoix(force)!.formuleForcee, false);
+  assert.equal(champsRetourAuChoix(force)!.formuleChoisie, null);
 });
 
 console.log(`\n${process.exitCode ? "❌" : "✅"} ${passes} tests passés`);

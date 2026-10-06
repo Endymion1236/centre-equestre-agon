@@ -14,6 +14,7 @@ import { authFetch } from "@/lib/auth-fetch";
 import { annulerMinuterieConfirmation } from "./minuteries-confirmation";
 import { createReservation, removeChildFromCreneau, deleteReservations } from "@/lib/planning-services";
 import type { Creneau, EnrolledChild } from "./types";
+import { champsChoixFormuleAdmin, champsRetourAuChoix } from "@/lib/creneau-sur-demande";
 
 export interface ContexteActions {
   creneau: Creneau & { id: string };
@@ -462,5 +463,33 @@ export async function envoyerProgressionA(ctx: ContexteActions, rappels: Rappels
     return { ok: true };
   } catch {
     return { ok: false, reason: "erreur réseau" };
+  }
+}
+
+/**
+ * Créneau sur demande : le club choisit la formule depuis le panneau
+ * (réservation au téléphone). Le créneau prend titre, prix et places ; le
+ * panneau, rafraîchi, inscrit ensuite comme un cours ordinaire.
+ */
+export async function choisirFormuleSurDemande(ctx: ContexteActions, rappels: RappelsActions, formuleId: string) {
+  const champs = champsChoixFormuleAdmin(ctx.creneau as any, formuleId, new Date().toISOString());
+  if (!champs) { rappels.panelToast("Formule indisponible sur ce créneau : vérifie son prix dans les réglages ⚙️.", "error"); return; }
+  try {
+    await updateDoc(doc(db, "creneaux", ctx.creneau.id), champs);
+    await rappels.onRefresh?.();
+  } catch (e: any) {
+    rappels.panelToast(`Formule non enregistrée : ${e?.message || e}`, "error");
+  }
+}
+
+/** Revenir au choix des formules, tant que personne n'est inscrit. */
+export async function rendreFormuleAuChoix(ctx: ContexteActions, rappels: RappelsActions) {
+  const champs = champsRetourAuChoix(ctx.creneau as any);
+  if (!champs) { rappels.panelToast("Un cavalier est déjà inscrit : la formule ne se change plus.", "warning"); return; }
+  try {
+    await updateDoc(doc(db, "creneaux", ctx.creneau.id), champs);
+    await rappels.onRefresh?.();
+  } catch (e: any) {
+    rappels.panelToast(`Changement non enregistré : ${e?.message || e}`, "error");
   }
 }

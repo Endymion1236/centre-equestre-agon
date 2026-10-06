@@ -227,3 +227,22 @@ export function champsEditionSurDemande(
   if (c.formuleChoisie) return base;
   return { ...base, maxPlaces: placesSurDemande(formules) };
 }
+
+/**
+ * Le club choisit la formule depuis le panneau d'inscription du planning
+ * (réservation au téléphone), sans passer par les réglages du créneau. Fixée
+ * comme par une famille (non « forcée ») : si le créneau se vide, il
+ * redevient libre. null si la formule n'est pas proposée.
+ */
+export function champsChoixFormuleAdmin(c: CreneauSurDemande, formuleId: unknown, quand: string): Record<string, unknown> | null {
+  if (!estSurDemande(c)) return null;
+  const f = formulesProposees(c).find((x) => x.id === formuleId);
+  return f ? champsFixationFormule(c, f, null, quand) : null;
+}
+
+/** Revenir au choix des formules : seulement tant que personne n'est inscrit. */
+export function champsRetourAuChoix(c: CreneauSurDemande): Record<string, unknown> | null {
+  if (!estSurDemande(c) || (c.enrolled || []).length > 0 || !c.formuleChoisie) return null;
+  if (c.formuleForcee) return { formuleForcee: false, ...champsSurDemandeApresRetrait({ ...c, formuleForcee: false }, []) };
+  return champsSurDemandeApresRetrait(c, []);
+}
