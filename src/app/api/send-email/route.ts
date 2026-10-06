@@ -6,6 +6,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, isEmailRestricted, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { adminDb } from "@/lib/firebase-admin";
 import { REPLY_TO } from "@/lib/email-reply-to";
+import { nettoyerDestinataires } from "@/lib/destinataires-email";
 import { estMarketing, estDesabonne, piedDesabonnement } from "@/lib/desabonnement";
 
 // Emails du personnel (moniteurs / salariés) : TOUJOURS autorisés, même en mode
@@ -119,10 +120,9 @@ export async function POST(request: NextRequest) {
     }
 
     // to peut être un string ou un tableau
-    const recipients = Array.isArray(to) ? to : [to];
-    const validRecipients = recipients.filter(
-      (email: string) => email && email.includes("@")
-    );
+    // Adresses nettoyées : un caractère invisible venu d'un copier-coller
+    // faisait refuser tout le message par Resend (lib/destinataires-email).
+    const validRecipients = nettoyerDestinataires(to);
 
     // 🔒 Garde-fou phase de préparation : en mode restreint, on ne garde que
     //    les destinataires autorisés (admins / compte test / EMAIL_ALLOWLIST)
