@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/destinataires-email.test.ts
  */
 import assert from "node:assert/strict";
-import { nettoyerAdresse, nettoyerDestinataires } from "../../src/lib/destinataires-email";
+import { adressesRejetees, motifAdresseInvalide, nettoyerAdresse, nettoyerDestinataires } from "../../src/lib/destinataires-email";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -39,6 +39,15 @@ test("ce qui n'est pas une adresse est écarté", () => {
   assert.deepEqual(nettoyerDestinataires("catherine@"), []);
   assert.deepEqual(nettoyerDestinataires("pas d'email"), []);
   assert.deepEqual(nettoyerDestinataires("a@b"), [], "domaine sans extension");
+});
+
+test("adresse sans « .fr » : écartée, et l'admin sait laquelle corriger", () => {
+  const a = "ce.0501261z@ac-normandie";
+  assert.deepEqual(nettoyerDestinataires(a), []);
+  assert.deepEqual(adressesRejetees(a), [a]);
+  assert.match(motifAdresseInvalide(a), /il manque la fin de l'adresse après « ac-normandie »/);
+  assert.deepEqual(adressesRejetees(`${C}; ${a}`), [a], "seule la mauvaise est signalée");
+  assert.match(motifAdresseInvalide("catherine"), /pas de @/);
 });
 
 console.log(`\n${process.exitCode ? "❌" : "✅"} ${passes} tests passés`);

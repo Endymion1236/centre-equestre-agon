@@ -6,7 +6,7 @@ import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, isEmailRestricted, blockedLog, refreshEmailMode } from "@/lib/email-guard";
 import { adminDb } from "@/lib/firebase-admin";
 import { REPLY_TO } from "@/lib/email-reply-to";
-import { nettoyerDestinataires } from "@/lib/destinataires-email";
+import { adressesRejetees, motifAdresseInvalide, nettoyerDestinataires } from "@/lib/destinataires-email";
 import { estMarketing, estDesabonne, piedDesabonnement } from "@/lib/desabonnement";
 
 // Emails du personnel (moniteurs / salariés) : TOUJOURS autorisés, même en mode
@@ -123,6 +123,20 @@ export async function POST(request: NextRequest) {
     // Adresses nettoyées : un caractère invisible venu d'un copier-coller
     // faisait refuser tout le message par Resend (lib/destinataires-email).
     const validRecipients = nettoyerDestinataires(to);
+    // Aucune adresse utilisable : on le dit AVANT le filtre du mode restreint,
+    // qui annonçait sinon « Bloqué par le mode restreint » pour une adresse
+    // simplement incomplète (« …@ac-normandie » sans « .fr », octobre 2026).
+    if (validRecipients.length === 0) {
+      const rejetees = adressesRejetees(to);
+      const motif = rejetees.length ? `Adresse email invalide : ${rejetees.map(motifAdresseInvalide).join(" ; ")}. Corrigez-la sur la fiche du client.` : "Aucun destinataire valide";
+      await logEmail({
+        to: rejetees.join(", ") || String(to), subject,
+        context: logContext, template: logTemplate,
+        status: "failed", error: motif,
+        sentBy, ...logMeta,
+      });
+      return NextResponse.json({ error: motif }, { status: 400 });
+    }
 
     // 🔒 Garde-fou phase de préparation : en mode restreint, on ne garde que
     //    les destinataires autorisés (admins / compte test / EMAIL_ALLOWLIST)

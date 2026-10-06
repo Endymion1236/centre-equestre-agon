@@ -45,3 +45,24 @@ export function nettoyerDestinataires(to: unknown): string[] {
   }
   return sortie;
 }
+
+/**
+ * Ce qui a été écarté, tel que saisi : pour dire à l'admin QUELLE adresse
+ * corriger (« ce.0501261z@ac-normandie » : il manque le « .fr »).
+ */
+export function adressesRejetees(to: unknown): string[] {
+  const brutes = (Array.isArray(to) ? to : [to]).flatMap((t) => String(t ?? "").split(/[,;\n\r]+/));
+  return brutes
+    .map((b) => b.replace(INVISIBLES, " ").trim())
+    .filter((b) => b && nettoyerDestinataires(b).length === 0);
+}
+
+/** Message lisible pour une adresse refusée. */
+export function motifAdresseInvalide(adresse: string): string {
+  const a = adresse.trim();
+  if (!a.includes("@")) return `« ${a} » n'est pas une adresse email (pas de @)`;
+  const domaine = a.split("@").pop() || "";
+  if (!domaine) return `« ${a} » : rien après le @`;
+  if (!domaine.includes(".")) return `« ${a} » : il manque la fin de l'adresse après « ${domaine} » (.fr, .com…)`;
+  return `« ${a} » n'est pas une adresse email valide`;
+}

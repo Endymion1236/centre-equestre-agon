@@ -327,14 +327,19 @@ export default function DevisPage() {
   const handleSend = async (d: Devis) => {
     // Devis enregistré avant que le site ait ses coordonnées : on relit la
     // fiche au moment de l'envoi plutôt que de refuser.
-    if (!d.familyEmail) {
+    // L'adresse de la fiche (ou du site facturé) au moment de l'envoi prime
+    // sur celle copiée dans le devis à sa création : une adresse corrigée
+    // sur la fiche partait sinon encore à l'ancienne, incomplète
+    // (« …@ac-normandie » sans « .fr », octobre 2026).
+    {
       const fiche = families.find(f => f.firestoreId === d.familyId);
-      const repli = coordonneesFacturation(fiche as any, serviceParNom((fiche as any)?.services, d.serviceFacture)).email;
-      if (!repli) {
+      const actuelle = fiche ? coordonneesFacturation(fiche as any, serviceParNom((fiche as any)?.services, d.serviceFacture)).email : "";
+      const email = actuelle || d.familyEmail;
+      if (!email) {
         alert("Aucune adresse email : ni sur la fiche du client, ni sur le site facturé.\nRenseignez-la dans Cavaliers, puis réessayez.");
         return;
       }
-      d = { ...d, familyEmail: repli };
+      d = { ...d, familyEmail: email };
     }
     setSendingId(d.id!);
     try {
@@ -420,9 +425,12 @@ export default function DevisPage() {
         }),
       });
       // Un refus du serveur passait inaperçu : le devis était marqué « envoyé ».
-      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || `erreur ${res.status}`);
+      const reponse = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(reponse?.error || `erreur ${res.status}`);
+      // Envoi écarté par le serveur (mode restreint) : rien n'est parti.
+      if (reponse?.skipped) throw new Error(`email non parti (${reponse.reason || reponse.skipped}) — le devis reste à envoyer`);
 
-      await updateDoc(doc(db, "devis", d.id!), { status: "sent", sentAt: serverTimestamp(), familyName: nomEnvoi, modifieApresEnvoi: false });
+      await updateDoc(doc(db, "devis", d.id!), { status: "sent", sentAt: serverTimestamp(), familyName: nomEnvoi, familyEmail: d.familyEmail, modifieApresEnvoi: false });
       await fetchData();
     } catch (e: any) { console.error(e); alert(`Erreur envoi email : ${e?.message || e}`); }
     setSendingId(null);
