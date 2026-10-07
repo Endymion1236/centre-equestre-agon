@@ -24,7 +24,7 @@ import {
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
 import { Loader2, Trash2, Search } from "lucide-react";
-import { sameStage } from "./types";
+import { ageCavalier, sameStage } from "./types";
 import {
   emailLayout, emailTitre, emailButton, emailPanneau, emailLigne,
   emailParagraphe as P, emailSignature,
@@ -248,8 +248,18 @@ export default function PanneauListeAttente({
               <div className="font-body text-sm font-semibold text-blue-800">
                 <span className="text-orange-400 mr-1.5">#{i + 1}</span>
                 {entry.childName}
+                {/* Âge et lien vers la fiche, demandés par Nicolas (octobre 2026) :
+                    même calcul d'âge que la liste des inscrits. */}
+                {(() => { const age = ageCavalier(entry, allFamilies); return age.label
+                  ? <span className="ml-2 font-body text-[11px] font-normal text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">{age.label}</span>
+                  : null; })()}
               </div>
-              <div className="font-body text-xs text-slate-500">{entry.familyName}</div>
+              <a href={entry.familyId
+                  ? `/admin/cavaliers?id=${encodeURIComponent(entry.familyId)}`
+                  : `/admin/cavaliers?search=${encodeURIComponent(entry.familyName || entry.childName || "")}`}
+                target="_blank" rel="noopener noreferrer"
+                title="Ouvrir la fiche famille dans un nouvel onglet"
+                className="font-body text-xs text-blue-600 underline hover:text-blue-800">{entry.familyName || "Fiche famille"}</a>
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button type="button"
