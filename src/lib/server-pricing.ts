@@ -1,3 +1,4 @@
+import { memeStage } from "@/lib/meme-stage";
 // ═══════════════════════════════════════════════════════════════════
 // src/lib/server-pricing.ts — Vérification serveur des prix (autoritaire)
 // ═══════════════════════════════════════════════════════════════════
@@ -96,15 +97,9 @@ function addDaysStr(dateStr: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Réplique locale de sameStage (admin/planning/types.ts) — pure, pas d'import
-// cross-module pour rester autonome côté serveur.
-function sameStageServer(a: any, b: any): boolean {
-  if (!a || !b) return false;
-  if (a.stageGroupId && b.stageGroupId) return a.stageGroupId === b.stageGroupId;
-  if (a.activityId && b.activityId)
-    return a.activityId === b.activityId && a.activityTitle === b.activityTitle;
-  return a.activityTitle === b.activityTitle && a.startTime === b.startTime;
-}
+// Même règle que partout ailleurs (lib/meme-stage, pure) : la copie locale
+// avait divergé — ni barrière de semaine, ni horaire dans le repli.
+const sameStageServer = memeStage;
 
 // ─── Vérification principale ────────────────────────────────────────
 

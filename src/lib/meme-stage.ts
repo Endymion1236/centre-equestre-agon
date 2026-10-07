@@ -46,7 +46,11 @@ export function memeStage(a: any, b: any): boolean {
   // Priorité 1 : identifiant de lot explicite (stages créés ensemble)
   if (a.stageGroupId && b.stageGroupId) return a.stageGroupId === b.stageGroupId;
   // Priorité 2 : même activité + même titre (stages depuis la même activité)
-  if (a.activityId && b.activityId) return a.activityId === b.activityId && a.activityTitle === b.activityTitle;
+  // ET même horaire. Octobre 2026 : Nicolas ouvre un second « Stage Premier
+  // sabot » à 16 h 30 à côté de celui de 10 h. Si l'un des deux n'a pas de
+  // `stageGroupId` (créneau ancien ou créé à l'unité), le repli sans horaire
+  // les confondait — la désinscription de l'un emportait l'autre.
+  if (a.activityId && b.activityId) return a.activityId === b.activityId && a.activityTitle === b.activityTitle && a.startTime === b.startTime;
   // Priorité 3 (repli) : ni l'un ni l'autre n'a d'identifiant fiable
   // (stages anciens ou créés jour par jour à la main) → titre + horaire.
   return a.activityTitle === b.activityTitle && a.startTime === b.startTime;

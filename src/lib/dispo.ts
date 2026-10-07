@@ -187,7 +187,7 @@ export async function calculerDisponibilites(
         ...(niveauPromenade ? { niveauPromenade } : {}),
         moniteur: c.monitor || "",
         // Clé de regroupement semaine (même logique que la page réservation famille)
-        stageKey: (c.stageGroupId || c.activityId || "") + "",
+        stageKey: (c.stageGroupId || (c.activityId ? `${c.activityId}_${c.startTime || ""}` : "")) + "",
         // Prix admin par nombre de jours (prioritaires en mode jours)
         pricePerCount: {
           1: typeof c.price1day === "number" && c.price1day > 0 ? c.price1day : null,

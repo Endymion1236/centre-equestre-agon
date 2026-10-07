@@ -254,7 +254,7 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
   if (isStage(creneau)) {
     const d = new Date(creneau.date);
     const lundi = new Date(d); lundi.setDate(lundi.getDate() - ((d.getDay() + 6) % 7));
-    const cle = `${(creneau as any).stageGroupId || creneau.activityId}_${fmtDate(lundi)}`;
+    const cle = `${(creneau as any).stageGroupId || `${creneau.activityId}_${creneau.startTime}`}_${fmtDate(lundi)}`;
     const jours = (stageGroups[cle] || [creneau]).slice().sort((a, b) => a.date.localeCompare(b.date));
     ajouterStageAuPanier(ctx, rappels, jours, undefined, undefined, [childId]);
     return;

@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
         date: c.date,
         horaire: [c.startTime, c.endTime].filter(Boolean).join("-"),
         places,
-        stageKey: (c.stageGroupId || c.activityId || "") + "",
+        stageKey: (c.stageGroupId || (c.activityId ? `${c.activityId}_${c.startTime || ""}` : "")) + "",
       });
     });
 

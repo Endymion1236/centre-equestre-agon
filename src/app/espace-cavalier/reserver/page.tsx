@@ -334,8 +334,9 @@ export default function ReserverPage() {
       const mon = new Date(d); mon.setDate(mon.getDate() - ((d.getDay() + 6) % 7));
       // Clé = stageGroupId (lot de création, fiable à 100%) avec fallback
       // activityId pour les stages antérieurs à ce champ. Deux stages
-      // homonymes — même créés depuis la même activité — restent distincts.
-      const key = `${(c as any).stageGroupId || c.activityId}_${fmtDate(mon)}`;
+      // homonymes — même créés depuis la même activité — restent distincts ;
+      // sans identifiant, l'horaire les sépare (10 h et 16 h 30, octobre 2026).
+      const key = `${(c as any).stageGroupId || `${c.activityId}_${c.startTime}`}_${fmtDate(mon)}`;
       if (!groups[key]) groups[key] = [];
       groups[key].push(c);
     });
