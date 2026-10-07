@@ -25,6 +25,7 @@ import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
 import { Loader2, Trash2, Search } from "lucide-react";
 import { ageCavalier, sameStage } from "./types";
+import { PropositionAutreHoraire } from "./PropositionAutreHoraire";
 import {
   emailLayout, emailTitre, emailButton, emailPanneau, emailLigne,
   emailParagraphe as P, emailSignature,
@@ -242,6 +243,9 @@ export default function PanneauListeAttente({
           <span className="font-body text-xs font-semibold text-orange-700">🔔 Liste d'attente ({waitlist.length})</span>
           {spots > 0 && <span className="font-body text-[10px] text-green-600 bg-green-50 px-2 py-0.5 rounded">Place disponible !</span>}
         </div>
+        {/* Autre horaire du même créneau ouvert la même semaine : prévenir les familles */}
+        <PropositionAutreHoraire creneau={creneau} allCreneaux={allCreneaux} allFamilies={allFamilies}
+          waitlist={waitlist} onEnvoye={chargerWaitlist} panelToast={panelToast} />
         {waitlist.map((entry: any, i: number) => (
           <div key={entry.id} className="flex items-center justify-between px-4 py-2.5 border-t border-orange-100">
             <div>
@@ -260,6 +264,9 @@ export default function PanneauListeAttente({
                 target="_blank" rel="noopener noreferrer"
                 title="Ouvrir la fiche famille dans un nouvel onglet"
                 className="font-body text-xs text-blue-600 underline hover:text-blue-800">{entry.familyName || "Fiche famille"}</a>
+              {(entry.alternativesProposees || []).length > 0 && (
+                <div className="font-body text-[10px] text-green-700">✉️ Autre horaire proposé{entry.alternativeProposeeLe ? ` le ${new Date(entry.alternativeProposeeLe).toLocaleDateString("fr-FR")}` : ""}</div>
+              )}
             </div>
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button type="button"
