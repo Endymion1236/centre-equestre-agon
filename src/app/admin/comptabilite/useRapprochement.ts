@@ -66,6 +66,9 @@ export function useRapprochement({
   payments, remises, remisesSepa, encaissementsCompta, period, fetchData,
 }: DonneesRapprochement) {
   const [bankLines, setBankLines] = useState<LigneBancaire[]>([]);
+  // Mois dont le relevé enregistré est chargé : un import lancé avant
+  // s'appuierait sur les lignes d'un autre mois.
+  const [periodeChargee, setPeriodeChargee] = useState("");
 
   // ─────────────────────────────────────────────────────────────────────────
   //  encaisserPaiementsPointes : une facture en attente pointée sur une ligne
@@ -477,12 +480,11 @@ export function useRapprochement({
       console.error("[sync-versements] Erreur:", e);
     }
   };
-  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const raw = ev.target?.result as string;
+  // Lecture d'un relevé déjà décodé : depuis le fichier choisi ici, ou depuis
+  // le CSV importé dans Dépenses (le même export bancaire sert aux deux
+  // écrans, octobre 2026). Renvoie le nombre de lignes lues, null si
+  // l'import a été abandonné.
+  const importerCsvTexte = async (raw: string): Promise<number | null> => {
 
       // ─────────────────────────────────────────────────────────────────────
       //  Garde-fou : detection de la periode reellement contenue dans le CSV
@@ -507,10 +509,7 @@ export function useRapprochement({
             `(intervalle inverse, dates futures, etc.).\n\n` +
             `Continuer quand meme l'import ?`,
           );
-          if (!ok) {
-            e.target.value = "";
-            return;
-          }
+          if (!ok) return null;
         } else {
           console.log(`📅 CSV : ${startStr} → ${endStr} (${nbJours} jours)`);
         }
@@ -691,6 +690,17 @@ export function useRapprochement({
         // Synchroniser les versements bancaires (sorties du livre de caisse)
         await syncVersementsEspeces(moisComplet);
       } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
+      return parsed.length;
+  };
+
+  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const input = e.target;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const lues = await importerCsvTexte(ev.target?.result as string);
+      if (lues === null) input.value = "";
     };
     reader.readAsText(file, "ISO-8859-1"); // Encodage Crédit Agricole = Latin1
   };
@@ -713,6 +723,7 @@ export function useRapprochement({
           setBankLines([]);
         }
       } catch { setBankLines([]); }
+      setPeriodeChargee(period);
     })();
   }, [period]);
 
@@ -745,6 +756,8 @@ export function useRapprochement({
   return {
     bankLines, setBankLines,
     handleCSVImport,
+    importerCsvTexte,
+    periodeChargee,
     relancerRapprochement,
     updateAndSaveBankLines,
     saveBankLinesByMonth,

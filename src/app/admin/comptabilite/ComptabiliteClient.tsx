@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { collection, getDocs, query, orderBy } from "firebase/firestore";
@@ -14,6 +14,7 @@ import PanneauxDebug from "./PanneauxDebug";
 import OngletRemise from "./OngletRemise";
 import { useRapprochement } from "./useRapprochement";
 import OngletRapprochement from "./OngletRapprochement";
+import { CLE_RELEVE_A_RAPPROCHER, deballerReleve } from "./releve-partage";
 import { modeLabels } from "./libelles-modes";
 import { collecteeEncaissementsParMois } from "@/lib/declaration-tva";
 import EncartTvaAPayer from "./EncartTvaAPayer";
@@ -96,20 +97,27 @@ export default function ComptabilitePage() {
   const [encaissementsCompta, setEncaissementsCompta] = useState<any[]>([]);
   const [remisesSepa, setRemisesSepa] = useState<any[]>([]);
 
+  // Lectures terminées (paiements, remises, encaissements, remises SEPA) :
+  // le rapprochement d'un relevé venu de Dépenses attend les quatre.
+  const [lecturesFaites, setLecturesFaites] = useState(0);
+  const lectureFaite = () => setLecturesFaites(n => n + 1);
   const fetchData = () => {
     getDocs(query(collection(db, "payments"), orderBy("date", "desc")))
       .then((snap) => setPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Payment[]))
       .catch(() => {
         getDocs(collection(db, "payments")).then((snap) => setPayments(snap.docs.map((d) => ({ id: d.id, ...d.data() })) as Payment[]));
       })
-      .finally(() => setLoading(false));
+      .finally(() => { setLoading(false); lectureFaite(); });
     getDocs(collection(db, "remises"))
-      .then((snap) => setRemises(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+      .then((snap) => setRemises(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+      .finally(lectureFaite);
     getDocs(collection(db, "encaissements"))
-      .then((snap) => setEncaissementsCompta(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+      .then((snap) => setEncaissementsCompta(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+      .finally(lectureFaite);
     getDocs(collection(db, "remises-sepa"))
       .then((snap) => setRemisesSepa(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(lectureFaite);
   };
 
   useEffect(() => { fetchData(); }, []);
@@ -119,7 +127,35 @@ export default function ComptabilitePage() {
   const {
     bankLines, setBankLines,
     handleCSVImport, relancerRapprochement, updateAndSaveBankLines, syncVersementsEspeces, saveBankLinesByMonth,
+    importerCsvTexte, periodeChargee,
   } = useRapprochement({ payments, remises, remisesSepa, encaissementsCompta, period, fetchData });
+
+  // Relevé passé depuis Dépenses (?releve=depenses) : le même export
+  // bancaire, dont on rapproche ici les recettes (releve-partage.ts). On
+  // attend les données et le relevé enregistré du bon mois, puis on le lit
+  // une seule fois.
+  const [releveVenu, setReleveVenu] = useState<{ etat: "attente" | "fait" | "absent"; message?: string } | null>(
+    () => (searchParams?.get("releve") === "depenses" ? { etat: "attente" } : null),
+  );
+  const releveEnCours = useRef(false);
+  useEffect(() => {
+    if (releveVenu?.etat !== "attente" || releveEnCours.current || lecturesFaites < 4) return;
+    let brut: string | null = null;
+    try { brut = localStorage.getItem(CLE_RELEVE_A_RAPPROCHER); } catch { /* stockage bloqué */ }
+    const releve = deballerReleve(brut);
+    if (!releve) { setReleveVenu({ etat: "absent" }); return; }
+    if (period !== releve.mois) { setPeriod(releve.mois); return; }
+    if (periodeChargee !== releve.mois) return;
+    releveEnCours.current = true;
+    try { localStorage.removeItem(CLE_RELEVE_A_RAPPROCHER); } catch { /* rien */ }
+    importerCsvTexte(releve.texte)
+      .then((n) => setReleveVenu(n === null
+        ? { etat: "fait", message: "Import du relevé abandonné." }
+        : { etat: "fait", message: `${n} recette${n > 1 ? "s" : ""} du fichier ${releve.nom || "importé dans Dépenses"} lue${n > 1 ? "s" : ""} et rapprochée${n > 1 ? "s" : ""} automatiquement. Vérifiez les lignes restées à traiter.` }))
+      .catch((e) => setReleveVenu({ etat: "fait", message: `Lecture du relevé impossible : ${e?.message || e}` }))
+      .finally(() => { try { window.history.replaceState(null, "", "/admin/comptabilite?tab=rapprochement"); } catch { /* rien */ } });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [releveVenu, lecturesFaites, period, periodeChargee]);
 
   const filteredPayments = useMemo(
     () => filtrerFacturesPeriode(payments, period),
@@ -619,6 +655,13 @@ export default function ComptabilitePage() {
 
       {/* ─── Rapprochement bancaire ─── */}
       {/* ─── Rapprochement bancaire, pointage manuel et lignes ignorées ─── */}
+      {releveVenu && tab === "rapprochement" && (
+        <div className={`mb-4 rounded-lg border p-3 font-body text-sm ${releveVenu.etat === "absent" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-green-200 bg-green-50 text-green-900"}`}>
+          {releveVenu.etat === "attente" && <><Loader2 className="inline w-4 h-4 animate-spin mr-2" />Lecture des recettes du relevé importé dans Dépenses…</>}
+          {releveVenu.etat === "absent" && "Le relevé venu de Dépenses est introuvable ou date de plus d'une heure : relancez « Rapprocher les recettes » depuis Dépenses, ou importez le fichier ci-dessous."}
+          {releveVenu.etat === "fait" && <>{releveVenu.message} <button type="button" onClick={() => setReleveVenu(null)} className="ml-2 underline bg-transparent border-none cursor-pointer">Fermer</button></>}
+        </div>
+      )}
       <OngletRapprochement
         tab={tab} loading={loading} bankLines={bankLines}
         payments={payments} remises={remises} remisesSepa={remisesSepa} encaissementsCompta={encaissementsCompta}

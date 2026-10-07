@@ -6,6 +6,7 @@ import { COMPTES_BANQUE_DEPENSE } from "@/lib/banque-depense";
 import { compteBanque } from "@/lib/plan-comptable-achats";
 import { CATEGORIES_IMPORT, type OperationImport, type DecisionsImport, type DecisionImport } from "@/lib/import-bancaire";
 import type { ApercuImport } from "@/lib/import-bancaire-ecritures";
+import { CLE_RELEVE_A_RAPPROCHER, emballerReleve, resumeCreditsReleve } from "../releve-partage";
 
 export type ReleveAComparer = { empreinte: string; nom: string; compte: string; mois: string; operations: OperationImport[] };
 const euros = (n: number) => n.toLocaleString("fr-FR", { style: "currency", currency: "EUR" });
@@ -95,7 +96,8 @@ export default function ImportMouvementsBancaires({ pdf, onImported }: { pdf?: R
         <div className="grid gap-3 sm:grid-cols-2"><label>Début du relevé<input type="date" className={champ} value={debut} onChange={e => { setDebut(e.target.value); invalider(); }} /></label>
           <label>Fin du relevé<input type="date" className={champ} value={fin} onChange={e => { setFin(e.target.value); invalider(); }} /></label></div>
       </div>}
-      {!pdf && <p className="text-slate-600">Colonnes acceptées : Date, Libellé et Débit/Crédit, ou Montant signé. Les encaissements continuent de s’importer dans leur écran habituel. En fin de mois : <Link className="underline" href="/admin/comptabilite/tresorerie">importer le PDF dans Trésorerie</Link>.</p>}
+      {!pdf && <p className="text-slate-600">Colonnes acceptées : Date, Libellé et Débit/Crédit, ou Montant signé. En fin de mois : <Link className="underline" href="/admin/comptabilite/tresorerie">importer le PDF dans Trésorerie</Link>.</p>}
+      {!pdf && texte && <RecettesAuRapprochement texte={texte} nom={nom} />}
       <button type="button" disabled={!compte || (!pdf && !texte) || !!pdf && (!debut || !fin)} onClick={() => void comparer()} className="rounded bg-blue-900 px-4 py-2 text-white disabled:opacity-50">
         {busy ? "Traitement en cours…" : resultat ? "Actualiser le rapprochement" : pdf ? "Rapprocher les débits du PDF" : "Lire le CSV et comparer"}
       </button>
@@ -138,4 +140,23 @@ export default function ImportMouvementsBancaires({ pdf, onImported }: { pdf?: R
   </div>;
   return pdf ? <section className="rounded-lg border border-blue-200 bg-white p-4"><h3 className="font-semibold">Rapprocher le relevé de fin de mois</h3>{contenu}</section>
     : <details className="rounded-lg border bg-white p-4"><summary className="cursor-pointer font-semibold">Importer des mouvements bancaires CSV</summary>{contenu}</details>;
+}
+
+/**
+ * Le même fichier contient les recettes (remises carte, chèques, virements,
+ * prélèvements SEPA) : un clic les passe au rapprochement bancaire, sans
+ * réimporter le fichier là-bas (releve-partage.ts).
+ */
+function RecettesAuRapprochement({ texte, nom }: { texte: string; nom: string }) {
+  const r = resumeCreditsReleve(texte);
+  if (!r.credits || !r.mois) return <p className="text-slate-600">Aucune recette lisible dans ce fichier pour le rapprochement bancaire.</p>;
+  const envoyer = () => {
+    try { localStorage.setItem(CLE_RELEVE_A_RAPPROCHER, emballerReleve(texte, nom, r.mois!)); }
+    catch { alert("Le navigateur refuse de garder le fichier : importez-le directement dans Comptabilité → Rapprochement."); return; }
+    window.open(`/admin/comptabilite?tab=rapprochement&releve=depenses`, "_blank", "noopener");
+  };
+  return <div className="flex flex-wrap items-center justify-between gap-3 rounded border border-green-200 bg-green-50 p-3">
+    <p className="min-w-0">Ce fichier contient aussi <b>{r.credits} recette{r.credits > 1 ? "s" : ""}</b> ({euros(r.totalCentimes / 100)}) : elles peuvent être rapprochées des encaissements sans réimporter le fichier.</p>
+    <button type="button" onClick={envoyer} className="rounded bg-green-800 px-4 py-2 text-white">Rapprocher les recettes →</button>
+  </div>;
 }
