@@ -101,7 +101,14 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
       </td>
       <td className={`${td} text-xs`}>
         {l.cavaliers.map((c) => (
-          <div key={c.id} className="whitespace-nowrap">{c.nom}{c.poney && <span className="text-blue-700"> — {c.poney}</span>}</div>
+          <div key={c.id} className="whitespace-nowrap">
+            {c.nom}{c.poney && <span className="text-blue-700"> — {c.poney}</span>}
+            {c.dejaPretDepuis && (
+              <span className="text-green-700" title="Même cavalier, même poney plus tôt : ni prépa ni échauffement à refaire">
+                {" "}· prêt depuis {c.dejaPretDepuis}
+              </span>
+            )}
+          </div>
         ))}
         {l.remplacant && (
           <div className="mt-1">

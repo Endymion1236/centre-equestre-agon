@@ -380,6 +380,52 @@ test("tâches comptées par personne, hors prépa, échauffement et jeu de son �
   assert.equal(c.find((x) => x.nom === "Nicolas")!.taches, 2);
 });
 
+console.log("\n── Même cavalier, même poney plus tôt : pas de prépa ni d'échauffement ──");
+
+function casJulie(poneyApres: string): { s: SaisonPonyGames; r: ResultatConcours } {
+  const s: SaisonPonyGames = {
+    id: "s", nom: "2026/2027",
+    cavaliers: [{ id: "julie", prenom: "Julie" }, { id: "tom", prenom: "Tom" }, { id: "ana", prenom: "Ana" }],
+    equipes: [
+      { id: "a", nom: "Équipe A", categorie: "Benjamin", indice: "", cavalierIds: ["julie", "tom"] },
+      { id: "b", nom: "Équipe B", categorie: "Benjamin", indice: "", cavalierIds: ["ana"] },
+      { id: "c", nom: "Équipe C", categorie: "Minime", indice: "", cavalierIds: ["julie"] },
+    ],
+    resultats: [{ id: "k", nom: "Pieux", date: "2026-11-15", heureDebut: "11:00", classements: [] }],
+  };
+  let r = engagerEquipes(s, s.resultats[0], ["a", "b", "c"]); // A 11h00, B 11h45, C 12h30
+  r = poserPoney(r, "a", "julie", "Kamélia");
+  r = poserPoney(r, "c", "julie", poneyApres);
+  return { s, r };
+}
+
+test("Julie rejoue 2 sessions plus tard avec Kamélia : libre pendant la session du milieu", () => {
+  const { s, r } = casJulie("kamélia ");
+  const [, , c] = lignesTableau(s, r);
+  assert.equal(c.cavaliers[0].dejaPretDepuis, "11h00");
+  // Session B 11h45–12h30 : Julie n'est ni en prépa (11h30) ni en échauffement (12h00) pour C.
+  assert.equal(occupesDe(candidatsRole(s, r, "b", "placeur"))["Julie"], "libre");
+  // Mais elle reste prise pendant son jeu avec C.
+  assert.equal(occupesDe(candidatsRole(s, r, "c", "juge"))["Julie"], "en jeu avec Équipe C (12h30–13h15)");
+});
+
+test("autre poney l'après-midi : prépa et échauffement à faire", () => {
+  const { s, r } = casJulie("Pompon");
+  assert.equal(lignesTableau(s, r)[2].cavaliers[0].dejaPretDepuis, undefined);
+  assert.equal(occupesDe(candidatsRole(s, r, "b", "placeur"))["Julie"], "en préparation avec Équipe C (11h30–12h00)");
+});
+
+test("la règle ne vaut que pour le même cavalier : le poney d'un autre ne compte pas", () => {
+  const { s, r } = casJulie("Pompon");
+  const r2 = poserPoney(r, "a", "tom", "Pompon"); // Tom montait Pompon à 11h, pas Julie
+  assert.equal(lignesTableau(s, r2)[2].cavaliers[0].dejaPretDepuis, undefined);
+});
+
+test("le tableau imprimé le signale", () => {
+  const { s, r } = casJulie("Kamélia");
+  assert.match(htmlTableau(s, r), /Julie — <i>Kamélia<\/i> <span class="cat">\(prêt depuis 11h00\)<\/span>/);
+});
+
 console.log("\n── Impression ──");
 
 test("la page imprimable reprend tout, échappe le texte", () => {

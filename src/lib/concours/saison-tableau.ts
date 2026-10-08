@@ -30,7 +30,16 @@ export interface LigneTableau {
   passage?: Plage;
   prepa?: Plage;
   echauffement?: Plage;
-  cavaliers: { id: string; nom: string; poney?: string }[];
+  cavaliers: {
+    id: string;
+    nom: string;
+    poney?: string;
+    /**
+     * Heure d'un passage plus tôt dans la journée où ce cavalier montait déjà
+     * ce poney : le poney est prêt, le cavalier ne refait ni prépa ni échauffement.
+     */
+    dejaPretDepuis?: string;
+  }[];
   remplacant?: string;
   roles: RolesPassage;
 }
@@ -82,6 +91,20 @@ export function lignesTableau(s: SaisonPonyGames, r: ResultatConcours): LigneTab
       remplacant: g.remplacant?.trim() || undefined,
       roles: g.roles ?? {},
     });
+  }
+
+  // Même cavalier, même poney, passage précédent terminé : poney déjà préparé et échauffé.
+  const memePoney = (a?: string, b?: string) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+  for (const l of lignes) {
+    if (!l.passage) continue;
+    for (const c of l.cavaliers) {
+      if (!c.poney) continue;
+      const avant = lignes
+        .filter((m) => m !== l && m.passage && m.passage.fin <= l.passage!.debut)
+        .filter((m) => m.cavaliers.some((x) => cleCavalier(s, x.id) === cleCavalier(s, c.id) && memePoney(x.poney, c.poney)))
+        .sort((a, b) => b.passage!.debut - a.passage!.debut)[0];
+      if (avant) c.dejaPretDepuis = plageLisible(avant.passage).split("–")[0];
+    }
   }
   return lignes;
 }
@@ -183,8 +206,11 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
     for (const c of l.cavaliers) {
       const genre = `cheval:${l.equipeId}`;
       const cle = cleCavalier(s, c.id);
-      occ.push({ cle, qui: c.nom, quoi: `en préparation avec ${l.equipe}`, genre, plage: l.prepa! });
-      occ.push({ cle, qui: c.nom, quoi: `en échauffement avec ${l.equipe}`, genre, plage: l.echauffement! });
+      // Poney déjà monté par ce cavalier plus tôt : pas de prépa ni d'échauffement à refaire.
+      if (!c.dejaPretDepuis) {
+        occ.push({ cle, qui: c.nom, quoi: `en préparation avec ${l.equipe}`, genre, plage: l.prepa! });
+        occ.push({ cle, qui: c.nom, quoi: `en échauffement avec ${l.equipe}`, genre, plage: l.echauffement! });
+      }
       occ.push({ cle, qui: c.nom, quoi: `en jeu avec ${l.equipe}`, genre, plage: l.passage });
     }
     for (const id of (l.roles.placeurs ?? []).filter((x) => !estPersonne(x))) {
@@ -339,7 +365,7 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
   const corps = lignes.map((l) => `
     <tr>
       <td><b>${plageLisible(l.passage)}</b><br>${echapper(l.equipe)}<br><span class="cat">${echapper(l.categorie)}</span></td>
-      <td>${l.cavaliers.map((c) => `${echapper(c.nom)}${c.poney ? ` — <i>${echapper(c.poney)}</i>` : ""}`).join("<br>")}
+      <td>${l.cavaliers.map((c) => `${echapper(c.nom)}${c.poney ? ` — <i>${echapper(c.poney)}</i>` : ""}${c.dejaPretDepuis ? ` <span class="cat">(prêt depuis ${c.dejaPretDepuis})</span>` : ""}`).join("<br>")}
         ${l.remplacant ? `<br><span class="cat">Remplaçant : <i>${echapper(l.remplacant)}</i>${l.roles.cavalierRemplacant ? ` (${echapper(nomCavalier(s, l.roles.cavalierRemplacant))})` : ""}</span>` : ""}</td>
       <td>${deux(l.roles.coach, l.roles.coach2) || '<span class="vide">……</span>'}</td>
       <td>${cellule(l.prepa, l.roles.respPrepa)}</td>
