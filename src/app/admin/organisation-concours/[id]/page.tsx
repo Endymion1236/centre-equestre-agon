@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { analyser, compterPassagesPoneys, personnesOccupeesAuPassage, heuresDerivees } from "@/lib/concours/contraintes";
 import { attribuerAuto } from "@/lib/concours/attribution";
 import { chevauxAvecSurnoms, trouverPoney } from "@/lib/concours/poneys";
+import { ajouterCavalierClub, choisirCavalierMembre, PREFIXE_BASE } from "@/lib/concours/membres";
 import {
   getConcours, saveConcours, listConcours,
   listerCavaliersBase, listerPoneysBase, listerCreneauxDuJour,
@@ -247,16 +248,7 @@ export default function EditeurConcours() {
     if (!childId) return;
     const cav = cavBase.find((x) => x.childId === childId);
     if (!cav) return;
-    update((c) => {
-      if (c.personnes.some((p) => p.cavalierId === childId)) return c; // déjà ajouté
-      return {
-        ...c,
-        personnes: [
-          ...c.personnes,
-          { id: `cav-${childId}`, prenom: cav.prenom, cavalierId: cav.childId, familyId: cav.familyId, naissance: cav.naissance },
-        ],
-      };
-    });
+    update((c) => ajouterCavalierClub(c, cav).concours);
   };
   const ajouterPoneyDeBase = (equideId: string) => {
     if (!equideId) return;
@@ -337,22 +329,16 @@ export default function EditeurConcours() {
       ),
     }));
   const setMembre = (eid: string, idx: number, field: "personneId" | "chevalId", value: string) =>
-    update((c) => ({
-      ...c,
-      equipes: (c.equipes || []).map((e) => {
-        if (e.id !== eid) return e;
-        return {
-          ...e,
-          membres: e.membres.map((m, i) => {
-            if (i !== idx) return m;
-            if (field === "chevalId") return { ...m, chevalId: value || undefined };
-            // Choix d'un cavalier : pré-remplit son poney attribué si la case est vide.
-            const pers = c.personnes.find((p) => p.id === value);
-            return { ...m, personneId: value, chevalId: m.chevalId || pers?.poneyAttribueId || undefined };
-          }),
-        };
-      }),
-    }));
+    update((c) => {
+      // Cavalier : du concours ou du club (ajouté au concours au passage), poney attribué pré-rempli.
+      if (field === "personneId") return choisirCavalierMembre(c, cavBase, eid, idx, value);
+      return {
+        ...c,
+        equipes: (c.equipes || []).map((e) =>
+          e.id !== eid ? e : { ...e, membres: e.membres.map((m, i) => (i !== idx ? m : { ...m, chevalId: value || undefined })) },
+        ),
+      };
+    });
   const supprimerMembre = (eid: string, idx: number) =>
     update((c) => ({
       ...c,
@@ -675,7 +661,20 @@ export default function EditeurConcours() {
                   <div key={idx} className="flex gap-1.5">
                     <select className={`${inpSm} flex-1 min-w-0`} value={m.personneId} onChange={(e) => setMembre(eq.id, idx, "personneId", e.target.value)}>
                       <option value="">— cavalier —</option>
-                      {concours.personnes.map((pe) => <option key={pe.id} value={pe.id}>{pe.prenom}</option>)}
+                      {concours.personnes.length > 0 && (
+                        <optgroup label="Dans ce concours">
+                          {concours.personnes.map((pe) => <option key={pe.id} value={pe.id}>{pe.prenom}{pe.nom ? ` ${pe.nom}` : ""}</option>)}
+                        </optgroup>
+                      )}
+                      <optgroup label="Cavaliers du club">
+                        {cavBase
+                          .filter((cv) => !concours.personnes.some((p) => p.cavalierId === cv.childId))
+                          .map((cv) => (
+                            <option key={cv.childId} value={`${PREFIXE_BASE}${cv.childId}`}>
+                              {cv.prenom}{cv.famille ? ` ${cv.famille}` : ""}
+                            </option>
+                          ))}
+                      </optgroup>
                     </select>
                     <select className={`${inpSm} flex-1 min-w-0`} value={m.chevalId ?? ""} onChange={(e) => setMembre(eq.id, idx, "chevalId", e.target.value)}>
                       <option value="">— poney —</option>
