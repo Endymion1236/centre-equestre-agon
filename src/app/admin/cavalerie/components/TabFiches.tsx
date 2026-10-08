@@ -9,6 +9,7 @@ import {
   X, Save, Loader2, ClipboardList, Pill, Syringe, Wrench, Bone, Scissors, Stethoscope,
   Image as ImageIcon, Upload,
 } from "lucide-react";
+import { equideCorrespond } from "@/lib/recherche-equide";
 import type { Equide, SoinRecord, DocumentEquide, MouvementRegistre, EquideType, EquideSex, EquideStatus } from "../types";
 import LastUpdated from "@/components/admin/LastUpdated";
 
@@ -142,11 +143,7 @@ export default function TabFiches({
   const filtered = equides.filter(e => {
     if (filterStatus !== "all" && e.status !== filterStatus) return false;
     if (filterType !== "all" && e.type !== filterType) return false;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      return e.name.toLowerCase().includes(q) || (e.sire || "").toLowerCase().includes(q) || (e.race || "").toLowerCase().includes(q);
-    }
-    return true;
+    return equideCorrespond(e as any, search);
   });
 
   const saveEquide = async () => {
@@ -446,7 +443,7 @@ export default function TabFiches({
       <div className="flex flex-wrap gap-3 mb-5">
         <div className="relative flex-1 min-w-[200px]">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300"/>
-          <input placeholder="Rechercher par nom, SIRE, race…" value={search} onChange={e => setSearch(e.target.value)}
+          <input placeholder="Rechercher par surnom, nom, SIRE, race…" value={search} onChange={e => setSearch(e.target.value)}
             className={`${inputStyle} !pl-9`}/>
         </div>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as any)} className={`${inputStyle} !w-auto`}>
@@ -486,6 +483,9 @@ export default function TabFiches({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-display text-base font-bold text-blue-800">{e.name}</span>
+                      {(e as any).surnom?.trim() && (e as any).surnom.trim() !== e.name && (
+                        <span className="font-body text-sm text-gray-500">« {(e as any).surnom.trim()} »</span>
+                      )}
                       <Badge color={statusOpt?.color || "gray"}>{statusOpt?.label || e.status}</Badge>
                       {e.niveauCavalier && <Badge color="blue">{e.niveauCavalier}</Badge>}
                       {prochainDays !== null && prochainDays <= 14 && (
