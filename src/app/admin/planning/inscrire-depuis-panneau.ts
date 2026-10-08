@@ -242,7 +242,9 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
         .filter(Boolean) as any[];
 
       const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
-      const encaisseEnsemble = showPay && !freeEnroll && !useRattrapage && !preinscription;
+      // SEPA : chaque cavalier a sa commande programmée en prélèvement
+      // (lib/sepa-unique), rien n'est encaissé sur place.
+      const encaisseEnsemble = showPay && !freeEnroll && !useRattrapage && !preinscription && payMode !== "prelevement_sepa";
       // Encaissement immédiat de plusieurs cavaliers : on inscrit SANS mode de
       // paiement, ce qui fait tomber tous les enfants dans la même commande
       // (fusion des impayés récents de la famille), puis on encaisse cette
@@ -1156,7 +1158,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
     setJustEnrolled(`${childName} inscrit(e) en forfait annuel — ${sessionsRestantes} séances — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`);
     panelToast(`Forfait créé — ${totalAnnuel.toFixed(2)}€ en ${payPlan}`, "success");
   } else {
-    const payInfo = useRattrapage ? " — 🔄 rattrapage utilisé" : freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? " — encaissé ✅" : priceTTC > 0 ? " — paiement en attente" : "";
+    const payInfo = useRattrapage ? " — 🔄 rattrapage utilisé" : freeEnroll ? ` — 🎁 offert (${freeReason})` : showPay ? (payMode === "prelevement_sepa" ? " — prélèvement SEPA programmé 🏦" : " — encaissé ✅") : priceTTC > 0 ? " — paiement en attente" : "";
     setJustEnrolled(`${childName}${payInfo}`);
   }
   // Reset complet du formulaire pour permettre une nouvelle inscription

@@ -12,6 +12,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
 import ModaleModifierCommande from "./ModaleModifierCommande";
 import ModaleEncaisser from "./ModaleEncaisser";
+import { programmerSepaCommandes } from "./sepa-groupe";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar, FileText } from "lucide-react";
 import type { Family, Activity } from "@/types";
@@ -87,6 +88,20 @@ export default function PaiementsPage() {
     const cibles = multiEncaisser.payments;
     if (cibles.length === 0) return;
     setMultiSaving(true);
+    // Prélèvement SEPA : programmé facture par facture, rien n'est encaissé
+    // aujourd'hui (sepa-groupe.ts).
+    if (multiMode === "prelevement_sepa") {
+      try {
+        const r = await programmerSepaCommandes({ familyId: multiEncaisser.familyId, payments: cibles, dateEcheance: multiDate });
+        if (!r.ok) { toast(r.raison, "error", 7000); setMultiSaving(false); return; }
+        toast(`🏦 ${r.ids.length} facture(s) programmée(s) en prélèvement SEPA pour ${multiEncaisser.familyName} — ${r.total.toFixed(2)}€ le ${new Date(multiDate + "T12:00:00").toLocaleDateString("fr-FR")}. Vérifiez puis envoyez la pré-notification dans Prélèvements SEPA.`, "success", 8000);
+        setMultiEncaisser(null);
+        setMultiRef(""); setMultiDate(new Date().toISOString().split("T")[0]); setMultiMode("cheque");
+        await refreshAll(r.ids);
+      } catch (e: any) { console.error(e); toast(`Erreur programmation SEPA : ${e?.message || e}`, "error", 7000); }
+      setMultiSaving(false);
+      return;
+    }
     try {
       const ids: string[] = [];
       let totalEncaisse = 0;
@@ -1532,11 +1547,11 @@ export default function PaiementsPage() {
                 </span>
               </div>
 
-              {/* Mode de paiement — modes directs uniquement (pas de chèque
-                  différé / SEPA, qui sont des règlements échelonnés) */}
+              {/* Modes directs, plus le prélèvement SEPA (un prélèvement par
+                  facture, programmé à la date choisie) ; pas de chèque différé. */}
               <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">Mode de paiement</label>
               <div className="grid grid-cols-2 gap-2 mb-4">
-                {paymentModes.filter(m => ["cheque", "especes", "cb_terminal", "virement", "cheque_vacances", "cheque_vacances_connect", "pass_sport"].includes(m.id)).map(m => (
+                {paymentModes.filter(m => ["cheque", "especes", "cb_terminal", "virement", "cheque_vacances", "cheque_vacances_connect", "pass_sport", "prelevement_sepa"].includes(m.id)).map(m => (
                   <button type="button" key={m.id} onClick={() => setMultiMode(m.id)}
                     className={`font-body text-sm py-2 rounded-lg border cursor-pointer ${multiMode === m.id ? "bg-blue-500 text-white border-blue-500 font-semibold" : "bg-white text-slate-600 border-gray-200 hover:border-gray-300"}`}>
                     {m.label}
@@ -1546,15 +1561,15 @@ export default function PaiementsPage() {
 
               <div className="flex gap-2 mb-1">
                 <div className="flex-1">
-                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">Date</label>
-                  <input type="date" value={multiDate} max={toParisDateString()} onChange={e => setMultiDate(e.target.value)}
+                  <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">{multiMode === "prelevement_sepa" ? "Date du prélèvement" : "Date"}</label>
+                  <input type="date" value={multiDate} {...(multiMode === "prelevement_sepa" ? { min: toParisDateString() } : { max: toParisDateString() })} onChange={e => setMultiDate(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:border-blue-400 focus:outline-none" />
                 </div>
-                <div className="flex-1">
+                {multiMode !== "prelevement_sepa" && <div className="flex-1">
                   <label className="font-body text-xs font-semibold text-slate-600 block mb-1.5">Référence (option.)</label>
                   <input value={multiRef} onChange={e => setMultiRef(e.target.value)} placeholder="N° chèque…"
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:border-blue-400 focus:outline-none" />
-                </div>
+                </div>}
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-2 flex-shrink-0">
@@ -1562,7 +1577,7 @@ export default function PaiementsPage() {
                 className="flex-1 font-body text-sm text-slate-500 bg-gray-100 py-2.5 rounded-lg border-none cursor-pointer disabled:opacity-50">Annuler</button>
               <button type="button" onClick={handleMultiEncaisser} disabled={multiSaving}
                 className="flex-1 font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 py-2.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
-                {multiSaving ? "Encaissement…" : "💳 Tout encaisser"}
+                {multiSaving ? "Enregistrement…" : multiMode === "prelevement_sepa" ? "🏦 Programmer le prélèvement" : "💳 Tout encaisser"}
               </button>
             </div>
           </div>

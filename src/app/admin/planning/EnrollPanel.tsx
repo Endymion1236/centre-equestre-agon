@@ -43,6 +43,7 @@ import { ModaleChangerGroupe } from "./ModaleChangerGroupe";
 import * as actions from "./enroll-panel-actions";
 import { ChoixFormuleSurDemande } from "./ChoixFormuleSurDemande";
 import { estSurDemande } from "@/lib/creneau-sur-demande";
+import { typeCarteDuCreneau } from "@/lib/cartes-seances";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
   libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche,
@@ -1534,6 +1535,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   <input type="checkbox" checked={showPay} onChange={e => setShowPay(e.target.checked)} className="accent-orange-500 w-4 h-4" />
                   <span className="font-body text-sm text-orange-800 font-semibold">Encaisser maintenant</span>
                 </label>
+                {!showPay && <div className="font-body text-[11px] text-orange-700">Non coché : l'engagement part dans les impayés, à régler plus tard.</div>}
                 {showPay && <div className="flex flex-wrap gap-1.5">{payModes.filter(m => m.id !== "carte" && m.id !== "avoir").map(m =>
                   <button key={m.id} onClick={() => setPayMode(m.id)}
                     className={`px-3 py-1.5 rounded-lg border font-body text-[11px] font-medium cursor-pointer ${payMode === m.id ? "bg-orange-500 text-white border-orange-500" : "bg-white text-slate-600 border-gray-200"}`}>
@@ -2219,7 +2221,15 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                   : useRattrapage ? `🔄 Inscrire en rattrapage (gratuit)${suffixe}`
                   : preinscription ? `✎ Pré-inscrire (aucun paiement)`
                   : inscriptionMode === "annuel" ? `Inscrire à l'année (${totalAnnuel.toFixed(2)}€)`
-                  : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}`
+                  // Concours : jamais de carte de séances (le montoir n'en débite
+                  // pas) ; sans « Encaisser maintenant », l'engagement part en impayé.
+                  : isCompetition ? (() => {
+                      const totalComp = compEpreuves.reduce((t, ep) => t + (parseFloat(ep.montant) || 0), 0) + (parseFloat(compCoaching) || 0);
+                      return showPay
+                        ? (payMode === "prelevement_sepa" ? `Inscrire + programmer le prélèvement SEPA (${totalComp.toFixed(2)}€)` : `Inscrire + Encaisser (${totalComp.toFixed(2)}€)`)
+                        : totalComp > 0 ? `Inscrire — en impayé (${totalComp.toFixed(2)}€)` : `Inscrire${suffixe}`;
+                    })()
+                  : (typeCarteDuCreneau(creneau.activityType) && allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}`
                   : showPay ? `Inscrire + Encaisser (${totalTTC.toFixed(2)}€)${suffixe}`
                   : totalTTC > 0 ? `Inscrire — paiement${isMulti ? "s" : ""} en attente (${totalTTC.toFixed(2)}€)${suffixe}`
                   : `Inscrire${suffixe}`}

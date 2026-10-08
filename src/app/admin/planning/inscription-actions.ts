@@ -41,6 +41,41 @@ import {
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { inscritsMemeFamille, prixCreneauTTC } from "@/lib/tarif-forfaitaire";
+import { champsCommandeSepaUnique, echeanceSepaUnique, estModeSepa, mandatLePlusRecent } from "@/lib/sepa-unique";
+import { toParisDateString } from "@/lib/date-local";
+
+/**
+ * Commande réglée par un prélèvement SEPA (lib/sepa-unique) : programmée,
+ * pas encaissée. Sans mandat actif, la commande reste à régler et l'écran le
+ * dit. Renvoie l'identifiant de la commande créée.
+ */
+async function commandePrelevementUnique(
+  toast: ContexteInscription["toast"],
+  p: { familyId: string; familyName: string; items: any[]; totalTTC: number; description: string; extra?: Record<string, unknown> },
+): Promise<string> {
+  const totalTTC = Math.round(p.totalTTC * 100) / 100;
+  const mandatsSnap = await getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", p.familyId), where("status", "==", "active")));
+  const mandat: any = mandatLePlusRecent(mandatsSnap.docs.map(d => d.data() as any));
+  const orderId = generateOrderId();
+  if (!mandat?.mandatId) {
+    const ref = await addDoc(collection(db, "payments"), {
+      orderId, familyId: p.familyId, familyName: p.familyName, items: p.items, totalTTC,
+      paymentMode: "", paymentRef: "", status: "pending", paidAmount: 0, date: serverTimestamp(), ...(p.extra || {}),
+    });
+    toast("⚠️ Aucun mandat SEPA actif pour cette famille : la commande reste à régler. Créez le mandat dans Prélèvements SEPA, puis programmez-la depuis Paiements.", "error");
+    return ref.id;
+  }
+  const ref = await addDoc(collection(db, "payments"), {
+    orderId, familyId: p.familyId, familyName: p.familyName, items: p.items, totalTTC,
+    ...champsCommandeSepaUnique(totalTTC, mandat.mandatId), date: serverTimestamp(), ...(p.extra || {}),
+  });
+  await addDoc(collection(db, "echeances-sepa"), {
+    ...echeanceSepaUnique({ familyId: p.familyId, familyName: p.familyName, mandatId: mandat.mandatId, montant: totalTTC, description: p.description, paymentId: ref.id, orderId, dateEcheance: toParisDateString() }),
+    createdAt: serverTimestamp(),
+  });
+  toast(`🏦 Prélèvement SEPA de ${totalTTC.toFixed(2)} € programmé. Vérifiez puis envoyez la pré-notification dans Prélèvements SEPA.`, "success");
+  return ref.id;
+}
 
 /**
  * Ce que les deux gestes doivent connaître de l'écran, et ce qu'ils doivent
@@ -99,18 +134,51 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
       const c = creneaux.find(x => x.id === cid) as any;
       const totalTTC = options.competitionItems.reduce((s: number, i: any) => s + (i.priceTTC || 0), 0);
       const totalHT = options.competitionItems.reduce((s: number, i: any) => s + (i.priceHT || 0), 0);
+      // SEPA : programmé, pas réglé (lib/sepa-unique). Avoir : la déduction
+      // se fait depuis Encaisser, la commande reste à régler.
+      if (estModeSepa(payMode)) {
+        await commandePrelevementUnique(toast, {
+          familyId: child.familyId, familyName: child.familyName, items: options.competitionItems, totalTTC,
+          description: `${c?.activityTitle || "Compétition"} — ${child.childName}`,
+          extra: { totalHT, totalTVA: totalTTC - totalHT, source: "competition", creneauId: cid, createdAt: serverTimestamp() },
+        });
+        await refreshCreneaux();
+        return;
+      }
+      const regle = !!payMode && payMode !== "avoir";
+      if (payMode === "avoir") toast("Avoir : la commande reste à régler, déduisez l'avoir depuis Paiements → Encaisser.", "warning");
+      // Réglé sur place : numéro de facture et encaissement au journal, comme
+      // une séance ponctuelle. La commande passait « réglée » sans aucune
+      // ligne au journal : la recette manquait au chiffre d'affaires.
+      let invoiceNumber = "";
+      if (regle) {
+        try {
+          const res = await authFetch("/api/invoice/next-number", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+          if (res.ok) invoiceNumber = (await res.json())?.invoiceNumber || "";
+          else console.error("Numéro facture compétition — API error:", res.status);
+        } catch (e) { console.error("Numéro facture compétition — erreur réseau:", e); }
+      }
       const payData: any = {
         orderId: `COMP-${Date.now().toString(36).toUpperCase()}`,
         familyId: child.familyId, familyName: child.familyName,
         items: options.competitionItems,
         totalTTC, totalHT, totalTVA: totalTTC - totalHT,
-        paymentMode: payMode || "",
-        paymentRef: "", status: payMode ? "paid" : "pending",
-        paidAmount: payMode ? totalTTC : 0,
+        paymentMode: regle ? payMode : "",
+        paymentRef: "", status: regle ? "paid" : "pending",
+        paidAmount: regle ? totalTTC : 0,
+        ...(invoiceNumber ? { invoiceNumber } : {}),
         source: "competition", creneauId: cid,
         date: serverTimestamp(), createdAt: serverTimestamp(),
       };
-      await addDoc(collection(db, "payments"), payData);
+      const payRef = await addDoc(collection(db, "payments"), payData);
+      if (regle && totalTTC > 0) {
+        await createEncaissement({
+          paymentId: payRef.id, familyId: child.familyId, familyName: child.familyName,
+          montant: Math.round(totalTTC * 100) / 100, mode: payMode!,
+          modeLabel: payMode === "cb_terminal" ? "CB (terminal)" : payMode === "especes" ? "Espèces" : payMode === "cheque" ? "Chèque" : payMode || "",
+          ref: "", activityTitle: `${c?.activityTitle || "Compétition"} — ${child.childName}`,
+        });
+      }
     } catch (e) { console.error("Erreur paiement compétition:", e); }
     await refreshCreneaux();
     return;
@@ -332,7 +400,9 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
     // ─── FIN CALCUL RÉDUCTIONS ───
 
     const priceHT = finalPriceHT;
-    const isPaid = !!payMode;
+    // SEPA n'est pas un encaissement immédiat : traité à part plus bas.
+    const sepa = estModeSepa(payMode);
+    const isPaid = !!payMode && !sepa;
     const newItem: any = {
       activityTitle: c.activityTitle,
       childId: child.childId,
@@ -353,7 +423,12 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
       newItem.discountReasons = discountResult.reasons;
     }
 
-    if (isPaid) {
+    if (sepa) {
+      payRefId = await commandePrelevementUnique(toast, {
+        familyId: child.familyId, familyName: child.familyName, items: [newItem], totalTTC: finalPriceTTC,
+        description: `${c.activityTitle} — ${child.childName}`,
+      });
+    } else if (isPaid) {
       // Encaissement immédiat → toujours créer un payment séparé (pas de fusion)
       // Numéro de facture séquentiel via API atomique (évite doublons)
       let invoiceNumber = "";
