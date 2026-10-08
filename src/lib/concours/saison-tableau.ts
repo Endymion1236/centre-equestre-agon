@@ -411,46 +411,95 @@ export function candidatsRole(
 const echapper = (t: string) =>
   t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-/** Page HTML autonome du tableau, prête à imprimer (A4 paysage). */
+/** « 9h », « 9h30 » : comme sur les tableaux du club. */
+function heureCourte(m?: number): string {
+  if (m === undefined) return "";
+  const [h, mn] = versHeure(m).split(":");
+  return `${Number(h)}h${mn === "00" ? "" : mn}`;
+}
+
+const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
+
+/** Fonds pastel des blocs d'équipe, dans l'ordre de passage. */
+const COULEURS_EQUIPES = ["#d9ead3", "#d9d2e9", "#d0e0e3", "#c9daf8", "#f4b8a3", "#ead1dc", "#fde5cc", "#e6b8af", "#fff2cc", "#cfe2f3"];
+
+/**
+ * Page HTML autonome du tableau, prête à imprimer (A4 portrait), sur le
+ * modèle des tableaux de Nicolas : un bloc coloré par équipe, des cases
+ * arrondies, prépa / à cheval / passage avec le nom du responsable en gras.
+ * Une case vide ou mise à X reste vide.
+ */
 export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
   const lignes = lignesTableau(s, r);
-  const date = r.date.split("-").reverse().join("/");
-  const titre = `${r.nom} — ${date}${r.lieu ? ` — ${r.lieu}` : ""}`;
-  const deux = (a?: string, b?: string) => [a, b].filter(Boolean).map((x) => echapper(x!)).join("<br>");
-  const cellule = (plage: Plage | undefined, resp?: string) =>
-    `<b>${plageLisible(plage)}</b><br>${resp ? echapper(resp) : '<span class="vide">……</span>'}`;
-  const corps = lignes.map((l) => `
-    <tr>
-      <td><b>${plageLisible(l.passage)}</b><br>${echapper(l.equipe)}<br><span class="cat">${echapper(l.categorie)}</span></td>
-      <td>${l.cavaliers.map((c) => `${echapper(c.nom)}${c.poney ? ` — <i>${echapper(c.poney)}</i>` : ""}${c.dejaPretDepuis ? ` <span class="cat">(prêt depuis ${c.dejaPretDepuis})</span>` : ""}${c.enchaineAvec ? ` <span class="cat">(prépa : ${c.preparateur ? echapper(nomCavalier(s, c.preparateur)) : "……"})</span>` : ""}`).join("<br>")}
-        ${l.remplacant ? `<br><span class="cat">Remplaçant : <i>${echapper(l.remplacant)}</i>${l.roles.cavalierRemplacant ? ` (${echapper(nomCavalier(s, l.roles.cavalierRemplacant))})` : ""}</span>` : ""}</td>
-      <td>${deux(l.roles.coach, l.roles.coach2) || '<span class="vide">……</span>'}</td>
-      <td>${cellule(l.prepa, l.roles.respPrepa)}</td>
-      <td>${cellule(l.echauffement, [l.roles.respEchauffement, l.roles.respEchauffement2].filter(Boolean).join(" et ") || undefined)}</td>
-      <td>${(l.roles.placeurs ?? []).map((id) => echapper(nomCavalier(s, id))).join("<br>") || '<span class="vide">……</span>'}</td>
-      <td>${l.roles.juge ? echapper(l.roles.juge) : '<span class="vide">……</span>'}</td>
-      <td>${l.roles.facteur ? echapper(l.roles.facteur) : '<span class="vide">……</span>'}</td>
-    </tr>`).join("");
+  const [a, m, j] = r.date.split("-");
+  const lieu = r.lieu?.trim() && r.lieu.trim().toLowerCase() !== r.nom.trim().toLowerCase() ? ` — ${r.lieu.trim()}` : "";
+  const titre = `${r.nom} — ${Number(j)} ${MOIS[Number(m) - 1] ?? ""} ${a}${lieu}`;
+  const nom = (n?: string) => (n?.trim() && !estPersonne(n) ? echapper(n.trim()) : "");
+  const noms = (...ns: (string | undefined)[]) => ns.map(nom).filter(Boolean).join(" et ");
+  const pastille = (t: string, cls = "") => `<div class="pastille ${cls}">${t || "&nbsp;"}</div>`;
+  const caseHeure = (heure: string, qui: string, extra = "") =>
+    `<div class="case">${heure ? `<span>${heure}</span>` : ""}${qui ? `<b>${qui}</b>` : ""}${extra}</div>`;
+
+  const blocs = lignes.map((l, i) => {
+    const couleur = COULEURS_EQUIPES[i % COULEURS_EQUIPES.length];
+    const titreEquipe = [l.categorie, s.equipes.find((e) => e.id === l.equipeId)?.indice].filter((x) => x?.trim()).join(" ");
+    const rangs = l.cavaliers.map((c) => ({
+      cavalier: echapper(c.nom),
+      poney: c.poney ? `${echapper(c.poney)}${c.dejaPretDepuis ? ' <span class="note">prêt</span>' : ""}` : "",
+    }));
+    if (l.remplacant) {
+      const qui = l.roles.cavalierRemplacant && !estPersonne(l.roles.cavalierRemplacant) ? ` ${echapper(nomCavalier(s, l.roles.cavalierRemplacant))}` : "";
+      rangs.push({ cavalier: `PR${qui}`, poney: echapper(l.remplacant) });
+    }
+    // Poneys préparés par quelqu'un d'autre (cavalier qui enchaîne deux sessions).
+    const prepares = l.cavaliers
+      .filter((c) => c.enchaineAvec && c.preparateur && !estPersonne(c.preparateur))
+      .map((c) => `<span class="note">${echapper(c.poney ?? c.nom)} : ${echapper(nomCavalier(s, c.preparateur!))}</span>`)
+      .join("");
+    const placeurs = (l.roles.placeurs ?? []).filter((id) => !estPersonne(id)).map((id) => pastille(echapper(nomCavalier(s, id))));
+    const juge = nom(l.roles.juge);
+    const facteur = nom(l.roles.facteur);
+    return `
+  <div class="bloc">
+    <div class="equipe" style="background:${couleur}">${titreEquipe ? `<span>${echapper(titreEquipe)}</span>` : ""}<b>${echapper(l.equipe)}</b></div>
+    <div class="pile">${rangs.map((x) => pastille(x.cavalier)).join("")}</div>
+    <div class="pile">${rangs.map((x) => pastille(x.poney)).join("")}</div>
+    ${caseHeure(heureCourte(l.prepa?.debut), noms(l.roles.respPrepa), prepares)}
+    ${caseHeure(heureCourte(l.echauffement?.debut), noms(l.roles.respEchauffement, l.roles.respEchauffement2))}
+    ${caseHeure(heureCourte(l.passage?.debut), noms(l.roles.coach, l.roles.coach2))}
+    <div class="pile centre">${placeurs.join("")}</div>
+    ${juge ? `<div class="case">${juge}</div>` : "<div></div>"}
+    ${facteur ? `<div class="case">${facteur}</div>` : "<div></div>"}
+  </div>`;
+  }).join("");
+
+  const entetes = ["Équipes", "Cavaliers", "Poneys", "Prépa", "A cheval", "Passage", "Placeur", "Juge de ligne", "Facteur"];
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${echapper(titre)}</title>
 <style>
-  @page { size: A4 landscape; margin: 10mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0; }
-  h1 { font-size: 16px; margin: 0 0 8px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { border: 1px solid #999; padding: 4px 5px; vertical-align: top; text-align: left; }
-  th { background: #e8eefc; font-size: 10px; text-transform: uppercase; }
-  tr { page-break-inside: avoid; }
-  .cat { color: #555; font-size: 10px; }
-  .vide { color: #bbb; }
+  @page { size: A4 portrait; margin: 8mm; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: "Open Sans", Arial, sans-serif; font-size: 11px; color: #222; margin: 0; padding: 6px; }
+  .titre { background: #5271ff; color: #fff; text-align: center; font-size: 22px; font-weight: 700;
+           border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; }
+  .grille { display: grid; grid-template-columns: 1.15fr 1.15fr 1.15fr .78fr .78fr .78fr 1.1fr 1.1fr 1.1fr; gap: 11px 6px; }
+  .bloc { display: contents; }
+  .entete { background: #f9a3d2; border-radius: 5px; text-align: center; padding: 6px 2px; font-size: 11px; }
+  .equipe { border-radius: 6px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; padding: 6px 4px; gap: 1px; }
+  .equipe b { font-weight: 700; }
+  .pile { display: flex; flex-direction: column; gap: 5px; justify-content: center; }
+  .pastille { background: #ebe7e7; border-radius: 6px; text-align: center; padding: 6px 4px; min-height: 26px; }
+  .case { background: #ebe7e7; border-radius: 6px; display: flex; flex-direction: column; justify-content: center;
+          align-items: center; text-align: center; padding: 6px 4px; gap: 2px; }
+  .note { display: block; font-size: 9px; color: #666; }
+  .pastille .note { display: inline; }
+  .grille > div { break-inside: avoid; }
 </style></head><body>
-<h1>${echapper(titre)}</h1>
-<table>
-  <thead><tr>
-    <th>Passage</th><th>Cavaliers — poneys</th><th>Coach</th><th>Prépa poneys (${DUREE_PREPA_MIN} min)</th>
-    <th>Échauffement (${DUREE_ECHAUFFEMENT_MIN} min)</th><th>Placeurs</th><th>Juge de ligne</th><th>Facteur</th>
-  </tr></thead>
-  <tbody>${corps}</tbody>
-</table>
+<div class="titre">${echapper(titre)}</div>
+<div class="grille">
+  ${entetes.map((e) => `<div class="entete">${e}</div>`).join("")}
+  ${blocs}
+</div>
 <script>window.onload = () => window.print();</script>
 </body></html>`;
 }

@@ -317,7 +317,7 @@ test("X sur plusieurs rôles en même temps : jamais occupé, jamais en conflit,
   r = poserRole(poserRemplacant(r, "eq", "Pompon"), "eq", "cavalierRemplacant", "X");
   assert.deepEqual(verifierTableau(s, r), [], "ni conflit ni « à désigner »");
   assert.ok(!candidatsRole(s, r, "eq", "coach").some((c) => c.nom.toLowerCase() === "x"), "pas listé comme une personne");
-  assert.match(htmlTableau(s, r), /<td>X<\/td>/);
+  assert.ok(!/>X</.test(htmlTableau(s, r)), "X n'est pas imprimé : la case reste vide");
 });
 
 test("X à volonté : deux placeurs X possibles", () => {
@@ -340,7 +340,7 @@ test("2e coach et 2e responsable : même créneau, pas de conflit entre eux, imp
   // Les deux coachs restent proposés l'un à côté de l'autre (même rôle).
   assert.equal(occupesDe(candidatsRole(s, r, "eq", "coach2"))["Coach Paul"], "libre");
   const html = htmlTableau(s, r);
-  assert.match(html, /Coach Paul<br>Coach Julie/);
+  assert.match(html, /<b>Coach Paul et Coach Julie<\/b>/);
   assert.match(html, /Emmeline et Léa A/);
 });
 
@@ -433,7 +433,7 @@ test("la règle ne vaut que pour le même cavalier : le poney d'un autre ne comp
 
 test("le tableau imprimé le signale", () => {
   const { s, r } = casJulie("Kamélia");
-  assert.match(htmlTableau(s, r), /Julie — <i>Kamélia<\/i> <span class="cat">\(prêt depuis 11h00\)<\/span>/);
+  assert.match(htmlTableau(s, r), /Kamélia <span class="note">prêt<\/span>/);
 });
 
 console.log("\n── Sessions enchaînées sur deux poneys différents ──");
@@ -483,7 +483,7 @@ test("un préparateur désigné : plus d'alerte, et il est pris pendant la prép
   assert.deepEqual(erreurs(s, r2), []);
   assert.equal(occupesDe(candidatsRole(s, r2, "a", "placeur"))["Ana"], "prépare Pompon pour Julie (10h45–11h15)");
   assert.equal(compterTaches(s, r2).get("cav:ana"), 1, "compte comme une tâche");
-  assert.match(htmlTableau(s, r2), /\(prépa : Ana\)/);
+  assert.match(htmlTableau(s, r2), /<span class="note">Pompon : Ana<\/span>/);
 });
 
 test("X : personne ne prépare, l'alerte est levée", () => {
@@ -502,9 +502,14 @@ console.log("\n── Impression ──");
 test("la page imprimable reprend tout, échappe le texte", () => {
   const s = saison();
   const html = htmlTableau(s, poserRole(complet(s), "eq", "juge", "<Papa & co>"));
-  assert.match(html, /Pieux — 15\/11\/2026 — Pieux/);
-  assert.match(html, /08h00–08h30/);
-  assert.match(html, /Zoé Martin — <i>Gala<\/i>/);
+  assert.match(html, /<div class="titre">Pieux — 15 novembre 2026<\/div>/, "lieu identique au nom : pas répété");
+  assert.match(html, /<span>8h<\/span><b>Nicolas<\/b>/, "prépa à 8h, responsable en gras");
+  assert.match(html, /<span>8h30<\/span><b>Emmeline<\/b>/, "à cheval à 8h30");
+  assert.match(html, /<span>9h<\/span><b>Coach Paul<\/b>/, "passage à 9h, coach en gras");
+  assert.match(html, /pastille ">Zoé Martin<\/div>/);
+  assert.match(html, /pastille ">Gala<\/div>/);
+  assert.match(html, /<span>Benjamin<\/span><b>Les Fusées<\/b>/);
+  assert.match(htmlTableau(s, { ...complet(s), lieu: "Carrière" }), /Pieux — 15 novembre 2026 — Carrière/);
   assert.match(html, /&lt;Papa &amp; co&gt;/);
   assert.ok(!html.includes("<Papa"));
 });
