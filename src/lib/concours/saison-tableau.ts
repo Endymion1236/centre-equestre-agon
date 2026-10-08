@@ -6,7 +6,7 @@
 // juste avant le passage, chacun avec un responsable ; placeurs de matériel
 // (1 à 2 cavaliers), juge de ligne, facteur et 1 à 2 coachs pendant le passage ;
 // l'échauffement peut avoir 2 responsables ;
-// un cavalier pour le poney remplaçant (échauffement et passage).
+// un cavalier pour le poney remplaçant (préparation, échauffement et passage).
 // Les vérifications signalent une personne prise à deux endroits à la fois.
 // =============================================================================
 
@@ -190,13 +190,14 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
     for (const id of (l.roles.placeurs ?? []).filter((x) => !estPersonne(x))) {
       occ.push({ cle: cleCavalier(s, id), qui: nomCavalier(s, id), quoi: `placeur pour ${l.equipe}`, genre: `piste:${l.equipeId}`, plage: l.passage });
     }
+    // Le cavalier du poney remplaçant suit l'équipe : préparation, échauffement et toute la session.
     // Compté seulement si un poney remplaçant est prévu.
-    if (l.remplacant && l.roles.cavalierRemplacant && !estPersonne(l.roles.cavalierRemplacant) && l.echauffement) {
-      occ.push({
-        cle: cleCavalier(s, l.roles.cavalierRemplacant), qui: nomCavalier(s, l.roles.cavalierRemplacant),
-        quoi: `au poney remplaçant de ${l.equipe}`, genre: `remplacant:${l.equipeId}`,
-        plage: { debut: l.echauffement.debut, fin: l.passage.fin },
-      });
+    const remp = l.roles.cavalierRemplacant;
+    if (l.remplacant && remp && !estPersonne(remp) && l.prepa && l.echauffement) {
+      const base = { cle: cleCavalier(s, remp), qui: nomCavalier(s, remp), genre: `remplacant:${l.equipeId}` };
+      occ.push({ ...base, quoi: `en préparation du remplaçant de ${l.equipe}`, plage: l.prepa });
+      occ.push({ ...base, quoi: `en échauffement du remplaçant de ${l.equipe}`, plage: l.echauffement });
+      occ.push({ ...base, quoi: `au poney remplaçant de ${l.equipe}`, plage: l.passage });
     }
     parNom(l.roles.coach, `coach de ${l.equipe}`, `coach:${l.equipeId}`, l.passage);
     parNom(l.roles.coach2, `coach de ${l.equipe}`, `coach:${l.equipeId}`, l.passage);
@@ -254,6 +255,27 @@ export interface Candidat {
   cavalierId?: string;
   /** Où est la personne à ce moment-là ; absent si elle est libre. */
   occupe?: string;
+  /** Tâches déjà confiées dans ce concours (hors préparation, échauffement et jeu avec son équipe). */
+  taches: number;
+}
+
+/**
+ * Nombre de tâches confiées à chacun dans le concours : placeur, juge,
+ * facteur, coach, responsable de prépa ou d'échauffement, cavalier du poney
+ * remplaçant. Préparer, s'échauffer et jouer avec son équipe ne comptent pas.
+ */
+export function compterTaches(s: SaisonPonyGames, r: ResultatConcours): Map<string, number> {
+  const n = new Map<string, number>();
+  const ajouter = (cle: string) => n.set(cle, (n.get(cle) ?? 0) + 1);
+  for (const l of lignesTableau(s, r)) {
+    const ro = l.roles;
+    for (const id of ro.placeurs ?? []) if (!estPersonne(id)) ajouter(cleCavalier(s, id));
+    if (l.remplacant && ro.cavalierRemplacant && !estPersonne(ro.cavalierRemplacant)) ajouter(cleCavalier(s, ro.cavalierRemplacant));
+    for (const nom of [ro.respPrepa, ro.respEchauffement, ro.respEchauffement2, ro.juge, ro.facteur, ro.coach, ro.coach2]) {
+      if (nom?.trim() && !estPersonne(nom)) ajouter(clePersonne(s, nom));
+    }
+  }
+  return n;
 }
 
 /**
@@ -268,7 +290,7 @@ export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId:
   const plage = !l ? undefined
     : role === "respPrepa" ? l.prepa
     : role === "respEchauffement" ? l.echauffement
-    : role === "cavalierRemplacant" ? (l.echauffement && l.passage ? { debut: l.echauffement.debut, fin: l.passage.fin } : undefined)
+    : role === "cavalierRemplacant" ? (l.prepa && l.passage ? { debut: l.prepa.debut, fin: l.passage.fin } : undefined)
     : l.passage;
   const genre = role === "respPrepa" ? "prepa"
     : role === "respEchauffement" ? "echauffement"
@@ -284,14 +306,16 @@ export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId:
     for (const c of x.cavaliers) sansHoraire.set(cleCavalier(s, c.id), `joue avec ${x.equipe} — horaire à saisir`);
   }
 
-  const personnes = new Map<string, Candidat>();
+  const personnes = new Map<string, Omit<Candidat, "taches">>();
   for (const c of s.cavaliers) {
     const cle = cleCavalier(s, c.id);
     if (!personnes.has(cle)) personnes.set(cle, { nom: nomCavalier(s, c.id), cavalierId: c.id });
   }
   for (const o of occ) if (!personnes.has(o.cle)) personnes.set(o.cle, { nom: o.qui });
 
-  const out = [...personnes.entries()].map(([cle, cand]): Candidat => {
+  const taches = compterTaches(s, r);
+  const out = [...personnes.entries()].map(([cle, sansTaches]): Candidat => {
+    const cand = { ...sansTaches, taches: taches.get(cle) ?? 0 };
     const gene = plage && occ.find((o) => o.cle === cle && o.genre !== genre && chevauche(o.plage, plage));
     if (gene) return { ...cand, occupe: `${gene.quoi} (${plageLisible(gene.plage)})` };
     return sansHoraire.has(cle) ? { ...cand, occupe: sansHoraire.get(cle) } : cand;

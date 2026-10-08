@@ -63,7 +63,7 @@ export interface RolesPassage {
   coach?: string;
   /** 2e coach, facultatif. */
   coach2?: string;
-  /** Cavalier (id) qui s'occupe du poney remplaçant : échauffement et passage. */
+  /** Cavalier (id) qui s'occupe du poney remplaçant : préparation, échauffement et passage. */
   cavalierRemplacant?: string;
 }
 

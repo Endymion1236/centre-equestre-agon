@@ -56,7 +56,7 @@ function ChoixPersonne({
       {!connu && <option value={valeur}>{libelle(valeur!)}</option>}
       {disponibles.length > 0 && (
         <optgroup label={`Disponibles (${disponibles.length})`}>
-          {disponibles.map((c) => <option key={valeurDe(c)} value={valeurDe(c)}>{c.nom}</option>)}
+          {disponibles.map((c) => <option key={valeurDe(c)} value={valeurDe(c)}>{c.nom} ({c.taches})</option>)}
         </optgroup>
       )}
       {occupes.length > 0 && (
@@ -64,7 +64,7 @@ function ChoixPersonne({
           {occupes.map((c) => (
             // Le choix déjà fait reste sélectionnable, pour pouvoir le voir et le changer.
             <option key={valeurDe(c)} value={valeurDe(c)} disabled={valeurDe(c) !== valeur}>
-              {c.nom} — {c.occupe}
+              {c.nom} ({c.taches}) — {c.occupe}
             </option>
           ))}
         </optgroup>
@@ -163,7 +163,9 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
           juste avant, chacun avec un responsable ; pendant le passage, 1 à 2 coachs, 1 à 2 placeurs, un juge de ligne et un facteur.
           Chaque menu propose d&apos;abord les personnes libres à ce moment-là ; les occupées (en préparation,
           en échauffement, en jeu ou sur un autre rôle) sont grisées. L&apos;échauffement peut avoir 2 responsables ; le cavalier du poney
-          remplaçant est pris de l&apos;échauffement à la fin du passage. « Autre personne… » pour un parent, un coach… « X — personne » quand il n&apos;y a personne sur le rôle : toujours disponible.
+          remplaçant est pris de la préparation à la fin du passage. « Autre personne… » pour un parent, un coach… « X — personne » quand il n&apos;y a personne sur le rôle : toujours disponible.
+          Le nombre entre parenthèses = tâches déjà confiées à la personne dans ce concours (placeur, juge, facteur,
+          coach, responsable, cavalier du remplaçant), sans compter la préparation, l&apos;échauffement et le jeu avec son équipe.
         </p>
         <button type="button" onClick={imprimer}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 transition">

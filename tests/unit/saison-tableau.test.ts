@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne,
+  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne, compterTaches,
 } from "../../src/lib/concours/saison-tableau";
 import { engagerEquipes, poserDuree, poserPoney, poserRemplacant } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
@@ -266,16 +266,24 @@ test("coach : à désigner s'il manque, en conflit s'il est juge au même moment
   assert.equal(occupesDe(candidatsRole(s, complet(s), "eq", "juge"))["Coach Paul"], "coach de Les Fusées (09h00–09h45)");
 });
 
-test("cavalier du poney remplaçant : pris de l'échauffement à la fin du passage", () => {
+test("cavalier du poney remplaçant : pris de la préparation à la fin du passage", () => {
   const s = saison();
   let r = poserRemplacant(complet(s), "eq", "Pompon");
-  // Candidats : ni les Fusées (elles jouent), ni le Duo (prépa 8h45) ; Léa A est placeur, donc prise aussi.
+  // Fusées : prépa 8h00, passage jusqu'à 9h45. Ni les Fusées, ni le Duo (prépa 8h45), ni les rôles du passage.
   const c = occupesDe(candidatsRole(s, r, "eq", "cavalierRemplacant"));
-  assert.equal(c["Zoé Martin"], "en échauffement avec Les Fusées (08h30–09h00)");
+  assert.equal(c["Zoé Martin"], "en préparation avec Les Fusées (08h00–08h30)");
   assert.equal(c["Lou"], "en préparation avec Duo (08h45–09h15)");
   assert.equal(c["Léa B"], "facteur pour Les Fusées (09h00–09h45)");
   r = poserRole(r, "eq", "cavalierRemplacant", "lou");
-  assert.ok(verifierTableau(s, r).some((a) => a.message.startsWith("Lou : en préparation avec Duo") || a.message.startsWith("Lou : au poney remplaçant")));
+  assert.ok(verifierTableau(s, r).some((a) => a.gravite === "erreur" && a.message.startsWith("Lou : ") && a.message.includes("remplaçant de Les Fusées")));
+  // Ana au remplaçant des Fusées (8h00–9h45) ne peut pas tenir un rôle pendant ce temps.
+  const s2 = { ...s, cavaliers: [...s.cavaliers, { id: "ana", prenom: "Ana" }] };
+  let r2 = poserRole(poserRemplacant(complet(s2), "eq", "Pompon"), "eq", "cavalierRemplacant", "ana");
+  r2 = poserRole(r2, "p", "respPrepa", "Ana"); // prépa du Duo 8h45–9h15, pendant l'échauffement des Fusées
+  assert.ok(verifierTableau(s2, r2).some((a) => a.message === "Ana : en échauffement du remplaçant de Les Fusées (08h30–09h00) et responsable prépa de Duo (08h45–09h15) en même temps."),
+    verifierTableau(s2, r2).map((a) => a.message).join("\n"));
+  const ana = occupesDe(candidatsRole(s2, poserRole(poserRemplacant(complet(s2), "eq", "Pompon"), "eq", "cavalierRemplacant", "ana"), "eq", "respPrepa"));
+  assert.equal(ana["Ana"], "en préparation du remplaçant de Les Fusées (08h00–08h30)", "pas libre pour responsable de la prépa");
   // Pas de poney remplaçant : le cavalier choisi n'occupe personne.
   r = poserRemplacant(r, "eq", "");
   assert.deepEqual(verifierTableau(s, r), []);
@@ -349,6 +357,27 @@ test("2e responsable d'échauffement en même temps qu'un autre rôle : conflit"
   // Le Duo s’échauffe de 9h15 à 9h45 ; Inès joue avec les Fusées jusqu’à 9h45.
   const r = poserRole(complet(s), "p", "respEchauffement2", "Inès");
   assert.ok(verifierTableau(s, r).some((a) => a.gravite === "erreur" && a.message.startsWith("Inès : en jeu avec Les Fusées")));
+});
+
+console.log("\n── Nombre de tâches ──");
+
+test("tâches comptées par personne, hors prépa, échauffement et jeu de son équipe", () => {
+  const s = saison();
+  let r = poserRole(complet(s), "eq", "coach2", "Coach Julie");
+  r = poserRole(poserRemplacant(r, "eq", "Pompon"), "eq", "cavalierRemplacant", "lea2");
+  r = poserPlaceur(r, "eq", 1, "X");
+  const n = compterTaches(s, r);
+  assert.equal(n.get("nom:nicolas"), 2, "responsable de 2 prépas");
+  assert.equal(n.get("nom:coach paul"), 2);
+  assert.equal(n.get("nom:coach julie"), 1);
+  assert.equal(n.get("cav:lea2"), 2, "facteur des Fusées + cavalier du remplaçant");
+  assert.equal(n.get("cav:ines"), 1, "facteur du Duo ; jouer avec les Fusées ne compte pas");
+  assert.equal(n.get("cav:zoe"), undefined, "ne fait que jouer");
+  assert.equal(n.has("nom:x"), false, "X n'est personne");
+  const c = candidatsRole(s, r, "p", "juge");
+  assert.equal(c.find((x) => x.cavalierId === "lea2")!.taches, 2);
+  assert.equal(c.find((x) => x.cavalierId === "zoe")!.taches, 0);
+  assert.equal(c.find((x) => x.nom === "Nicolas")!.taches, 2);
 });
 
 console.log("\n── Impression ──");
