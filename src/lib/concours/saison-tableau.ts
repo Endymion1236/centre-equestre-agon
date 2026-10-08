@@ -117,11 +117,26 @@ const simplifier = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toL
  */
 export function clePersonne(s: SaisonPonyGames, nom: string): string {
   const t = simplifier(nom);
-  const complet = s.cavaliers.find((c) => simplifier([c.prenom, c.nom].filter(Boolean).join(" ")) === t);
-  if (complet) return `cav:${complet.id}`;
+  const complet = s.cavaliers.find((c) => nomSimplifie(c) === t);
+  if (complet) return cleCavalier(s, complet.id);
   const memePrenom = s.cavaliers.filter((c) => simplifier(c.prenom) === t);
-  if (memePrenom.length === 1) return `cav:${memePrenom[0].id}`;
+  // Un prénom ne désigne quelqu'un que s'il n'existe qu'une personne (même saisie en double) à le porter.
+  if (memePrenom.length && new Set(memePrenom.map(nomSimplifie)).size === 1) return cleCavalier(s, memePrenom[0].id);
   return `nom:${t}`;
+}
+
+const nomSimplifie = (c: { prenom: string; nom?: string }) => simplifier([c.prenom, c.nom].filter(Boolean).join(" "));
+
+/**
+ * Clé d'un cavalier de la saison. Un même cavalier saisi deux fois (même
+ * prénom et même nom) est une seule personne : il ne peut pas être libre
+ * sous une fiche et en jeu sous l'autre.
+ */
+export function cleCavalier(s: SaisonPonyGames, id: string): string {
+  const c = s.cavaliers.find((x) => x.id === id);
+  if (!c) return `cav:${id}`;
+  const premier = s.cavaliers.find((x) => nomSimplifie(x) === nomSimplifie(c))!;
+  return `cav:${premier.id}`;
 }
 
 interface Occupation {
@@ -153,12 +168,13 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
     if (!l.passage) continue;
     for (const c of l.cavaliers) {
       const genre = `cheval:${l.equipeId}`;
-      occ.push({ cle: `cav:${c.id}`, qui: c.nom, quoi: `en préparation avec ${l.equipe}`, genre, plage: l.prepa! });
-      occ.push({ cle: `cav:${c.id}`, qui: c.nom, quoi: `en échauffement avec ${l.equipe}`, genre, plage: l.echauffement! });
-      occ.push({ cle: `cav:${c.id}`, qui: c.nom, quoi: `en jeu avec ${l.equipe}`, genre, plage: l.passage });
+      const cle = cleCavalier(s, c.id);
+      occ.push({ cle, qui: c.nom, quoi: `en préparation avec ${l.equipe}`, genre, plage: l.prepa! });
+      occ.push({ cle, qui: c.nom, quoi: `en échauffement avec ${l.equipe}`, genre, plage: l.echauffement! });
+      occ.push({ cle, qui: c.nom, quoi: `en jeu avec ${l.equipe}`, genre, plage: l.passage });
     }
     for (const id of l.roles.placeurs ?? []) {
-      occ.push({ cle: `cav:${id}`, qui: nomCavalier(s, id), quoi: `placeur pour ${l.equipe}`, genre: `piste:${l.equipeId}`, plage: l.passage });
+      occ.push({ cle: cleCavalier(s, id), qui: nomCavalier(s, id), quoi: `placeur pour ${l.equipe}`, genre: `piste:${l.equipeId}`, plage: l.passage });
     }
     parNom(l.roles.juge, `juge pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
     parNom(l.roles.facteur, `facteur pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
@@ -224,13 +240,24 @@ export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId:
   const genre = role === "respPrepa" ? "prepa" : role === "respEchauffement" ? "echauffement" : `piste:${equipeId}`;
   const occ = occupations(s, r);
 
+  // Les cavaliers d'une équipe engagée sans horaire : on ne sait pas quand ils jouent, on ne les propose pas.
+  const sansHoraire = new Map<string, string>();
+  for (const x of lignesTableau(s, r)) {
+    if (x.passage || !plage) continue;
+    for (const c of x.cavaliers) sansHoraire.set(cleCavalier(s, c.id), `joue avec ${x.equipe} — horaire à saisir`);
+  }
+
   const personnes = new Map<string, Candidat>();
-  for (const c of s.cavaliers) personnes.set(`cav:${c.id}`, { nom: nomCavalier(s, c.id), cavalierId: c.id });
+  for (const c of s.cavaliers) {
+    const cle = cleCavalier(s, c.id);
+    if (!personnes.has(cle)) personnes.set(cle, { nom: nomCavalier(s, c.id), cavalierId: c.id });
+  }
   for (const o of occ) if (!personnes.has(o.cle)) personnes.set(o.cle, { nom: o.qui });
 
   const out = [...personnes.entries()].map(([cle, cand]): Candidat => {
     const gene = plage && occ.find((o) => o.cle === cle && o.genre !== genre && chevauche(o.plage, plage));
-    return gene ? { ...cand, occupe: `${gene.quoi} (${plageLisible(gene.plage)})` } : cand;
+    if (gene) return { ...cand, occupe: `${gene.quoi} (${plageLisible(gene.plage)})` };
+    return sansHoraire.has(cle) ? { ...cand, occupe: sansHoraire.get(cle) } : cand;
   });
   return out.sort((a, b) => Number(!!a.occupe) - Number(!!b.occupe) || a.nom.localeCompare(b.nom, "fr"));
 }

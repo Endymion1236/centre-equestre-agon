@@ -5,7 +5,7 @@ import { AlertOctagon, AlertTriangle, CheckCircle2, Printer } from "lucide-react
 import type { ResultatConcours, SaisonPonyGames } from "@/lib/concours/saisons";
 import {
   DUREE_ECHAUFFEMENT_MIN, DUREE_PREPA_MIN, PLACEURS_MAX,
-  candidatsRole, htmlTableau, lignesTableau, plageLisible, poserPlaceur, poserRole, verifierTableau,
+  candidatsRole, htmlTableau, lignesTableau, nomCavalier, plageLisible, poserPlaceur, poserRole, verifierTableau,
   type Candidat, type LigneTableau,
 } from "@/lib/concours/saison-tableau";
 
@@ -25,7 +25,7 @@ const AUTRE = "__autre__";
  * `valeurDe` dit ce qu'on enregistre (le nom, ou l'id pour un placeur).
  */
 function ChoixPersonne({
-  valeur, candidats, onChange, vide, valeurDe, libre = true,
+  valeur, candidats, onChange, vide, valeurDe, libre = true, libelle = (v: string) => v,
 }: {
   valeur?: string;
   candidats: Candidat[];
@@ -33,6 +33,8 @@ function ChoixPersonne({
   vide: string;
   valeurDe: (c: Candidat) => string;
   libre?: boolean;
+  /** Texte affiché pour une valeur absente de la liste (un id de cavalier, par exemple). */
+  libelle?: (v: string) => string;
 }) {
   const [saisie, setSaisie] = useState(false);
   if (saisie) {
@@ -50,7 +52,7 @@ function ChoixPersonne({
     <select className={`${inpSm} ${choisi?.occupe ? "border-red-300 bg-red-50 text-red-700" : ""}`} value={valeur ?? ""}
       onChange={(e) => (e.target.value === AUTRE ? setSaisie(true) : onChange(e.target.value))}>
       <option value="">{vide}</option>
-      {!connu && <option value={valeur}>{valeur}</option>}
+      {!connu && <option value={valeur}>{libelle(valeur!)}</option>}
       {disponibles.length > 0 && (
         <optgroup label={`Disponibles (${disponibles.length})`}>
           {disponibles.map((c) => <option key={valeurDe(c)} value={valeurDe(c)}>{c.nom}</option>)}
@@ -105,7 +107,8 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
         {Array.from({ length: Math.min(placeurs.length + 1, PLACEURS_MAX) }, (_, i) => (
           <ChoixPersonne key={i} valeur={placeurs[i]} libre={false} vide={i === 0 ? "— placeur —" : "— 2e placeur —"}
             candidats={candidatsPlaceur.filter((c) => c.cavalierId === placeurs[i] || !placeurs.includes(c.cavalierId!))}
-            valeurDe={(c) => c.cavalierId!} onChange={(v) => changer((c) => poserPlaceur(c, l.equipeId, i, v))} />
+            valeurDe={(c) => c.cavalierId!} libelle={(id) => nomCavalier(saison, id)}
+            onChange={(v) => changer((c) => poserPlaceur(c, l.equipeId, i, v))} />
         ))}
       </td>
       <td className={td}>{parNom("juge", "— juge —")}</td>

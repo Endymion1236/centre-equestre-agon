@@ -201,6 +201,57 @@ test("passage sans horaire : personne n'est écarté", () => {
   assert.ok(candidatsRole(s, r, "eq", "juge").every((x) => !x.occupe));
 });
 
+console.log("\n── Cas du 11h : l'équipe suivante n'est pas libre ──");
+
+function cas11h(): { s: SaisonPonyGames; r: ResultatConcours } {
+  const s: SaisonPonyGames = {
+    id: "s", nom: "2026/2027",
+    cavaliers: [
+      { id: "a", prenom: "Astérix" }, { id: "o", prenom: "Obélix" }, { id: "i", prenom: "Idéfix" }, { id: "p", prenom: "Panoramix" },
+      { id: "x", prenom: "Zoé" }, { id: "y", prenom: "Léo" }, { id: "libre", prenom: "Ana" },
+    ],
+    equipes: [
+      { id: "h11", nom: "Les Fusées", categorie: "Benjamin", indice: "", cavalierIds: ["x", "y"] },
+      { id: "gaulois", nom: "Les Irréductibles Gaulois", categorie: "Minime", indice: "", cavalierIds: ["a", "o", "i", "p"] },
+    ],
+    resultats: [{ id: "c", nom: "Pieux", date: "2026-11-15", heureDebut: "11:00", classements: [] }],
+  };
+  return { s, r: engagerEquipes(s, s.resultats[0], ["h11", "gaulois"]) };
+}
+const occupesDe = (c: ReturnType<typeof candidatsRole>) => Object.fromEntries(c.map((x) => [x.nom, x.occupe ?? "libre"]));
+
+test("Gaulois à 11h45 : pas libres pour placer ni échauffer à 11h", () => {
+  const { s, r } = cas11h();
+  assert.equal(r.engagements![1].heure, "11:45");
+  const placeur = occupesDe(candidatsRole(s, r, "h11", "placeur"));
+  assert.equal(placeur["Astérix"], "en préparation avec Les Irréductibles Gaulois (10h45–11h15)");
+  assert.equal(placeur["Ana"], "libre");
+  const ech = occupesDe(candidatsRole(s, r, "h11", "respEchauffement")); // 10h30–11h00
+  assert.equal(ech["Obélix"], "en préparation avec Les Irréductibles Gaulois (10h45–11h15)");
+  // La prépa du 11h (10h00–10h30) finit avant la leur (10h45) : là, ils sont vraiment libres.
+  assert.equal(occupesDe(candidatsRole(s, r, "h11", "respPrepa"))["Obélix"], "libre");
+});
+
+test("équipe suivante sans horaire : ses cavaliers ne sont pas proposés", () => {
+  const { s, r } = cas11h();
+  const r2 = { ...r, engagements: r.engagements!.map((g) => (g.equipeId === "gaulois" ? { ...g, heure: undefined } : g)) };
+  const placeur = occupesDe(candidatsRole(s, r2, "h11", "placeur"));
+  assert.equal(placeur["Astérix"], "joue avec Les Irréductibles Gaulois — horaire à saisir");
+  assert.equal(placeur["Ana"], "libre");
+});
+
+test("cavalier saisi deux fois : une seule personne, occupée", () => {
+  const { s, r } = cas11h();
+  const s2 = { ...s, cavaliers: [...s.cavaliers, { id: "a-bis", prenom: "astérix " }] };
+  const c = candidatsRole(s2, r, "h11", "placeur").filter((x) => x.nom.toLowerCase().trim() === "astérix");
+  assert.equal(c.length, 1, "proposé une seule fois");
+  assert.ok(c[0].occupe);
+  // Choisi sous sa 2e fiche, il est quand même repéré en conflit.
+  const r2 = poserPlaceur(r, "h11", 0, "a-bis");
+  assert.ok(verifierTableau(s2, r2).some((x) => x.gravite === "erreur" && x.message.includes("placeur pour Les Fusées")));
+  assert.equal(clePersonne(s2, "Astérix"), "cav:a");
+});
+
 console.log("\n── Impression ──");
 
 test("la page imprimable reprend tout, échappe le texte", () => {
