@@ -7,13 +7,14 @@ import { ArrowLeft, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { getSaison, saveSaison } from "@/lib/concours/saisons-store";
 import { messageErreurSaison, type SaisonPonyGames } from "@/lib/concours/saisons";
-import { OngletEquipes, OngletCavaliers, OngletResultats, OngletClassement, type Maj } from "./onglets";
+import { OngletEquipes, OngletCavaliers, OngletClassement, type Maj } from "./onglets";
+import { OngletConcours } from "./concours-saison";
 
-type Onglet = "equipes" | "cavaliers" | "resultats" | "classement";
+type Onglet = "equipes" | "cavaliers" | "concours" | "classement";
 const ONGLETS: { id: Onglet; libelle: string }[] = [
   { id: "equipes", libelle: "Équipes" },
   { id: "cavaliers", libelle: "Cavaliers" },
-  { id: "resultats", libelle: "Résultats des concours" },
+  { id: "concours", libelle: "Concours" },
   { id: "classement", libelle: "Classement de la saison" },
 ];
 
@@ -102,7 +103,7 @@ export default function EditeurSaison() {
 
       {onglet === "equipes" && <OngletEquipes saison={saison} maj={maj} />}
       {onglet === "cavaliers" && <OngletCavaliers saison={saison} maj={maj} />}
-      {onglet === "resultats" && <OngletResultats saison={saison} maj={maj} />}
+      {onglet === "concours" && <OngletConcours saison={saison} maj={maj} />}
       {onglet === "classement" && <OngletClassement saison={saison} />}
     </div>
   );

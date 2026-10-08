@@ -32,12 +32,28 @@ export interface ClassementEquipe {
   points?: number;
 }
 
+/** Une équipe engagée à un concours : son horaire et les poneys de la journée. */
+export interface EngagementConcours {
+  equipeId: string;
+  /** Heure de passage « HH:MM ». */
+  heure?: string;
+  /** Poney (surnom) monté par chaque cavalier : cavalierId → poney. */
+  poneys: Record<string, string>;
+  /** Poney remplaçant de l'équipe (équipes de 4 et paires). */
+  remplacant?: string;
+}
+
+/** Un concours de la saison : son organisation puis ses résultats. */
 export interface ResultatConcours {
   id: string;
   nom: string;
   /** ISO « AAAA-MM-JJ ». */
   date: string;
   lieu?: string;
+  /** Heure du premier passage, point de départ des horaires automatiques. */
+  heureDebut?: string;
+  /** Équipes engagées, dans l'ordre de passage. */
+  engagements?: EngagementConcours[];
   classements: ClassementEquipe[];
 }
 
@@ -100,6 +116,17 @@ export function retirerCavalier(s: SaisonPonyGames, cavalierId: string): SaisonP
     ...s,
     cavaliers: s.cavaliers.filter((c) => c.id !== cavalierId),
     equipes: s.equipes.map((e) => ({ ...e, cavalierIds: e.cavalierIds.filter((id) => id !== cavalierId) })),
+    resultats: s.resultats.map((r) =>
+      r.engagements
+        ? {
+            ...r,
+            engagements: r.engagements.map((g) => {
+              const { [cavalierId]: _retire, ...poneys } = g.poneys;
+              return { ...g, poneys };
+            }),
+          }
+        : r,
+    ),
   };
 }
 
@@ -108,7 +135,11 @@ export function retirerEquipe(s: SaisonPonyGames, equipeId: string): SaisonPonyG
   return {
     ...s,
     equipes: s.equipes.filter((e) => e.id !== equipeId),
-    resultats: s.resultats.map((r) => ({ ...r, classements: r.classements.filter((c) => c.equipeId !== equipeId) })),
+    resultats: s.resultats.map((r) => ({
+      ...r,
+      classements: r.classements.filter((c) => c.equipeId !== equipeId),
+      ...(r.engagements ? { engagements: r.engagements.filter((g) => g.equipeId !== equipeId) } : {}),
+    })),
   };
 }
 

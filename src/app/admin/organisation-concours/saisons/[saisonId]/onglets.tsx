@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, PencilLine, X, Check, UserPlus, Trophy, Calendar, MapPin } from "lucide-react";
+import { Plus, Trash2, PencilLine, X, Check, UserPlus } from "lucide-react";
 import {
   CATEGORIES_SUGGEREES, INDICES_SUGGERES,
-  retirerCavalier, retirerEquipe, saisirClassement, lireNombre, resultatsTries,
+  retirerCavalier, retirerEquipe, resultatsTries,
   bilanSaison, nomsCavaliers, equipesDuCavalier,
   type SaisonPonyGames, type EquipeSaison, type CavalierSaison,
 } from "@/lib/concours/saisons";
@@ -271,123 +271,6 @@ export function OngletCavaliers({ saison, maj }: { saison: SaisonPonyGames; maj:
             </div>
           ))}
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Résultats des concours ────────────────────────────────────────────────
-
-function CarteResultat({ saison, maj, resultatId }: { saison: SaisonPonyGames; maj: Maj; resultatId: string }) {
-  const r = saison.resultats.find((x) => x.id === resultatId)!;
-  const groupes = bilanSaison(saison);
-
-  const champ = (equipeId: string, cle: "rang" | "points", saisie: string) => {
-    const actuel = r.classements.find((c) => c.equipeId === equipeId) ?? { equipeId };
-    const valeurs = { rang: actuel.rang, points: actuel.points, [cle]: lireNombre(saisie) };
-    maj((s) => saisirClassement(s, r.id, equipeId, valeurs));
-  };
-
-  const supprimer = () => {
-    if (!confirm(`Supprimer le concours « ${r.nom} » et les résultats saisis ?`)) return;
-    maj((s) => ({ ...s, resultats: s.resultats.filter((x) => x.id !== r.id) }));
-  };
-
-  return (
-    <div className="rounded-xl border border-blue-500/15 bg-white p-4">
-      <div className="flex items-start gap-3 mb-3">
-        <Trophy size={18} className="text-blue-600 mt-0.5 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <div className="font-display font-bold text-gray-800">{r.nom}</div>
-          <div className="flex flex-wrap gap-3 text-xs text-gray-500 mt-0.5">
-            <span className="inline-flex items-center gap-1"><Calendar size={12} /> {r.date.split("-").reverse().join("/")}</span>
-            {r.lieu && <span className="inline-flex items-center gap-1"><MapPin size={12} /> {r.lieu}</span>}
-          </div>
-        </div>
-        <button type="button" onClick={supprimer} className={btnIcone} title="Supprimer le concours"><Trash2 size={16} /></button>
-      </div>
-      {saison.equipes.length === 0 ? (
-        <p className="text-xs text-gray-400">Crée d&apos;abord les équipes de la saison.</p>
-      ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-gray-500 text-left">
-              <th className="font-semibold py-1">Équipe</th>
-              <th className="font-semibold py-1 w-24">Classement</th>
-              <th className="font-semibold py-1 w-24">Points</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groupes.map((g) => [
-              <tr key={`g-${g.categorie}`}><td colSpan={3} className="pt-3 pb-1 text-xs font-bold text-blue-900 uppercase tracking-wide">{g.categorie}</td></tr>,
-              ...g.equipes.map(({ equipe }) => {
-                const c = r.classements.find((x) => x.equipeId === equipe.id);
-                return (
-                  <tr key={equipe.id} className="border-t border-gray-100">
-                    <td className="py-1.5 pr-2">
-                      {equipe.nom}
-                      {equipe.indice && <span className="text-xs text-gray-400 ml-1.5">{equipe.indice}</span>}
-                    </td>
-                    <td className="py-1.5 pr-2">
-                      <input key={`${r.id}-${equipe.id}-rang-${c?.rang ?? ""}`} className={inp} inputMode="numeric" placeholder="—"
-                        defaultValue={c?.rang ?? ""} onBlur={(e) => champ(equipe.id, "rang", e.target.value)} />
-                    </td>
-                    <td className="py-1.5">
-                      <input key={`${r.id}-${equipe.id}-pts-${c?.points ?? ""}`} className={inp} inputMode="decimal" placeholder="—"
-                        defaultValue={c?.points ?? ""} onBlur={(e) => champ(equipe.id, "points", e.target.value)} />
-                    </td>
-                  </tr>
-                );
-              }),
-            ])}
-          </tbody>
-        </table>
-      )}
-    </div>
-  );
-}
-
-export function OngletResultats({ saison, maj }: { saison: SaisonPonyGames; maj: Maj }) {
-  const [nom, setNom] = useState("");
-  const [date, setDate] = useState("");
-  const [lieu, setLieu] = useState("");
-
-  const ajouter = () => {
-    if (!nom.trim() || !date) return;
-    maj((s) => ({ ...s, resultats: [...s.resultats, { id: genId("cc"), nom: nom.trim(), date, lieu: lieu.trim() || undefined, classements: [] }] }));
-    setNom("");
-    setDate("");
-    setLieu("");
-  };
-
-  const tries = resultatsTries(saison).reverse();
-
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-blue-500/15 bg-white p-4">
-        <div className="text-sm font-semibold text-blue-900 mb-2">Ajouter un concours terminé</div>
-        <div className="grid sm:grid-cols-[2fr_1fr_1.5fr_auto] gap-2 items-end">
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Concours</label>
-            <input className={inp} value={nom} onChange={(e) => setNom(e.target.value)} placeholder="Pony Games de Pieux" />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Date</label>
-            <input type="date" className={inp} value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1">Lieu (optionnel)</label>
-            <input className={inp} value={lieu} onChange={(e) => setLieu(e.target.value)} />
-          </div>
-          <button type="button" onClick={ajouter} disabled={!nom.trim() || !date} className={btnPrimaire}><Plus size={15} /> Ajouter</button>
-        </div>
-        <p className="text-xs text-gray-400 mt-2">Puis saisis le classement et les points de chaque équipe engagée ; laisse vide celles qui n&apos;y étaient pas.</p>
-      </div>
-
-      {tries.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center border border-dashed border-gray-200 rounded-xl">Aucun concours enregistré pour cette saison.</p>
-      ) : (
-        tries.map((r) => <CarteResultat key={r.id} saison={saison} maj={maj} resultatId={r.id} />)
       )}
     </div>
   );
