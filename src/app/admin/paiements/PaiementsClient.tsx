@@ -14,6 +14,7 @@ import ModaleModifierCommande from "./ModaleModifierCommande";
 import ModaleEncaisser from "./ModaleEncaisser";
 import { programmerSepaCommandes } from "./sepa-groupe";
 import { planRemiseGroupee, pourcentageRemise } from "./remise-groupee";
+import { nouveauReglementGroupe } from "./journal-utils";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar, FileText } from "lucide-react";
 import type { Family, Activity } from "@/types";
@@ -122,6 +123,11 @@ export default function PaiementsPage() {
       let totalEncaisse = 0;
       // Chaque commande reste un document distinct (compta/NF525 intacts) : on
       // solde son dû via la fonction centralisée, une à une, même geste de paiement.
+      // Un seul geste de paiement : chaque commande garde son encaissement,
+      // tous portent la même marque (journal : « Réglé en une fois », et le
+      // rapprochement bancaire les retrouve ensemble face à la ligne de banque).
+      const dus = cibles.map(p => Math.max(0, Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100));
+      const groupe = nouveauReglementGroupe(dus, `rg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`);
       for (const p of cibles) {
         const du = Math.max(0, Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100);
         if (du <= 0) continue;
@@ -129,6 +135,7 @@ export default function PaiementsPage() {
           p.id!, p, du, multiMode, multiRef,
           (p.items || []).map((i: any) => i.activityTitle).join(", "),
           multiDate,
+          groupe ? { reglementGroupe: groupe } : {},
         );
         ids.push(p.id!);
         totalEncaisse += du;
