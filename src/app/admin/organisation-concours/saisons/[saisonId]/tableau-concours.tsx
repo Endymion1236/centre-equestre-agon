@@ -1,11 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { AlertOctagon, AlertTriangle, CheckCircle2, Printer } from "lucide-react";
 import type { ResultatConcours, SaisonPonyGames } from "@/lib/concours/saisons";
 import {
   DUREE_ECHAUFFEMENT_MIN, DUREE_PREPA_MIN, PLACEURS_MAX,
-  htmlTableau, lignesTableau, nomCavalier, plageLisible, poserPlaceur, poserRole, verifierTableau,
-  type LigneTableau,
+  candidatsRole, htmlTableau, lignesTableau, plageLisible, poserPlaceur, poserRole, verifierTableau,
+  type Candidat, type LigneTableau,
 } from "@/lib/concours/saison-tableau";
 
 type Changer = (f: (r: ResultatConcours) => ResultatConcours) => void;
@@ -16,20 +17,67 @@ const inpSm =
 const th = "text-left font-semibold px-2.5 py-2 text-xs text-gray-600 whitespace-nowrap";
 const td = "px-2.5 py-2 align-top";
 
-/** Nom libre (cavalier, parent, coach…) : saisi puis enregistré en quittant la case. */
-function CaseNom({ valeur, onChange, placeholder }: { valeur?: string; onChange: (v: string) => void; placeholder: string }) {
+const AUTRE = "__autre__";
+
+/**
+ * Menu d'une personne pour un rôle : les disponibles d'abord, les occupés
+ * grisés avec ce qui les retient, et « Autre personne… » pour taper un nom.
+ * `valeurDe` dit ce qu'on enregistre (le nom, ou l'id pour un placeur).
+ */
+function ChoixPersonne({
+  valeur, candidats, onChange, vide, valeurDe, libre = true,
+}: {
+  valeur?: string;
+  candidats: Candidat[];
+  onChange: (v: string) => void;
+  vide: string;
+  valeurDe: (c: Candidat) => string;
+  libre?: boolean;
+}) {
+  const [saisie, setSaisie] = useState(false);
+  if (saisie) {
+    return (
+      <input autoFocus className={inpSm} placeholder="Nom de la personne"
+        onBlur={(e) => { if (e.target.value.trim()) onChange(e.target.value); setSaisie(false); }}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setSaisie(false); }} />
+    );
+  }
+  const disponibles = candidats.filter((c) => !c.occupe);
+  const occupes = candidats.filter((c) => c.occupe);
+  const connu = !valeur || candidats.some((c) => valeurDe(c) === valeur);
+  const choisi = candidats.find((c) => valeurDe(c) === valeur);
   return (
-    <input key={valeur ?? ""} list="pg-personnes" className={inpSm} placeholder={placeholder} defaultValue={valeur ?? ""}
-      onBlur={(e) => e.target.value.trim() !== (valeur ?? "") && onChange(e.target.value)} />
+    <select className={`${inpSm} ${choisi?.occupe ? "border-red-300 bg-red-50 text-red-700" : ""}`} value={valeur ?? ""}
+      onChange={(e) => (e.target.value === AUTRE ? setSaisie(true) : onChange(e.target.value))}>
+      <option value="">{vide}</option>
+      {!connu && <option value={valeur}>{valeur}</option>}
+      {disponibles.length > 0 && (
+        <optgroup label={`Disponibles (${disponibles.length})`}>
+          {disponibles.map((c) => <option key={valeurDe(c)} value={valeurDe(c)}>{c.nom}</option>)}
+        </optgroup>
+      )}
+      {occupes.length > 0 && (
+        <optgroup label="Occupés à ce moment-là">
+          {occupes.map((c) => (
+            // Le choix déjà fait reste sélectionnable, pour pouvoir le voir et le changer.
+            <option key={valeurDe(c)} value={valeurDe(c)} disabled={valeurDe(c) !== valeur}>
+              {c.nom} — {c.occupe}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {libre && <option value={AUTRE}>✎ Autre personne…</option>}
+    </select>
   );
 }
 
-function LignePassage({ saison, ligne: l, changer }: { saison: SaisonPonyGames; ligne: LigneTableau; changer: Changer }) {
-  const role = (r: RoleTexte) => (v: string) => changer((c) => poserRole(c, l.equipeId, r, v));
-  // Les cavaliers de l'équipe courent : on ne les propose pas comme placeurs.
-  const placeursPossibles = saison.cavaliers
-    .filter((c) => !l.cavaliers.some((x) => x.id === c.id))
-    .sort((a, b) => a.prenom.localeCompare(b.prenom, "fr"));
+function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonPonyGames; concours: ResultatConcours; ligne: LigneTableau; changer: Changer }) {
+  const parNom = (role: RoleTexte, vide: string) => (
+    <ChoixPersonne valeur={l.roles[role]} candidats={candidatsRole(saison, concours, l.equipeId, role)} vide={vide}
+      valeurDe={(c) => c.nom} onChange={(v) => changer((c) => poserRole(c, l.equipeId, role, v))} />
+  );
+  // Placeurs : cavaliers de la saison seulement.
+  const candidatsPlaceur = candidatsRole(saison, concours, l.equipeId, "placeur").filter((c) => c.cavalierId);
   const placeurs = l.roles.placeurs ?? [];
 
   return (
@@ -47,25 +95,21 @@ function LignePassage({ saison, ligne: l, changer }: { saison: SaisonPonyGames; 
       </td>
       <td className={td}>
         <div className="text-xs font-semibold text-gray-600 mb-1 whitespace-nowrap">{plageLisible(l.prepa)}</div>
-        <CaseNom valeur={l.roles.respPrepa} onChange={role("respPrepa")} placeholder="Responsable" />
+        {parNom("respPrepa", "— responsable —")}
       </td>
       <td className={td}>
         <div className="text-xs font-semibold text-gray-600 mb-1 whitespace-nowrap">{plageLisible(l.echauffement)}</div>
-        <CaseNom valeur={l.roles.respEchauffement} onChange={role("respEchauffement")} placeholder="Responsable" />
+        {parNom("respEchauffement", "— responsable —")}
       </td>
       <td className={`${td} space-y-1`}>
         {Array.from({ length: Math.min(placeurs.length + 1, PLACEURS_MAX) }, (_, i) => (
-          <select key={i} className={inpSm} value={placeurs[i] ?? ""}
-            onChange={(e) => changer((c) => poserPlaceur(c, l.equipeId, i, e.target.value))}>
-            <option value="">{i === 0 ? "— placeur —" : "— 2e placeur —"}</option>
-            {placeursPossibles
-              .filter((c) => c.id === placeurs[i] || !placeurs.includes(c.id))
-              .map((c) => <option key={c.id} value={c.id}>{nomCavalier(saison, c.id)}</option>)}
-          </select>
+          <ChoixPersonne key={i} valeur={placeurs[i]} libre={false} vide={i === 0 ? "— placeur —" : "— 2e placeur —"}
+            candidats={candidatsPlaceur.filter((c) => c.cavalierId === placeurs[i] || !placeurs.includes(c.cavalierId!))}
+            valeurDe={(c) => c.cavalierId!} onChange={(v) => changer((c) => poserPlaceur(c, l.equipeId, i, v))} />
         ))}
       </td>
-      <td className={td}><CaseNom valeur={l.roles.juge} onChange={role("juge")} placeholder="Juge de ligne" /></td>
-      <td className={td}><CaseNom valeur={l.roles.facteur} onChange={role("facteur")} placeholder="Facteur" /></td>
+      <td className={td}>{parNom("juge", "— juge —")}</td>
+      <td className={td}>{parNom("facteur", "— facteur —")}</td>
     </tr>
   );
 }
@@ -73,13 +117,6 @@ function LignePassage({ saison, ligne: l, changer }: { saison: SaisonPonyGames; 
 export function TableauConcours({ saison, concours, changer }: { saison: SaisonPonyGames; concours: ResultatConcours; changer: Changer }) {
   const lignes = lignesTableau(saison, concours);
   const alertes = verifierTableau(saison, concours);
-
-  // Suggestions de noms : les cavaliers de la saison et les personnes déjà désignées.
-  const dejaNommes = lignes.flatMap((l) => [l.roles.respPrepa, l.roles.respEchauffement, l.roles.juge, l.roles.facteur]);
-  const suggestions = [...new Set([
-    ...saison.cavaliers.map((c) => nomCavalier(saison, c.id)),
-    ...dejaNommes.filter((n): n is string => !!n),
-  ])].sort((a, b) => a.localeCompare(b, "fr"));
 
   const imprimer = () => {
     const w = window.open("", "_blank");
@@ -98,13 +135,12 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
 
   return (
     <div className="space-y-3">
-      <datalist id="pg-personnes">{suggestions.map((n) => <option key={n} value={n} />)}</datalist>
-
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-xs text-gray-500 flex-1 min-w-[240px]">
           Pour chaque passage : préparation des poneys ({DUREE_PREPA_MIN} min) puis échauffement ({DUREE_ECHAUFFEMENT_MIN} min)
           juste avant, chacun avec un responsable ; pendant le passage, 1 à 2 placeurs, un juge de ligne et un facteur.
-          Les noms sont libres (cavalier, parent, coach…).
+          Chaque menu propose d&apos;abord les personnes libres à ce moment-là ; les occupées (en préparation,
+          en échauffement, en jeu ou sur un autre rôle) sont grisées. « Autre personne… » pour un parent, un coach…
         </p>
         <button type="button" onClick={imprimer}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 transition">
@@ -141,7 +177,7 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
             </tr>
           </thead>
           <tbody>
-            {lignes.map((l) => <LignePassage key={l.equipeId} saison={saison} ligne={l} changer={changer} />)}
+            {lignes.map((l) => <LignePassage key={l.equipeId} saison={saison} concours={concours} ligne={l} changer={changer} />)}
           </tbody>
         </table>
       </div>

@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau,
+  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole,
 } from "../../src/lib/concours/saison-tableau";
 import { engagerEquipes, poserDuree, poserPoney } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
@@ -135,10 +135,10 @@ test("rôle manquant signalé", () => {
 
 test("un cavalier placeur pendant son propre échauffement", () => {
   const s = saison();
-  // Lou échauffe pour le Duo de 9h15 à 9h45 : il ne peut pas placer pour les Fusées (9h00–9h45).
+  // Lou prépare puis échauffe pour le Duo de 8h45 à 9h45 : il ne peut pas placer pour les Fusées (9h00–9h45).
   const r = poserPlaceur(complet(s), "eq", 1, "lou");
   const msgs = verifierTableau(s, r).map((x) => x.message);
-  assert.deepEqual(msgs, ["Lou : placeur pour Les Fusées (09h00–09h45) et à cheval avec Duo (09h15–10h15) en même temps."]);
+  assert.deepEqual(msgs, ["Lou : placeur pour Les Fusées (09h00–09h45) et en préparation avec Duo (08h45–09h15) en même temps."], "un seul message, pas un par temps");
   // Inès est facteur du Duo (9h45–10h15) juste après avoir couru avec les Fusées : pas de conflit.
   assert.deepEqual(verifierTableau(s, complet(s)), []);
 });
@@ -147,7 +147,7 @@ test("un juge tapé par son prénom qui passe en même temps", () => {
   const s = saison();
   const r = poserRole(complet(s), "p", "juge", "zoé");
   const msgs = verifierTableau(s, poserDuree(s, r, "eq", 60)).map((x) => x.message);
-  assert.ok(msgs.some((m) => m.startsWith("zoé : juge pour Duo") || m.startsWith("Zoé Martin : à cheval avec Les Fusées")), msgs.join("\n"));
+  assert.ok(msgs.some((m) => m.startsWith("zoé : juge pour Duo") || m.startsWith("Zoé Martin : en jeu avec Les Fusées (09h00–10h00) et juge pour Duo")), msgs.join("\n"));
 });
 
 test("deux rôles sur le même passage : choix d'organisation, pas signalé", () => {
@@ -162,6 +162,43 @@ test("une personne responsable de l'échauffement et juge en même temps", () =>
   const r = poserRole(complet(s), "eq", "juge", "Emmeline");
   const msgs = verifierTableau(s, r).map((x) => x.message);
   assert.deepEqual(msgs, ["Emmeline : juge pour Les Fusées (09h00–09h45) et responsable échauffement de Duo (09h15–09h45) en même temps."]);
+});
+
+console.log("\n── Qui est disponible ──");
+
+const libres = (c: ReturnType<typeof candidatsRole>) => c.filter((x) => !x.occupe).map((x) => x.nom);
+
+test("placeur des Fusées (9h00–9h45) : ni ceux qui courent, ni ceux du Duo qui se préparent", () => {
+  const s = saison();
+  const c = candidatsRole(s, complet(s), "eq", "placeur");
+  assert.deepEqual(libres(c).filter((n) => s.cavaliers.some((x) => n.startsWith(x.prenom))), ["Léa A", "Léa B"]);
+  assert.equal(c.find((x) => x.cavalierId === "zoe")!.occupe, "en jeu avec Les Fusées (09h00–09h45)");
+  assert.equal(c.find((x) => x.cavalierId === "lou")!.occupe, "en préparation avec Duo (08h45–09h15)");
+  assert.ok(c.findIndex((x) => x.occupe) > c.findIndex((x) => !x.occupe), "les libres d'abord");
+});
+
+test("responsable prépa des Fusées (8h00–8h30) : tout le monde est libre, sauf les Fusées qui préparent", () => {
+  const s = saison();
+  const c = candidatsRole(s, complet(s), "eq", "respPrepa");
+  assert.equal(c.find((x) => x.cavalierId === "lou")!.occupe, undefined);
+  assert.equal(c.find((x) => x.cavalierId === "zoe")!.occupe, "en préparation avec Les Fusées (08h00–08h30)");
+  // Nicolas est déjà responsable de cette prépa : même rôle, il reste proposé.
+  assert.equal(c.find((x) => x.nom === "Nicolas")!.occupe, undefined);
+});
+
+test("les adultes déjà désignés sont proposés, avec leur occupation", () => {
+  const s = saison();
+  // Emmeline échauffe le Duo de 9h15 à 9h45 : pas libre pour juger les Fusées.
+  const c = candidatsRole(s, complet(s), "eq", "juge");
+  assert.equal(c.find((x) => x.nom === "Emmeline")!.occupe, "responsable échauffement de Duo (09h15–09h45)");
+  assert.equal(c.find((x) => x.nom === "Papa de Lou")!.occupe, undefined, "déjà juge de ce passage");
+  assert.equal(c.find((x) => x.nom === "Maman de Zoé")!.occupe, undefined, "juge du Duo, plus tard");
+});
+
+test("passage sans horaire : personne n'est écarté", () => {
+  const s = saison();
+  const r = engagerEquipes(s, { ...s.resultats[0], heureDebut: undefined }, ["eq"]);
+  assert.ok(candidatsRole(s, r, "eq", "juge").every((x) => !x.occupe));
 });
 
 console.log("\n── Impression ──");

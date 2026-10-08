@@ -138,27 +138,24 @@ export interface AlerteTableau {
   message: string;
 }
 
-export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): AlerteTableau[] {
-  const out: AlerteTableau[] = [];
+/**
+ * Où est chacun, et quand. Un cavalier est pris avec son équipe pendant la
+ * préparation des poneys, l'échauffement et le jeu ; chaque rôle occupe sa
+ * plage (prépa, échauffement ou passage).
+ */
+function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
   const occ: Occupation[] = [];
   const parNom = (nom: string | undefined, quoi: string, genre: string, plage?: Plage) => {
     if (!nom?.trim() || !plage) return;
     occ.push({ cle: clePersonne(s, nom), qui: nom.trim(), quoi, genre, plage });
   };
-
   for (const l of lignesTableau(s, r)) {
     if (!l.passage) continue;
-    const manque: string[] = [];
-    if (!l.roles.respPrepa?.trim()) manque.push("responsable préparation");
-    if (!l.roles.respEchauffement?.trim()) manque.push("responsable échauffement");
-    if (!l.roles.placeurs?.length) manque.push("placeur (1 minimum)");
-    if (!l.roles.juge?.trim()) manque.push("juge de ligne");
-    if (!l.roles.facteur?.trim()) manque.push("facteur");
-    if (manque.length) out.push({ gravite: "alerte", message: `${l.equipe} : ${manque.join(", ")} à désigner.` });
-
     for (const c of l.cavaliers) {
-      // Un cavalier échauffe son poney puis passe : occupé pendant ces deux temps.
-      occ.push({ cle: `cav:${c.id}`, qui: c.nom, quoi: `à cheval avec ${l.equipe}`, genre: `cheval:${l.equipeId}`, plage: { debut: l.echauffement!.debut, fin: l.passage.fin } });
+      const genre = `cheval:${l.equipeId}`;
+      occ.push({ cle: `cav:${c.id}`, qui: c.nom, quoi: `en préparation avec ${l.equipe}`, genre, plage: l.prepa! });
+      occ.push({ cle: `cav:${c.id}`, qui: c.nom, quoi: `en échauffement avec ${l.equipe}`, genre, plage: l.echauffement! });
+      occ.push({ cle: `cav:${c.id}`, qui: c.nom, quoi: `en jeu avec ${l.equipe}`, genre, plage: l.passage });
     }
     for (const id of l.roles.placeurs ?? []) {
       occ.push({ cle: `cav:${id}`, qui: nomCavalier(s, id), quoi: `placeur pour ${l.equipe}`, genre: `piste:${l.equipeId}`, plage: l.passage });
@@ -168,21 +165,74 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
     parNom(l.roles.respPrepa, `responsable prépa de ${l.equipe}`, "prepa", l.prepa);
     parNom(l.roles.respEchauffement, `responsable échauffement de ${l.equipe}`, "echauffement", l.echauffement);
   }
+  return occ;
+}
 
+const chevauche = (a: Plage, b: Plage) => a.debut < b.fin && b.debut < a.fin;
+
+export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): AlerteTableau[] {
+  const out: AlerteTableau[] = [];
+  for (const l of lignesTableau(s, r)) {
+    if (!l.passage) continue;
+    const manque: string[] = [];
+    if (!l.roles.respPrepa?.trim()) manque.push("responsable préparation");
+    if (!l.roles.respEchauffement?.trim()) manque.push("responsable échauffement");
+    if (!l.roles.placeurs?.length) manque.push("placeur (1 minimum)");
+    if (!l.roles.juge?.trim()) manque.push("juge de ligne");
+    if (!l.roles.facteur?.trim()) manque.push("facteur");
+    if (manque.length) out.push({ gravite: "alerte", message: `${l.equipe} : ${manque.join(", ")} à désigner.` });
+  }
+
+  const occ = occupations(s, r);
+  // Un seul message par personne et par paire d'engagements (le premier temps qui chevauche).
   const dejaDit = new Set<string>();
   for (let i = 0; i < occ.length; i++) {
     for (let j = i + 1; j < occ.length; j++) {
       const a = occ[i];
       const b = occ[j];
-      if (a.cle !== b.cle || a.genre === b.genre) continue;
-      if (!(a.plage.debut < b.plage.fin && b.plage.debut < a.plage.fin)) continue;
-      const message = `${a.qui} : ${a.quoi} (${plageLisible(a.plage)}) et ${b.quoi} (${plageLisible(b.plage)}) en même temps.`;
-      if (dejaDit.has(message)) continue;
-      dejaDit.add(message);
-      out.push({ gravite: "erreur", message });
+      if (a.cle !== b.cle || a.genre === b.genre || !chevauche(a.plage, b.plage)) continue;
+      const paire = [a.cle, ...[a.genre, b.genre].sort()].join("|");
+      if (dejaDit.has(paire)) continue;
+      dejaDit.add(paire);
+      out.push({ gravite: "erreur", message: `${a.qui} : ${a.quoi} (${plageLisible(a.plage)}) et ${b.quoi} (${plageLisible(b.plage)}) en même temps.` });
     }
   }
   return out.sort((x, y) => (x.gravite === y.gravite ? 0 : x.gravite === "erreur" ? -1 : 1));
+}
+
+// ─── Qui est disponible pour un rôle ───────────────────────────────────────
+
+export type RolePassage = "respPrepa" | "respEchauffement" | "placeur" | "juge" | "facteur";
+
+export interface Candidat {
+  /** Nom à inscrire dans la case. */
+  nom: string;
+  /** Présent pour un cavalier de la saison. */
+  cavalierId?: string;
+  /** Où est la personne à ce moment-là ; absent si elle est libre. */
+  occupe?: string;
+}
+
+/**
+ * Pour un rôle d'un passage : les cavaliers de la saison et les autres
+ * personnes déjà désignées dans ce concours, libres d'abord (par ordre
+ * alphabétique), puis les occupés avec ce qui les retient.
+ */
+export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId: string, role: RolePassage): Candidat[] {
+  const l = lignesTableau(s, r).find((x) => x.equipeId === equipeId);
+  const plage = !l ? undefined : role === "respPrepa" ? l.prepa : role === "respEchauffement" ? l.echauffement : l.passage;
+  const genre = role === "respPrepa" ? "prepa" : role === "respEchauffement" ? "echauffement" : `piste:${equipeId}`;
+  const occ = occupations(s, r);
+
+  const personnes = new Map<string, Candidat>();
+  for (const c of s.cavaliers) personnes.set(`cav:${c.id}`, { nom: nomCavalier(s, c.id), cavalierId: c.id });
+  for (const o of occ) if (!personnes.has(o.cle)) personnes.set(o.cle, { nom: o.qui });
+
+  const out = [...personnes.entries()].map(([cle, cand]): Candidat => {
+    const gene = plage && occ.find((o) => o.cle === cle && o.genre !== genre && chevauche(o.plage, plage));
+    return gene ? { ...cand, occupe: `${gene.quoi} (${plageLisible(gene.plage)})` } : cand;
+  });
+  return out.sort((a, b) => Number(!!a.occupe) - Number(!!b.occupe) || a.nom.localeCompare(b.nom, "fr"));
 }
 
 // ─── Impression ────────────────────────────────────────────────────────────
