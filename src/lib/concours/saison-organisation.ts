@@ -217,12 +217,8 @@ export function verifierOrganisation(s: SaisonPonyGames, r: ResultatConcours): A
     const debut = minutes(g.heure);
     creneaux.push({ g, equipe, debut, fin: debut === undefined ? undefined : debut + dureePassage(s, g) });
 
+    // Poney ou remplaçant laissé vide : choix de Nicolas, pas un oubli (le remplaçant n'est pas systématique).
     if (debut === undefined) out.push({ gravite: "alerte", message: `${equipe.nom} : pas d'horaire.` });
-    const sansPoney = equipe.cavalierIds.filter((id) => !g.poneys[id]?.trim()).map(nom);
-    if (sansPoney.length) out.push({ gravite: "alerte", message: `${equipe.nom} : pas de poney pour ${sansPoney.join(", ")}.` });
-    if (besoinRemplacant(equipe) && !g.remplacant?.trim()) {
-      out.push({ gravite: "alerte", message: `${equipe.nom} : poney remplaçant à choisir.` });
-    }
 
     // Un même poney deux fois dans l'équipe (remplaçant compris).
     const vus = new Map<string, string>();

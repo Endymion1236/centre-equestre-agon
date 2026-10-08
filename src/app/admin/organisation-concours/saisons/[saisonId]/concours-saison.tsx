@@ -265,7 +265,7 @@ function Alertes({ alertes }: { alertes: ReturnType<typeof verifierOrganisation>
   if (alertes.length === 0) {
     return (
       <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-2.5 text-sm text-green-800 inline-flex items-center gap-2">
-        <CheckCircle2 size={16} /> Organisation complète : horaires, poneys et remplaçants en place, aucun conflit.
+        <CheckCircle2 size={16} /> Tous les passages ont un horaire, aucun poney ni cavalier n&apos;est pris à deux endroits.
       </div>
     );
   }

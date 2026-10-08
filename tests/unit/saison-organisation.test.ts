@@ -202,11 +202,11 @@ test("organisation complète et sans chevauchement : rien à signaler", () => {
   assert.deepEqual(verifierOrganisation(s, complet(s)), []);
 });
 
-test("ce qui manque est signalé", () => {
+test("seul l'horaire manquant est signalé : poney ou remplaçant vide, c'est voulu", () => {
   const s = saison();
   const r = engagerEquipes(s, concours(s), ["p"]);
   const msgs = verifierOrganisation(s, poserPoney(r, "p", "lou", "Gala")).map((a) => a.message);
-  assert.deepEqual(msgs, ["Duo : pas d'horaire.", "Duo : pas de poney pour Max.", "Duo : poney remplaçant à choisir."]);
+  assert.deepEqual(msgs, ["Duo : pas d'horaire."]);
 });
 
 test("un poney deux fois dans la même équipe", () => {
