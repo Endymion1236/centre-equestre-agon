@@ -15,6 +15,7 @@ import {
   heureLisible, majConcours, minutes, poserDuree, poserHeure, poserPoney, poserRemplacant, verifierOrganisation, versHeure,
 } from "@/lib/concours/saison-organisation";
 import type { Maj } from "./onglets";
+import { TableauConcours } from "./tableau-concours";
 
 const inp =
   "w-full px-2.5 py-2 rounded-lg border border-blue-500/15 font-body text-sm bg-white focus:border-blue-500 focus:outline-none";
@@ -124,7 +125,7 @@ export function OngletConcours({ saison, maj }: { saison: SaisonPonyGames; maj: 
 function FicheConcours({
   saison, maj, concours, onFermer,
 }: { saison: SaisonPonyGames; maj: Maj; concours: ResultatConcours; onFermer: () => void }) {
-  const [partie, setPartie] = useState<"organisation" | "resultats">("organisation");
+  const [partie, setPartie] = useState<"organisation" | "tableau" | "resultats">("organisation");
   const changer = (f: (r: ResultatConcours) => ResultatConcours) => maj((s) => majConcours(s, concours.id, f));
 
   return (
@@ -148,7 +149,7 @@ function FicheConcours({
       </div>
 
       <div className="flex gap-1 border-b border-blue-500/10">
-        {([["organisation", "Organisation"], ["resultats", "Résultats"]] as const).map(([id, libelle]) => (
+        {([["organisation", "Organisation"], ["tableau", "Tableau de la journée"], ["resultats", "Résultats"]] as const).map(([id, libelle]) => (
           <button key={id} type="button" onClick={() => setPartie(id)}
             className={`px-4 py-2 font-body text-sm font-semibold rounded-t-lg transition ${
               partie === id ? "bg-blue-600 text-white" : "text-blue-800 hover:bg-blue-50"
@@ -158,9 +159,9 @@ function FicheConcours({
         ))}
       </div>
 
-      {partie === "organisation"
-        ? <OrganisationConcours saison={saison} concours={concours} changer={changer} />
-        : <ResultatsConcours saison={saison} maj={maj} concours={concours} />}
+      {partie === "organisation" && <OrganisationConcours saison={saison} concours={concours} changer={changer} />}
+      {partie === "tableau" && <TableauConcours saison={saison} concours={concours} changer={changer} />}
+      {partie === "resultats" && <ResultatsConcours saison={saison} maj={maj} concours={concours} />}
     </div>
   );
 }

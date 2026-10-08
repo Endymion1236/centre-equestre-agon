@@ -43,6 +43,20 @@ export interface EngagementConcours {
   remplacant?: string;
   /** Durée du passage en minutes, quand elle diffère de la durée habituelle (paire 30, équipe 45). */
   duree?: number;
+  /** Qui fait quoi autour de ce passage (tableau de la journée). */
+  roles?: RolesPassage;
+}
+
+/** Rôles autour d'un passage. Les noms sont libres (cavalier de la saison, parent, coach…). */
+export interface RolesPassage {
+  /** Responsable de la préparation des poneys (30 min, avant l'échauffement). */
+  respPrepa?: string;
+  /** Responsable de l'échauffement (30 min avant le passage). */
+  respEchauffement?: string;
+  /** Placeurs de matériel : 1 à 2 cavaliers de la saison (ids). */
+  placeurs?: string[];
+  juge?: string;
+  facteur?: string;
 }
 
 /** Un concours de la saison : son organisation puis ses résultats. */
@@ -124,7 +138,13 @@ export function retirerCavalier(s: SaisonPonyGames, cavalierId: string): SaisonP
             ...r,
             engagements: r.engagements.map((g) => {
               const { [cavalierId]: _retire, ...poneys } = g.poneys;
-              return { ...g, poneys };
+              const placeurs = g.roles?.placeurs;
+              if (!placeurs?.includes(cavalierId)) return { ...g, poneys };
+              const { placeurs: _p, ...autresRoles } = g.roles!;
+              const restants = placeurs.filter((id) => id !== cavalierId);
+              const roles = restants.length ? { ...autresRoles, placeurs: restants } : autresRoles;
+              const { roles: _r, ...sansRoles } = g;
+              return Object.keys(roles).length ? { ...sansRoles, poneys, roles } : { ...sansRoles, poneys };
             }),
           }
         : r,
