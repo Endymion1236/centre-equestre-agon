@@ -68,6 +68,15 @@ function FormulaireEquipe({
     setNom("");
   };
 
+  // Supprime le cavalier de la saison (et donc de toutes ses équipes), pas seulement de celle-ci.
+  const supprimerCavalier = (c: CavalierSaison) => {
+    const autres = equipesDuCavalier(saison, c.id).map((e) => e.nom);
+    const detail = autres.length ? `\nIl sera aussi retiré de : ${autres.join(", ")}.` : "";
+    if (!confirm(`Supprimer ${nomComplet(c)} de la saison ?${detail}`)) return;
+    maj((s) => retirerCavalier(s, c.id));
+    setB((x) => ({ ...x, cavalierIds: x.cavalierIds.filter((id) => id !== c.id) }));
+  };
+
   const valider = () => {
     if (!b.nom.trim()) return;
     onValider({ ...b, nom: b.nom.trim(), categorie: b.categorie.trim(), indice: b.indice.trim() });
@@ -91,7 +100,10 @@ function FormulaireEquipe({
       </div>
 
       <div>
-        <div className="text-xs font-semibold text-gray-600 mb-1.5">Cavaliers de l&apos;équipe ({b.cavalierIds.length})</div>
+        <div className="text-xs font-semibold text-gray-600 mb-1.5">
+          Cavaliers de l&apos;équipe ({b.cavalierIds.length})
+          <span className="font-normal text-gray-400"> — clic sur le nom : dans l&apos;équipe ou non · croix : supprimer le cavalier</span>
+        </div>
         {saison.cavaliers.length === 0 ? (
           <p className="text-xs text-gray-400 mb-2">Aucun cavalier dans la saison : ajoute-les juste en dessous.</p>
         ) : (
@@ -99,12 +111,17 @@ function FormulaireEquipe({
             {saison.cavaliers.map((c) => {
               const coche = b.cavalierIds.includes(c.id);
               return (
-                <button key={c.id} type="button" onClick={() => basculer(c.id)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
-                    coche ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:border-blue-400"
-                  }`}>
-                  {coche && <Check size={11} className="inline mr-1 -mt-0.5" />}{nomComplet(c)}
-                </button>
+                <span key={c.id} className={`inline-flex items-center rounded-full text-xs font-semibold border transition ${
+                  coche ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-600 border-gray-200 hover:border-blue-400"
+                }`}>
+                  <button type="button" onClick={() => basculer(c.id)} className="pl-2.5 pr-1.5 py-1">
+                    {coche && <Check size={11} className="inline mr-1 -mt-0.5" />}{nomComplet(c)}
+                  </button>
+                  <button type="button" onClick={() => supprimerCavalier(c)} title="Supprimer ce cavalier de la saison"
+                    className={`pr-2 py-1 ${coche ? "text-blue-200 hover:text-white" : "text-gray-300 hover:text-red-600"}`}>
+                    <X size={12} />
+                  </button>
+                </span>
               );
             })}
           </div>
