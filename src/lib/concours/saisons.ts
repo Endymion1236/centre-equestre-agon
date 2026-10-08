@@ -52,8 +52,8 @@ export interface SaisonPonyGames {
 
 /** Suggestions proposées à la saisie ; toute autre valeur reste acceptée. */
 export const CATEGORIES_SUGGEREES = [
-  "Poussin", "Benjamin", "Minime", "Cadet", "Open", "Senior",
-  "Paire poussin", "Paire benjamin", "Paire minime", "Paire cadet", "Paire open",
+  "Poussin", "Benjamin", "Minime", "Cadet", "Junior", "Open", "Senior",
+  "Paire poussin", "Paire benjamin", "Paire minime", "Paire cadet", "Paire junior", "Paire open",
 ];
 export const INDICES_SUGGERES = ["Club 4", "Club 3", "Club 2", "Club 1", "Club Élite", "Poney 2", "Poney 1", "Poney Élite"];
 
