@@ -15,6 +15,7 @@ import SectionReductions from "./SectionReductions";
 import SectionStages from "./SectionStages";
 import SectionProgression from "./SectionProgression";
 import SectionBorne from "./SectionBorne";
+import SectionProduits from "./SectionProduits";
 
 const defaultAccounts = [
   { code: "70641000", label: "Animations collectivité", tva: "5.50%", affectation: "Animations CE, collectivités" },
@@ -43,11 +44,11 @@ export default function ParametresPage() {
     setAgentContext({ module_actif: "parametres", description: "moniteurs, tarifs, infos centre" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  const [section, setSection] = useState<"centre" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "moniteurs" | "fidelite" | "inscription" | "progression" | "maintenance" | "notifications" | "marees" | "stages" | "borne">("centre");
+  const [section, setSection] = useState<"centre" | "reductions" | "degressivite" | "vacances" | "annulation" | "comptable" | "moniteurs" | "fidelite" | "inscription" | "progression" | "maintenance" | "notifications" | "marees" | "stages" | "borne" | "produits">("centre");
 
   // Ouvrir directement une section via l'URL (ex. /admin/parametres?section=moniteurs)
   useEffect(() => {
-    const allowed = ["centre","reductions","degressivite","vacances","annulation","comptable","moniteurs","fidelite","inscription","progression","maintenance","notifications","marees","stages","borne"];
+    const allowed = ["centre","reductions","degressivite","vacances","annulation","comptable","moniteurs","fidelite","inscription","progression","maintenance","notifications","marees","stages","borne","produits"];
     const s = new URLSearchParams(window.location.search).get("section");
     if (s && allowed.includes(s)) setSection(s as any);
   }, []);
@@ -318,6 +319,7 @@ export default function ParametresPage() {
           ["fidelite", "🏆 Fidélité"],
           ["notifications", "🔔 Notifications"],
           ["stages", "🐴 Déroulé stages"],
+          ["produits", "🛒 Produits"],
           ["marees", "🌊 Marées"],
           ["borne", "📺 Borne d'accueil"],
           ["maintenance", "Maintenance"],
@@ -889,6 +891,7 @@ export default function ParametresPage() {
 
       {/* ─── Maintenance ─── */}
       {section === "borne" && <SectionBorne />}
+      {section === "produits" && <SectionProduits />}
       {section === "maintenance" && <SectionMaintenance />}
       {section === "notifications" && (
         <div className="flex flex-col gap-5">

@@ -14,9 +14,14 @@
  *   - adhésion    : TVA 5,5 %, 70611110 « Cotisations / Adhésions ».
  * Mêmes libellés que les lignes de l'inscription annuelle.
  *
+ * S'y ajoutent les produits créés par le club (Paramètres → Produits,
+ * document settings/produits) : libellé, prix, TVA et compte choisi DANS le
+ * plan comptable du cabinet — un compte hors plan est refusé.
+ *
  * Module pur, testé seul (tests/unit/produits-annexes.test.ts).
  */
 import { tauxTva } from "@/lib/tva-taux";
+import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
 
 /** Champs utiles du document settings/inscription. */
 export interface TarifsAnnexes {
@@ -76,4 +81,47 @@ export function ligneProduitAnnexe(p: ProduitAnnexe, cavalier?: { id?: string; p
     category: p.category,
     compteComptable: p.compteComptable,
   };
+}
+
+/** Un produit créé par le club (Paramètres → Produits). */
+export interface ProduitCatalogue {
+  id: string;
+  label: string;
+  priceTTC: number;
+  tva: number;
+  compteComptable: string;
+  actif: boolean;
+}
+
+export const TAUX_TVA_PRODUIT = [0, 5.5, 10, 20];
+
+/** Pourquoi un produit ne peut pas être enregistré ; null s'il est complet. */
+export function erreurProduit(p: Partial<ProduitCatalogue>): string | null {
+  if (!String(p.label || "").trim()) return "Donnez un nom au produit.";
+  if (!(Number(p.priceTTC) > 0)) return "Le prix doit être supérieur à 0.";
+  if (!TAUX_TVA_PRODUIT.includes(Number(p.tva))) return "Choisissez un taux de TVA.";
+  if (!PLAN_COMPTABLE.some((c) => c.code === p.compteComptable)) return "Choisissez le compte dans le plan comptable.";
+  return null;
+}
+
+/** Le catalogue lu en base, sans les produits incomplets (compte hors plan, prix nul…). */
+export function nettoyerCatalogue(brut: unknown): ProduitCatalogue[] {
+  const liste = Array.isArray(brut) ? brut : [];
+  return liste
+    .map((p: any) => ({
+      id: String(p?.id || "").trim(),
+      label: String(p?.label || "").trim().slice(0, 80),
+      priceTTC: Math.round((Number(String(p?.priceTTC ?? "").replace(",", ".")) || 0) * 100) / 100,
+      tva: Number(p?.tva),
+      compteComptable: String(p?.compteComptable || ""),
+      actif: p?.actif !== false,
+    }))
+    .filter((p) => p.id && erreurProduit(p) === null);
+}
+
+/** Les produits actifs du catalogue, prêts pour les boutons. */
+export function produitsDuCatalogue(brut: unknown): ProduitAnnexe[] {
+  return nettoyerCatalogue(brut)
+    .filter((p) => p.actif)
+    .map((p) => ({ id: `cat-${p.id}`, label: p.label, priceTTC: p.priceTTC, tva: p.tva, category: "produit", compteComptable: p.compteComptable }));
 }
