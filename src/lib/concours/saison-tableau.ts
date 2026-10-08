@@ -440,7 +440,7 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
   const caseHeure = (heure: string, qui: string, extra = "") =>
     `<div class="case">${heure ? `<span>${heure}</span>` : ""}${qui ? `<b>${qui}</b>` : ""}${extra}</div>`;
 
-  const blocs = lignes.map((l, i) => {
+  const cases = lignes.map((l, i) => {
     const couleur = COULEURS_EQUIPES[i % COULEURS_EQUIPES.length];
     const titreEquipe = [l.categorie, s.equipes.find((e) => e.id === l.equipeId)?.indice].filter((x) => x?.trim()).join(" ");
     const rangs = l.cavaliers.map((c) => ({
@@ -457,49 +457,101 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
       .map((c) => `<span class="note">${echapper(c.poney ?? c.nom)} : ${echapper(nomCavalier(s, c.preparateur!))}</span>`)
       .join("");
     const placeurs = (l.roles.placeurs ?? []).filter((id) => !estPersonne(id)).map((id) => pastille(echapper(nomCavalier(s, id))));
-    const juge = nom(l.roles.juge);
-    const facteur = nom(l.roles.facteur);
-    return `
-  <div class="bloc">
-    <div class="equipe" style="background:${couleur}">${titreEquipe ? `<span>${echapper(titreEquipe)}</span>` : ""}<b>${echapper(l.equipe)}</b></div>
-    <div class="pile">${rangs.map((x) => pastille(x.cavalier)).join("")}</div>
-    <div class="pile">${rangs.map((x) => pastille(x.poney)).join("")}</div>
-    ${caseHeure(heureCourte(l.prepa?.debut), noms(l.roles.respPrepa), prepares)}
-    ${caseHeure(heureCourte(l.echauffement?.debut), noms(l.roles.respEchauffement, l.roles.respEchauffement2))}
-    ${caseHeure(heureCourte(l.passage?.debut), noms(l.roles.coach, l.roles.coach2))}
-    <div class="pile centre">${placeurs.join("")}</div>
-    ${juge ? `<div class="case">${juge}</div>` : "<div></div>"}
-    ${facteur ? `<div class="case">${facteur}</div>` : "<div></div>"}
-  </div>`;
-  }).join("");
+    const grande = (t: string) => (t ? `<div class="case">${t}</div>` : "<div></div>");
+    return {
+      equipe: `<div class="equipe" style="background:${couleur}">${titreEquipe ? `<span>${echapper(titreEquipe)}</span>` : ""}<b>${echapper(l.equipe)}</b></div>`,
+      cavaliers: `<div class="pile">${rangs.map((x) => pastille(x.cavalier)).join("")}</div>`,
+      poneys: `<div class="pile">${rangs.map((x) => pastille(x.poney)).join("")}</div>`,
+      prepa: caseHeure(heureCourte(l.prepa?.debut), noms(l.roles.respPrepa), prepares),
+      cheval: caseHeure(heureCourte(l.echauffement?.debut), noms(l.roles.respEchauffement, l.roles.respEchauffement2)),
+      passage: caseHeure(heureCourte(l.passage?.debut), noms(l.roles.coach, l.roles.coach2)),
+      placeur: `<div class="pile">${placeurs.join("")}</div>`,
+      juge: grande(nom(l.roles.juge)),
+      facteur: grande(nom(l.roles.facteur)),
+    };
+  });
 
-  const entetes = ["Équipes", "Cavaliers", "Poneys", "Prépa", "A cheval", "Passage", "Placeur", "Juge de ligne", "Facteur"];
+  const colonnes = colonnesImpression(s, r);
+  const ligneDeCases = (c: (typeof cases)[number]) => colonnes.map((col) => c[col.cle]).join("");
   return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${echapper(titre)}</title>
 <style>
   @page { size: A4 portrait; margin: 8mm; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { font-family: "Open Sans", Arial, sans-serif; font-size: 11px; color: #222; margin: 0; padding: 6px; }
-  .titre { background: #5271ff; color: #fff; text-align: center; font-size: 22px; font-weight: 700;
-           border-radius: 8px; padding: 9px 12px; margin-bottom: 8px; }
-  .grille { display: grid; grid-template-columns: 1.15fr 1.15fr 1.15fr .78fr .78fr .78fr 1.1fr 1.1fr 1.1fr; gap: 11px 6px; }
-  .bloc { display: contents; }
-  .entete { background: #f9a3d2; border-radius: 5px; text-align: center; padding: 6px 2px; font-size: 11px; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Open Sans", Arial, sans-serif; font-size: 10.5px; color: #222; }
+  /* Largeur utile d'une A4 portrait (210 mm moins les marges) ; ramenée à la hauteur d'une page au chargement. */
+  .page { width: 194mm; }
+  .titre { background: #5271ff; color: #fff; text-align: center; font-size: 20px; font-weight: 700;
+           border-radius: 8px; padding: 8px 12px; margin-bottom: 7px; }
+  .grille { display: grid; grid-template-columns: ${colonnes.map((c) => c.largeur).join(" ")}; gap: 8px 5px; }
+  .entete { background: #f9a3d2; border-radius: 5px; text-align: center; padding: 5px 3px; font-size: 10.5px; white-space: nowrap; }
   .equipe { border-radius: 6px; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            text-align: center; padding: 6px 4px; gap: 1px; }
+            text-align: center; padding: 5px 4px; gap: 1px; }
   .equipe b { font-weight: 700; }
-  .pile { display: flex; flex-direction: column; gap: 5px; justify-content: center; }
-  .pastille { background: #ebe7e7; border-radius: 6px; text-align: center; padding: 6px 4px; min-height: 26px; }
+  .pile { display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+  .pastille { background: #ebe7e7; border-radius: 6px; text-align: center; padding: 4px 4px; min-height: 22px;
+              display: flex; align-items: center; justify-content: center; }
   .case { background: #ebe7e7; border-radius: 6px; display: flex; flex-direction: column; justify-content: center;
-          align-items: center; text-align: center; padding: 6px 4px; gap: 2px; }
-  .note { display: block; font-size: 9px; color: #666; }
-  .pastille .note { display: inline; }
-  .grille > div { break-inside: avoid; }
+          align-items: center; text-align: center; padding: 5px 5px; gap: 2px; white-space: nowrap; }
+  .note { display: block; font-size: 8.5px; color: #666; }
+  .pastille .note { display: inline; margin-left: 3px; }
 </style></head><body>
+<div class="page">
 <div class="titre">${echapper(titre)}</div>
 <div class="grille">
-  ${entetes.map((e) => `<div class="entete">${e}</div>`).join("")}
-  ${blocs}
+  ${colonnes.map((c) => `<div class="entete">${c.entete}</div>`).join("")}
+  ${cases.map(ligneDeCases).join("\n  ")}
 </div>
-<script>window.onload = () => window.print();</script>
+</div>
+<script>
+  // Tout le concours sur une seule feuille A4 : on réduit si ça dépasse la hauteur d'une page.
+  window.onload = () => {
+    const page = document.querySelector(".page");
+    const mm = (n) => { const d = document.createElement("div"); d.style.height = n + "mm"; document.body.appendChild(d); const h = d.getBoundingClientRect().height; d.remove(); return h; };
+    const largeur = mm(194), hauteur = mm(279);
+    let z = 1;
+    for (let k = 0; k < 6; k++) {
+      page.style.zoom = "1";
+      page.style.width = largeur / z + "px";
+      const nz = Math.min(1, (hauteur / page.scrollHeight) * 0.99);
+      if (Math.abs(nz - z) < 0.005) { z = nz; break; }
+      z = nz;
+    }
+    page.style.width = largeur / z + "px";
+    page.style.zoom = String(z);
+    window.print();
+  };
+</script>
 </body></html>`;
+}
+
+export interface ColonneImpression {
+  cle: "equipe" | "cavaliers" | "poneys" | "prepa" | "cheval" | "passage" | "placeur" | "juge" | "facteur";
+  entete: string;
+  /** Largeur dans la grille : étroite (« max-content ») pour une colonne d'heures sans nom. */
+  largeur: string;
+}
+
+/**
+ * Colonnes de la feuille imprimée. Placeur, juge et facteur disparaissent
+ * quand personne n'y est inscrit (X ou vide partout) ; les colonnes d'heures
+ * sans aucun nom se resserrent pour laisser la place au texte.
+ */
+export function colonnesImpression(s: SaisonPonyGames, r: ResultatConcours): ColonneImpression[] {
+  const lignes = lignesTableau(s, r);
+  const rempli = (n?: string) => !!n?.trim() && !estPersonne(n);
+  const auMoinsUn = (f: (l: LigneTableau) => boolean) => lignes.some(f);
+  const heure = (avecNoms: boolean) => (avecNoms ? "minmax(58px, .9fr)" : "max-content");
+  const cols: (ColonneImpression | false)[] = [
+    { cle: "equipe", entete: "Équipes", largeur: "1.25fr" },
+    { cle: "cavaliers", entete: "Cavaliers", largeur: "1.1fr" },
+    { cle: "poneys", entete: "Poneys", largeur: "1.1fr" },
+    { cle: "prepa", entete: "Prépa", largeur: heure(auMoinsUn((l) => rempli(l.roles.respPrepa) || l.cavaliers.some((c) => c.enchaineAvec && rempli(c.preparateur)))) },
+    { cle: "cheval", entete: "A cheval", largeur: heure(auMoinsUn((l) => rempli(l.roles.respEchauffement) || rempli(l.roles.respEchauffement2))) },
+    { cle: "passage", entete: "Passage", largeur: heure(auMoinsUn((l) => rempli(l.roles.coach) || rempli(l.roles.coach2))) },
+    auMoinsUn((l) => (l.roles.placeurs ?? []).some(rempli)) && { cle: "placeur", entete: "Placeur", largeur: "1fr" },
+    auMoinsUn((l) => rempli(l.roles.juge)) && { cle: "juge", entete: "Juge de ligne", largeur: "1fr" },
+    auMoinsUn((l) => rempli(l.roles.facteur)) && { cle: "facteur", entete: "Facteur", largeur: "1fr" },
+  ];
+  return cols.filter((c): c is ColonneImpression => !!c);
 }

@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne, compterTaches, poserPreparateur,
+  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne, compterTaches, poserPreparateur, colonnesImpression,
 } from "../../src/lib/concours/saison-tableau";
 import { engagerEquipes, poserDuree, poserPoney, poserRemplacant } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
@@ -495,6 +495,44 @@ test("retirer le préparateur de la saison efface la désignation", () => {
   const { s, r } = casEnchaine("Pompon");
   const s2 = retirerCavalier({ ...s, resultats: [poserPreparateur(r, "c", "julie", "ana")] }, "ana");
   assert.equal(s2.resultats[0].engagements![1].roles, undefined);
+});
+
+console.log("\n── Colonnes de la feuille imprimée ──");
+
+const entetes = (s: SaisonPonyGames, r: ResultatConcours) => colonnesImpression(s, r).map((c) => c.entete);
+
+test("personne au facteur (vide ou X) : la colonne disparaît", () => {
+  const s = saison();
+  let r = complet(s);
+  assert.ok(entetes(s, r).includes("Facteur"));
+  for (const eq of ["eq", "p"]) r = poserRole(r, eq, "facteur", eq === "eq" ? "X" : "");
+  assert.deepEqual(entetes(s, r), ["Équipes", "Cavaliers", "Poneys", "Prépa", "A cheval", "Passage", "Placeur", "Juge de ligne"]);
+  assert.ok(!htmlTableau(s, r).includes(">Facteur<"));
+});
+
+test("placeurs et juges absents partout : colonnes retirées aussi", () => {
+  const s = saison();
+  const r = engagerEquipes(s, { ...s.resultats[0] }, ["eq", "p"]);
+  assert.deepEqual(entetes(s, r), ["Équipes", "Cavaliers", "Poneys", "Prépa", "A cheval", "Passage"]);
+});
+
+test("colonnes d'heures sans nom resserrées, élargies dès qu'un nom y figure", () => {
+  const s = saison();
+  const r = engagerEquipes(s, { ...s.resultats[0] }, ["eq", "p"]);
+  const largeur = (r: ResultatConcours, cle: string) => colonnesImpression(s, r).find((c) => c.cle === cle)!.largeur;
+  assert.equal(largeur(r, "prepa"), "max-content");
+  assert.equal(largeur(r, "passage"), "max-content");
+  const r2 = poserRole(r, "p", "coach", "Emmeline");
+  assert.notEqual(largeur(r2, "passage"), "max-content");
+  assert.equal(largeur(poserRole(r, "p", "coach", "X"), "passage"), "max-content", "X ne compte pas comme un nom");
+});
+
+test("la feuille se règle sur une A4 portrait", () => {
+  const s = saison();
+  const html = htmlTableau(s, complet(s));
+  assert.match(html, /@page \{ size: A4 portrait/);
+  assert.match(html, /\.page \{ width: 194mm; \}/);
+  assert.match(html, /page\.style\.zoom/, "réduction automatique si le concours dépasse une page");
 });
 
 console.log("\n── Impression ──");
