@@ -23,6 +23,8 @@ import { authFetch } from "@/lib/auth-fetch";
 import { refusDateEncaissement } from "@/lib/date-encaissement";
 import { toParisDateString } from "@/lib/date-local";
 import { CATEGORIES_COMPTABLES } from "@/lib/categories-comptables";
+import { BoutonsProduitsAnnexes } from "./BoutonsProduitsAnnexes";
+import { ligneProduitAnnexe, type ProduitAnnexe } from "@/lib/produits-annexes";
 import { nomsServices, serviceParNom } from "@/lib/services-etablissement";
 import {
   emailLayout, emailPanneau, emailLigne, emailTitre,
@@ -190,6 +192,15 @@ export function TabEncaisser({
       tva: (act as any).tvaTaux ?? 5.5,
       priceTTC,
     }]);
+  };
+
+  // Licence, adhésion : ligne avec prix, TVA et compte du produit (lib/produits-annexes).
+  const ajouterProduitAnnexe = (p: ProduitAnnexe) => {
+    if (!selectedFamily) { toast("Veuillez d'abord sélectionner une famille", "warning"); return; }
+    const fam = families.find(f => f.firestoreId === selectedFamily);
+    const child = (fam?.children || []).find((c: any) => c.id === selectedChild);
+    const ligne = ligneProduitAnnexe(p, child ? { id: selectedChild, prenom: (child as any).firstName || "" } : null);
+    setBasket([...basket, { id: `${p.id}-${Date.now()}`, ...ligne, childName: ligne.childName || "—", description: p.label } as any]);
   };
 
   const vendreBonCadeau = () => {
@@ -1055,6 +1066,9 @@ export function TabEncaisser({
             </div>
           );
         })()}
+
+        {/* Produits hors activités : licence, adhésion */}
+        <div className="mb-3"><BoutonsProduitsAnnexes onAjouter={ajouterProduitAnnexe} /></div>
 
         {/* Custom item */}
         <div className="font-body text-xs text-slate-600 mb-2">— ou saisie libre —</div>

@@ -120,7 +120,20 @@ export function cleLibelleVente(titre: unknown): string {
 }
 
 /** Compte d'une ligne + provenance de la décision (pour l'audit à l'écran). */
+/**
+ * Anciens codes génériques posés sur des lignes déjà enregistrées, dont le
+ * compte Celeris est connu. Octobre 2026 : une licence saisie à la caisse
+ * portait 706400, hors du plan du cabinet, alors que la même licence prise à
+ * l'inscription allait au 70100000 « Refacturation FFE ».
+ */
+const ANCIENS_CODES: Record<string, string> = {
+  "706400": "70100000",
+};
+
 export function compteDeLigne(item: LigneFacture, regles?: ReglesVentilation | null): { code: string; source: string } {
+  if (item.compteComptable && ANCIENS_CODES[item.compteComptable]) {
+    return { code: ANCIENS_CODES[item.compteComptable], source: "compte de la ligne (ancien code converti)" };
+  }
   if (item.compteComptable) return { code: item.compteComptable, source: "compte de la ligne" };
   if (item.category && PAR_CATEGORIE[item.category]) {
     return { code: PAR_CATEGORIE[item.category], source: "catégorie" };

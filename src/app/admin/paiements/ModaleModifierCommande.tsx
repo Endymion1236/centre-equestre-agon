@@ -27,6 +27,8 @@ import { fetchDiscountSettings, calculateFamilyDiscount, calculateMultiStageDisc
 import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
 import { verrouCommande } from "./commande-verrou";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
+import { BoutonsProduitsAnnexes } from "./BoutonsProduitsAnnexes";
+import { ligneProduitAnnexe } from "@/lib/produits-annexes";
 
 export interface ModaleModifierCommandeProps {
   /** La commande à modifier ; la modale n'est montée que si elle existe. */
@@ -113,7 +115,11 @@ export default function ModaleModifierCommande({
                 {editItems.map((item, idx) => (
                   <div key={idx} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2.5">
                     <div className="flex-1 min-w-0">
-                      <div className="font-body text-xs text-blue-800 truncate">{item.activityTitle}</div>
+                      {/* Ligne libre ajoutée ici : son libellé se saisit (il partait figé à « Remise / Ajustement »). */}
+                      {item.ligneLibre && !isInvoiced
+                        ? <input value={item.activityTitle} onChange={e => setEditItems(prev => prev.map((it, i) => i === idx ? { ...it, activityTitle: e.target.value } : it))}
+                            className="w-full px-2 py-1 rounded border border-gray-200 font-body text-xs text-blue-800" />
+                        : <div className="font-body text-xs text-blue-800 truncate">{item.activityTitle}</div>}
                       {item.childName && <div className="font-body text-[10px] text-slate-400">{item.childName}</div>}
                     </div>
                     <input
@@ -136,10 +142,18 @@ export default function ModaleModifierCommande({
                 ))}
               </div>
 
+              {/* Licence, adhésion : produit avec son prix, sa TVA et son compte */}
+              {!isInvoiced && (() => {
+                // Rattachée au cavalier quand la commande n'en concerne qu'un ; sinon à la famille.
+                const cavaliers = [...new Map(editItems.filter(i => i.childId).map(i => [i.childId, i.childName])).entries()];
+                const cavalier = cavaliers.length === 1 ? { id: cavaliers[0][0], prenom: cavaliers[0][1] } : null;
+                return <div className="mt-3"><BoutonsProduitsAnnexes onAjouter={p => setEditItems(prev => [...prev, ligneProduitAnnexe(p, cavalier)])} /></div>;
+              })()}
+
               {/* Ajouter une ligne libre */}
-              <button type="button" onClick={() => setEditItems(prev => [...prev, { activityTitle: "Remise / Ajustement", priceTTC: 0, priceHT: 0, tva: 5.5, childName: "" }])}
-                className="mt-2 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline">
-                + Ajouter une ligne
+              <button type="button" disabled={isInvoiced} onClick={() => setEditItems(prev => [...prev, { activityTitle: "Remise / Ajustement", priceTTC: 0, priceHT: 0, tva: 5.5, childName: "", ligneLibre: true }])}
+                className="mt-2 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline disabled:opacity-40">
+                + Ajouter une ligne libre
               </button>
             </div>
 
