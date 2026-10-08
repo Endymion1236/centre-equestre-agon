@@ -11,8 +11,8 @@ import {
   type SaisonPonyGames, type ResultatConcours, type EquipeSaison,
 } from "@/lib/concours/saisons";
 import {
-  avecHoraires, besoinRemplacant, deplacer, desengager, dureeEpreuve, engagerEquipes, estPaire,
-  heureLisible, majConcours, minutes, poserHeure, poserPoney, poserRemplacant, verifierOrganisation, versHeure,
+  avecHoraires, besoinRemplacant, deplacer, desengager, dureeEpreuve, dureePassage, engagerEquipes, estPaire,
+  heureLisible, majConcours, minutes, poserDuree, poserHeure, poserPoney, poserRemplacant, verifierOrganisation, versHeure,
 } from "@/lib/concours/saison-organisation";
 import type { Maj } from "./onglets";
 
@@ -211,8 +211,9 @@ function OrganisationConcours({ saison, concours, changer }: { saison: SaisonPon
           <RefreshCw size={14} /> Recalculer les horaires
         </button>
         <p className="text-xs text-gray-500 flex-1 min-w-[220px]">
-          Les épreuves s&apos;enchaînent dans l&apos;ordre de passage : <b>30 min</b> pour une paire, <b>45 min</b> pour une équipe.
-          Une heure modifiée à la main range l&apos;équipe à sa place.
+          Les épreuves s&apos;enchaînent dans l&apos;ordre de passage : <b>30 min</b> pour une paire, <b>45 min</b> pour une équipe,
+          durée modifiable passage par passage. Une heure modifiée à la main range l&apos;équipe à sa place ;
+          après un changement de durée, « Recalculer » réenchaîne les horaires.
         </p>
       </div>
 
@@ -292,8 +293,10 @@ function CartePassage({
   changer: Changer;
 }) {
   const debut = minutes(engagement.heure);
-  const duree = dureeEpreuve(equipe);
   const g = engagement;
+  const habituelle = dureeEpreuve(equipe);
+  const duree = dureePassage(saison, g);
+  const modifiee = duree !== habituelle;
 
   return (
     <div className="rounded-xl border border-blue-500/12 bg-white p-3.5">
@@ -304,8 +307,20 @@ function CartePassage({
           <input key={`h-${g.heure ?? ""}`} type="time" className={`${inpSm} w-[110px]`} defaultValue={g.heure ?? ""}
             onBlur={(e) => e.target.value !== (g.heure ?? "") && changer((r) => poserHeure(r, equipe.id, e.target.value))} />
           <span className="text-xs text-gray-500 whitespace-nowrap">
-            {debut !== undefined ? `→ ${heureLisible(versHeure(debut + duree))}` : ""} · {duree} min
+            {debut !== undefined ? `→ ${heureLisible(versHeure(debut + duree))}` : ""}
           </span>
+          <input key={`d-${duree}`} type="number" min={5} step={5} inputMode="numeric" title={`Durée du passage (habituellement ${habituelle} min)`}
+            className={`${inpSm} w-[64px] text-center ${modifiee ? "border-amber-300 bg-amber-50 font-semibold" : ""}`}
+            defaultValue={duree}
+            onBlur={(e) => {
+              const v = lireNombre(e.target.value);
+              if (v !== duree) changer((r) => poserDuree(saison, r, equipe.id, v));
+            }} />
+          <span className="text-xs text-gray-500">min</span>
+          {modifiee && (
+            <button type="button" title={`Revenir à ${habituelle} min`} onClick={() => changer((r) => poserDuree(saison, r, equipe.id, undefined))}
+              className="text-[11px] text-amber-700 hover:underline whitespace-nowrap">↺ {habituelle} min</button>
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <span className="font-display font-bold text-gray-800">{equipe.nom}</span>

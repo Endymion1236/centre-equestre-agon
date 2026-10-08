@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import {
   estPaire, dureeEpreuve, besoinRemplacant, minutes, versHeure, heureLisible,
   engagerEquipes, desengager, deplacer, avecHoraires, poserHeure, poserPoney, poserRemplacant,
-  verifierOrganisation, majConcours,
+  verifierOrganisation, majConcours, dureePassage, poserDuree,
 } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, retirerEquipe, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
 
@@ -122,6 +122,41 @@ test("avecHoraires sans heure de début valide rend le concours intact", () => {
   const s = saison();
   const r = { ...concours(s), heureDebut: "n'importe" };
   assert.equal(avecHoraires(s, r), r);
+});
+
+console.log("\n── Durée modifiée à la main ──");
+
+test("une durée saisie remplace la durée habituelle pour ce passage seulement", () => {
+  const s = saison();
+  let r = engagerEquipes(s, { ...concours(s), heureDebut: "09:00" }, ["eq4", "p"]);
+  r = poserDuree(s, r, "eq4", 60);
+  assert.equal(dureePassage(s, r.engagements![0]), 60);
+  assert.equal(dureePassage(s, r.engagements![1]), 30, "la paire garde 30 min");
+  assert.deepEqual(r.engagements!.map((g) => g.heure), ["09:00", "09:45"], "les autres horaires ne bougent pas seuls");
+  r = avecHoraires(s, r);
+  assert.deepEqual(r.engagements!.map((g) => g.heure), ["09:00", "10:00"], "« Recalculer » tient compte de la durée");
+  r = engagerEquipes(s, r, ["eq5"]);
+  assert.equal(r.engagements![2].heure, "10:30", "une équipe ajoutée se place après la vraie fin");
+});
+
+test("vide, zéro ou durée habituelle : retour à la valeur par défaut", () => {
+  const s = saison();
+  let r = poserDuree(s, engagerEquipes(s, concours(s), ["p"]), "p", 40);
+  assert.equal(r.engagements![0].duree, 40);
+  for (const v of [undefined, 0, 30]) {
+    const r2 = poserDuree(s, r, "p", v);
+    assert.equal("duree" in r2.engagements![0], false, String(v));
+    assert.equal(dureePassage(s, r2.engagements![0]), 30);
+  }
+  r = poserDuree(s, r, "p", 37.6);
+  assert.equal(r.engagements![0].duree, 38, "arrondi à la minute");
+});
+
+test("une durée allongée crée le chevauchement qu'elle provoque", () => {
+  const s = saison();
+  const r = poserDuree(s, complet(s), "eq4", 60); // les Fusées finissent à 10h00, le Duo part à 9h45
+  const msgs = verifierOrganisation(s, r).map((a) => a.message);
+  assert.ok(msgs.includes("Gala est dans Les Fusées (09h00–10h00) et Duo (09h45–10h15) en même temps."), msgs.join("\n"));
 });
 
 console.log("\n── Poneys ──");

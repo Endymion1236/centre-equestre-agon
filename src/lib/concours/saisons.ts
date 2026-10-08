@@ -41,6 +41,8 @@ export interface EngagementConcours {
   poneys: Record<string, string>;
   /** Poney remplaçant de l'équipe (équipes de 4 et paires). */
   remplacant?: string;
+  /** Durée du passage en minutes, quand elle diffère de la durée habituelle (paire 30, équipe 45). */
+  duree?: number;
 }
 
 /** Un concours de la saison : son organisation puis ses résultats. */

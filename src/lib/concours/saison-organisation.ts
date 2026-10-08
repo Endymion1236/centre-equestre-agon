@@ -4,7 +4,8 @@
 // Pour chaque concours : les équipes engagées dans l'ordre de passage, leur
 // horaire, le poney de chaque cavalier et le poney remplaçant (équipes de 4
 // cavaliers et paires). Une épreuve en paire dure 30 min, en équipe 45 min :
-// les horaires s'enchaînent à partir de l'heure du premier passage, et les
+// les horaires s'enchaînent à partir de l'heure du premier passage (durée
+// modifiable passage par passage), et les
 // vérifications signalent un poney ou un cavalier pris à deux endroits.
 // =============================================================================
 
@@ -25,6 +26,13 @@ export function dureeEpreuve(e: EquipeSaison): number {
 }
 
 /** Un poney remplaçant est prévu quand l'équipe compte 4 cavaliers, ou 2 (paire). */
+/** Durée d'un passage : celle saisie pour ce concours, sinon la durée habituelle de l'épreuve. */
+export function dureePassage(s: SaisonPonyGames, g: EngagementConcours): number {
+  if (g.duree !== undefined && g.duree > 0) return g.duree;
+  const e = s.equipes.find((x) => x.id === g.equipeId);
+  return e ? dureeEpreuve(e) : DUREE_EQUIPE_MIN;
+}
+
 export function besoinRemplacant(e: EquipeSaison): boolean {
   return e.cavalierIds.length === 4 || e.cavalierIds.length === 2;
 }
@@ -70,9 +78,8 @@ function prochaineHeureLibre(s: SaisonPonyGames, liste: EngagementConcours[], he
   let fin: number | undefined;
   for (const g of liste) {
     const d = minutes(g.heure);
-    const e = equipeDe(s, g.equipeId);
-    if (d === undefined || !e) continue;
-    fin = Math.max(fin ?? 0, d + dureeEpreuve(e));
+    if (d === undefined || !equipeDe(s, g.equipeId)) continue;
+    fin = Math.max(fin ?? 0, d + dureePassage(s, g));
   }
   return fin ?? minutes(heureDebut);
 }
@@ -119,9 +126,8 @@ export function avecHoraires(s: SaisonPonyGames, r: ResultatConcours): ResultatC
   let curseur = minutes(r.heureDebut);
   if (curseur === undefined) return r;
   const engagements = (r.engagements ?? []).map((g) => {
-    const e = equipeDe(s, g.equipeId);
     const heure = versHeure(curseur!);
-    curseur! += e ? dureeEpreuve(e) : DUREE_EQUIPE_MIN;
+    curseur! += dureePassage(s, g);
     return { ...g, heure };
   });
   return { ...r, engagements };
@@ -150,6 +156,24 @@ export function poserPoney(r: ResultatConcours, equipeId: string, cavalierId: st
       if (g.equipeId !== equipeId) return g;
       const { [cavalierId]: _ancien, ...poneys } = g.poneys;
       return { ...g, poneys: poney.trim() ? { ...poneys, [cavalierId]: poney.trim() } : poneys };
+    }),
+  };
+}
+
+/**
+ * Durée modifiée à la main pour ce passage. Vide, nulle ou égale à la durée
+ * habituelle : on revient à la durée habituelle. Les autres horaires ne
+ * bougent pas (« Recalculer » les réenchaîne).
+ */
+export function poserDuree(s: SaisonPonyGames, r: ResultatConcours, equipeId: string, duree: number | undefined): ResultatConcours {
+  const e = equipeDe(s, equipeId);
+  const valeur = duree !== undefined && duree > 0 && Math.round(duree) !== (e ? dureeEpreuve(e) : undefined) ? Math.round(duree) : undefined;
+  return {
+    ...r,
+    engagements: (r.engagements ?? []).map((g) => {
+      if (g.equipeId !== equipeId) return g;
+      const { duree: _ancienne, ...reste } = g;
+      return valeur === undefined ? reste : { ...reste, duree: valeur };
     }),
   };
 }
@@ -191,7 +215,7 @@ export function verifierOrganisation(s: SaisonPonyGames, r: ResultatConcours): A
     const equipe = equipeDe(s, g.equipeId);
     if (!equipe) continue;
     const debut = minutes(g.heure);
-    creneaux.push({ g, equipe, debut, fin: debut === undefined ? undefined : debut + dureeEpreuve(equipe) });
+    creneaux.push({ g, equipe, debut, fin: debut === undefined ? undefined : debut + dureePassage(s, g) });
 
     if (debut === undefined) out.push({ gravite: "alerte", message: `${equipe.nom} : pas d'horaire.` });
     const sansPoney = equipe.cavalierIds.filter((id) => !g.poneys[id]?.trim()).map(nom);
