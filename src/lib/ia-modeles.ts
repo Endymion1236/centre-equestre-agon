@@ -18,8 +18,15 @@
 export const MODELE_PRINCIPAL = "claude-opus-5-5";
 /** Rédactions courantes (emails, descriptions, suggestions), borne, boîte mail. */
 export const MODELE_REDACTION = "claude-sonnet-5-5";
-/** Petites extractions en masse (justificatifs, trésorerie, repérage dans un mail). */
-export const MODELE_LEGER = "claude-haiku-4-5";
+/**
+ * Petites extractions en masse (justificatifs, trésorerie, bulletins de paie,
+ * repérage dans un mail). Haiku 5.5 depuis octobre 2026 (demande de Nicolas) :
+ * plus fiable que Haiku 4.5 et dix fois moins cher. Comme les autres, il
+ * réfléchit par défaut : chaque appel règle `effort: "low"` et garde une
+ * limite large. Il refuse `temperature`, `top_p`, `top_k`, les budgets de
+ * réflexion et les réponses préremplies (erreur 400).
+ */
+export const MODELE_LEGER = "claude-haiku-5-5";
 
 /**
  * Limite de longueur d'une réponse, réflexion comprise. Assez large pour

@@ -1,4 +1,4 @@
-import { MODELE_LEGER, MODELE_REDACTION } from "@/lib/ia-modeles";
+import { LIMITE_REPONSE, MODELE_LEGER, MODELE_REDACTION } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
 import Anthropic from "@anthropic-ai/sdk";
@@ -86,7 +86,9 @@ ${periodesConnues ? `Vacances scolaires configurées (quand le mail nomme l'une 
 Règles cavaliers : uniquement ce qui est ÉCRIT (âge, niveau de galop, "débutant", "galop d'argent"…) ; n'invente ni âge ni niveau ; liste vide si aucun cavalier n'est décrit.`;
     const msg = await client.messages.create({
       model: MODELE_LEGER,
-      max_tokens: 300,
+      // La réflexion compte dans la limite : 300 laissait le JSON vide.
+      max_tokens: LIMITE_REPONSE,
+      output_config: { effort: "low" },
       system: sys,
       messages: [{ role: "user", content: `${subject || ""}\n${(body || "").slice(0, 1500)}` }],
     });

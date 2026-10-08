@@ -21,7 +21,7 @@
  * Auth admin obligatoire.
  */
 
-import { MODELE_LEGER } from "@/lib/ia-modeles";
+import { LIMITE_REPONSE, MODELE_LEGER } from "@/lib/ia-modeles";
 import { NextRequest, NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { controlerCoutEmployeur } from "@/lib/controle-bulletin";
@@ -87,7 +87,9 @@ export async function POST(req: NextRequest) {
       const anthropic = new Anthropic({ apiKey });
       const rep = await anthropic.messages.create({
         model: MODELE_LEGER,
-        max_tokens: 500,
+        // La réflexion compte dans la limite : 500 tronquait le JSON.
+        max_tokens: LIMITE_REPONSE,
+        output_config: { effort: "low" },
         messages: [{
           role: "user",
           content: [
