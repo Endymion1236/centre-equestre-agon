@@ -57,6 +57,10 @@ export interface RolesPassage {
   placeurs?: string[];
   juge?: string;
   facteur?: string;
+  /** Coach de l'équipe pendant le passage (nom libre). */
+  coach?: string;
+  /** Cavalier (id) qui s'occupe du poney remplaçant : échauffement et passage. */
+  cavalierRemplacant?: string;
 }
 
 /** Un concours de la saison : son organisation puis ses résultats. */
@@ -138,11 +142,15 @@ export function retirerCavalier(s: SaisonPonyGames, cavalierId: string): SaisonP
             ...r,
             engagements: r.engagements.map((g) => {
               const { [cavalierId]: _retire, ...poneys } = g.poneys;
-              const placeurs = g.roles?.placeurs;
-              if (!placeurs?.includes(cavalierId)) return { ...g, poneys };
-              const { placeurs: _p, ...autresRoles } = g.roles!;
+              const placeurs = g.roles?.placeurs ?? [];
+              if (!placeurs.includes(cavalierId) && g.roles?.cavalierRemplacant !== cavalierId) return { ...g, poneys };
+              const { placeurs: _p, cavalierRemplacant, ...autresRoles } = g.roles!;
               const restants = placeurs.filter((id) => id !== cavalierId);
-              const roles = restants.length ? { ...autresRoles, placeurs: restants } : autresRoles;
+              const roles = {
+                ...autresRoles,
+                ...(restants.length ? { placeurs: restants } : {}),
+                ...(cavalierRemplacant && cavalierRemplacant !== cavalierId ? { cavalierRemplacant } : {}),
+              };
               const { roles: _r, ...sansRoles } = g;
               return Object.keys(roles).length ? { ...sansRoles, poneys, roles } : { ...sansRoles, poneys };
             }),

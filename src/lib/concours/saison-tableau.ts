@@ -4,7 +4,8 @@
 // À partir des horaires, des durées, des cavaliers et des poneys, une ligne
 // par passage : préparation des poneys (30 min) puis échauffement (30 min)
 // juste avant le passage, chacun avec un responsable ; placeurs de matériel
-// (1 à 2 cavaliers), juge de ligne et facteur pendant le passage.
+// (1 à 2 cavaliers), juge de ligne, facteur et coach pendant le passage ;
+// un cavalier pour le poney remplaçant (échauffement et passage).
 // Les vérifications signalent une personne prise à deux endroits à la fois.
 // =============================================================================
 
@@ -74,7 +75,7 @@ export function lignesTableau(s: SaisonPonyGames, r: ResultatConcours): LigneTab
 
 // ─── Saisie des rôles ──────────────────────────────────────────────────────
 
-type RoleTexte = "respPrepa" | "respEchauffement" | "juge" | "facteur";
+type RoleTexte = "respPrepa" | "respEchauffement" | "juge" | "facteur" | "coach" | "cavalierRemplacant";
 
 function majRoles(r: ResultatConcours, equipeId: string, f: (roles: RolesPassage) => RolesPassage): ResultatConcours {
   return {
@@ -176,6 +177,15 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
     for (const id of l.roles.placeurs ?? []) {
       occ.push({ cle: cleCavalier(s, id), qui: nomCavalier(s, id), quoi: `placeur pour ${l.equipe}`, genre: `piste:${l.equipeId}`, plage: l.passage });
     }
+    // Compté seulement si un poney remplaçant est prévu.
+    if (l.remplacant && l.roles.cavalierRemplacant && l.echauffement) {
+      occ.push({
+        cle: cleCavalier(s, l.roles.cavalierRemplacant), qui: nomCavalier(s, l.roles.cavalierRemplacant),
+        quoi: `au poney remplaçant de ${l.equipe}`, genre: `remplacant:${l.equipeId}`,
+        plage: { debut: l.echauffement.debut, fin: l.passage.fin },
+      });
+    }
+    parNom(l.roles.coach, `coach de ${l.equipe}`, `coach:${l.equipeId}`, l.passage);
     parNom(l.roles.juge, `juge pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
     parNom(l.roles.facteur, `facteur pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
     parNom(l.roles.respPrepa, `responsable prépa de ${l.equipe}`, "prepa", l.prepa);
@@ -196,6 +206,7 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
     if (!l.roles.placeurs?.length) manque.push("placeur (1 minimum)");
     if (!l.roles.juge?.trim()) manque.push("juge de ligne");
     if (!l.roles.facteur?.trim()) manque.push("facteur");
+    if (!l.roles.coach?.trim()) manque.push("coach");
     if (manque.length) out.push({ gravite: "alerte", message: `${l.equipe} : ${manque.join(", ")} à désigner.` });
   }
 
@@ -218,7 +229,7 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
 
 // ─── Qui est disponible pour un rôle ───────────────────────────────────────
 
-export type RolePassage = "respPrepa" | "respEchauffement" | "placeur" | "juge" | "facteur";
+export type RolePassage = "respPrepa" | "respEchauffement" | "placeur" | "juge" | "facteur" | "coach" | "cavalierRemplacant";
 
 export interface Candidat {
   /** Nom à inscrire dans la case. */
@@ -236,8 +247,16 @@ export interface Candidat {
  */
 export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId: string, role: RolePassage): Candidat[] {
   const l = lignesTableau(s, r).find((x) => x.equipeId === equipeId);
-  const plage = !l ? undefined : role === "respPrepa" ? l.prepa : role === "respEchauffement" ? l.echauffement : l.passage;
-  const genre = role === "respPrepa" ? "prepa" : role === "respEchauffement" ? "echauffement" : `piste:${equipeId}`;
+  const plage = !l ? undefined
+    : role === "respPrepa" ? l.prepa
+    : role === "respEchauffement" ? l.echauffement
+    : role === "cavalierRemplacant" ? (l.echauffement && l.passage ? { debut: l.echauffement.debut, fin: l.passage.fin } : undefined)
+    : l.passage;
+  const genre = role === "respPrepa" ? "prepa"
+    : role === "respEchauffement" ? "echauffement"
+    : role === "cavalierRemplacant" ? `remplacant:${equipeId}`
+    : role === "coach" ? `coach:${equipeId}`
+    : `piste:${equipeId}`;
   const occ = occupations(s, r);
 
   // Les cavaliers d'une équipe engagée sans horaire : on ne sait pas quand ils jouent, on ne les propose pas.
@@ -278,7 +297,8 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
     <tr>
       <td><b>${plageLisible(l.passage)}</b><br>${echapper(l.equipe)}<br><span class="cat">${echapper(l.categorie)}</span></td>
       <td>${l.cavaliers.map((c) => `${echapper(c.nom)}${c.poney ? ` — <i>${echapper(c.poney)}</i>` : ""}`).join("<br>")}
-        ${l.remplacant ? `<br><span class="cat">Remplaçant : <i>${echapper(l.remplacant)}</i></span>` : ""}</td>
+        ${l.remplacant ? `<br><span class="cat">Remplaçant : <i>${echapper(l.remplacant)}</i>${l.roles.cavalierRemplacant ? ` (${echapper(nomCavalier(s, l.roles.cavalierRemplacant))})` : ""}</span>` : ""}</td>
+      <td>${l.roles.coach ? echapper(l.roles.coach) : '<span class="vide">……</span>'}</td>
       <td>${cellule(l.prepa, l.roles.respPrepa)}</td>
       <td>${cellule(l.echauffement, l.roles.respEchauffement)}</td>
       <td>${(l.roles.placeurs ?? []).map((id) => echapper(nomCavalier(s, id))).join("<br>") || '<span class="vide">……</span>'}</td>
@@ -300,7 +320,7 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
 <h1>${echapper(titre)}</h1>
 <table>
   <thead><tr>
-    <th>Passage</th><th>Cavaliers — poneys</th><th>Prépa poneys (${DUREE_PREPA_MIN} min)</th>
+    <th>Passage</th><th>Cavaliers — poneys</th><th>Coach</th><th>Prépa poneys (${DUREE_PREPA_MIN} min)</th>
     <th>Échauffement (${DUREE_ECHAUFFEMENT_MIN} min)</th><th>Placeurs</th><th>Juge de ligne</th><th>Facteur</th>
   </tr></thead>
   <tbody>${corps}</tbody>

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import {
   lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole,
 } from "../../src/lib/concours/saison-tableau";
-import { engagerEquipes, poserDuree, poserPoney } from "../../src/lib/concours/saison-organisation";
+import { engagerEquipes, poserDuree, poserPoney, poserRemplacant } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
 
 let passes = 0;
@@ -46,6 +46,7 @@ function complet(s: SaisonPonyGames): ResultatConcours {
     r = poserRole(r, eq, "respEchauffement", ech);
     r = poserRole(r, eq, "juge", juge);
     r = poserRole(r, eq, "facteur", fact);
+    r = poserRole(r, eq, "coach", "Coach Paul");
   }
   r = poserPlaceur(r, "eq", 0, "lea1");
   r = poserPlaceur(r, "p", 0, "tom");
@@ -250,6 +251,43 @@ test("cavalier saisi deux fois : une seule personne, occupée", () => {
   const r2 = poserPlaceur(r, "h11", 0, "a-bis");
   assert.ok(verifierTableau(s2, r2).some((x) => x.gravite === "erreur" && x.message.includes("placeur pour Les Fusées")));
   assert.equal(clePersonne(s2, "Astérix"), "cav:a");
+});
+
+console.log("\n── Coach et cavalier du poney remplaçant ──");
+
+test("coach : à désigner s'il manque, en conflit s'il est juge au même moment", () => {
+  const s = saison();
+  let r = poserRole(complet(s), "eq", "coach", "");
+  assert.deepEqual(verifierTableau(s, r).map((a) => a.message), ["Les Fusées : coach à désigner."]);
+  // Coach Paul coache les deux passages, l'un après l'autre : rien à dire.
+  assert.deepEqual(verifierTableau(s, complet(s)), []);
+  r = poserRole(complet(s), "eq", "juge", "Coach Paul");
+  assert.ok(verifierTableau(s, r).some((a) => a.message === "Coach Paul : coach de Les Fusées (09h00–09h45) et juge pour Les Fusées (09h00–09h45) en même temps."));
+  assert.equal(occupesDe(candidatsRole(s, complet(s), "eq", "juge"))["Coach Paul"], "coach de Les Fusées (09h00–09h45)");
+});
+
+test("cavalier du poney remplaçant : pris de l'échauffement à la fin du passage", () => {
+  const s = saison();
+  let r = poserRemplacant(complet(s), "eq", "Pompon");
+  // Candidats : ni les Fusées (elles jouent), ni le Duo (prépa 8h45) ; Léa A est placeur, donc prise aussi.
+  const c = occupesDe(candidatsRole(s, r, "eq", "cavalierRemplacant"));
+  assert.equal(c["Zoé Martin"], "en échauffement avec Les Fusées (08h30–09h00)");
+  assert.equal(c["Lou"], "en préparation avec Duo (08h45–09h15)");
+  assert.equal(c["Léa B"], "facteur pour Les Fusées (09h00–09h45)");
+  r = poserRole(r, "eq", "cavalierRemplacant", "lou");
+  assert.ok(verifierTableau(s, r).some((a) => a.message.startsWith("Lou : en préparation avec Duo") || a.message.startsWith("Lou : au poney remplaçant")));
+  // Pas de poney remplaçant : le cavalier choisi n'occupe personne.
+  r = poserRemplacant(r, "eq", "");
+  assert.deepEqual(verifierTableau(s, r), []);
+});
+
+test("un cavalier retiré de la saison quitte le poney remplaçant", () => {
+  let s = saison();
+  s = { ...s, resultats: [poserRole(poserRemplacant(complet(s), "eq", "Pompon"), "eq", "cavalierRemplacant", "ana")] };
+  s = { ...s, cavaliers: [...s.cavaliers, { id: "ana", prenom: "Ana" }] };
+  s = retirerCavalier(s, "ana");
+  assert.equal(s.resultats[0].engagements![0].roles!.cavalierRemplacant, undefined);
+  assert.equal(s.resultats[0].engagements![0].roles!.coach, "Coach Paul", "les autres rôles restent");
 });
 
 console.log("\n── Impression ──");

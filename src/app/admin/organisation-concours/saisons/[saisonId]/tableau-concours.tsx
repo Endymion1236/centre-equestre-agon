@@ -10,7 +10,7 @@ import {
 } from "@/lib/concours/saison-tableau";
 
 type Changer = (f: (r: ResultatConcours) => ResultatConcours) => void;
-type RoleTexte = "respPrepa" | "respEchauffement" | "juge" | "facteur";
+type RoleTexte = "respPrepa" | "respEchauffement" | "juge" | "facteur" | "coach";
 
 const inpSm =
   "w-full min-w-[110px] px-2 py-1.5 rounded-md border border-blue-500/15 font-body text-sm bg-white focus:border-blue-500 focus:outline-none";
@@ -93,8 +93,17 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
         {l.cavaliers.map((c) => (
           <div key={c.id} className="whitespace-nowrap">{c.nom}{c.poney && <span className="text-blue-700"> — {c.poney}</span>}</div>
         ))}
-        {l.remplacant && <div className="text-pink-700 whitespace-nowrap">Remplaçant : {l.remplacant}</div>}
+        {l.remplacant && (
+          <div className="mt-1">
+            <div className="text-pink-700 whitespace-nowrap">Remplaçant : {l.remplacant}</div>
+            <ChoixPersonne valeur={l.roles.cavalierRemplacant} libre={false} vide="— cavalier du remplaçant —"
+              candidats={candidatsRole(saison, concours, l.equipeId, "cavalierRemplacant").filter((c) => c.cavalierId)}
+              valeurDe={(c) => c.cavalierId!} libelle={(id) => nomCavalier(saison, id)}
+              onChange={(v) => changer((c) => poserRole(c, l.equipeId, "cavalierRemplacant", v))} />
+          </div>
+        )}
       </td>
+      <td className={td}>{parNom("coach", "— coach —")}</td>
       <td className={td}>
         <div className="text-xs font-semibold text-gray-600 mb-1 whitespace-nowrap">{plageLisible(l.prepa)}</div>
         {parNom("respPrepa", "— responsable —")}
@@ -141,9 +150,10 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-xs text-gray-500 flex-1 min-w-[240px]">
           Pour chaque passage : préparation des poneys ({DUREE_PREPA_MIN} min) puis échauffement ({DUREE_ECHAUFFEMENT_MIN} min)
-          juste avant, chacun avec un responsable ; pendant le passage, 1 à 2 placeurs, un juge de ligne et un facteur.
+          juste avant, chacun avec un responsable ; pendant le passage, un coach, 1 à 2 placeurs, un juge de ligne et un facteur.
           Chaque menu propose d&apos;abord les personnes libres à ce moment-là ; les occupées (en préparation,
-          en échauffement, en jeu ou sur un autre rôle) sont grisées. « Autre personne… » pour un parent, un coach…
+          en échauffement, en jeu ou sur un autre rôle) sont grisées. Un coach par passage ; le cavalier du poney
+          remplaçant est pris de l&apos;échauffement à la fin du passage. « Autre personne… » pour un parent, un coach…
         </p>
         <button type="button" onClick={imprimer}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 transition">
@@ -172,6 +182,7 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
             <tr>
               <th className={th}>Passage</th>
               <th className={th}>Cavaliers — poneys</th>
+              <th className={th}>Coach</th>
               <th className={th}>Prépa poneys</th>
               <th className={th}>Échauffement</th>
               <th className={th}>Placeurs</th>
