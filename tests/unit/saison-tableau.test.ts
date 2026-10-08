@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne, compterTaches,
+  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne, compterTaches, poserPreparateur,
 } from "../../src/lib/concours/saison-tableau";
 import { engagerEquipes, poserDuree, poserPoney, poserRemplacant } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
@@ -409,10 +409,20 @@ test("Julie rejoue 2 sessions plus tard avec Kamélia : libre pendant la session
   assert.equal(occupesDe(candidatsRole(s, r, "c", "juge"))["Julie"], "en jeu avec Équipe C (12h30–13h15)");
 });
 
-test("autre poney l'après-midi : prépa et échauffement à faire", () => {
+test("autre poney deux sessions plus tard, prépa qui démarre pendant son jeu : quelqu'un doit la faire", () => {
+  // A finit à 11h45, la prépa de C commence à 11h30 : Julie ne peut pas la faire elle-même.
   const { s, r } = casJulie("Pompon");
-  assert.equal(lignesTableau(s, r)[2].cavaliers[0].dejaPretDepuis, undefined);
-  assert.equal(occupesDe(candidatsRole(s, r, "b", "placeur"))["Julie"], "en préparation avec Équipe C (11h30–12h00)");
+  const julie = lignesTableau(s, r)[2].cavaliers[0];
+  assert.equal(julie.dejaPretDepuis, undefined);
+  assert.equal(julie.enchaineAvec, "Équipe A (11h00–11h45)");
+});
+
+test("autre poney bien plus tard : Julie prépare elle-même", () => {
+  const { s, r } = casJulie("Pompon");
+  const r2 = { ...r, engagements: r.engagements!.map((g) => (g.equipeId === "c" ? { ...g, heure: "14:00" } : g)) };
+  const julie = lignesTableau(s, r2)[2].cavaliers[0];
+  assert.equal(julie.enchaineAvec, undefined);
+  assert.equal(occupesDe(candidatsRole(s, r2, "c", "respPrepa"))["Julie"], "en préparation avec Équipe C (13h00–13h30)");
 });
 
 test("la règle ne vaut que pour le même cavalier : le poney d'un autre ne compte pas", () => {
@@ -424,6 +434,67 @@ test("la règle ne vaut que pour le même cavalier : le poney d'un autre ne comp
 test("le tableau imprimé le signale", () => {
   const { s, r } = casJulie("Kamélia");
   assert.match(htmlTableau(s, r), /Julie — <i>Kamélia<\/i> <span class="cat">\(prêt depuis 11h00\)<\/span>/);
+});
+
+console.log("\n── Sessions enchaînées sur deux poneys différents ──");
+
+/** A 11h00–11h45 (Julie sur Kamélia, Tom), C juste après à 11h45 (Julie). */
+function casEnchaine(poneyC: string): { s: SaisonPonyGames; r: ResultatConcours } {
+  const s: SaisonPonyGames = {
+    id: "s", nom: "2026/2027",
+    cavaliers: [{ id: "julie", prenom: "Julie" }, { id: "tom", prenom: "Tom" }, { id: "ana", prenom: "Ana" }],
+    equipes: [
+      { id: "a", nom: "Équipe A", categorie: "Benjamin", indice: "", cavalierIds: ["julie", "tom"] },
+      { id: "c", nom: "Équipe C", categorie: "Minime", indice: "", cavalierIds: ["julie"] },
+    ],
+    resultats: [{ id: "k", nom: "Pieux", date: "2026-11-15", heureDebut: "11:00", classements: [] }],
+  };
+  let r = engagerEquipes(s, s.resultats[0], ["a", "c"]);
+  r = poserPoney(r, "a", "julie", "Kamélia");
+  r = poserPoney(r, "c", "julie", poneyC);
+  return { s, r };
+}
+const erreurs = (s: SaisonPonyGames, r: ResultatConcours) => verifierTableau(s, r).filter((a) => a.gravite === "erreur").map((a) => a.message);
+
+test("autre poney juste après : alerte, et une seule", () => {
+  const { s, r } = casEnchaine("Pompon");
+  const julie = lignesTableau(s, r)[1].cavaliers[0];
+  assert.equal(julie.enchaineAvec, "Équipe A (11h00–11h45)");
+  assert.deepEqual(erreurs(s, r), [
+    "Julie joue avec Équipe A (11h00–11h45) puis avec Équipe C (11h45–12h30) sur un autre poney : désigner qui prépare et échauffe son poney (Pompon).",
+  ]);
+});
+
+test("même poney juste après : rien à faire", () => {
+  const { s, r } = casEnchaine("Kamélia");
+  const julie = lignesTableau(s, r)[1].cavaliers[0];
+  assert.equal(julie.enchaineAvec, undefined);
+  assert.equal(julie.dejaPretDepuis, "11h00");
+  assert.deepEqual(erreurs(s, r), []);
+});
+
+test("un préparateur désigné : plus d'alerte, et il est pris pendant la prépa et l'échauffement", () => {
+  const { s, r } = casEnchaine("Pompon");
+  const cands = occupesDe(candidatsRole(s, r, "c", "preparateur", "julie"));
+  assert.equal(cands["Ana"], "libre");
+  assert.equal(cands["Tom"], "en échauffement avec Équipe A (10h30–11h00)", "Tom s'échauffe puis joue avec A pendant ce temps");
+  const r2 = poserPreparateur(r, "c", "julie", "ana");
+  assert.equal(lignesTableau(s, r2)[1].cavaliers[0].preparateur, "ana");
+  assert.deepEqual(erreurs(s, r2), []);
+  assert.equal(occupesDe(candidatsRole(s, r2, "a", "placeur"))["Ana"], "prépare Pompon pour Julie (10h45–11h15)");
+  assert.equal(compterTaches(s, r2).get("cav:ana"), 1, "compte comme une tâche");
+  assert.match(htmlTableau(s, r2), /\(prépa : Ana\)/);
+});
+
+test("X : personne ne prépare, l'alerte est levée", () => {
+  const { s, r } = casEnchaine("Pompon");
+  assert.deepEqual(erreurs(s, poserPreparateur(r, "c", "julie", "X")), []);
+});
+
+test("retirer le préparateur de la saison efface la désignation", () => {
+  const { s, r } = casEnchaine("Pompon");
+  const s2 = retirerCavalier({ ...s, resultats: [poserPreparateur(r, "c", "julie", "ana")] }, "ana");
+  assert.equal(s2.resultats[0].engagements![1].roles, undefined);
 });
 
 console.log("\n── Impression ──");

@@ -65,6 +65,12 @@ export interface RolesPassage {
   coach2?: string;
   /** Cavalier (id) qui s'occupe du poney remplaçant : préparation, échauffement et passage. */
   cavalierRemplacant?: string;
+  /**
+   * Quand un cavalier enchaîne deux sessions avec des poneys différents : qui
+   * prépare et échauffe son poney de cette session à sa place.
+   * Clé = cavalier qui monte ; valeur = cavalier qui prépare (ou « X »).
+   */
+  preparateurs?: Record<string, string>;
 }
 
 /** Un concours de la saison : son organisation puis ses résultats. */
@@ -146,22 +152,30 @@ export function retirerCavalier(s: SaisonPonyGames, cavalierId: string): SaisonP
             ...r,
             engagements: r.engagements.map((g) => {
               const { [cavalierId]: _retire, ...poneys } = g.poneys;
-              const placeurs = g.roles?.placeurs ?? [];
-              if (!placeurs.includes(cavalierId) && g.roles?.cavalierRemplacant !== cavalierId) return { ...g, poneys };
-              const { placeurs: _p, cavalierRemplacant, ...autresRoles } = g.roles!;
-              const restants = placeurs.filter((id) => id !== cavalierId);
-              const roles = {
-                ...autresRoles,
-                ...(restants.length ? { placeurs: restants } : {}),
-                ...(cavalierRemplacant && cavalierRemplacant !== cavalierId ? { cavalierRemplacant } : {}),
-              };
-              const { roles: _r, ...sansRoles } = g;
-              return Object.keys(roles).length ? { ...sansRoles, poneys, roles } : { ...sansRoles, poneys };
+              const { roles: anciens, ...sansRoles } = g;
+              const roles = anciens ? rolesSansCavalier(anciens, cavalierId) : undefined;
+              return roles ? { ...sansRoles, poneys, roles } : { ...sansRoles, poneys };
             }),
           }
         : r,
     ),
   };
+}
+
+/** Rôles d'un passage sans ce cavalier (placeur, remplaçant, préparateur ou préparé) ; undefined s'il ne reste rien. */
+function rolesSansCavalier(roles: RolesPassage, cavalierId: string): RolesPassage | undefined {
+  const { placeurs, cavalierRemplacant, preparateurs, ...autres } = roles;
+  const restants = (placeurs ?? []).filter((id) => id !== cavalierId);
+  const prep = Object.fromEntries(
+    Object.entries(preparateurs ?? {}).filter(([monte, prepare]) => monte !== cavalierId && prepare !== cavalierId),
+  );
+  const out: RolesPassage = {
+    ...autres,
+    ...(restants.length ? { placeurs: restants } : {}),
+    ...(cavalierRemplacant && cavalierRemplacant !== cavalierId ? { cavalierRemplacant } : {}),
+    ...(Object.keys(prep).length ? { preparateurs: prep } : {}),
+  };
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** Retire une équipe et ses lignes dans les résultats. */

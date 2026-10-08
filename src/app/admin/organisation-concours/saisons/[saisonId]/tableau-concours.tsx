@@ -5,7 +5,7 @@ import { AlertOctagon, AlertTriangle, CheckCircle2, Printer } from "lucide-react
 import type { ResultatConcours, SaisonPonyGames } from "@/lib/concours/saisons";
 import {
   DUREE_ECHAUFFEMENT_MIN, DUREE_PREPA_MIN, PLACEURS_MAX,
-  candidatsRole, estPersonne, htmlTableau, lignesTableau, nomCavalier, PERSONNE, plageLisible, poserPlaceur, poserRole, verifierTableau,
+  candidatsRole, estPersonne, htmlTableau, lignesTableau, nomCavalier, PERSONNE, plageLisible, poserPlaceur, poserPreparateur, poserRole, verifierTableau,
   type Candidat, type LigneTableau,
 } from "@/lib/concours/saison-tableau";
 
@@ -107,6 +107,17 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
               <span className="text-green-700" title="Même cavalier, même poney plus tôt : ni prépa ni échauffement à refaire">
                 {" "}· prêt depuis {c.dejaPretDepuis}
               </span>
+            )}
+            {c.enchaineAvec && (
+              <div className={`mt-0.5 mb-1 pl-2 border-l-2 ${c.preparateur ? "border-green-300" : "border-red-300"} whitespace-normal`}>
+                <div className={c.preparateur ? "text-gray-500" : "text-red-700 font-semibold"}>
+                  Joue avant avec {c.enchaineAvec} : qui prépare et échauffe {c.poney ?? "son poney"} ?
+                </div>
+                <ChoixPersonne valeur={c.preparateur} libre={false} vide="— préparateur —"
+                  candidats={candidatsRole(saison, concours, l.equipeId, "preparateur", c.id).filter((x) => x.cavalierId && x.cavalierId !== c.id)}
+                  valeurDe={(x) => x.cavalierId!} libelle={(id) => nomCavalier(saison, id)}
+                  onChange={(v) => changer((r) => poserPreparateur(r, l.equipeId, c.id, v))} />
+              </div>
             )}
           </div>
         ))}

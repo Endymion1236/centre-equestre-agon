@@ -39,6 +39,13 @@ export interface LigneTableau {
      * ce poney : le poney est prêt, le cavalier ne refait ni prépa ni échauffement.
      */
     dejaPretDepuis?: string;
+    /**
+     * Passage que ce cavalier joue pendant la prépa ou l'échauffement de
+     * celui-ci, avec un autre poney : quelqu'un doit préparer ce poney à sa place.
+     */
+    enchaineAvec?: string;
+    /** Qui prépare et échauffe le poney à sa place (id de cavalier, ou « X »). */
+    preparateur?: string;
   }[];
   remplacant?: string;
   roles: RolesPassage;
@@ -106,6 +113,21 @@ export function lignesTableau(s: SaisonPonyGames, r: ResultatConcours): LigneTab
       if (avant) c.dejaPretDepuis = plageLisible(avant.passage).split("–")[0];
     }
   }
+
+  // Cavalier qui joue ailleurs pendant la prépa ou l'échauffement de ce passage, avec un autre poney.
+  for (const l of lignes) {
+    if (!l.passage || !l.prepa || !l.echauffement) continue;
+    const avantJeu = { debut: l.prepa.debut, fin: l.echauffement.fin };
+    for (const c of l.cavaliers) {
+      if (c.dejaPretDepuis) continue;
+      const autre = lignes.find((m) => m !== l && m.passage && chevauche(m.passage, avantJeu)
+        && m.cavaliers.some((x) => cleCavalier(s, x.id) === cleCavalier(s, c.id)));
+      if (!autre) continue;
+      c.enchaineAvec = `${autre.equipe} (${plageLisible(autre.passage)})`;
+      const prep = l.roles.preparateurs?.[c.id];
+      if (prep) c.preparateur = prep;
+    }
+  }
   return lignes;
 }
 
@@ -141,6 +163,15 @@ export function poserPlaceur(r: ResultatConcours, equipeId: string, index: numbe
     else liste.splice(index, 1);
     const uniques = liste.filter((id, i) => id && (estPersonne(id) || liste.indexOf(id) === i)).slice(0, PLACEURS_MAX);
     return { ...roles, placeurs: uniques };
+  });
+}
+
+/** Qui prépare et échauffe le poney de `cavalierId` pour ce passage ("" pour retirer). */
+export function poserPreparateur(r: ResultatConcours, equipeId: string, cavalierId: string, preparateur: string): ResultatConcours {
+  return majRoles(r, equipeId, (roles) => {
+    const { [cavalierId]: _ancien, ...autres } = roles.preparateurs ?? {};
+    const liste = preparateur.trim() ? { ...autres, [cavalierId]: preparateur.trim() } : autres;
+    return { ...roles, preparateurs: Object.keys(liste).length ? liste : undefined };
   });
 }
 
@@ -206,12 +237,19 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
     for (const c of l.cavaliers) {
       const genre = `cheval:${l.equipeId}`;
       const cle = cleCavalier(s, c.id);
-      // Poney déjà monté par ce cavalier plus tôt : pas de prépa ni d'échauffement à refaire.
-      if (!c.dejaPretDepuis) {
+      // Poney déjà monté par ce cavalier plus tôt, ou cavalier en jeu ailleurs : il ne prépare pas lui-même.
+      if (!c.dejaPretDepuis && !c.enchaineAvec) {
         occ.push({ cle, qui: c.nom, quoi: `en préparation avec ${l.equipe}`, genre, plage: l.prepa! });
         occ.push({ cle, qui: c.nom, quoi: `en échauffement avec ${l.equipe}`, genre, plage: l.echauffement! });
       }
       occ.push({ cle, qui: c.nom, quoi: `en jeu avec ${l.equipe}`, genre, plage: l.passage });
+      // Celui qui prépare et échauffe le poney à sa place.
+      if (c.enchaineAvec && c.preparateur && !estPersonne(c.preparateur)) {
+        const base = { cle: cleCavalier(s, c.preparateur), qui: nomCavalier(s, c.preparateur), genre: `prepa-poney:${l.equipeId}:${c.id}` };
+        const poney = c.poney ?? "le poney";
+        occ.push({ ...base, quoi: `prépare ${poney} pour ${c.nom}`, plage: l.prepa! });
+        occ.push({ ...base, quoi: `échauffe ${poney} pour ${c.nom}`, plage: l.echauffement! });
+      }
     }
     for (const id of (l.roles.placeurs ?? []).filter((x) => !estPersonne(x))) {
       occ.push({ cle: cleCavalier(s, id), qui: nomCavalier(s, id), quoi: `placeur pour ${l.equipe}`, genre: `piste:${l.equipeId}`, plage: l.passage });
@@ -250,6 +288,14 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
     if (!l.roles.facteur?.trim()) manque.push("facteur");
     if (!l.roles.coach?.trim() && !l.roles.coach2?.trim()) manque.push("coach");
     if (manque.length) out.push({ gravite: "alerte", message: `${l.equipe} : ${manque.join(", ")} à désigner.` });
+    for (const c of l.cavaliers) {
+      if (!c.enchaineAvec || c.preparateur) continue;
+      const poney = c.poney ? `son poney (${c.poney})` : "son poney";
+      out.push({
+        gravite: "erreur",
+        message: `${c.nom} joue avec ${c.enchaineAvec} puis avec ${l.equipe} (${plageLisible(l.passage)}) sur un autre poney : désigner qui prépare et échauffe ${poney}.`,
+      });
+    }
   }
 
   const occ = occupations(s, r);
@@ -272,7 +318,8 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
 // ─── Qui est disponible pour un rôle ───────────────────────────────────────
 
 export type RolePassage =
-  | "respPrepa" | "respEchauffement" | "respEchauffement2" | "placeur" | "juge" | "facteur" | "coach" | "coach2" | "cavalierRemplacant";
+  | "respPrepa" | "respEchauffement" | "respEchauffement2" | "placeur" | "juge" | "facteur" | "coach" | "coach2" | "cavalierRemplacant"
+  | "preparateur";
 
 export interface Candidat {
   /** Nom à inscrire dans la case. */
@@ -297,6 +344,7 @@ export function compterTaches(s: SaisonPonyGames, r: ResultatConcours): Map<stri
     const ro = l.roles;
     for (const id of ro.placeurs ?? []) if (!estPersonne(id)) ajouter(cleCavalier(s, id));
     if (l.remplacant && ro.cavalierRemplacant && !estPersonne(ro.cavalierRemplacant)) ajouter(cleCavalier(s, ro.cavalierRemplacant));
+    for (const c of l.cavaliers) if (c.enchaineAvec && c.preparateur && !estPersonne(c.preparateur)) ajouter(cleCavalier(s, c.preparateur));
     for (const nom of [ro.respPrepa, ro.respEchauffement, ro.respEchauffement2, ro.juge, ro.facteur, ro.coach, ro.coach2]) {
       if (nom?.trim() && !estPersonne(nom)) ajouter(clePersonne(s, nom));
     }
@@ -309,7 +357,14 @@ export function compterTaches(s: SaisonPonyGames, r: ResultatConcours): Map<stri
  * personnes déjà désignées dans ce concours, libres d'abord (par ordre
  * alphabétique), puis les occupés avec ce qui les retient.
  */
-export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId: string, roleDemande: RolePassage): Candidat[] {
+export function candidatsRole(
+  s: SaisonPonyGames,
+  r: ResultatConcours,
+  equipeId: string,
+  roleDemande: RolePassage,
+  /** Pour « preparateur » : le cavalier dont on prépare le poney. */
+  pourCavalier?: string,
+): Candidat[] {
   // Le 2e coach ou 2e responsable a le même créneau que le premier.
   const role = roleDemande === "coach2" ? "coach" : roleDemande === "respEchauffement2" ? "respEchauffement" : roleDemande;
   const l = lignesTableau(s, r).find((x) => x.equipeId === equipeId);
@@ -317,10 +372,12 @@ export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId:
     : role === "respPrepa" ? l.prepa
     : role === "respEchauffement" ? l.echauffement
     : role === "cavalierRemplacant" ? (l.prepa && l.passage ? { debut: l.prepa.debut, fin: l.passage.fin } : undefined)
+    : role === "preparateur" ? (l.prepa && l.echauffement ? { debut: l.prepa.debut, fin: l.echauffement.fin } : undefined)
     : l.passage;
   const genre = role === "respPrepa" ? "prepa"
     : role === "respEchauffement" ? "echauffement"
     : role === "cavalierRemplacant" ? `remplacant:${equipeId}`
+    : role === "preparateur" ? `prepa-poney:${equipeId}:${pourCavalier}`
     : role === "coach" ? `coach:${equipeId}`
     : `piste:${equipeId}`;
   const occ = occupations(s, r);
@@ -365,7 +422,7 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
   const corps = lignes.map((l) => `
     <tr>
       <td><b>${plageLisible(l.passage)}</b><br>${echapper(l.equipe)}<br><span class="cat">${echapper(l.categorie)}</span></td>
-      <td>${l.cavaliers.map((c) => `${echapper(c.nom)}${c.poney ? ` — <i>${echapper(c.poney)}</i>` : ""}${c.dejaPretDepuis ? ` <span class="cat">(prêt depuis ${c.dejaPretDepuis})</span>` : ""}`).join("<br>")}
+      <td>${l.cavaliers.map((c) => `${echapper(c.nom)}${c.poney ? ` — <i>${echapper(c.poney)}</i>` : ""}${c.dejaPretDepuis ? ` <span class="cat">(prêt depuis ${c.dejaPretDepuis})</span>` : ""}${c.enchaineAvec ? ` <span class="cat">(prépa : ${c.preparateur ? echapper(nomCavalier(s, c.preparateur)) : "……"})</span>` : ""}`).join("<br>")}
         ${l.remplacant ? `<br><span class="cat">Remplaçant : <i>${echapper(l.remplacant)}</i>${l.roles.cavalierRemplacant ? ` (${echapper(nomCavalier(s, l.roles.cavalierRemplacant))})` : ""}</span>` : ""}</td>
       <td>${deux(l.roles.coach, l.roles.coach2) || '<span class="vide">……</span>'}</td>
       <td>${cellule(l.prepa, l.roles.respPrepa)}</td>
