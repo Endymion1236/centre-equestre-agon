@@ -27,6 +27,7 @@ import ThemeSuggestion from "./ThemeSuggestion";
 import QuickAddRider from "./QuickAddRider";
 import SeanceNotes from "./SeanceNotes";
 import { reglementSeanceParCarte, type AjustementCommande } from "./seance-par-carte";
+import { typeCarteCouvre } from "@/lib/cartes-seances";
 import { Loader2, ChevronLeft, ChevronRight, XCircle, AlertCircle, Printer, ClipboardList, Mic, MicOff, Sparkles, TrendingUp, AlertTriangle, Trash2, X, CalendarDays, ChevronDown, ChevronUp } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
@@ -582,8 +583,6 @@ export default function MontoirPage() {
       const ps = (child as any).paymentSource;
       if (!carteId && ps !== "card" && ps !== "forfait" && ps !== "offert" && ps !== "celeris") {
         try {
-          const isCours = ["cours","cours_collectif","cours_particulier"].includes(c.activityType);
-          const isBalade = ["balade","promenade","ponyride"].includes(c.activityType);
           // Récupérer la famille de l'enfant pour chercher les cartes familiales
           const famDoc = families.find((f: any) => (f.children || []).some((ch: any) => ch.id === child.childId)) as any;
           const [cartesIndivSnap, cartesFamSnap] = await Promise.all([
@@ -595,8 +594,8 @@ export default function MontoirPage() {
             const cd = d.data();
             if ((cd.remainingSessions || 0) <= 0) return false;
             if (cd.dateFin && new Date(cd.dateFin) < new Date()) return false;
-            const ct = cd.activityType || "cours";
-            return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
+            // Règle unique du type de carte (lib/cartes-seances).
+            return typeCarteCouvre(cd.activityType, c);
           });
           if (carteDoc) {
             // Carte trouvée après coup : la séance a peut-être déjà une commande

@@ -41,6 +41,7 @@ import {
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { inscritsMemeFamille, prixCreneauTTC } from "@/lib/tarif-forfaitaire";
+import { estCoursParticulier, typeCarteCouvre } from "@/lib/cartes-seances";
 import { champsCommandeSepaUnique, echeanceSepaUnique, estModeSepa, mandatLePlusRecent } from "@/lib/sepa-unique";
 import { toParisDateString } from "@/lib/date-local";
 
@@ -323,7 +324,7 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
     // Le débit réel se fait au montoir lors de la clôture (confirmation de présence)
     const isCoursType = ["cours", "cours_collectif", "cours_particulier"].includes(c.activityType);
     const isBaladeType = ["balade", "promenade", "ponyride"].includes(c.activityType);
-    if (isCoursType || isBaladeType) {
+    if (isCoursType || isBaladeType || estCoursParticulier(c)) {
       try {
         // Forfait actif sur le MÊME créneau précis → pas de carte
         // On calcule le slotKey du créneau courant pour comparer
@@ -358,10 +359,8 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
             const data = d.data();
             if ((data.remainingSessions || 0) <= 0) return false;
             if (data.dateFin && new Date(data.dateFin) < new Date()) return false;
-            const cardType = data.activityType || "cours";
-            if (cardType === "cours" && isCoursType) return true;
-            if (cardType === "balade" && isBaladeType) return true;
-            return false;
+            // Règle unique du type de carte (lib/cartes-seances).
+            return typeCarteCouvre(data.activityType, c);
           });
           if (carteActive) {
             usedCardId = null; // Pas de débit à l'inscription — le montoir s'en charge

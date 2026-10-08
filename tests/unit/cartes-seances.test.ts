@@ -5,6 +5,7 @@ import {
   compterReservationsParCarte,
   libelleCarte,
   seancesDisponibles,
+  typeCarteCouvre,
   typeCarteDuCreneau,
   type CarteLike,
 } from "../../src/lib/cartes-seances";
@@ -94,6 +95,19 @@ test("libellé court avec le nombre de séances et la mention famille", () => {
   assert.equal(libelleCarte(carteLea), "Carte 5 séances");
   assert.equal(libelleCarte(carteFamille), "Carte 10 séances (famille)");
   assert.equal(libelleCarte(carteBalade), "Carte de séances");
+});
+
+test("carte « cours particuliers » : seulement les cours particuliers, y compris la formule sur demande", () => {
+  const carteFred: CarteLike = { id: "c-fred", familyId: "fam", childId: "fred", activityType: "particulier", remainingSessions: 5, status: "active", totalSessions: 5 };
+  assert.equal(carteCouvreCreneau(carteFred, { childId: "fred", activityType: "cours_particulier" }), true);
+  assert.equal(carteCouvreCreneau(carteFred, { childId: "fred", activityType: "cours", formuleChoisie: "cours-particulier" }), true);
+  assert.equal(carteCouvreCreneau(carteFred, { childId: "fred", activityType: "cours" }), false, "pas un cours collectif");
+  assert.equal(carteCouvreCreneau(carteFred, { childId: "fred", activityType: "balade" }), false);
+  assert.equal(carteCouvreCreneau(carteFred, { childId: "fred", activityType: "cours", formuleChoisie: "anniversaire" }), false);
+  // La carte « cours » garde son étendue : collectifs et particuliers.
+  assert.equal(typeCarteCouvre("cours", { activityType: "cours_particulier" }), true);
+  assert.equal(typeCarteCouvre(undefined, { activityType: "cours_collectif" }), true);
+  assert.equal(typeCarteCouvre("balade", { activityType: "cours_particulier" }), false);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

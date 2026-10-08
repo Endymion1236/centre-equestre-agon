@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, query, where, updateDoc, doc, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { typeCarteCouvre } from "@/lib/cartes-seances";
 import { enrollChildInCreneau, createReservation } from "@/lib/planning-services";
 import { generateOrderId } from "@/lib/utils";
 import { X, Search, Loader2 } from "lucide-react";
@@ -73,10 +74,9 @@ export default function QuickAddRider({ creneau, families, cartes, forfaits, onC
       if (c.dateFin && new Date(c.dateFin) < new Date()) return false;
       if (c.familiale) { if (c.familyId !== sel.familyId) return false; }
       else { if (c.childId !== sel.childId) return false; }
-      const ct = c.activityType || "cours";
-      return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
+      return typeCarteCouvre(c.activityType, creneau);
     }) || null;
-  }, [sel, cartes, isCours, isBalade]);
+  }, [sel, cartes, creneau]);
 
   // Détection forfait actif compatible (même logique que le planning, slotKey inclus)
   const forfaitActif = useMemo(() => {

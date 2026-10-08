@@ -13,6 +13,8 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { authFetch } from "@/lib/auth-fetch";
 import { Plus, Minus, Search, Loader2, Ticket, X, Check, History } from "lucide-react";
 import type { Family } from "@/types";
+import { libelleTypeCarte } from "@/lib/cartes-seances";
+import { RattacherSeances } from "./RattacherSeances";
 
 interface Card10 {
   id: string;
@@ -69,7 +71,7 @@ export default function CartesPage() {
   const [payMode, setPayMode] = useState("cb_terminal");
   const [encaisserMaintenant, setEncaisserMaintenant] = useState(true);
   const [bonCode, setBonCode] = useState("");
-  const [selActivityType, setSelActivityType] = useState<"cours" | "balade">("cours");
+  const [selActivityType, setSelActivityType] = useState<"cours" | "balade" | "particulier">("cours");
   const [carteFamiliale, setCarteFamiliale] = useState(false);
   const [creating, setCreating] = useState(false);
   const [familySearch, setFamilySearch] = useState("");
@@ -315,7 +317,7 @@ export default function CartesPage() {
                         <div className="w-12 h-12 rounded-xl bg-gold-50 flex items-center justify-center text-2xl">🎟️</div>
                         <div>
                           <div className="font-body text-base font-semibold text-blue-800">{card.childName} <span className="font-normal text-slate-500 text-sm">· {card.familyName}</span></div>
-                          <div className="font-body text-xs text-slate-500">{card.familyName} · {card.activityType === "balade" ? "Balades" : "Cours"}{(card as any).familiale ? " · 👨‍👩‍👧 Familiale" : ""}</div>
+                          <div className="font-body text-xs text-slate-500">{card.familyName} · {libelleTypeCarte(card.activityType)}{(card as any).familiale ? " · 👨‍👩‍👧 Familiale" : ""}</div>
                           {(card as any).dateDebut && (card as any).dateFin && (
                             <div className="font-body text-[10px] text-slate-500 mt-0.5">
                               {new Date((card as any).dateDebut).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}
@@ -389,6 +391,9 @@ export default function CartesPage() {
                         </button>
                       )
                     )}
+
+                    {/* Séances déjà prises avant la vente de la carte */}
+                    {card.remainingSessions > 0 && card.status === "active" && <RattacherSeances carte={card} onFait={fetchData} />}
 
                     {/* Bouton détail + historique replié */}
                     <button type="button" onClick={() => setOpenCardId(openCardId === card.id ? null : card.id)}
@@ -501,7 +506,7 @@ export default function CartesPage() {
             <div>
               <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Valable pour</label>
               <div className="flex gap-2">
-                {([["cours", "🐴 Cours"], ["balade", "🌿 Balades"]] as const).map(([val, label]) => (
+                {([["cours", "🐴 Cours"], ["particulier", "👤 Cours particuliers"], ["balade", "🌿 Balades"]] as const).map(([val, label]) => (
                   <button type="button" key={val} onClick={() => setSelActivityType(val)}
                     className={`flex-1 py-2.5 rounded-lg border font-body text-sm cursor-pointer transition-all ${selActivityType === val ? "border-blue-500 bg-blue-50 text-blue-800 font-semibold" : "border-gray-200 bg-white text-slate-600"}`}>
                     {label}

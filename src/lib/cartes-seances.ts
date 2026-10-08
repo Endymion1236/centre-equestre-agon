@@ -4,8 +4,9 @@
  * Écrit une fois, lu par la réservation en ligne (navigateur), par le serveur
  * d'inscription (/api/enroll, qui a le dernier mot) et par les écrans admin.
  *
- * Une carte est vendue depuis Admin → Cartes : N séances de cours ou de
- * balade, pour un cavalier ou pour toute la famille. La séance n'est
+ * Une carte est vendue depuis Admin → Cartes : N séances de cours, de
+ * balade ou de cours particuliers seulement (octobre 2026, carte de Fred),
+ * pour un cavalier ou pour toute la famille. La séance n'est
  * décomptée qu'au montoir, à la présence constatée ; à la réservation on ne
  * fait que « réserver » une séance de la carte, sans l'entamer.
  */
@@ -18,7 +19,7 @@ export interface CarteLike {
   familyId?: string | null;
   childId?: string | null;
   familiale?: boolean;
-  /** "cours" (défaut) ou "balade". */
+  /** "cours" (défaut), "balade" ou "particulier" (cours particuliers seulement). */
   activityType?: string | null;
   remainingSessions?: number | null;
   status?: string | null;
@@ -30,6 +31,8 @@ export interface CarteLike {
 export interface CreneauCible {
   childId: string;
   activityType?: string | null;
+  /** Créneau sur demande : formule choisie (« cours-particulier »…). */
+  formuleChoisie?: string | null;
   /** AAAA-MM-JJ du créneau. */
   date?: string | null;
 }
@@ -42,13 +45,37 @@ export function typeCarteDuCreneau(activityType?: string | null): "cours" | "bal
   return null;
 }
 
+/** Le créneau est-il un cours particulier (type d'activité, ou formule « sur demande ») ? */
+export function estCoursParticulier(c: { activityType?: string | null; formuleChoisie?: string | null } | null | undefined): boolean {
+  return !!c && (c.activityType === "cours_particulier" || c.formuleChoisie === "cours-particulier");
+}
+
+/**
+ * Le TYPE de carte convient-il au créneau ? La seule règle, lue par le
+ * montoir, le planning, la réservation et le serveur (elle était recopiée à
+ * la main à six endroits) :
+ *   - « balade »      → balades, promenades, poney-rides ;
+ *   - « particulier » → cours particuliers seulement ;
+ *   - « cours »       → tout cours (collectif ou particulier).
+ */
+export function typeCarteCouvre(typeCarte: string | null | undefined, c: { activityType?: string | null; formuleChoisie?: string | null }): boolean {
+  const t = typeCarte || "cours";
+  if (t === "particulier") return estCoursParticulier(c);
+  if (t === "balade") return typeCarteDuCreneau(c.activityType) === "balade";
+  if (t === "cours") return typeCarteDuCreneau(c.activityType) === "cours" || estCoursParticulier(c);
+  return false;
+}
+
+/** Libellé du type de carte, pour l'écran. */
+export function libelleTypeCarte(typeCarte: string | null | undefined): string {
+  return typeCarte === "balade" ? "Balades" : typeCarte === "particulier" ? "Cours particuliers" : "Cours";
+}
+
 /** La carte est-elle utilisable pour CE cavalier sur CE créneau ? (sans tenir compte des séances déjà réservées) */
 export function carteCouvreCreneau(carte: CarteLike, cible: CreneauCible): boolean {
   if (!carte || carte.status !== "active") return false;
   if ((Number(carte.remainingSessions) || 0) <= 0) return false;
-  const typeCible = typeCarteDuCreneau(cible.activityType);
-  if (!typeCible) return false;
-  if ((carte.activityType || "cours") !== typeCible) return false;
+  if (!typeCarteCouvre(carte.activityType, cible)) return false;
   if (!carte.familiale && carte.childId !== cible.childId) return false;
   if (carte.dateFin && cible.date && carte.dateFin < cible.date) return false;
   return true;

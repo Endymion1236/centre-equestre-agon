@@ -43,7 +43,7 @@ import { ModaleChangerGroupe } from "./ModaleChangerGroupe";
 import * as actions from "./enroll-panel-actions";
 import { ChoixFormuleSurDemande } from "./ChoixFormuleSurDemande";
 import { estSurDemande } from "@/lib/creneau-sur-demande";
-import { typeCarteDuCreneau } from "@/lib/cartes-seances";
+import { estCoursParticulier, libelleTypeCarte, typeCarteCouvre, typeCarteDuCreneau } from "@/lib/cartes-seances";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
   libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche,
@@ -1547,7 +1547,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             })()}
 
             {selChild && !isStage && !isCompetition && (() => {
-              const isCours = creneau.activityType === "cours" || creneau.activityType === "cours_collectif" || creneau.activityType === "cours_particulier";
+              const isCours = typeCarteDuCreneau(creneau.activityType) === "cours" || estCoursParticulier(creneau as any);
               const isBalade = ["balade","promenade","ponyride"].includes(creneau.activityType);
               // SlotKey du créneau courant pour vérification précise du forfait
               const currentSlotKey = `${creneau.activityTitle} — ${new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long" })} ${creneau.startTime}`;
@@ -1570,8 +1570,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                 } else {
                   if (c.childId !== selChild) return false;
                 }
-                const ct = c.activityType || "cours";
-                return (ct === "cours" && isCours) || (ct === "balade" && isBalade);
+                // Règle unique du type de carte (lib/cartes-seances).
+                return typeCarteCouvre(c.activityType, creneau as any);
               });
               return isCours ? (
               <div className="bg-sand rounded-xl p-4 space-y-3">
@@ -1584,7 +1584,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     <div className="flex-1 min-w-0">
                       <div className="font-body text-sm font-bold text-gold-700">Carte de séances disponible</div>
                       <div className="font-body text-xs text-gold-600">
-                        {carteActive.remainingSessions} séance{carteActive.remainingSessions > 1 ? "s" : ""} restante{carteActive.remainingSessions > 1 ? "s" : ""} · {carteActive.activityType === "balade" ? "Balades" : "Cours"}
+                        {carteActive.remainingSessions} séance{carteActive.remainingSessions > 1 ? "s" : ""} restante{carteActive.remainingSessions > 1 ? "s" : ""} · {libelleTypeCarte(carteActive.activityType)}
                         {carteActive.dateFin ? ` · valide jusqu'au ${new Date(carteActive.dateFin).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}` : ""}
                       </div>
                       <div className="font-body text-[10px] text-gold-500 mt-0.5">La séance sera débitée à la confirmation de présence au montoir.</div>
@@ -2229,7 +2229,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                         ? (payMode === "prelevement_sepa" ? `Inscrire + programmer le prélèvement SEPA (${totalComp.toFixed(2)}€)` : `Inscrire + Encaisser (${totalComp.toFixed(2)}€)`)
                         : totalComp > 0 ? `Inscrire — en impayé (${totalComp.toFixed(2)}€)` : `Inscrire${suffixe}`;
                     })()
-                  : (typeCarteDuCreneau(creneau.activityType) && allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}`
+                  : (allCartes.some((c: any) => c.status === "active" && (c.remainingSessions || 0) > 0 && (c.childId === selChild || (c.familiale && c.familyId === selFam)) && typeCarteCouvre(c.activityType, creneau as any))) ? `Inscrire 🎟️ (débit carte à la clôture)${suffixe}`
                   : showPay ? `Inscrire + Encaisser (${totalTTC.toFixed(2)}€)${suffixe}`
                   : totalTTC > 0 ? `Inscrire — paiement${isMulti ? "s" : ""} en attente (${totalTTC.toFixed(2)}€)${suffixe}`
                   : `Inscrire${suffixe}`}

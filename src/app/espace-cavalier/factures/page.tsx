@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { libelleTypeCarte } from "@/lib/cartes-seances";
 import {
   addDoc,
   collection,
@@ -944,7 +945,7 @@ export default function FacturesPage() {
                         <div key={card.id} className="rounded-xl bg-gold-50/50 p-3">
                           <div className="flex items-center justify-between gap-3">
                             <div>
-                              <div className="font-body text-sm font-bold text-blue-800">Carte {card.totalSessions} séances · {card.activityType === "balade" ? "Balades" : "Cours"}</div>
+                              <div className="font-body text-sm font-bold text-blue-800">Carte {card.totalSessions} séances · {libelleTypeCarte(card.activityType)}</div>
                               <div className="font-body text-xs text-gray-600 mt-0.5">{card.familiale ? "Carte familiale" : card.childName}</div>
                             </div>
                             <Badge color={card.remainingSessions > 2 ? "green" : "orange"}>{card.remainingSessions}/{card.totalSessions}</Badge>
