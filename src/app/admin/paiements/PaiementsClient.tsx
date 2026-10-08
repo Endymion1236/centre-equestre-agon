@@ -13,6 +13,7 @@ import { retraitPointsFidelite } from "@/lib/fidelite-avoir";
 import ModaleModifierCommande from "./ModaleModifierCommande";
 import ModaleEncaisser from "./ModaleEncaisser";
 import { programmerSepaCommandes } from "./sepa-groupe";
+import { planRemiseGroupee, pourcentageRemise } from "./remise-groupee";
 import { useToast } from "@/components/ui/Toast";
 import { Plus, ShoppingCart, CreditCard, Check, Loader2, Search, X, Receipt, Copy, Gift, Calendar, FileText } from "lucide-react";
 import type { Family, Activity } from "@/types";
@@ -82,12 +83,26 @@ export default function PaiementsPage() {
   const [multiRef, setMultiRef] = useState("");
   const [multiDate, setMultiDate] = useState(new Date().toISOString().split("T")[0]);
   const [multiSaving, setMultiSaving] = useState(false);
+  // Remise en % sur l'ensemble des commandes (remise-groupee.ts).
+  const [multiRemise, setMultiRemise] = useState("");
 
   const handleMultiEncaisser = async () => {
     if (!multiEncaisser) return;
-    const cibles = multiEncaisser.payments;
+    let cibles = multiEncaisser.payments;
     if (cibles.length === 0) return;
     setMultiSaving(true);
+    // Remise globale : écrite sur chaque commande modifiable AVANT le
+    // règlement, pour que facture, journal et prélèvement portent le montant remisé.
+    const pct = pourcentageRemise(multiRemise);
+    if (pct) {
+      const plan = planRemiseGroupee(cibles, pct);
+      try {
+        for (const r of plan.remisees) {
+          await updateDoc(doc(db, "payments", r.id), { items: r.items, totalTTC: r.totalTTC, remiseGlobalePct: pct, updatedAt: serverTimestamp() });
+        }
+      } catch (e: any) { toast(`Remise non enregistrée : ${e?.message || e}`, "error", 7000); setMultiSaving(false); return; }
+      cibles = cibles.map(p => { const r = plan.remisees.find(x => x.id === p.id); return r ? { ...p, items: r.items, totalTTC: r.totalTTC } : p; });
+    }
     // Prélèvement SEPA : programmé facture par facture, rien n'est encaissé
     // aujourd'hui (sepa-groupe.ts).
     if (multiMode === "prelevement_sepa") {
@@ -96,7 +111,7 @@ export default function PaiementsPage() {
         if (!r.ok) { toast(r.raison, "error", 7000); setMultiSaving(false); return; }
         toast(`🏦 ${r.ids.length} facture(s) programmée(s) en prélèvement SEPA pour ${multiEncaisser.familyName} — ${r.total.toFixed(2)}€ le ${new Date(multiDate + "T12:00:00").toLocaleDateString("fr-FR")}. Vérifiez puis envoyez la pré-notification dans Prélèvements SEPA.`, "success", 8000);
         setMultiEncaisser(null);
-        setMultiRef(""); setMultiDate(new Date().toISOString().split("T")[0]); setMultiMode("cheque");
+        setMultiRef(""); setMultiDate(new Date().toISOString().split("T")[0]); setMultiMode("cheque"); setMultiRemise("");
         await refreshAll(r.ids);
       } catch (e: any) { console.error(e); toast(`Erreur programmation SEPA : ${e?.message || e}`, "error", 7000); }
       setMultiSaving(false);
@@ -120,7 +135,7 @@ export default function PaiementsPage() {
       }
       toast(`✅ ${ids.length} facture(s) réglée(s) pour ${multiEncaisser.familyName} — ${totalEncaisse.toFixed(2)}€ (${paymentModes.find(m => m.id === multiMode)?.label})`, "success");
       setMultiEncaisser(null);
-      setMultiRef(""); setMultiDate(new Date().toISOString().split("T")[0]);
+      setMultiRef(""); setMultiDate(new Date().toISOString().split("T")[0]); setMultiRemise("");
       await refreshAll(ids);
     } catch (e: any) { console.error(e); toast(`Erreur encaissement groupé : ${e?.message || e}`, "error", 7000); }
     setMultiSaving(false);
@@ -1521,7 +1536,7 @@ export default function PaiementsPage() {
       {/* ── Modal encaissement rapide ── */}
       {/* ─── Modale Encaissement groupé ─── */}
       {multiEncaisser && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !multiSaving && setMultiEncaisser(null)}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { if (!multiSaving) { setMultiEncaisser(null); setMultiRemise(""); } }}>
           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100 flex-shrink-0">
               <h2 className="font-display text-lg font-bold text-blue-800">Encaisser ensemble</h2>
@@ -1540,12 +1555,33 @@ export default function PaiementsPage() {
                   );
                 })}
               </div>
-              <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2.5 mb-4">
-                <span className="font-body text-sm font-semibold text-blue-800">Total à encaisser</span>
-                <span className="font-body text-lg font-bold text-blue-800">
-                  {multiEncaisser.payments.reduce((s, p) => s + Math.max(0, (p.totalTTC || 0) - (p.paidAmount || 0)), 0).toFixed(2)}€
-                </span>
-              </div>
+              {(() => {
+                const avant = multiEncaisser.payments.reduce((s, p) => s + Math.max(0, (p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+                const pct = pourcentageRemise(multiRemise);
+                const plan = pct ? planRemiseGroupee(multiEncaisser.payments, pct) : null;
+                const apres = Math.round((avant - (plan?.remiseTotale || 0)) * 100) / 100;
+                return (<>
+                  <div className="flex items-center gap-2 mb-2">
+                    <label className="font-body text-xs font-semibold text-slate-600">🎁 Remise globale</label>
+                    <input inputMode="decimal" value={multiRemise} onChange={e => setMultiRemise(e.target.value)} placeholder="0"
+                      className="w-16 px-2 py-1 rounded-lg border border-gray-200 font-body text-sm text-right focus:border-blue-400 focus:outline-none" />
+                    <span className="font-body text-xs text-slate-500">%</span>
+                    {plan && plan.remiseTotale > 0 && <span className="font-body text-xs text-orange-700">− {plan.remiseTotale.toFixed(2)}€</span>}
+                  </div>
+                  {plan && plan.exclues.length > 0 && (
+                    <div className="font-body text-[11px] text-amber-800 bg-amber-50 rounded-lg px-3 py-2 mb-2">
+                      Sans remise : {plan.exclues.map(x => `${(multiEncaisser.payments.find(p => p.id === x.id)?.items || []).map((i: any) => i.activityTitle).join(", ") || "commande"} (${x.motif})`).join(" ; ")}. Pour ces commandes, il faut un avoir.
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between bg-blue-50 rounded-lg px-3 py-2.5 mb-4">
+                    <span className="font-body text-sm font-semibold text-blue-800">Total à encaisser</span>
+                    <span className="font-body text-lg font-bold text-blue-800">
+                      {plan && plan.remiseTotale > 0 && <span className="font-body text-xs font-normal text-slate-400 line-through mr-2">{avant.toFixed(2)}€</span>}
+                      {apres.toFixed(2)}€
+                    </span>
+                  </div>
+                </>);
+              })()}
 
               {/* Modes directs, plus le prélèvement SEPA (un prélèvement par
                   facture, programmé à la date choisie) ; pas de chèque différé. */}
@@ -1573,7 +1609,7 @@ export default function PaiementsPage() {
               </div>
             </div>
             <div className="p-5 border-t border-gray-100 flex gap-2 flex-shrink-0">
-              <button type="button" onClick={() => setMultiEncaisser(null)} disabled={multiSaving}
+              <button type="button" onClick={() => { setMultiEncaisser(null); setMultiRemise(""); }} disabled={multiSaving}
                 className="flex-1 font-body text-sm text-slate-500 bg-gray-100 py-2.5 rounded-lg border-none cursor-pointer disabled:opacity-50">Annuler</button>
               <button type="button" onClick={handleMultiEncaisser} disabled={multiSaving}
                 className="flex-1 font-body text-sm font-semibold text-white bg-blue-500 hover:bg-blue-600 py-2.5 rounded-lg border-none cursor-pointer disabled:opacity-50">
