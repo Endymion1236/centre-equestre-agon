@@ -20,11 +20,18 @@ export interface ApercuPrenotif {
   mandatId: string;
   total: number;
   echeances: { date: string; dateLabel: string; montant: number }[];
+  /** Plusieurs commandes de la famille dans un même email. */
+  commandes?: { id: string; prestations: string; montant: number; nbEcheances: number }[];
   dejaEnvoyeeLe: string | null;
 }
 
 interface Props {
   paymentId: string;
+  /**
+   * Toutes les commandes de la famille à prévenir : UN seul email les
+   * récapitule (octobre 2026 — les DUHEM recevaient 8 pré-notifications).
+   */
+  paymentIds?: string[];
   familyName?: string;
   /** Appelé après un envoi réussi (rafraîchir, fermer le bandeau). */
   onEnvoye?: () => void;
@@ -33,7 +40,9 @@ interface Props {
   toast: (message: string, type?: "error" | "success" | "warning" | "info", duration?: number) => void;
 }
 
-export function BandeauPrenotificationSepa({ paymentId, familyName, onEnvoye, onPlusTard, toast }: Props) {
+export function BandeauPrenotificationSepa({ paymentId, paymentIds, familyName, onEnvoye, onPlusTard, toast }: Props) {
+  const ids = paymentIds && paymentIds.length ? paymentIds : [paymentId];
+  const cle = ids.join(",");
   const [apercu, setApercu] = useState<ApercuPrenotif | null>(null);
   const [erreur, setErreur] = useState("");
   const [etat, setEtat] = useState<"chargement" | "pret" | "envoi" | "envoye">("chargement");
@@ -45,7 +54,7 @@ export function BandeauPrenotificationSepa({ paymentId, familyName, onEnvoye, on
         const r = await authFetch("/api/admin/sepa-prenotification", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ paymentId, mode: "apercu" }),
+          body: JSON.stringify({ paymentIds: ids, mode: "apercu" }),
         });
         const d = await r.json().catch(() => ({} as any));
         if (annule) return;
@@ -58,7 +67,8 @@ export function BandeauPrenotificationSepa({ paymentId, familyName, onEnvoye, on
       }
     })();
     return () => { annule = true; };
-  }, [paymentId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cle]);
 
   const envoyer = async () => {
     if (!apercu || etat === "envoi") return;
@@ -67,12 +77,12 @@ export function BandeauPrenotificationSepa({ paymentId, familyName, onEnvoye, on
       const r = await authFetch("/api/admin/sepa-prenotification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentId }),
+        body: JSON.stringify({ paymentIds: ids }),
       });
       const d = await r.json().catch(() => ({} as any));
       if (!r.ok || !d?.sent) throw new Error(d?.error || d?.reason || "Envoi impossible");
       setEtat("envoye");
-      toast(`Pré-notification SEPA envoyée à ${d.to}`, "success");
+      toast(`Pré-notification SEPA envoyée à ${d.to}${d.nbCommandes > 1 ? ` (${d.nbCommandes} commandes en un seul email)` : ""}`, "success");
       onEnvoye?.();
     } catch (e: any) {
       setEtat("pret");
@@ -95,7 +105,14 @@ export function BandeauPrenotificationSepa({ paymentId, familyName, onEnvoye, on
           {apercu && (
             <div className="mt-2 text-xs">
               <div><span className="text-amber-700">Destinataire :</span> <strong>{apercu.to}</strong></div>
-              {apercu.prestations && <div><span className="text-amber-700">Commande :</span> {apercu.prestations}</div>}
+              {apercu.commandes && apercu.commandes.length > 1 ? (
+                <div className="mt-1">
+                  <span className="text-amber-700">{apercu.commandes.length} commandes dans un seul email :</span>
+                  <ul className="ml-4 list-disc">
+                    {apercu.commandes.map(c => <li key={c.id}>{c.prestations} — {c.montant.toFixed(2)} €{c.nbEcheances > 1 ? ` en ${c.nbEcheances} fois` : ""}</li>)}
+                  </ul>
+                </div>
+              ) : apercu.prestations && <div><span className="text-amber-700">Commande :</span> {apercu.prestations}</div>}
               <div><span className="text-amber-700">Mandat :</span> {apercu.mandatId || "—"}</div>
               <table className="mt-2 w-full max-w-xs">
                 <tbody>
@@ -106,7 +123,7 @@ export function BandeauPrenotificationSepa({ paymentId, familyName, onEnvoye, on
                     </tr>
                   ))}
                   <tr className="border-t-2 border-amber-300">
-                    <td className="py-1 pr-3 font-semibold">Total · {apercu.echeances.length} prélèvement{apercu.echeances.length > 1 ? "s" : ""}</td>
+                    <td className="py-1 pr-3 font-semibold">Total · {apercu.echeances.length} date{apercu.echeances.length > 1 ? "s" : ""} de prélèvement</td>
                     <td className="py-1 text-right font-bold">{apercu.total.toFixed(2)} €</td>
                   </tr>
                 </tbody>

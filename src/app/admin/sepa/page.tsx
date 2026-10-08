@@ -1,6 +1,7 @@
 "use client";
 import { authFetch } from "@/lib/auth-fetch";
 import { BandeauPrenotificationSepa } from "@/components/admin/BandeauPrenotificationSepa";
+import { grouperParFamille } from "@/lib/sepa-prenotification-resume";
 
 import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, deleteField, doc, serverTimestamp, query, where } from "firebase/firestore";
@@ -1275,8 +1276,10 @@ export default function SepaPage() {
 
               {/* Pré-notifications SEPA à vérifier : forfaits annuels dont
                   l'email d'échéancier n'a pas encore été confirmé. */}
-              {payments.filter((p: any) => p.prenotificationSepa === "a_verifier" && !(p.echeancierAnnuleLe && p.status !== "sepa_scheduled")).map((p: any) => (
-                <BandeauPrenotificationSepa key={p.id} paymentId={p.id} familyName={p.familyName} toast={toast} onEnvoye={fetchAll} />
+              {/* Une pré-notification par FAMILLE, toutes ses commandes à prévenir
+                  dans le même email (lib/sepa-prenotification-resume). */}
+              {grouperParFamille(payments.filter((p: any) => p.prenotificationSepa === "a_verifier" && !(p.echeancierAnnuleLe && p.status !== "sepa_scheduled"))).map((g) => (
+                <BandeauPrenotificationSepa key={g.ids.join(",")} paymentId={g.ids[0]} paymentIds={g.ids} familyName={g.familyName} toast={toast} onEnvoye={fetchAll} />
               ))}
 
               {/* Formulaire nouvel échéancier */}

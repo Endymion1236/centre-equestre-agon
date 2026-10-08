@@ -363,28 +363,21 @@ export default function ModaleEncaisser({
           // dû autrement et visible dans les impayés (lib/sepa-remise).
           sepaRestant: Math.round(plans.reduce((s, pl) => s + pl.montant, 0) * 100) / 100,
           paymentRef: `${nbEch}× SEPA · ${plans.map(pl => pl.mandat.mandatId).join(" + ")}`,
+          // Pré-notification à vérifier puis envoyer depuis Prélèvements
+          // SEPA : un seul email y regroupe toutes les commandes de la famille.
+          prenotificationSepa: "a_verifier",
           updatedAt: serverTimestamp(),
         });
 
-        // Prévenir la famille : montant, date, mandat. Sans cet envoi, elle
-        // en restait au message « réglez quand vous le souhaitez » de la
-        // commande différée, et découvrait le prélèvement sur son relevé.
-        // Les règles SEPA imposent d'ailleurs cette pré-notification.
-        let prevenue = false;
-        try {
-          const r = await authFetch("/api/admin/sepa-prenotification", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ paymentId: p.id }),
-          });
-          prevenue = !!(await r.json().catch(() => null))?.sent;
-        } catch (e) { console.warn("[sepa] pré-notification:", e); }
-
+        // Prévenir la famille : montant, date, mandat (les règles SEPA
+        // l'imposent). L'email partait ici, une commande à la fois : une
+        // famille dont on programmait 8 commandes recevait 8 messages
+        // (octobre 2026, les DUHEM). Il part désormais depuis Prélèvements
+        // SEPA, en un seul email par famille, après relecture.
         toast(
-          `✅ ${nbEch} échéance${nbEch > 1 ? "s" : ""} SEPA créée${nbEch > 1 ? "s" : ""} pour ${p.familyName} (${montant.toFixed(2)}€)`
-          + (prevenue ? " — famille prévenue par email" : " — ⚠️ email de pré-notification non envoyé")
-          + ". La commande sort des Impayés : échéancier dans Prélèvements SEPA › Échéancier.",
-          prevenue ? "success" : "warning",
+          `✅ ${nbEch} échéance${nbEch > 1 ? "s" : ""} SEPA créée${nbEch > 1 ? "s" : ""} pour ${p.familyName} (${montant.toFixed(2)}€). `
+          + "Pré-notification à envoyer depuis Prélèvements SEPA : un seul email regroupe toutes les commandes de la famille.",
+          "success",
         );
         onClose();
         setQuickMontant(""); setQuickRef("");
