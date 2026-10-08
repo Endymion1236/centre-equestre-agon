@@ -7,7 +7,7 @@
  */
 import assert from "node:assert/strict";
 import {
-  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole,
+  lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne,
 } from "../../src/lib/concours/saison-tableau";
 import { engagerEquipes, poserDuree, poserPoney, poserRemplacant } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
@@ -288,6 +288,28 @@ test("un cavalier retiré de la saison quitte le poney remplaçant", () => {
   s = retirerCavalier(s, "ana");
   assert.equal(s.resultats[0].engagements![0].roles!.cavalierRemplacant, undefined);
   assert.equal(s.resultats[0].engagements![0].roles!.coach, "Coach Paul", "les autres rôles restent");
+});
+
+console.log("\n── « X » : personne sur le rôle ──");
+
+test("X veut dire personne, sous plusieurs écritures", () => {
+  for (const v of ["X", "x", " x ", "personne", "Aucun", "-"]) assert.equal(estPersonne(v), true, v);
+  for (const v of ["", undefined, "Xavier", "Max"]) assert.equal(estPersonne(v), false, String(v));
+});
+
+test("X sur plusieurs rôles en même temps : jamais occupé, jamais en conflit, rôle tranché", () => {
+  const s = saison();
+  let r = complet(s);
+  for (const eq of ["eq", "p"]) {
+    r = poserRole(r, eq, "juge", "X");
+    r = poserRole(r, eq, "facteur", "x");
+    r = poserRole(r, eq, "respEchauffement", "X");
+  }
+  r = poserPlaceur(r, "eq", 0, "X");
+  r = poserRole(poserRemplacant(r, "eq", "Pompon"), "eq", "cavalierRemplacant", "X");
+  assert.deepEqual(verifierTableau(s, r), [], "ni conflit ni « à désigner »");
+  assert.ok(!candidatsRole(s, r, "eq", "coach").some((c) => c.nom.toLowerCase() === "x"), "pas listé comme une personne");
+  assert.match(htmlTableau(s, r), /<td>X<\/td>/);
 });
 
 console.log("\n── Impression ──");

@@ -41,7 +41,19 @@ export function plageLisible(p?: Plage): string {
   return `${h(p.debut)}–${h(p.fin)}`;
 }
 
+/** Valeur à choisir quand il n'y a personne sur un rôle. */
+export const PERSONNE = "X";
+
+/**
+ * « X » (ou « personne », « aucun », « - ») veut dire qu'il n'y a personne :
+ * le rôle est tranché, et ce n'est pas quelqu'un qui pourrait être pris ailleurs.
+ */
+export function estPersonne(nom?: string): boolean {
+  return /^\s*(x|personne|aucun|aucune|-|—)\s*$/i.test(nom ?? "");
+}
+
 export function nomCavalier(s: SaisonPonyGames, id: string): string {
+  if (estPersonne(id)) return PERSONNE;
   const c = s.cavaliers.find((x) => x.id === id);
   return c ? [c.prenom, c.nom].filter(Boolean).join(" ") : "?";
 }
@@ -162,7 +174,7 @@ export interface AlerteTableau {
 function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
   const occ: Occupation[] = [];
   const parNom = (nom: string | undefined, quoi: string, genre: string, plage?: Plage) => {
-    if (!nom?.trim() || !plage) return;
+    if (!nom?.trim() || !plage || estPersonne(nom)) return;
     occ.push({ cle: clePersonne(s, nom), qui: nom.trim(), quoi, genre, plage });
   };
   for (const l of lignesTableau(s, r)) {
@@ -174,11 +186,11 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
       occ.push({ cle, qui: c.nom, quoi: `en échauffement avec ${l.equipe}`, genre, plage: l.echauffement! });
       occ.push({ cle, qui: c.nom, quoi: `en jeu avec ${l.equipe}`, genre, plage: l.passage });
     }
-    for (const id of l.roles.placeurs ?? []) {
+    for (const id of (l.roles.placeurs ?? []).filter((x) => !estPersonne(x))) {
       occ.push({ cle: cleCavalier(s, id), qui: nomCavalier(s, id), quoi: `placeur pour ${l.equipe}`, genre: `piste:${l.equipeId}`, plage: l.passage });
     }
     // Compté seulement si un poney remplaçant est prévu.
-    if (l.remplacant && l.roles.cavalierRemplacant && l.echauffement) {
+    if (l.remplacant && l.roles.cavalierRemplacant && !estPersonne(l.roles.cavalierRemplacant) && l.echauffement) {
       occ.push({
         cle: cleCavalier(s, l.roles.cavalierRemplacant), qui: nomCavalier(s, l.roles.cavalierRemplacant),
         quoi: `au poney remplaçant de ${l.equipe}`, genre: `remplacant:${l.equipeId}`,

@@ -5,7 +5,7 @@ import { AlertOctagon, AlertTriangle, CheckCircle2, Printer } from "lucide-react
 import type { ResultatConcours, SaisonPonyGames } from "@/lib/concours/saisons";
 import {
   DUREE_ECHAUFFEMENT_MIN, DUREE_PREPA_MIN, PLACEURS_MAX,
-  candidatsRole, htmlTableau, lignesTableau, nomCavalier, plageLisible, poserPlaceur, poserRole, verifierTableau,
+  candidatsRole, estPersonne, htmlTableau, lignesTableau, nomCavalier, PERSONNE, plageLisible, poserPlaceur, poserRole, verifierTableau,
   type Candidat, type LigneTableau,
 } from "@/lib/concours/saison-tableau";
 
@@ -46,12 +46,13 @@ function ChoixPersonne({
   }
   const disponibles = candidats.filter((c) => !c.occupe);
   const occupes = candidats.filter((c) => c.occupe);
-  const connu = !valeur || candidats.some((c) => valeurDe(c) === valeur);
+  const connu = !valeur || estPersonne(valeur) || candidats.some((c) => valeurDe(c) === valeur);
   const choisi = candidats.find((c) => valeurDe(c) === valeur);
   return (
     <select className={`${inpSm} ${choisi?.occupe ? "border-red-300 bg-red-50 text-red-700" : ""}`} value={valeur ?? ""}
       onChange={(e) => (e.target.value === AUTRE ? setSaisie(true) : onChange(e.target.value))}>
       <option value="">{vide}</option>
+      <option value={estPersonne(valeur) ? valeur : PERSONNE}>X — personne</option>
       {!connu && <option value={valeur}>{libelle(valeur!)}</option>}
       {disponibles.length > 0 && (
         <optgroup label={`Disponibles (${disponibles.length})`}>
@@ -153,7 +154,7 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
           juste avant, chacun avec un responsable ; pendant le passage, un coach, 1 à 2 placeurs, un juge de ligne et un facteur.
           Chaque menu propose d&apos;abord les personnes libres à ce moment-là ; les occupées (en préparation,
           en échauffement, en jeu ou sur un autre rôle) sont grisées. Un coach par passage ; le cavalier du poney
-          remplaçant est pris de l&apos;échauffement à la fin du passage. « Autre personne… » pour un parent, un coach…
+          remplaçant est pris de l&apos;échauffement à la fin du passage. « Autre personne… » pour un parent, un coach… « X — personne » quand il n&apos;y a personne sur le rôle : toujours disponible.
         </p>
         <button type="button" onClick={imprimer}
           className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-600 text-white font-body text-sm font-semibold hover:bg-blue-700 transition">
