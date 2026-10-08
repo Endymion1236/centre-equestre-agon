@@ -10,7 +10,7 @@ import {
 } from "@/lib/concours/saison-tableau";
 
 type Changer = (f: (r: ResultatConcours) => ResultatConcours) => void;
-type RoleTexte = "respPrepa" | "respEchauffement" | "juge" | "facteur" | "coach";
+type RoleTexte = "respPrepa" | "respEchauffement" | "respEchauffement2" | "juge" | "facteur" | "coach" | "coach2";
 
 const inpSm =
   "w-full min-w-[110px] px-2 py-1.5 rounded-md border border-blue-500/15 font-body text-sm bg-white focus:border-blue-500 focus:outline-none";
@@ -75,9 +75,18 @@ function ChoixPersonne({
 }
 
 function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonPonyGames; concours: ResultatConcours; ligne: LigneTableau; changer: Changer }) {
-  const parNom = (role: RoleTexte, vide: string) => (
-    <ChoixPersonne valeur={l.roles[role]} candidats={candidatsRole(saison, concours, l.equipeId, role)} vide={vide}
-      valeurDe={(c) => c.nom} onChange={(v) => changer((c) => poserRole(c, l.equipeId, role, v))} />
+  // `sauf` : le 2e menu ne repropose pas la personne du 1er (X reste à volonté).
+  const parNom = (role: RoleTexte, vide: string, sauf?: string) => (
+    <ChoixPersonne valeur={l.roles[role]} vide={vide} valeurDe={(c) => c.nom}
+      candidats={candidatsRole(saison, concours, l.equipeId, role).filter((c) => !sauf || estPersonne(sauf) || c.nom !== sauf)}
+      onChange={(v) => changer((c) => poserRole(c, l.equipeId, role, v))} />
+  );
+  /** Un 1er menu, et un 2e (facultatif) une fois le 1er rempli ou si le 2e l'est déjà. */
+  const deuxNoms = (role: "coach" | "respEchauffement", vide: string, vide2: string) => (
+    <div className="space-y-1">
+      {parNom(role, vide)}
+      {(l.roles[role] || l.roles[`${role}2`]) && parNom(`${role}2`, vide2, l.roles[role])}
+    </div>
   );
   // Placeurs : cavaliers de la saison seulement.
   const candidatsPlaceur = candidatsRole(saison, concours, l.equipeId, "placeur").filter((c) => c.cavalierId);
@@ -104,14 +113,14 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
           </div>
         )}
       </td>
-      <td className={td}>{parNom("coach", "— coach —")}</td>
+      <td className={td}>{deuxNoms("coach", "— coach —", "— 2e coach —")}</td>
       <td className={td}>
         <div className="text-xs font-semibold text-gray-600 mb-1 whitespace-nowrap">{plageLisible(l.prepa)}</div>
         {parNom("respPrepa", "— responsable —")}
       </td>
       <td className={td}>
         <div className="text-xs font-semibold text-gray-600 mb-1 whitespace-nowrap">{plageLisible(l.echauffement)}</div>
-        {parNom("respEchauffement", "— responsable —")}
+        {deuxNoms("respEchauffement", "— responsable —", "— 2e responsable —")}
       </td>
       <td className={`${td} space-y-1`}>
         {Array.from({ length: Math.min(placeurs.length + 1, PLACEURS_MAX) }, (_, i) => (
@@ -151,9 +160,9 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-xs text-gray-500 flex-1 min-w-[240px]">
           Pour chaque passage : préparation des poneys ({DUREE_PREPA_MIN} min) puis échauffement ({DUREE_ECHAUFFEMENT_MIN} min)
-          juste avant, chacun avec un responsable ; pendant le passage, un coach, 1 à 2 placeurs, un juge de ligne et un facteur.
+          juste avant, chacun avec un responsable ; pendant le passage, 1 à 2 coachs, 1 à 2 placeurs, un juge de ligne et un facteur.
           Chaque menu propose d&apos;abord les personnes libres à ce moment-là ; les occupées (en préparation,
-          en échauffement, en jeu ou sur un autre rôle) sont grisées. Un coach par passage ; le cavalier du poney
+          en échauffement, en jeu ou sur un autre rôle) sont grisées. L&apos;échauffement peut avoir 2 responsables ; le cavalier du poney
           remplaçant est pris de l&apos;échauffement à la fin du passage. « Autre personne… » pour un parent, un coach… « X — personne » quand il n&apos;y a personne sur le rôle : toujours disponible.
         </p>
         <button type="button" onClick={imprimer}

@@ -4,7 +4,8 @@
 // À partir des horaires, des durées, des cavaliers et des poneys, une ligne
 // par passage : préparation des poneys (30 min) puis échauffement (30 min)
 // juste avant le passage, chacun avec un responsable ; placeurs de matériel
-// (1 à 2 cavaliers), juge de ligne, facteur et coach pendant le passage ;
+// (1 à 2 cavaliers), juge de ligne, facteur et 1 à 2 coachs pendant le passage ;
+// l'échauffement peut avoir 2 responsables ;
 // un cavalier pour le poney remplaçant (échauffement et passage).
 // Les vérifications signalent une personne prise à deux endroits à la fois.
 // =============================================================================
@@ -87,7 +88,7 @@ export function lignesTableau(s: SaisonPonyGames, r: ResultatConcours): LigneTab
 
 // ─── Saisie des rôles ──────────────────────────────────────────────────────
 
-type RoleTexte = "respPrepa" | "respEchauffement" | "juge" | "facteur" | "coach" | "cavalierRemplacant";
+type RoleTexte = "respPrepa" | "respEchauffement" | "respEchauffement2" | "juge" | "facteur" | "coach" | "coach2" | "cavalierRemplacant";
 
 function majRoles(r: ResultatConcours, equipeId: string, f: (roles: RolesPassage) => RolesPassage): ResultatConcours {
   return {
@@ -198,10 +199,12 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
       });
     }
     parNom(l.roles.coach, `coach de ${l.equipe}`, `coach:${l.equipeId}`, l.passage);
+    parNom(l.roles.coach2, `coach de ${l.equipe}`, `coach:${l.equipeId}`, l.passage);
     parNom(l.roles.juge, `juge pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
     parNom(l.roles.facteur, `facteur pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
     parNom(l.roles.respPrepa, `responsable prépa de ${l.equipe}`, "prepa", l.prepa);
     parNom(l.roles.respEchauffement, `responsable échauffement de ${l.equipe}`, "echauffement", l.echauffement);
+    parNom(l.roles.respEchauffement2, `responsable échauffement de ${l.equipe}`, "echauffement", l.echauffement);
   }
   return occ;
 }
@@ -214,11 +217,11 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
     if (!l.passage) continue;
     const manque: string[] = [];
     if (!l.roles.respPrepa?.trim()) manque.push("responsable préparation");
-    if (!l.roles.respEchauffement?.trim()) manque.push("responsable échauffement");
+    if (!l.roles.respEchauffement?.trim() && !l.roles.respEchauffement2?.trim()) manque.push("responsable échauffement");
     if (!l.roles.placeurs?.length) manque.push("placeur (1 minimum)");
     if (!l.roles.juge?.trim()) manque.push("juge de ligne");
     if (!l.roles.facteur?.trim()) manque.push("facteur");
-    if (!l.roles.coach?.trim()) manque.push("coach");
+    if (!l.roles.coach?.trim() && !l.roles.coach2?.trim()) manque.push("coach");
     if (manque.length) out.push({ gravite: "alerte", message: `${l.equipe} : ${manque.join(", ")} à désigner.` });
   }
 
@@ -241,7 +244,8 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
 
 // ─── Qui est disponible pour un rôle ───────────────────────────────────────
 
-export type RolePassage = "respPrepa" | "respEchauffement" | "placeur" | "juge" | "facteur" | "coach" | "cavalierRemplacant";
+export type RolePassage =
+  | "respPrepa" | "respEchauffement" | "respEchauffement2" | "placeur" | "juge" | "facteur" | "coach" | "coach2" | "cavalierRemplacant";
 
 export interface Candidat {
   /** Nom à inscrire dans la case. */
@@ -257,7 +261,9 @@ export interface Candidat {
  * personnes déjà désignées dans ce concours, libres d'abord (par ordre
  * alphabétique), puis les occupés avec ce qui les retient.
  */
-export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId: string, role: RolePassage): Candidat[] {
+export function candidatsRole(s: SaisonPonyGames, r: ResultatConcours, equipeId: string, roleDemande: RolePassage): Candidat[] {
+  // Le 2e coach ou 2e responsable a le même créneau que le premier.
+  const role = roleDemande === "coach2" ? "coach" : roleDemande === "respEchauffement2" ? "respEchauffement" : roleDemande;
   const l = lignesTableau(s, r).find((x) => x.equipeId === equipeId);
   const plage = !l ? undefined
     : role === "respPrepa" ? l.prepa
@@ -303,6 +309,7 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
   const lignes = lignesTableau(s, r);
   const date = r.date.split("-").reverse().join("/");
   const titre = `${r.nom} — ${date}${r.lieu ? ` — ${r.lieu}` : ""}`;
+  const deux = (a?: string, b?: string) => [a, b].filter(Boolean).map((x) => echapper(x!)).join("<br>");
   const cellule = (plage: Plage | undefined, resp?: string) =>
     `<b>${plageLisible(plage)}</b><br>${resp ? echapper(resp) : '<span class="vide">……</span>'}`;
   const corps = lignes.map((l) => `
@@ -310,9 +317,9 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
       <td><b>${plageLisible(l.passage)}</b><br>${echapper(l.equipe)}<br><span class="cat">${echapper(l.categorie)}</span></td>
       <td>${l.cavaliers.map((c) => `${echapper(c.nom)}${c.poney ? ` — <i>${echapper(c.poney)}</i>` : ""}`).join("<br>")}
         ${l.remplacant ? `<br><span class="cat">Remplaçant : <i>${echapper(l.remplacant)}</i>${l.roles.cavalierRemplacant ? ` (${echapper(nomCavalier(s, l.roles.cavalierRemplacant))})` : ""}</span>` : ""}</td>
-      <td>${l.roles.coach ? echapper(l.roles.coach) : '<span class="vide">……</span>'}</td>
+      <td>${deux(l.roles.coach, l.roles.coach2) || '<span class="vide">……</span>'}</td>
       <td>${cellule(l.prepa, l.roles.respPrepa)}</td>
-      <td>${cellule(l.echauffement, l.roles.respEchauffement)}</td>
+      <td>${cellule(l.echauffement, [l.roles.respEchauffement, l.roles.respEchauffement2].filter(Boolean).join(" et ") || undefined)}</td>
       <td>${(l.roles.placeurs ?? []).map((id) => echapper(nomCavalier(s, id))).join("<br>") || '<span class="vide">……</span>'}</td>
       <td>${l.roles.juge ? echapper(l.roles.juge) : '<span class="vide">……</span>'}</td>
       <td>${l.roles.facteur ? echapper(l.roles.facteur) : '<span class="vide">……</span>'}</td>

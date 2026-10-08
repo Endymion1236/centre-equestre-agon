@@ -320,6 +320,37 @@ test("X à volonté : deux placeurs X possibles", () => {
   assert.deepEqual(verifierTableau(s, r), []);
 });
 
+console.log("\n── Deux coachs, deux responsables d'échauffement ──");
+
+test("2e coach et 2e responsable : même créneau, pas de conflit entre eux, imprimés", () => {
+  const s = saison();
+  let r = poserRole(complet(s), "eq", "coach2", "Coach Julie");
+  r = poserRole(r, "eq", "respEchauffement2", "Léa A"); // 8h30–9h00 : Léa A n'est placeur qu'à 9h00
+  assert.deepEqual(verifierTableau(s, r), []);
+  // Le 2e coach est pris pendant le passage, comme le 1er.
+  assert.equal(occupesDe(candidatsRole(s, r, "eq", "juge"))["Coach Julie"], "coach de Les Fusées (09h00–09h45)");
+  // Les deux coachs restent proposés l'un à côté de l'autre (même rôle).
+  assert.equal(occupesDe(candidatsRole(s, r, "eq", "coach2"))["Coach Paul"], "libre");
+  const html = htmlTableau(s, r);
+  assert.match(html, /Coach Paul<br>Coach Julie/);
+  assert.match(html, /Emmeline et Léa A/);
+});
+
+test("le 2e suffit : rôle tranché même si le 1er est vide", () => {
+  const s = saison();
+  let r = poserRole(complet(s), "eq", "coach", "");
+  r = poserRole(r, "eq", "coach2", "Coach Julie");
+  r = poserRole(poserRole(r, "eq", "respEchauffement", ""), "eq", "respEchauffement2", "Emmeline");
+  assert.deepEqual(verifierTableau(s, r), []);
+});
+
+test("2e responsable d'échauffement en même temps qu'un autre rôle : conflit", () => {
+  const s = saison();
+  // Le Duo s’échauffe de 9h15 à 9h45 ; Inès joue avec les Fusées jusqu’à 9h45.
+  const r = poserRole(complet(s), "p", "respEchauffement2", "Inès");
+  assert.ok(verifierTableau(s, r).some((a) => a.gravite === "erreur" && a.message.startsWith("Inès : en jeu avec Les Fusées")));
+});
+
 console.log("\n── Impression ──");
 
 test("la page imprimable reprend tout, échappe le texte", () => {

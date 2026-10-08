@@ -53,12 +53,16 @@ export interface RolesPassage {
   respPrepa?: string;
   /** Responsable de l'échauffement (30 min avant le passage). */
   respEchauffement?: string;
+  /** 2e responsable de l'échauffement, facultatif. */
+  respEchauffement2?: string;
   /** Placeurs de matériel : 1 à 2 cavaliers de la saison (ids). */
   placeurs?: string[];
   juge?: string;
   facteur?: string;
   /** Coach de l'équipe pendant le passage (nom libre). */
   coach?: string;
+  /** 2e coach, facultatif. */
+  coach2?: string;
   /** Cavalier (id) qui s'occupe du poney remplaçant : échauffement et passage. */
   cavalierRemplacant?: string;
 }
