@@ -96,7 +96,7 @@ responsabilité personnelle de Nicolas — inexacte.
 
 ## Flux de travail d'une session
 
-- La session travaille sur sa branche, puis avance `main` en fast-forward (`git checkout main && git reset --hard origin/main && git merge --ff-only <branche> && git push origin main`). Si `main` a bougé entre-temps : `git rebase origin/main` sur la branche d'abord. Nicolas demande en général que tout finisse sur `main` ; le confirmer une fois en début de session, et demander si le sujet relève plutôt de `test`.
+- La session travaille sur sa branche, puis avance `main` en fast-forward (`git checkout main && git reset --hard origin/main && git merge --ff-only <branche> && git push origin main`). Si `main` a bougé entre-temps : `git rebase origin/main` sur la branche d'abord. Consigne de Nicolas (08/10/2026) : **tout mettre en ligne sur `main` à chaque fois**, sans redemander — sauf sujet qui relève clairement de `test` (modules listés plus haut).
 - `npm run test:unit` lance toute la suite (`scripts/run-unit-tests.mjs`) et sort 1 au premier échec : équivalent de la boucle ci-dessus.
 - `firestore.rules` ne part pas avec le site : déploiement Firebase séparé. Le dire à chaque modification.
 - Vercel déploie `main` automatiquement en deux ou trois minutes : prévenir Nicolas qu'un test « en vrai » attend ce délai.
