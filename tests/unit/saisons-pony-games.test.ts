@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import {
   nomSaison, saisonDeLaDate, normaliserNomSaison, saisonAProposer, trierSaisons,
   retirerCavalier, retirerEquipe, saisirClassement, lireNombre, resultatsTries,
-  bilanSaison, nomsCavaliers, equipesDuCavalier, type SaisonPonyGames,
+  bilanSaison, nomsCavaliers, equipesDuCavalier, messageErreurSaison, type SaisonPonyGames,
 } from "../../src/lib/concours/saisons";
 
 let passes = 0;
@@ -135,6 +135,15 @@ test("une équipe sans catégorie reste visible", () => {
   const s = saison();
   s.equipes.push({ id: "eq4", nom: "Nouvelle", categorie: " ", indice: "", cavalierIds: [] });
   assert.ok(bilanSaison(s).some((g) => g.categorie === "Sans catégorie"));
+});
+
+console.log("\n── Erreurs ──");
+
+test("un refus d'accès renvoie vers la règle Firebase à publier", () => {
+  const m = messageErreurSaison({ code: "permission-denied", message: "Missing or insufficient permissions." }, "Échec de la création");
+  assert.match(m, /règle « saisons-pony-games »/);
+  assert.equal(messageErreurSaison({ code: "unavailable", message: "hors ligne" }, "Échec"), "Échec : hors ligne");
+  assert.equal(messageErreurSaison(null, "Échec"), "Échec");
 });
 
 console.log(process.exitCode ? "\n❌ des tests ont échoué" : `\n✅ ${passes} tests passés`);

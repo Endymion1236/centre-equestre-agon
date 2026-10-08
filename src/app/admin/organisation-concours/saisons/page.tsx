@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, FolderOpen, Loader2, Plus, Trash2, Users, Trophy } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { listSaisons, createSaison, deleteSaison } from "@/lib/concours/saisons-store";
-import { normaliserNomSaison, saisonAProposer, type SaisonPonyGames } from "@/lib/concours/saisons";
+import { messageErreurSaison, normaliserNomSaison, saisonAProposer, type SaisonPonyGames } from "@/lib/concours/saisons";
 import { toParisDateString } from "@/lib/date-local";
 
 const inp =
@@ -28,7 +28,7 @@ export default function SaisonsPonyGames() {
         setNom(saisonAProposer(liste.map((s) => s.nom), toParisDateString(new Date())));
       } catch (e) {
         console.error(e);
-        toast("Impossible de charger les saisons (règle Firestore à déployer ?)", "error");
+        toast(messageErreurSaison(e, "Impossible de charger les saisons"), "error", 10000);
       }
       setLoading(false);
     })();
@@ -50,7 +50,7 @@ export default function SaisonsPonyGames() {
       router.push(`/admin/organisation-concours/saisons/${id}`);
     } catch (e) {
       console.error(e);
-      toast("Échec de la création", "error");
+      toast(messageErreurSaison(e, "Échec de la création"), "error", 10000);
       setCreating(false);
     }
   };
@@ -63,7 +63,7 @@ export default function SaisonsPonyGames() {
       toast("Saison supprimée", "success");
     } catch (e) {
       console.error(e);
-      toast("Échec de la suppression", "error");
+      toast(messageErreurSaison(e, "Échec de la suppression"), "error", 10000);
     }
   };
 

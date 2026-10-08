@@ -199,3 +199,15 @@ export function nomsCavaliers(s: SaisonPonyGames, equipe: EquipeSaison): string[
 export function equipesDuCavalier(s: SaisonPonyGames, cavalierId: string): EquipeSaison[] {
   return s.equipes.filter((e) => e.cavalierIds.includes(cavalierId));
 }
+
+// ─── Message d'erreur ──────────────────────────────────────────────────────
+
+/** Explique un échec Firestore : un refus d'accès vient de la règle Firebase non publiée. */
+export function messageErreurSaison(e: unknown, action: string): string {
+  const code = String((e as any)?.code ?? "");
+  const msg = String((e as any)?.message ?? "");
+  if (code.includes("permission-denied") || /permission/i.test(msg)) {
+    return `${action} : Firebase refuse l'accès. La règle « saisons-pony-games » doit être publiée dans la console Firebase (Firestore › Règles).`;
+  }
+  return `${action}${msg ? ` : ${msg}` : ""}`;
+}

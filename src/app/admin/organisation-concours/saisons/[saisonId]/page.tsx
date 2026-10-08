@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import { getSaison, saveSaison } from "@/lib/concours/saisons-store";
-import type { SaisonPonyGames } from "@/lib/concours/saisons";
+import { messageErreurSaison, type SaisonPonyGames } from "@/lib/concours/saisons";
 import { OngletEquipes, OngletCavaliers, OngletResultats, OngletClassement, type Maj } from "./onglets";
 
 type Onglet = "equipes" | "cavaliers" | "resultats" | "classement";
@@ -33,7 +33,7 @@ export default function EditeurSaison() {
         setSaison(await getSaison(id));
       } catch (e) {
         console.error(e);
-        toast("Impossible de charger la saison", "error");
+        toast(messageErreurSaison(e, "Impossible de charger la saison"), "error", 10000);
       }
       setLoading(false);
     })();
@@ -55,7 +55,7 @@ export default function EditeurSaison() {
       } catch (e) {
         console.error(e);
         setEtat("erreur");
-        toast("Échec de l'enregistrement — vérifie la connexion", "error");
+        toast(messageErreurSaison(e, "Échec de l'enregistrement"), "error", 10000);
       }
     }, 800);
     return () => clearTimeout(t);
