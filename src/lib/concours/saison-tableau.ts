@@ -115,7 +115,7 @@ export function poserPlaceur(r: ResultatConcours, equipeId: string, index: numbe
     const liste = [...(roles.placeurs ?? [])];
     if (cavalierId) liste[index] = cavalierId;
     else liste.splice(index, 1);
-    const uniques = liste.filter((id, i) => id && liste.indexOf(id) === i).slice(0, PLACEURS_MAX);
+    const uniques = liste.filter((id, i) => id && (estPersonne(id) || liste.indexOf(id) === i)).slice(0, PLACEURS_MAX);
     return { ...roles, placeurs: uniques };
   });
 }

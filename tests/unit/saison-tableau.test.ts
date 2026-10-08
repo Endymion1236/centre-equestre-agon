@@ -312,6 +312,14 @@ test("X sur plusieurs rôles en même temps : jamais occupé, jamais en conflit,
   assert.match(htmlTableau(s, r), /<td>X<\/td>/);
 });
 
+test("X à volonté : deux placeurs X possibles", () => {
+  const s = saison();
+  let r = poserPlaceur(complet(s), "eq", 0, "X");
+  r = poserPlaceur(r, "eq", 1, "X");
+  assert.deepEqual(r.engagements![0].roles!.placeurs, ["X", "X"]);
+  assert.deepEqual(verifierTableau(s, r), []);
+});
+
 console.log("\n── Impression ──");
 
 test("la page imprimable reprend tout, échappe le texte", () => {
