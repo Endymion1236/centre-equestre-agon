@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trophy, Trash2, Loader2, Calendar, PencilLine, FlaskConical } from "lucide-react";
+import { Plus, Trophy, Trash2, Loader2, Calendar, PencilLine, FlaskConical, FolderOpen } from "lucide-react";
+import Link from "next/link";
 import { useToast } from "@/components/ui/Toast";
 import {
   listConcours,
@@ -102,6 +103,19 @@ export default function OrganisationConcoursAccueil() {
           <Plus size={16} /> Nouveau concours
         </button>
       </div>
+
+      <Link
+        href="/admin/organisation-concours/saisons"
+        className="mb-6 flex items-center gap-3 rounded-xl border border-pink-200 bg-pink-50/60 p-4 hover:border-pink-400 transition"
+      >
+        <FolderOpen size={22} className="text-pink-600 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="font-display font-bold text-gray-800">Saisons de Pony Games</div>
+          <div className="text-xs text-gray-500 mt-0.5">
+            Équipes de la saison (catégorie, indice, cavaliers), classements et points après chaque concours.
+          </div>
+        </div>
+      </Link>
 
       {showForm && (
         <div className="mb-6 rounded-xl border border-blue-500/15 bg-white p-4 space-y-3">

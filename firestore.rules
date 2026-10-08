@@ -757,6 +757,12 @@ service cloud.firestore {
       allow read, write: if isStaff();
     }
 
+    // ── Saisons de Pony Games (équipes, cavaliers, classements) ─────────
+    // Un document = une saison (« 2026/2027 »). Même accès que les concours.
+    match /saisons-pony-games/{docId} {
+      allow read, write: if isStaff();
+    }
+
     // ── Journal des actions de l'agent IA ─────────────────────────────────
     // Ecrit UNIQUEMENT cote serveur (Admin SDK, qui ignore ces regles).
     // Lecture admin pour pouvoir retracer ce que l'agent a modifie ;
