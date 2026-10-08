@@ -21,6 +21,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Concours, Terrain } from "./types";
+import { poneyDepuisFiche, type PoneyBase } from "./poneys";
 
 const COL = "concours";
 
@@ -95,10 +96,7 @@ export interface CavalierBase {
   naissance?: string;
 }
 
-export interface PoneyBase {
-  equideId: string;
-  nom: string;
-}
+export type { PoneyBase } from "./poneys";
 
 /** Convertit un champ date Firestore (Timestamp / Date / string) en ISO "AAAA-MM-JJ". */
 function toISODate(v: any): string | undefined {
@@ -132,11 +130,11 @@ export async function listerCavaliersBase(): Promise<CavalierBase[]> {
   return out.sort((a, b) => a.prenom.localeCompare(b.prenom, "fr"));
 }
 
-/** Liste les poneys/équidés de la cavalerie. */
+/** Liste les poneys/équidés de la cavalerie, sous leur surnom quand il existe. */
 export async function listerPoneysBase(): Promise<PoneyBase[]> {
   const snap = await getDocs(collection(db, "equides"));
   return snap.docs
-    .map((d) => ({ equideId: d.id, nom: (d.data() as any).name || "?" }))
+    .map((d) => poneyDepuisFiche(d.id, d.data() as any))
     .sort((a, b) => a.nom.localeCompare(b.nom, "fr"));
 }
 

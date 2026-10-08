@@ -9,6 +9,7 @@ import {
 import { useToast } from "@/components/ui/Toast";
 import { analyser, compterPassagesPoneys, personnesOccupeesAuPassage, heuresDerivees } from "@/lib/concours/contraintes";
 import { attribuerAuto } from "@/lib/concours/attribution";
+import { chevauxAvecSurnoms, trouverPoney } from "@/lib/concours/poneys";
 import {
   getConcours, saveConcours, listConcours,
   listerCavaliersBase, listerPoneysBase, listerCreneauxDuJour,
@@ -84,6 +85,16 @@ export default function EditeurConcours() {
       }
     })();
   }, []);
+
+  // Concours enregistrés avant le surnom : on affiche le surnom actuel de la cavalerie.
+  useEffect(() => {
+    if (poneyBase.length === 0) return;
+    setConcours((c) => {
+      if (!c) return c;
+      const chevaux = chevauxAvecSurnoms(c.chevaux, poneyBase);
+      return chevaux === c.chevaux ? c : { ...c, chevaux };
+    });
+  }, [poneyBase, concours?.id]);
 
   // Recharge les séances du planning quand la date du concours change.
   useEffect(() => {
@@ -192,14 +203,17 @@ export default function EditeurConcours() {
       const resoudrePoney = (poneyNom?: string): string | undefined => {
         if (!poneyNom || !poneyNom.trim()) return undefined;
         const cible = poneyNom.trim().toLowerCase();
-        const exist = chevaux.find((ch) => ch.nom.trim().toLowerCase() === cible);
-        if (exist) return exist.id;
-        const base = poneyBase.find((po) => po.nom.trim().toLowerCase() === cible);
+        // Le planning garde le nom officiel : on passe par la cavalerie pour retrouver le surnom.
+        const base = trouverPoney(poneyBase, poneyNom);
         if (base) {
+          const dejaLa = chevaux.find((ch) => ch.equideId === base.equideId);
+          if (dejaLa) return dejaLa.id;
           const id = `eq-${base.equideId}`;
-          if (!chevaux.some((ch) => ch.id === id)) chevaux.push({ id, nom: base.nom, equideId: base.equideId });
+          chevaux.push({ id, nom: base.nom, equideId: base.equideId });
           return id;
         }
+        const exist = chevaux.find((ch) => ch.nom.trim().toLowerCase() === cible);
+        if (exist) return exist.id;
         const id = genId(poneyNom);
         chevaux.push({ id, nom: poneyNom.trim() });
         return id;
@@ -599,7 +613,7 @@ export default function EditeurConcours() {
               <option value="">+ Ajouter un poney (cavalerie)…</option>
               {poneyBase
                 .filter((po) => !concours.chevaux.some((ch) => ch.equideId === po.equideId))
-                .map((po) => <option key={po.equideId} value={po.equideId}>{po.nom}</option>)}
+                .map((po) => <option key={po.equideId} value={po.equideId}>{po.nom}{po.nom !== po.nomOfficiel ? ` (${po.nomOfficiel})` : ""}</option>)}
             </select>
             <div className="flex gap-2">
               <input className={inp} placeholder="Poney hors base…" value={nouvCheval} onChange={(e) => setNouvCheval(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ajouterCheval()} />
