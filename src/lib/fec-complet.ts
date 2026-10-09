@@ -74,7 +74,10 @@ function dateFec(secondes: number | undefined, repli: Date): string {
   const p = Object.fromEntries(JOUR_PARIS.formatToParts(d).map((x) => [x.type, x.value]));
   return `${p.year}${p.month}${p.day}`;
 }
-const euros = (centimes: number) => (centimes / 100).toFixed(2);
+/** Virgule décimale : Test Compta Démat rejette le point dans DEBIT et CREDIT. */
+const euros = (centimes: number) => (centimes / 100).toFixed(2).replace(".", ",");
+/** Relit un montant écrit au format du FEC (« 12,50 »). */
+const centimesFec = (v: string | undefined) => Math.round((Number(String(v || "0").replace(",", ".")) || 0) * 100);
 /** Tabulation et retours à la ligne cassent le format : on les remplace. */
 const propre = (t: unknown) => String(t ?? "").replace(/[\t\r\n]+/g, " ").trim();
 
@@ -270,7 +273,7 @@ export function construireFecComplet(params: {
   const compteAttente = [...ventes.lignes, ...lignesRg]
     .map((l) => l.split("\t"))
     .filter((c) => c[4] === COMPTE_ATTENTE.compte)
-    .reduce((s, c) => s + Math.round((Number(c[11]) || 0) * 100) + Math.round((Number(c[12]) || 0) * 100), 0) / 100;
+    .reduce((s, c) => s + centimesFec(c[11]) + centimesFec(c[12]), 0) / 100;
   const totalTTC = params.factures.reduce((s, f) => s + Math.round((Number(f.totalTTC) || 0) * 100), 0);
   return {
     contenu: [ENTETE_FEC, ...ventes.lignes, ...lignesRg].join("\n") + "\n",

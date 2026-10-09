@@ -99,8 +99,13 @@ function centimes(n: number): number {
   return Math.round((n || 0) * 100);
 }
 
+/**
+ * Montant au format du FEC : virgule décimale (« 12,50 »). Test Compta Démat
+ * rejette le point (octobre 2026 : « le champ DEBIT n'est pas au bon format,
+ * un séparateur , au lieu de . est attendu », 1 061 fois dans le fichier).
+ */
 function euros(centimes: number): string {
-  return (centimes / 100).toFixed(2);
+  return (centimes / 100).toFixed(2).replace(".", ",");
 }
 
 /**

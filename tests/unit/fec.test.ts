@@ -45,8 +45,8 @@ function soldes(contenu: string) {
   for (const l of contenu.split("\n").slice(1).filter(Boolean)) {
     const c = l.split("\t");
     const cur = parNumero.get(c[2]) || { debit: 0, credit: 0 };
-    cur.debit += Math.round(Number(c[11] || 0) * 100);
-    cur.credit += Math.round(Number(c[12] || 0) * 100);
+    cur.debit += Math.round(Number(String(c[11] || 0).replace(",", ".")) * 100);
+    cur.credit += Math.round(Number(String(c[12] || 0).replace(",", ".")) * 100);
     parNumero.set(c[2], cur);
   }
   return parNumero;
@@ -65,11 +65,11 @@ test("une vente avec TVA produit produit, TVA et créance client", () => {
   const lignes = construireFecVentes([paiements[0]]).split("\n");
   assert.equal(lignes.length, 4);
   assert.match(lignes[1], /^VE\tVentes\t1\t20260815\t70611400/);
-  assert.match(lignes[1], /Stage été\t\t100\.00/);
+  assert.match(lignes[1], /Stage été\t\t100,00/);
   assert.match(lignes[2], /^VE\tVentes\t1\t20260815\t44571200/);
-  assert.match(lignes[2], /TVA 5\.5%\t\t5\.50/);
+  assert.match(lignes[2], /TVA 5\.5%\t\t5,50/);
   assert.match(lignes[3], /^VE\tVentes\t1\t20260815\t41100000/);
-  assert.match(lignes[3], /Famille Martin.*105\.50/);
+  assert.match(lignes[3], /Famille Martin.*105,50/);
 });
 
 test("les trois lignes d'une facture portent le même numéro d'écriture", () => {
@@ -152,7 +152,7 @@ test("une facture dont le détail ne retombe pas sur le total reste équilibrée
   // Les lignes sont ramenées au total au prorata : plus besoin de ligne
   // d'écart, et la TVA porte sur les 90 € facturés, pas sur 105,50 €.
   assert.ok(!contenu.includes("Écart de ventilation"));
-  assert.ok(contenu.includes("\t4.69\t"), "TVA 5,5 % de 90 € TTC = 4,69 €");
+  assert.ok(contenu.includes("\t4,69\t"), "TVA 5,5 % de 90 € TTC = 4,69 €");
 });
 
 test("1re échéance d'un forfait en 10× : TVA sur l'échéance, pas sur le forfait entier", () => {

@@ -49,7 +49,7 @@ test("chaque écriture est équilibrée, numéros continus sur tout le fichier",
   const parNum = new Map<string, number>();
   for (const l of lignes.slice(1)) {
     const c = cols(l);
-    parNum.set(c[2], (parNum.get(c[2]) || 0) + Math.round(Number(c[11] || 0) * 100) - Math.round(Number(c[12] || 0) * 100));
+    parNum.set(c[2], (parNum.get(c[2]) || 0) + Math.round(Number(String(c[11] || 0).replace(",", ".")) * 100) - Math.round(Number(String(c[12] || 0).replace(",", ".")) * 100));
   }
   for (const [n, solde] of parNum) assert.equal(solde, 0, `écriture ${n}`);
   assert.deepEqual([...parNum.keys()].map(Number), [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -75,22 +75,22 @@ test("une prestation non reconnue part au compte d'attente, et c'est signalé", 
 console.log("\n── Règlements ──");
 test("virement : banque au débit, client au crédit, pièce = facture", () => {
   const rg = lignes.filter((l) => cols(l)[0] === "RG" && cols(l)[8] === "F-2026-0101");
-  assert.deepEqual(rg.map((l) => [cols(l)[4], cols(l)[11], cols(l)[12]]), [["51200000", "316.50", ""], ["41100000", "", "316.50"]]);
+  assert.deepEqual(rg.map((l) => [cols(l)[4], cols(l)[11], cols(l)[12]]), [["51200000", "316,50", ""], ["41100000", "", "316,50"]]);
   assert.equal(cols(rg[1])[6], "Enaux", "compte auxiliaire du client");
 });
 
 test("chèque au 51120000 ; une contre-passation inverse les sens", () => {
   const rg = lignes.filter((l) => cols(l)[0] === "RG" && cols(l)[8] === "F-2026-0102");
   assert.deepEqual(rg.map((l) => [cols(l)[4], cols(l)[11], cols(l)[12]]), [
-    ["51120000", "107.00", ""], ["41100000", "", "107.00"],
-    ["41100000", "7.00", ""], ["51120000", "", "7.00"],
+    ["51120000", "107,00", ""], ["41100000", "", "107,00"],
+    ["41100000", "7,00", ""], ["51120000", "", "7,00"],
   ]);
   assert.match(cols(rg[2])[10], /^Contre-passation/);
 });
 
 test("versement d'espèces en banque : banque au débit, caisse au crédit, sans client", () => {
   const v = lignes.filter((l) => /Versement d'espèces/.test(cols(l)[10]));
-  assert.deepEqual(v.map((l) => [cols(l)[4], cols(l)[11], cols(l)[12], cols(l)[6]]), [["51200000", "150.00", "", ""], ["53000000", "", "150.00", ""]]);
+  assert.deepEqual(v.map((l) => [cols(l)[4], cols(l)[11], cols(l)[12], cols(l)[6]]), [["51200000", "150,00", "", ""], ["53000000", "", "150,00", ""]]);
 });
 
 test("mode inconnu : compte d'attente, signalé ; comptes à confirmer listés", () => {
@@ -118,11 +118,11 @@ test("les écritures Céleris deviennent un FEC : une écriture par pièce, en e
   assert.equal(ls[0], ENTETE_FEC);
   assert.equal(r.ecritures, 2);
   assert.deepEqual(ls.slice(1).map((l) => cols(l).slice(0, 5).concat(cols(l).slice(11, 13))), [
-    ["BQ1", "Banque", "1", "20260801", "51200000", "50.00", ""],
-    ["BQ1", "Banque", "1", "20260801", "41100000", "", "50.00"],
-    ["VTE", "Ventes", "2", "20260802", "70611400", "", "100.00"],
-    ["VTE", "Ventes", "2", "20260802", "41100000", "105.50", ""],
-    ["VTE", "Ventes", "2", "20260802", "44571200", "", "5.50"],
+    ["BQ1", "Banque", "1", "20260801", "51200000", "50,00", ""],
+    ["BQ1", "Banque", "1", "20260801", "41100000", "", "50,00"],
+    ["VTE", "Ventes", "2", "20260802", "70611400", "", "100,00"],
+    ["VTE", "Ventes", "2", "20260802", "41100000", "105,50", ""],
+    ["VTE", "Ventes", "2", "20260802", "44571200", "", "5,50"],
   ]);
   for (const l of ls) assert.equal(cols(l).length, 18);
   assert.deepEqual(r.anomalies, []);
@@ -134,7 +134,7 @@ test("un montant négatif Céleris passe du côté opposé ; journal inconnu gar
     { journal: "ZZ", compte: "70611000", piece: "A1", date: "2026-07-05", debit: 0, credit: -1200, libelle: "Avoir", libelleCompte: "Forfaits" },
   ]);
   const ls = r.contenu.split("\n").filter(Boolean).slice(1);
-  assert.deepEqual(ls.map((l) => [cols(l)[1], cols(l)[4], cols(l)[11], cols(l)[12]]), [["ZZ", "41100000", "", "12.00"], ["ZZ", "70611000", "12.00", ""]]);
+  assert.deepEqual(ls.map((l) => [cols(l)[1], cols(l)[4], cols(l)[11], cols(l)[12]]), [["ZZ", "41100000", "", "12,00"], ["ZZ", "70611000", "12,00", ""]]);
   assert.equal(libelleJournal("OD"), "Opérations diverses");
 });
 

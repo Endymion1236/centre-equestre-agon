@@ -33,7 +33,7 @@ function fec(factures: Facture[], encaissements: EncaissementFec[], opts: { tous
     tvaEncaissements: { payments, moisCeleris: opts.moisCeleris || [], tousEncaissements: opts.tous || encaissements },
   });
   const lignes = r.contenu.split("\n").filter(Boolean).slice(1).map((l) => l.split("\t"));
-  const cts = (v: string) => (v === "" ? 0 : Math.round(Number(v) * 100));
+  const cts = (v: string) => (v === "" ? 0 : Math.round(Number(v.replace(",", ".")) * 100));
   /** Solde débit − crédit d'un compte, en euros. */
   const solde = (compte: string) => lignes.filter((c) => c[4] === compte).reduce((s, c) => s + cts(c[11]) - cts(c[12]), 0) / 100;
   return { r, lignes, solde, cts };

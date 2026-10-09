@@ -55,7 +55,8 @@ export function controlerStructureFec(contenu: string, max = 20): string[] {
     }
     for (const c of OBLIGATOIRES) if (!v[idx(c)].trim()) ajouter(`Ligne ${n} : ${c} vide.`);
     for (const c of DATES) if (v[idx(c)] && !dateValide(v[idx(c)])) ajouter(`Ligne ${n} : ${c} « ${v[idx(c)]} » n'est pas une date AAAAMMJJ.`);
-    for (const c of MONTANTS) if (v[idx(c)] && !/^-?\d+([.,]\d{1,2})?$/.test(v[idx(c)])) ajouter(`Ligne ${n} : ${c} « ${v[idx(c)]} » n'est pas un montant.`);
+    // Virgule décimale exigée : Test Compta Démat rejette « 12.50 ».
+    for (const c of MONTANTS) if (v[idx(c)] && !/^-?\d+(,\d{1,2})?$/.test(v[idx(c)])) ajouter(`Ligne ${n} : ${c} « ${v[idx(c)]} » n'est pas un montant au format du FEC (virgule décimale attendue).`);
     const cts = (s: string) => Math.round(Number((s || "0").replace(",", ".")) * 100);
     const cle = `${v[idx("JournalCode")]}|${v[idx("EcritureNum")]}`;
     soldes.set(cle, (soldes.get(cle) || 0) + cts(v[idx("Debit")]) - cts(v[idx("Credit")]));
