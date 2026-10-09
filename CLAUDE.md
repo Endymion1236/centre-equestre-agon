@@ -140,7 +140,7 @@ responsabilité personnelle de Nicolas — inexacte.
 
 ## Pièges connus
 
-- FEC : jamais de montant négatif dans une colonne (`cote()` de `fec-utils.ts` le passe du côté opposé), jamais d'écart rangé dans un produit (ce que la facture n'explique pas va au 47100000, qui bloque la clôture du mois). Toute évolution du FEC doit garder `tests/unit/fec-scenarios.test.ts` vert.
+- FEC : jamais de montant négatif dans une colonne (`cote()` de `fec-utils.ts` le passe du côté opposé), jamais d'écart rangé dans un produit (ce que la facture n'explique pas va au 47100000, qui bloque la clôture du mois). Montants à **virgule décimale** (« 12,50 ») : Test Compta Démat rejette le point (structure jugée conforme le 09/10/2026 après correction) ; `lib/controle-fec.ts` le vérifie. Toute évolution du FEC doit garder `tests/unit/fec-scenarios.test.ts` vert.
 
 - `Confirm` (`components/ui/Confirm.tsx`) prend `{ titre, details, libelleConfirmer, danger }` ; `useToast()` renvoie `{ toast }` avec `(message, type, durée)`.
 - Modèles d'IA : tous déclarés dans `lib/ia-modeles.ts` (Opus 5.5 pour les analyses et l'agent, Sonnet 5.5 pour les rédactions, la borne et la boîte mail, Haiku 5.5 pour les petites extractions) — jamais un nom de modèle en dur dans une route. Sur Opus 5.5 / Sonnet 5.5 la réflexion ne se coupe plus (`thinking: { type: "disabled" }` = erreur 400) et compte dans `max_tokens` : régler `output_config.effort` (« low » pour les rédactions), garder une limite large (`LIMITE_REPONSE`), lire la réponse avec `texteReponse()` (jamais `content[0]`). Pas de `temperature`, pas de `tool_choice` imposé (`any`/`tool`) : erreur 400.
