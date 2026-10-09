@@ -28,6 +28,7 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
+import { datesEcheances } from "@/lib/echeancier-paiement";
 import { generateOrderId } from "@/lib/utils";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { formatStageSchedule } from "@/lib/format-stage";
@@ -932,16 +933,15 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
             .map(d => d.data())
             .sort((a: any, b: any) => dateMandat(b) - dateMandat(a))[0];
           const orderId = generateOrderId();
+          const dates = datesEcheances(fmtDate(new Date()), nbEcheances);
           for (let i = 0; i < nbEcheances; i++) {
-            const echeanceDate = new Date();
-            echeanceDate.setMonth(echeanceDate.getMonth() + i);
             const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
             await addDoc(collection(db, "echeances-sepa"), {
               familyId: fam.firestoreId,
               familyName: fam.parentName || "",
               mandatId: mandatData.mandatId,
               montant,
-              dateEcheance: fmtDate(echeanceDate),
+              dateEcheance: dates[i],
               status: "pending",
               reference: "",
               description: `Forfait ${creneau.activityTitle} — ${childName} — ${i + 1}/${nbEcheances}`,
@@ -984,9 +984,8 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
           // relecture ; elle est maintenant proposée à la vérification.
           setPrenotificationEnAttente({ paymentId: docRef.id, familyName: fam.parentName || "" });
         } else {
+          const dates = datesEcheances(fmtDate(new Date()), nbEcheances);
           for (let i = 0; i < nbEcheances; i++) {
-            const echeanceDate = new Date();
-            echeanceDate.setMonth(echeanceDate.getMonth() + i);
             const montant = i === nbEcheances - 1 ? montantDerniereEcheance : montantEcheance;
 
             const docRef = await addDoc(collection(db, "payments"), { orderId: generateOrderId(),
@@ -1000,7 +999,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
               paidAmount: 0,
               echeance: i + 1,
               echeancesTotal: nbEcheances,
-              echeanceDate: fmtDate(echeanceDate),
+              echeanceDate: dates[i],
               forfaitRef: slotKey,
               date: serverTimestamp(),
             });
