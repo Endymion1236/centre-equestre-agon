@@ -270,7 +270,7 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
   for (const p of paiements.filter(p => p?.status === "sepa_scheduled")) {
     const liees = ech.filter(e => (e.paymentId && e.paymentId === p.id) || (!e.paymentId && p.orderId && e.orderId === p.orderId));
     if (!liees.some(e => e.status === "pending" || e.status === "remis")) {
-      sansCommande.push(`${p.familyName || "Famille"} — commande « SEPA » à ${eur(p.totalTTC)} sans prélèvement à venir`);
+      sansCommande.push(`${p.familyName || "Famille"} — commande « SEPA » à ${eur(p.totalTTC)} sans prélèvement à venir : Prélèvements SEPA → « Remettre dans les impayés »`);
     }
   }
   points.push(point(13, "forfaits-sans-commande", "jaune", "Forfaits sans commande, ou commandes SEPA sans échéancier", sansCommande, "/admin/forfaits"));

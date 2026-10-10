@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/Toast";
 import { generateSepaXml, regrouperParMandat, SEPA_CREDITOR } from "@/lib/sepa";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { etatCommandeApresRemise } from "@/lib/sepa-remise";
-import { planifierAnnulationEcheancier } from "./annulation-echeancier-utils";
+import { commandesSansPrelevementAVenir, planifierAnnulationEcheancier } from "./annulation-echeancier-utils";
 import type { SepaTransaction, SepaRemise } from "@/lib/sepa";
 import { validateIban, validateBic, formatIban } from "@/lib/sepa-validation";
 import type { Family } from "@/types";
@@ -773,10 +773,41 @@ export default function SepaPage() {
   // ─── Supprimer une échéance ───
   const handleDeleteEcheance = async (id: string) => {
     if (!confirm("Supprimer cette échéance ?")) return;
+    const ech = echeances.find(e => e.id === id);
     await deleteDoc(doc(db, "echeances-sepa", id));
+    // Dernière échéance à venir supprimée : la commande ne doit pas rester
+    // « prélèvement programmé », sinon elle disparaît des impayés alors
+    // qu'elle reste due (octobre 2026, Éléonore GRENIER).
+    const commande = ech && payments.find((p: any) => (ech.paymentId && p.id === ech.paymentId) || (ech.orderId && p.orderId === ech.orderId));
+    if (commande) {
+      const restantes = echeances.filter(e => e.id !== id);
+      const plan = planifierAnnulationEcheancier(commande.id, restantes, commande);
+      if (plan.possible && plan.aRetirer.length === 0 && !restantes.some(e => e.status === "pending" && ((e.paymentId && e.paymentId === commande.id) || (commande.orderId && e.orderId === commande.orderId)))) {
+        await updateDoc(doc(db, "payments", commande.id), champsCommandeApresAnnulation(plan));
+        toast("Échéance supprimée. Plus aucun prélèvement à venir : la commande revient dans les impayés.", "success");
+        fetchAll();
+        return;
+      }
+    }
     toast("Échéance supprimée", "success");
     fetchAll();
   };
+
+  // Champs de la commande une fois son échéancier annulé (ou vidé).
+  const champsCommandeApresAnnulation = (plan: ReturnType<typeof planifierAnnulationEcheancier>) => ({
+    status: plan.commande.status,
+    sepaRestant: plan.commande.sepaRestant === null ? deleteField() : plan.commande.sepaRestant,
+    paymentRef: plan.commande.paymentRef,
+    ...(plan.commande.paymentMode !== undefined ? { paymentMode: plan.commande.paymentMode } : {}),
+    echeancierAnnuleLe: new Date().toISOString(),
+    // Plus d'échéancier : la commande redevient ordinaire (plus de « 1/10 »,
+    // plus de pré-notification à vérifier pour un prélèvement qui n'aura pas lieu).
+    echeance: deleteField(),
+    echeancesTotal: deleteField(),
+    echeanceDate: deleteField(),
+    prenotificationSepa: deleteField(),
+    updatedAt: serverTimestamp(),
+  });
 
   // ─── Annuler tout l'échéancier d'une commande (créé par erreur) ───
   // La corbeille ne retirait qu'une échéance, et la commande restait
@@ -789,26 +820,14 @@ export default function SepaPage() {
     if (!plan.possible) { toast(plan.raison || "Annulation impossible", "error"); return; }
     if (!confirm(
       `Annuler l'échéancier de ${ech.familyName} ?\n\n`
-      + `${plan.aRetirer.length} échéance(s) à venir seront supprimées (${plan.montantRetire.toFixed(2)} €).\n`
+      + (plan.aRetirer.length ? `${plan.aRetirer.length} échéance(s) à venir seront supprimées (${plan.montantRetire.toFixed(2)} €).\n` : "Plus aucune échéance à venir : la commande est seulement remise d'aplomb.\n")
+      + (plan.gardees.length ? `${plan.gardees.length} échéance(s) déjà remise(s) à la banque ou prélevée(s) restent acquises.\n` : "")
       + `La commande de ${(Number(commande.totalTTC) || 0).toFixed(2)} € repassera « ${plan.commande.status === "pending" ? "en attente" : "partiellement réglée"} » et réapparaîtra dans les impayés.\n\n`
       + `Vous pourrez ensuite corriger la commande et refaire le bon échéancier depuis les impayés.`
     )) return;
     try {
       for (const id of plan.aRetirer) await deleteDoc(doc(db, "echeances-sepa", id));
-      await updateDoc(doc(db, "payments", commande.id), {
-        status: plan.commande.status,
-        sepaRestant: deleteField(),
-        paymentRef: plan.commande.paymentRef,
-        ...(plan.commande.paymentMode !== undefined ? { paymentMode: plan.commande.paymentMode } : {}),
-        echeancierAnnuleLe: new Date().toISOString(),
-        // Plus d'échéancier : la commande redevient ordinaire (plus de « 1/10 »,
-        // plus de pré-notification à vérifier pour un prélèvement qui n'aura pas lieu).
-        echeance: deleteField(),
-        echeancesTotal: deleteField(),
-        echeanceDate: deleteField(),
-        prenotificationSepa: deleteField(),
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(doc(db, "payments", commande.id), champsCommandeApresAnnulation(plan));
       toast(`Échéancier annulé : ${plan.aRetirer.length} échéance(s) supprimée(s). La commande est de retour dans les impayés.`, "success");
     } catch (e: any) {
       toast(`Annulation interrompue : ${e?.message || e}. Relancez-la, elle reprendra les échéances restantes.`, "error");
@@ -1276,6 +1295,33 @@ export default function SepaPage() {
 
               {/* Pré-notifications SEPA à vérifier : forfaits annuels dont
                   l'email d'échéancier n'a pas encore été confirmé. */}
+              {/* Commandes restées « prélèvement programmé » sans échéance à venir :
+                  dues, mais cachées des impayés. Un clic les y remet. */}
+              {(() => {
+                const orphelines = commandesSansPrelevementAVenir(payments as any[], echeances as any[]);
+                if (!orphelines.length) return null;
+                return (
+                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg font-body text-sm text-red-900">
+                    <div className="font-semibold mb-1">Commandes « prélèvement programmé » sans aucun prélèvement à venir</div>
+                    <div className="text-xs mb-2">Elles restent dues mais n'apparaissent pas dans les impayés (échéances supprimées une à une, par exemple).</div>
+                    {orphelines.map((p: any) => (
+                      <div key={p.id} className="flex items-center justify-between gap-2 py-1 border-t border-red-100">
+                        <span className="text-xs">{p.familyName} — {(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 70)} — reste {Math.max(0, (Number(p.totalTTC) || 0) - (Number(p.paidAmount) || 0)).toFixed(2)} €</span>
+                        <button type="button" onClick={async () => {
+                          const plan = planifierAnnulationEcheancier(p.id, echeances, p);
+                          if (!plan.possible) { toast(plan.raison || "Impossible", "error"); return; }
+                          await updateDoc(doc(db, "payments", p.id), champsCommandeApresAnnulation(plan));
+                          toast(`${p.familyName} : la commande est de retour dans les impayés.`, "success");
+                          fetchAll();
+                        }} className="shrink-0 text-xs font-semibold text-white bg-red-600 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-red-500">
+                          Remettre dans les impayés
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+
               {/* Une pré-notification par FAMILLE, toutes ses commandes à prévenir
                   dans le même email (lib/sepa-prenotification-resume). */}
               {grouperParFamille(payments.filter((p: any) => p.prenotificationSepa === "a_verifier" && !(p.echeancierAnnuleLe && p.status !== "sepa_scheduled"))).map((g) => (
@@ -1447,7 +1493,8 @@ export default function SepaPage() {
                           📅
                         </button>
                       )}
-                      {ech.echeance === 1 && ech.status === "pending" && (
+                      {/* Aussi quand la 1re échéance est déjà passée : on annule ce qui reste à venir. */}
+                      {ech.echeance === 1 && ech.status !== "rejete" && (
                         <button type="button"
                           onClick={() => handleAnnulerEcheancier(ech)}
                           title="Annuler tout l'échéancier de cette commande (échéances à venir), pour le refaire"

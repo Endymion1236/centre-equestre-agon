@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/annulation-echeancier.test.ts
  */
 import assert from "node:assert/strict";
-import { planifierAnnulationEcheancier } from "../../src/app/admin/sepa/annulation-echeancier-utils";
+import { commandesSansPrelevementAVenir, planifierAnnulationEcheancier } from "../../src/app/admin/sepa/annulation-echeancier-utils";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -34,17 +34,31 @@ test("un acompte déjà encaissé : la commande repart en partielle, son mode re
   assert.equal("paymentMode" in plan.commande, false);
 });
 
-test("une échéance déjà remise à la banque bloque l'annulation en bloc", () => {
-  const serie = dix.map((e, i) => (i === 0 ? { ...e, status: "remis" } : e));
-  const plan = planifierAnnulationEcheancier("p1", serie, { paidAmount: 0, totalTTC: 570 });
-  assert.equal(plan.possible, false);
-  assert.equal(plan.bloquantes.length, 1);
-  assert.match(plan.raison || "", /remise/);
+test("1re échéance prélevée (Éléonore GRENIER) : les 9 autres sont retirées, la commande repart en partielle", () => {
+  const serie = dix.map((e, i) => (i === 0 ? { ...e, status: "preleve" } : e));
+  const plan = planifierAnnulationEcheancier("p1", serie, { paidAmount: 57, totalTTC: 570, status: "sepa_scheduled", sepaRestant: 513 });
+  assert.equal(plan.possible, true);
+  assert.equal(plan.aRetirer.length, 9);
+  assert.equal(plan.gardees.length, 1);
+  assert.deepEqual(plan.commande, { status: "partial", sepaRestant: null, paymentRef: "" });
 });
 
-test("une échéance prélevée bloque aussi", () => {
-  const serie = dix.map((e, i) => (i === 0 ? { ...e, status: "preleve" } : e));
-  assert.equal(planifierAnnulationEcheancier("p1", serie, { paidAmount: 57, totalTTC: 570 }).possible, false);
+test("une échéance remise à la banque reste attendue : son montant n'est pas réclamé dans les impayés", () => {
+  const serie = dix.map((e, i) => (i === 0 ? { ...e, status: "remis" } : e));
+  const plan = planifierAnnulationEcheancier("p1", serie, { paidAmount: 0, totalTTC: 570, status: "sepa_scheduled" });
+  assert.equal(plan.possible, true);
+  assert.equal(plan.aRetirer.length, 9);
+  assert.equal(plan.commande.sepaRestant, 57);
+  assert.equal("paymentMode" in plan.commande, false, "le prélèvement attendu garde son mode");
+});
+
+test("réparation : plus aucune échéance à venir mais commande encore « programmée »", () => {
+  const serie = [{ id: "e1", paymentId: "p1", status: "preleve", montant: 57 }];
+  const plan = planifierAnnulationEcheancier("p1", serie, { paidAmount: 57, totalTTC: 570, status: "sepa_scheduled", sepaRestant: 513 });
+  assert.equal(plan.possible, true);
+  assert.equal(plan.aRetirer.length, 0);
+  assert.equal(plan.commande.status, "partial");
+  assert.equal(plan.commande.sepaRestant, null);
 });
 
 test("une échéance rejetée ne bloque pas, et n'est pas retirée", () => {
@@ -64,6 +78,22 @@ test("inscription annuelle : échéances reliées par le numéro de commande", (
 test("rien à venir : refus explicite", () => {
   const plan = planifierAnnulationEcheancier("p1", [], { paidAmount: 0, totalTTC: 570 });
   assert.equal(plan.possible, false);
+});
+
+test("repérer les commandes « programmées » sans prélèvement à venir", () => {
+  const cmds = [
+    { id: "eleonore", status: "sepa_scheduled", sepaRestant: 513 },
+    { id: "enCours", status: "sepa_scheduled" },
+    { id: "annuel", orderId: "CMD-1", status: "sepa_scheduled" },
+    { id: "reglee", status: "paid" },
+    { id: "ordinaire", status: "pending" },
+  ];
+  const ech = [
+    { id: "a", paymentId: "eleonore", status: "preleve", montant: 57 },
+    { id: "b", paymentId: "enCours", status: "pending", montant: 50 },
+    { id: "c", paymentId: null, orderId: "CMD-1", status: "remis", montant: 60 },
+  ];
+  assert.deepEqual(commandesSansPrelevementAVenir(cmds, ech).map((c) => c.id), ["eleonore"]);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
