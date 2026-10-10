@@ -42,6 +42,7 @@ import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { inscritsMemeFamille, prixCreneauTTC } from "@/lib/tarif-forfaitaire";
 import { estCoursParticulier, typeCarteCouvre } from "@/lib/cartes-seances";
+import { ligneDeLaSeance } from "@/lib/ligne-seance";
 import { champsCommandeSepaUnique, echeanceSepaUnique, estModeSepa, mandatLePlusRecent } from "@/lib/sepa-unique";
 import { toParisDateString } from "@/lib/date-local";
 
@@ -1106,7 +1107,9 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
 
   // 3. Gestion financière (paiement classique)
   try {
-    const linked = await findLinkedPayment(child.familyId, childId, c.activityTitle);
+    // Créneau et date de la séance : sans eux, la ligne d'une autre semaine
+    // du même cours était prise (lib/ligne-seance).
+    const linked = await findLinkedPayment(child.familyId, childId, c.activityTitle, cid, undefined, c.date);
     if (linked) {
       const { paymentDoc, paymentData, matchItem } = linked;
       const originalTotalTTC = paymentData.originalTotalTTC || paymentData.totalTTC || 0;
@@ -1234,14 +1237,25 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
       for (const pd of allPaysSnap.docs) {
         const pdata = pd.data();
         // Si ce paiement pending concerne cet enfant + cette activité
-        const hasItem = (pdata.items || []).some((i: any) =>
-          i.childId === childId &&
-          (i.activityTitle?.includes(c.activityTitle) || c.activityTitle.includes(i.activityTitle || ""))
-        );
-        if (hasItem && pd.id !== linked?.paymentDoc?.id) {
+        // Seulement les lignes de CETTE séance (lib/ligne-seance) : le titre
+        // seul annulait toute commande à régler d'une autre semaine du cours,
+        // y compris les lignes des frères et sœurs.
+        const seance = { childId, creneauId: cid, activityTitle: c.activityTitle, date: c.date };
+        const items = pdata.items || [];
+        const restantes = items.filter((i: any) => !ligneDeLaSeance(i, seance));
+        if (restantes.length === items.length || pd.id === linked?.paymentDoc?.id) continue;
+        // Une commande à facture émise ne se modifie pas (il faut un avoir).
+        if (verrouCommande(pdata as any).verrouillee) continue;
+        if (restantes.length === 0) {
           await updateDoc(doc(db, "payments", pd.id), {
             status: "cancelled", cancelledAt: serverTimestamp(),
             cancelReason: `Nettoyage désinscription ${child.childName}`, updatedAt: serverTimestamp(),
+          });
+        } else {
+          await updateDoc(doc(db, "payments", pd.id), {
+            items: restantes,
+            totalTTC: Math.round(restantes.reduce((s2: number, i: any) => s2 + (Number(i.priceTTC) || 0), 0) * 100) / 100,
+            updatedAt: serverTimestamp(),
           });
         }
       }

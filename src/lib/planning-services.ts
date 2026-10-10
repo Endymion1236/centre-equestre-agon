@@ -11,6 +11,7 @@
  */
 
 import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
+import { trouverLigneLiee } from "@/lib/ligne-seance";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -369,50 +370,19 @@ export async function deleteReservations(creneauId: string, childId: string) {
 }
 
 /** Trouve le paiement lié à un enfant + activité */
-export async function findLinkedPayment(familyId: string, childId: string, activityTitle: string, creneauId?: string, activityId?: string) {
+export async function findLinkedPayment(familyId: string, childId: string, activityTitle: string, creneauId?: string, _activityId?: string, date?: string) {
+  // La règle est dans lib/ligne-seance (testée) : le créneau exact d'abord,
+  // sur toutes les commandes ; le titre seulement pour une ligne sans créneau
+  // (stage, ancien format), à la bonne date. Avant, une préinscription sans
+  // commande prenait la séance réglée d'une autre semaine (avoir à tort).
   const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", familyId)));
-  for (const pDoc of paySnap.docs) {
-    const p = pDoc.data();
-    if (p.status === "cancelled") continue;
-    const items = p.items || [];
-    
-    // Priorité 1 : match par childId + creneauId (le plus fiable)
-    if (creneauId) {
-      const matchByCreneau = items.find((i: any) => i.childId === childId && i.creneauId === creneauId);
-      if (matchByCreneau) return { paymentDoc: pDoc, paymentData: p, matchItem: matchByCreneau };
-    }
-    
-    // Priorité 2 : match par childId + activityId
-    if (activityId) {
-      const matchByActivity = items.find((i: any) => i.childId === childId && i.activityId === activityId);
-      if (matchByActivity) return { paymentDoc: pDoc, paymentData: p, matchItem: matchByActivity };
-    }
-    
-    // Priorité 3 : match par childId + activityTitle (exact d'abord, puis includes)
-    const matchExact = items.find((i: any) =>
-      i.childId === childId && (
-        i.activityTitle === activityTitle ||
-        i.stageKey === activityTitle
-      )
-    );
-    if (matchExact) return { paymentDoc: pDoc, paymentData: p, matchItem: matchExact };
-
-    // Priorité 4 : match par childId + activityTitle (includes, pour les titres avec suffixe)
-    const matchIncludes = items.find((i: any) =>
-      i.childId === childId && activityTitle.length > 3 && (
-        i.stageKey?.includes(activityTitle) ||
-        i.activityTitle?.includes(activityTitle)
-      )
-    );
-    if (matchIncludes) return { paymentDoc: pDoc, paymentData: p, matchItem: matchIncludes };
-    
-    // Priorité 5 : fallback ancien format (sans childId) — match exact uniquement
-    const legacyMatch = items.find((i: any) =>
-      !i.childId && typeof i.activityTitle === "string" && i.activityTitle === activityTitle
-    );
-    if (legacyMatch) return { paymentDoc: pDoc, paymentData: p, matchItem: legacyMatch };
-  }
-  return null;
+  const commandes = paySnap.docs.map((d) => ({ id: d.id, ...(d.data() as any), _doc: d }));
+  const r = trouverLigneLiee(commandes, { childId, creneauId: creneauId || null, activityTitle, date: date || null });
+  if (!r) return null;
+  const { _doc, ...paymentData } = r.commande as any;
+  // matchItem est l'objet même de paymentData.items : l'appelant le retire
+  // de la liste par identité (i !== matchItem).
+  return { paymentDoc: _doc, paymentData, matchItem: r.item };
 }
 
 /** Calcule le trop-perçu pour un paiement après retrait d'une ligne */
