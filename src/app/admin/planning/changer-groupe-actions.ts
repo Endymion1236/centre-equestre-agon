@@ -56,7 +56,7 @@ export async function prepererChangement(
   // Les jours du stage actuel où l'enfant est effectivement inscrit : un
   // cavalier venu « une journée seulement » ne doit pas être délogé des jours
   // où il n'est pas.
-  const tousLesJours = await findStageCreneaux(creneau.activityTitle, creneau.date);
+  const tousLesJours = await findStageCreneaux(creneau.activityTitle, creneau.date, creneau);
   const source = (tousLesJours as any[]).filter((c) =>
     (c.enrolled || []).some((e: any) => e.childId === ctx.childId));
 

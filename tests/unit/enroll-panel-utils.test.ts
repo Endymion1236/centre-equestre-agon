@@ -6,6 +6,7 @@ import {
   frequenceDejaInscrite,
   holdActifDuCreneau,
   prixAffiche,
+  prixJourStage,
   rangEnfantFamille,
   seasonOf,
   nomActuelInscrit,
@@ -99,6 +100,16 @@ test("frequenceDejaInscrite : la fréquence de cet enfant cette saison, une quin
   assert.equal(frequenceDejaInscrite(fam, forfaits, "c1", "2026-10-07"), 1);
   assert.equal(frequenceDejaInscrite(fam, [...forfaits, { familyId: "f1", childId: "c1", status: "actif", seasonStartYear: 2026, frequence: 1, rythme: "quinzaine" }], "c1", "2026-10-07"), 1.5);
   assert.equal(frequenceDejaInscrite(fam, forfaits, "c8", "2026-10-07"), 0);
+});
+
+test("prix d'une journée de stage : le prix journée du créneau prime sur le tarif de l'activité", () => {
+  // Premiers Sabots de 16 h 30 : 27 €/jour saisi sur le créneau, 36 € recopié de l'activité.
+  assert.deepEqual(prixJourStage({ allowDayBooking: true, priceTTCDay: 27, price1day: 36 }, 135, 5), { prix: 27, origine: "prix journée du créneau" });
+  // Inscription à la journée fermée : le prix journée ne s'applique pas.
+  assert.equal(prixJourStage({ allowDayBooking: false, priceTTCDay: 27, price1day: 36 }, 135, 5).prix, 36);
+  assert.equal(prixJourStage({ allowDayBooking: true, priceTTCDay: "", price1day: 36 }, 135, 5).prix, 36);
+  assert.deepEqual(prixJourStage({}, 135, 5), { prix: 27, origine: "prorata" });
+  assert.equal(prixJourStage({}, 100, 0).prix, 100);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

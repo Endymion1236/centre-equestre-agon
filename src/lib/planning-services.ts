@@ -12,6 +12,7 @@
 
 import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
 import { trouverLigneLiee } from "@/lib/ligne-seance";
+import { memeStage } from "@/lib/meme-stage";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -61,7 +62,11 @@ export function getWeekBounds(dateStr: string) {
 // ═══ STAGES ═══
 
 /** Trouve tous les créneaux d'un stage sur la même semaine */
-export async function findStageCreneaux(activityTitle: string, dateStr: string) {
+export async function findStageCreneaux(activityTitle: string, dateStr: string, ref?: any) {
+  // Avec le créneau de référence, on ne garde que les jours de CE stage :
+  // deux stages du même nom la même semaine (10 h et 16 h 30) faisaient
+  // proposer la désinscription de 10 jours au lieu de 5.
+  const duStage = (c: any) => !ref || memeStage(c, ref);
   const { monday, sunday } = getWeekBounds(dateStr);
   const mondayStr = fmtDate(monday);
   const sundayStr = fmtDate(sunday);
@@ -85,6 +90,7 @@ export async function findStageCreneaux(activityTitle: string, dateStr: string) 
     ));
     const result = snap.docs
       .map(d => ({ id: d.id, ...d.data() }))
+      .filter(duStage)
       .sort((a: any, b: any) => a.date.localeCompare(b.date));
     console.log("[findStageCreneaux] Trouvés (requête indexée)", result.length, "créneaux :",
       result.map((c: any) => ({ id: c.id, date: c.date, startTime: c.startTime, nbInscrits: (c.enrolled || []).length })));
@@ -99,7 +105,7 @@ export async function findStageCreneaux(activityTitle: string, dateStr: string) 
     ));
     const allInWeek = snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const result = allInWeek
-      .filter((c: any) => c.activityTitle === activityTitle)
+      .filter((c: any) => c.activityTitle === activityTitle && duStage(c))
       .sort((a: any, b: any) => a.date.localeCompare(b.date));
     console.log("[findStageCreneaux] Trouvés (fallback client)", result.length, "créneaux (sur",
       allInWeek.length, "de la semaine) :",

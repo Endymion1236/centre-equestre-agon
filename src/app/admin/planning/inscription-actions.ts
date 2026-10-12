@@ -956,7 +956,7 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
   let isPartialStageUnenroll = false; // true si on désinscrit 1 jour seulement d'un stage
   let skipAvoir = false; // true si l'admin a choisi "sans avoir" (absence tardive, le montant reste dû)
   if (isStageType) {
-    const stageCreneaux = await findStageCreneaux(c.activityTitle, c.date);
+    const stageCreneaux = await findStageCreneaux(c.activityTitle, c.date, c);
     const allCreneauxIds = stageCreneaux.map((sc: any) => sc.id);
 
     // Si le stage a plusieurs jours, proposer le choix
@@ -1024,7 +1024,7 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
   // pourra ajouter un nettoyage automatique plus tard si le bug réapparaît).
   if (isStageType) {
     try {
-      const verif = await findStageCreneaux(c.activityTitle, c.date);
+      const verif = await findStageCreneaux(c.activityTitle, c.date, c);
       const tracesRestantes = verif
         .map((vc: any) => ({
           id: vc.id,
@@ -1124,7 +1124,7 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
 
       if (isPartialStageUnenroll) {
         // On retrouve combien de jours avait le stage complet
-        const stageAll = await findStageCreneaux(c.activityTitle, c.date);
+        const stageAll = await findStageCreneaux(c.activityTitle, c.date, c);
         const totalJours = stageAll.length || 1;
         const prixParJour = (matchItem.priceTTC || 0) / totalJours;
         const prixHTParJour = (matchItem.priceHT || 0) / totalJours;

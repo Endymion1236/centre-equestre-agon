@@ -7,6 +7,7 @@
 import { collection, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { EnrolledChild } from "./types";
+import { prixJourStage } from "./enroll-panel-utils";
 
 export interface JoursSupplementaires {
   familyId: string;
@@ -83,11 +84,8 @@ export function PanneauJoursSupplementaires({ showAddDays, setShowAddDays, famil
                           const totalJoursStage = showAddDays.totalJoursStage || 1;
                           const cr = showAddDays.creneauRef as any;
                           const prixComplet = (cr.priceTTC || (cr.priceHT || 0) * (1 + (cr.tvaTaux ?? 5.5) / 100)) || 0;
-                          // Prix jour défini dans le stage (price1day), brut.
-                          // Fallback prorata seulement si non configuré.
-                          const prixJour = (cr.price1day && cr.price1day > 0)
-                            ? cr.price1day
-                            : Math.round((prixComplet / Math.max(1, totalJoursStage)) * 100) / 100;
+                          // Prix jour du créneau, brut (cf. prixJourStage).
+                          const prixJour = prixJourStage(cr, prixComplet, totalJoursStage).prix;
                           // Prix = prix jour × nb de jours ; si tous les jours pris,
                           // on retombe sur le prix semaine complet. AUCUNE remise.
                           const prixBase = (totalDaysNow >= totalJoursStage)

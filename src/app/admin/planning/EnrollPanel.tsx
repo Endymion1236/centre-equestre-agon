@@ -46,7 +46,7 @@ import { estSurDemande } from "@/lib/creneau-sur-demande";
 import { estCoursParticulier, libelleTypeCarte, typeCarteCouvre, typeCarteDuCreneau } from "@/lib/cartes-seances";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
-  libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche,
+  libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche, prixJourStage,
   holdActifDuCreneau, cavaliersDisponibles, finSaisonEffective,
   rangEnfantFamille as calculerRangEnfantFamille, frequenceDejaInscrite as calculerFrequenceDejaInscrite,
 } from "./enroll-panel-utils";
@@ -323,7 +323,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
         // Ceux qui portent le même titre sans appartenir au lot : ce sont eux
         // qui manquent à l'appel, et c'est à l'admin de trancher.
         const memeTitreAutreLot = semaine
-          .filter(c => c.activityTitle === creneau.activityTitle && !sameStage(c, creneau))
+          // Même titre à un autre horaire : c'est un autre stage (le
+          // « Premiers Sabots » de 16 h 30 à côté de celui de 10 h), rien à réunir.
+          .filter(c => c.activityTitle === creneau.activityTitle && c.startTime === creneau.startTime && !sameStage(c, creneau))
           .map(c => c.date)
           .sort();
 
@@ -690,9 +692,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
     // Mode jour : on facture le PRIX JOUR DÉFINI dans le stage (price1day),
     // brut, sans prorata ni réduction ni plancher. Fallback prorata seulement
     // si price1day n'est pas configuré du tout.
-    const prixJourDefini = (configuredPrices[1] && configuredPrices[1] > 0)
-      ? configuredPrices[1]
-      : Math.round((prixStageComplet / nbJoursStage) * 100) / 100;
+    const prixJourDefini = prixJourStage(creneau, prixStageComplet, nbJoursStage).prix;
     const prixEffectif = stageMode === "jour"
       ? prixJourDefini
       : (configuredPrices[nbJoursStage] && configuredPrices[nbJoursStage] <= prixStageComplet ? configuredPrices[nbJoursStage] : prixStageComplet);
@@ -1321,16 +1321,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     )}
                     <div className="font-body text-[10px] text-blue-500 bg-blue-50 rounded px-2 py-1">
                       {(() => {
-                        const cr = creneau as any;
-                        const p1 = cr.price1day;
                         // Doit refléter ce qui sera RÉELLEMENT facturé : le tarif
                         // configuré fait foi dès qu'il existe. On retenait avant
                         // le moins cher des deux, d'où un stage annoncé 37,50 €
                         // et facturé 45 €.
-                        const prixJourAff = (p1 && p1 > 0)
-                          ? p1
-                          : Math.round((priceTTC / Math.max(1, nbJours)) * 100) / 100;
-                        const origine = (p1 && p1 > 0) ? "tarif jour" : "prorata";
+                        const { prix: prixJourAff, origine } = prixJourStage(creneau, priceTTC, nbJours);
                         return stageMode === "semaine"
                           ? `${nbJours} jour${nbJours > 1 ? "s" : ""} — ${priceTTC.toFixed(2)}€`
                           : `1 jour sur ${nbJours} — ${prixJourAff.toFixed(2)}€/jour (${origine})`;

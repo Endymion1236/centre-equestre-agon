@@ -67,6 +67,24 @@ export function cavaliersNonAttendusQuinzaine(allForfaits: any[], creneau: Crene
   });
 }
 
+/**
+ * Prix d'UNE journée de stage, et d'où il vient.
+ *
+ * Octobre 2026 : le « Premiers Sabots » de l'après-midi, ouvert à la journée
+ * à 27 €, s'inscrivait à 36 € depuis le planning. Le panneau lisait
+ * `price1day`, recopié de la fiche activité à la création du créneau, et
+ * ignorait le « Prix TTC par journée » saisi sur le créneau — celui que la
+ * réservation en ligne applique. Ordre : prix journée du créneau, tarif
+ * 1 jour de l'activité, prorata du prix semaine.
+ */
+export function prixJourStage(creneau: any, prixSemaine: number, nbJours: number): { prix: number; origine: string } {
+  const jour = Number(creneau?.priceTTCDay);
+  if (creneau?.allowDayBooking && jour > 0) return { prix: jour, origine: "prix journée du créneau" };
+  const p1 = Number(creneau?.price1day);
+  if (p1 > 0) return { prix: p1, origine: "tarif jour" };
+  return { prix: Math.round(((prixSemaine || 0) / Math.max(1, nbJours || 1)) * 100) / 100, origine: "prorata" };
+}
+
 /** Prix affiché dans l'en-tête : pour les stages, le tarif configuré du nombre de jours si disponible. */
 export function prixAffiche(creneau: Creneau, isStage: boolean, priceTTC: number, stageDaysCount: number): number {
   if (!isStage) return priceTTC;

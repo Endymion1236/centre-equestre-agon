@@ -744,8 +744,10 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
       const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
       // Utiliser weekCreneaux (chargé depuis Firestore) plutôt qu'allCreneaux (limité à la vue)
       const source = weekCreneaux.length > 0 ? weekCreneaux : allCreneaux;
+      // Même stage seulement : un « Premiers Sabots » à un autre horaire
+      // est un autre stage (cf. sameStage).
       const autresJours = source.filter(c =>
-        c.activityTitle === creneau.activityTitle &&
+        sameStage(c, creneau) &&
         (c.activityType === "stage" || c.activityType === "stage_journee") &&
         new Date(c.date) >= mon && new Date(c.date) <= sun &&
         c.id !== creneau.id
