@@ -48,6 +48,8 @@ export interface LigneBancaire {
   manualPaymentId?: string;
   /** Remise de prélèvements SEPA à laquelle la ligne est rapprochée. */
   remiseSepaId?: string;
+  /** Commission retenue par l'ANCV (brut des chèques-vacances − net viré). */
+  commissionAncv?: number;
   uncertain?: boolean;
 }
 
