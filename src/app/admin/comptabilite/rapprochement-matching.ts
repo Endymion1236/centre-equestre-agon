@@ -38,6 +38,7 @@ import {
   estLibelleVirement,
   parserDateBancaire,
   periodePrecedente,
+  remiseSepaDansFenetre,
   trouverSousEnsembleMontant,
 } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
@@ -321,14 +322,9 @@ export function rapprocherReleve(
         const remiseMatch = remisesSepa.find(r => {
           if (usedRemiseSepaIds.has(r.id)) return false; // déjà consommée
           if (Math.abs((r.montantTotal || 0) - bl.amount) >= 0.02) return false;
-          // La remise doit être dans la même période OU dans une fenêtre proche de la date bancaire
-          if (r.datePrelevement?.startsWith(period)) return true;
-          if (bankDate && r.datePrelevement) {
-            const rd = new Date(r.datePrelevement);
-            const diff = Math.abs(bankDate.getTime() - rd.getTime()) / (1000 * 60 * 60 * 24);
-            return diff <= 7;
-          }
-          return false;
+          // Même période, ou date bancaire plausible pour cette remise
+          // (exécutée en retard si générée après la date demandée).
+          return remiseSepaDansFenetre(r, bankDate, period);
         });
         if (remiseMatch) {
           usedRemiseSepaIds.add(remiseMatch.id);

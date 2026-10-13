@@ -514,3 +514,33 @@ export function encaissementsCouvertsParLigne<
 
   return [];
 }
+
+/**
+ * Une remise SEPA peut-elle correspondre à une ligne bancaire de cette date ?
+ *
+ * Octobre 2026 : la remise n°4, générée le 08/10 pour un prélèvement « le
+ * 28/09 » (date déjà passée), a été exécutée par la banque le 12/10. Seuls
+ * ±7 jours autour de la date de prélèvement étaient admis : la ligne de
+ * 767,90 € restait « À traiter ». La banque prélève au plus tôt à la date
+ * demandée, et jamais avant d'avoir reçu le fichier : la fenêtre va de la
+ * date demandée (moins 7 jours de tolérance) jusqu'à 10 jours après la plus
+ * tardive de la date demandée et de la date de génération ou de dépôt.
+ */
+export function remiseSepaDansFenetre(
+  r: { datePrelevement?: string; dateRemise?: string; depositedAt?: { seconds?: number } | null },
+  dateBancaire: Date | null,
+  period: string,
+): boolean {
+  if (r.datePrelevement?.startsWith(period)) return true;
+  if (!dateBancaire || !r.datePrelevement) return false;
+  const jour = (iso: string) => new Date(iso.slice(0, 10) + "T12:00:00Z").getTime();
+  const b = Date.UTC(dateBancaire.getFullYear(), dateBancaire.getMonth(), dateBancaire.getDate(), 12);
+  const demande = jour(r.datePrelevement);
+  if (Number.isNaN(demande)) return false;
+  const reperes = [demande];
+  if (r.dateRemise && !Number.isNaN(jour(r.dateRemise))) reperes.push(jour(r.dateRemise));
+  if (r.depositedAt?.seconds) reperes.push(r.depositedAt.seconds * 1000);
+  const debut = demande - 7 * JOUR_MS_RAPPROCHEMENT;
+  const fin = Math.max(...reperes) + 10 * JOUR_MS_RAPPROCHEMENT;
+  return b >= debut && b <= fin;
+}

@@ -22,7 +22,7 @@ import {
   apparierRemiseCarte, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
   encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
-  estEncaissementCarte,
+  estEncaissementCarte, estLibellePrelevement,
 } from "./rapprochement-utils";
 import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
@@ -923,8 +923,40 @@ export default function OngletRapprochement({
                   <div className="font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider mt-3 mb-1.5 first:mt-0">{t}</div>
                 );
 
+                // Une ligne « Avis de prélèvement emis » : la remise SEPA est la
+                // réponse attendue, elle passe en tête (elle venait après une
+                // soixantaine de virements et de factures).
+                const lignePrelevement = estLibellePrelevement(ligne.label || "");
+                const blocRemisesSepa = (
+                  <>
+                    {remisesCandidates.length > 0 && titre(`Remises de prélèvements SEPA (${remisesCandidates.length})`)}
+                    {remisesCandidates.map((r: any) => {
+                      const amountMatch = montantProche(r.montantTotal);
+                      const nbEncs = encaissementsDeRemiseSepa(r, encaissementsCompta).length;
+                      return (
+                        <div key={r.id}
+                          className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
+                          onClick={() => pointerRemiseSepa(r)}>
+                          <div>
+                            <div className="font-body text-sm font-semibold text-blue-800">🏦 Remise SEPA n°{r.numero}</div>
+                            <div className="font-body text-xs text-slate-500">
+                              Prélèvement du {r.datePrelevement || "?"} · {r.nbTransactions || "?"} prélèvement(s) · {r.status === "deposited" ? `${nbEncs} au journal` : "pas encore déposée"}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-blue-500"}`}>{(r.montantTotal || 0).toFixed(2)}€</div>
+                            {amountMatch && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                  </>
+                );
+
                 return (
                   <div className="flex flex-col gap-1.5">
+                    {lignePrelevement && blocRemisesSepa}
                     {encsVirement.length > 0 && titre(ligneAncv ? `Chèques-vacances encaissés, à relier (${encsVirement.length})` : remiseCarte ? `Encaissements CB de la semaine, à relier (${encsVirement.length})` : `Virements déjà encaissés, à relier (${encsVirement.length})`)}
                     {encsVirement.length > 0 && (
                       <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
@@ -1000,27 +1032,7 @@ export default function OngletRapprochement({
                       );
                     })}
 
-                    {remisesCandidates.length > 0 && titre(`Remises de prélèvements SEPA (${remisesCandidates.length})`)}
-                    {remisesCandidates.map((r: any) => {
-                      const amountMatch = montantProche(r.montantTotal);
-                      const nbEncs = encaissementsDeRemiseSepa(r, encaissementsCompta).length;
-                      return (
-                        <div key={r.id}
-                          className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${amountMatch ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
-                          onClick={() => pointerRemiseSepa(r)}>
-                          <div>
-                            <div className="font-body text-sm font-semibold text-blue-800">🏦 Remise SEPA n°{r.numero}</div>
-                            <div className="font-body text-xs text-slate-500">
-                              Prélèvement du {r.datePrelevement || "?"} · {r.nbTransactions || "?"} prélèvement(s) · {r.status === "deposited" ? `${nbEncs} au journal` : "pas encore déposée"}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className={`font-body text-sm font-bold ${amountMatch ? "text-green-600" : "text-blue-500"}`}>{(r.montantTotal || 0).toFixed(2)}€</div>
-                            {amountMatch && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
-                          </div>
-                        </div>
-                      );
-                    })}
+                    {!lignePrelevement && blocRemisesSepa}
 
                     {duMois.length > 0 && titre(`Factures du mois (${duMois.length})`)}
                     {duMois.map((p: any) => {
