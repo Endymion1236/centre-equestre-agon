@@ -7,7 +7,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { logEmail } from "@/lib/email-log";
 import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { generateCAWLQR, generateSEPAQR } from "@/lib/payment-qr";
-import { addDaysParis } from "@/lib/date-local";
+import { addDaysParis, toParisDateString } from "@/lib/date-local";
+import { doitDemanderSolde, doitRelancerSolde, joursAvantStage, libelleDelai } from "@/lib/solde-stage-rappel";
 import { chargeWithToken, logMitAttempt } from "@/lib/cawl-mit";
 import { acquireCawlConfirmationLock } from "@/lib/cawl-lock";
 import {
@@ -24,8 +25,8 @@ export const maxDuration = 120;
 /**
  * CRON charge-stage-balances — tous les jours à 8h
  * 
- * Pour chaque paiement stage dont le stage commence dans 7 jours
- * et qui a un solde restant, envoie un email avec lien de paiement.
+ * Pour chaque paiement stage dont le stage commence D'ICI 7 jours (rattrapage
+ * des passages manqués, cf. lib/solde-stage-rappel) et qui a un solde restant, envoie un email avec lien de paiement.
  * 
  * Flow :
  *   Inscription stage → paiement pending (acompteAmount=30€/enfant)
@@ -65,40 +66,34 @@ export async function GET(req: NextRequest) {
     const dateParam = req.nextUrl.searchParams.get("date");
     const j7Str = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : addDaysParis(7);
     if (dateParam) console.log(`⚠️ [charge-stage-balances] MODE TEST : date forcée à ${j7Str}`);
-    const [j7y, j7m, j7d] = j7Str.split("-").map(Number);
-    const j7 = new Date(j7y, j7m - 1, j7d, 12, 0, 0);
-    const j7Label = j7.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
-    console.log(`\n💳 [charge-stage-balances] Soldes stage J-7 — stages du ${j7Str}`);
+    console.log(`\n💳 [charge-stage-balances] Soldes stage — stages jusqu'au ${j7Str}`);
 
-    // Trouver les paiements stage dont la date de début est J+7
+    // Les stages qui commencent d'ici J+7 — pas seulement À J+7 : un passage
+    // manqué (panne, envoi bloqué) ou une inscription tardive étaient perdus
+    // pour toujours (cf. lib/solde-stage-rappel). En mode test (?date=), la
+    // date forcée seule.
+    const aujourdhui = dateParam ? j7Str : toParisDateString();
     const stagePaySnap = await adminDb.collection("payments")
-      .where("stageDate", "==", j7Str)
+      .where("stageDate", ">=", aujourdhui)
+      .where("stageDate", "<=", j7Str)
       .get();
-
-    if (stagePaySnap.empty) {
-      console.log("  → Aucun paiement stage pour J+7");
-      return NextResponse.json({ ok: true, message: `Aucun stage le ${j7Str}`, ...results });
-    }
 
     for (const payDoc of stagePaySnap.docs) {
       const p = payDoc.data() as any;
       results.processed++;
 
-      // Solde restant
-      const solde = (p.totalTTC || 0) - (p.paidAmount || 0);
-      if (solde <= 0 || p.status === "paid" || p.status === "cancelled") {
+      // Solde dû, demande pas encore partie, stage dans la fenêtre
+      if (!doitDemanderSolde({ ...p, soldeReminderSentAt: p.soldeReminderSentAt ? 1 : null }, aujourdhui, j7Str)) {
         results.skipped++;
-        results.details.push(`${p.familyName}: déjà réglé ou annulé`);
+        results.details.push(`${p.familyName}: déjà réglé, annulé ou déjà demandé`);
         continue;
       }
-
-      // Éviter les doublons
-      if (p.soldeReminderSentAt) {
-        results.skipped++;
-        results.details.push(`${p.familyName}: rappel déjà envoyé`);
-        continue;
-      }
+      const solde = Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100;
+      // Date et délai propres à CE stage (rattrapage : moins de 7 jours).
+      const [sy, sm, sd] = String(p.stageDate).split("-").map(Number);
+      const jourStageLabel = new Date(sy, sm - 1, sd, 12, 0, 0).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+      const delai = libelleDelai(joursAvantStage(p.stageDate, toParisDateString()));
 
       const familyEmail = p.familyEmail || "";
       const familyName = p.familyName || "";
@@ -186,7 +181,7 @@ export async function GET(req: NextRequest) {
                 emailEtat("Solde prélevé", euros(solde), C.vert),
                 emailTitre("Tout est réglé"),
                 P(`Bonjour <strong>${familyName}</strong>,`),
-                P(`Le solde du stage <strong>${stageTitle}</strong>, qui commence le ${j7Label}, vient d'être prélevé sur votre carte enregistrée.`),
+                P(`Le solde du stage <strong>${stageTitle}</strong>, qui commence ${jourStageLabel}, vient d'être prélevé sur votre carte enregistrée.`),
                 P("Aucune action n'est requise. La facture est disponible dans votre espace.", 14),
                 emailButton("Voir ma facture", `${appUrl}/espace-cavalier/factures`),
                 emailSignature(),
@@ -221,12 +216,12 @@ export async function GET(req: NextRequest) {
                 P(`Le prélèvement automatique du solde de votre stage <strong>${stageTitle}</strong> n'a pas abouti. Cela arrive : un plafond de carte, une opposition temporaire, ou une carte arrivée à expiration.`),
                 emailPanneau("", [
                   emailLigne("Reste à régler", euros(solde)),
-                  emailLigne("Avant le", j7Label),
+                  emailLigne("Avant le", jourStageLabel),
                 ].join("")),
                 emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`),
                 P("Un souci pour régler en ligne ? Répondez simplement à ce message, nous trouverons une solution.", 13),
                 emailSignature(),
-              ].join("\n"), `${euros(solde)} à régler avant le ${j7Label}`);
+              ].join("\n"), `${euros(solde)} à régler avant le ${jourStageLabel}`);
               const r = await fetch("https://api.resend.com/emails", {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
@@ -292,11 +287,11 @@ export async function GET(req: NextRequest) {
       `) : "";
 
       try {
-        const subject = `Solde du stage à régler — ${eurosTexte(solde)} avant le ${j7Label}`;
+        const subject = `Solde du stage à régler — ${eurosTexte(solde)} avant le ${jourStageLabel}`;
         const html = emailLayout([
-          emailTitre("Le stage commence dans une semaine"),
+          emailTitre(delai === "dans 7 jours" ? "Le stage commence dans une semaine" : `Le stage commence ${delai}`),
           P(`Bonjour <strong>${familyName}</strong>,`),
-          P(`Le stage <strong>${stageTitle}</strong> commence dans <strong>7 jours</strong> (${j7Label}).`),
+          P(`Le stage <strong>${stageTitle}</strong> commence <strong>${delai}</strong> (${jourStageLabel}).`),
           emailPanneau("", [
             p.paidAmount > 0 ? emailLigne("Acompte déjà reçu", euros(p.paidAmount)) : "",
             emailLigne('<strong style="color:' + C.encre + ';">Solde à régler</strong>', euros(solde)),
@@ -305,7 +300,7 @@ export async function GET(req: NextRequest) {
           qrSection,
           P("Vous pouvez également régler sur place, par carte, chèque ou espèces.", 13),
           emailSignature(),
-        ].join("\n"), `${euros(solde)} à régler avant le ${j7Label}`);
+        ].join("\n"), `${euros(solde)} à régler avant le ${jourStageLabel}`);
 
         if (resendKey && isRecipientAllowed(familyEmail)) {
           // Attachments CID pour les QR. IMPORTANT : content_id (snake_case)
@@ -361,26 +356,28 @@ export async function GET(req: NextRequest) {
     // Le passage J-7 est un tir unique (soldeReminderSentAt bloque tout
     // repassage) : prélèvement échoué ou lien ignoré, la famille arrivait au
     // stage avec un solde impayé sans autre rappel. À J-5, on relance UNE
-    // fois celles dont le solde reste dû ET qui ont déjà été traitées à J-7
-    // — jamais celles que J-7 aurait ratées, pour ne pas court-circuiter le
-    // prélèvement automatique.
+    // fois celles dont le solde reste dû ET qui ont déjà reçu la demande
+    // (au moins deux jours avant) — jamais avant, pour ne pas court-circuiter
+    // le prélèvement automatique.
     let relances = 0;
     try {
       const j5Str = dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : addDaysParis(5);
-      const [y5, m5, d5] = j5Str.split("-").map(Number);
-      const j5Label = new Date(y5, m5 - 1, d5, 12, 0, 0)
-        .toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
 
+      // D'ici J+5, et deux jours au moins après la demande (cf.
+      // lib/solde-stage-rappel) : une relance manquée est rattrapée, une
+      // famille rattrapée tardivement ne reçoit pas deux emails coup sur coup.
       const relanceSnap = await adminDb.collection("payments")
-        .where("stageDate", "==", j5Str)
+        .where("stageDate", ">=", dateParam ? j5Str : toParisDateString())
+        .where("stageDate", "<=", j5Str)
         .get();
 
       for (const payDoc of relanceSnap.docs) {
         const p = payDoc.data() as any;
-        const solde = (p.totalTTC || 0) - (p.paidAmount || 0);
-        if (solde <= 0 || p.status === "paid" || p.status === "cancelled") continue;
-        if (!p.soldeReminderSentAt) continue;   // J-7 pas encore passé sur lui : on n'anticipe pas
-        if (p.soldeRelanceJ5SentAt) continue;   // relance déjà faite (anti-doublon)
+        const envoye = p.soldeReminderSentAt?.toMillis ? p.soldeReminderSentAt.toMillis() : (p.soldeReminderSentAt ? Date.parse(p.soldeReminderSentAt) || 0 : null);
+        if (!doitRelancerSolde({ ...p, soldeReminderSentAt: envoye }, dateParam ? j5Str : toParisDateString(), j5Str, dateParam ? Infinity : Date.now())) continue;
+        const solde = Math.round(((p.totalTTC || 0) - (p.paidAmount || 0)) * 100) / 100;
+        const [ry, rm, rd] = String(p.stageDate).split("-").map(Number);
+        const jourRelanceLabel = new Date(ry, rm - 1, rd, 12, 0, 0).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
         const familyEmail = p.familyEmail || "";
         if (!familyEmail || !resendKey || !isRecipientAllowed(familyEmail)) continue;
 
@@ -389,11 +386,11 @@ export async function GET(req: NextRequest) {
         const html = emailLayout([
           emailTitre("Le stage approche"),
           P(`Bonjour <strong>${p.familyName || ""}</strong>,`),
-          P(`Le stage <strong>${stageTitle}</strong> commence <strong>${j5Label}</strong> et il reste <strong>${euros(solde)}</strong> à régler sur votre inscription.`),
+          P(`Le stage <strong>${stageTitle}</strong> commence <strong>${jourRelanceLabel}</strong> et il reste <strong>${euros(solde)}</strong> à régler sur votre inscription.`),
           emailButton("Régler mon solde", `${appUrl}/espace-cavalier/factures?payId=${payDoc.id}`),
           P("Vous préférez régler sur place, ou vous rencontrez un souci ? Répondez simplement à ce message, nous trouverons une solution.", 13),
           emailSignature(),
-        ].join("\n"), `${euros(solde)} à régler avant ${j5Label}`);
+        ].join("\n"), `${euros(solde)} à régler avant ${jourRelanceLabel}`);
         const r = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "Authorization": `Bearer ${resendKey}`, "Content-Type": "application/json" },
