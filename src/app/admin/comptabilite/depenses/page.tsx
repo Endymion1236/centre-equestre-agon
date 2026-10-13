@@ -224,7 +224,13 @@ export default function DepensesPage() {
   }
   const actives = lignes.filter(l => !l.rapprochementExclu);
   const sansFacture = lignes.filter(l => !l.rapprochementExclu && sansFactureParNature(l));
-  const visibles = lignes.filter(l => !(masquerFrais && sansFactureParNature(l)) && (filtre === "exclues" ? l.rapprochementExclu : !l.rapprochementExclu && (filtre !== "manquantes" || etatPiece(l) === "facture-a-obtenir") && (filtre !== "sans-tva" || l.statutTVA === "sans-tva") && (filtre !== "a-ventiler" || comptesProposes(l).aVentiler)) && `${l.fournisseur} ${l.poste} ${l.montant} ${l.compte} ${comptesProposes(l).imputation.compte}`.toLowerCase().includes(recherche.toLowerCase())).sort((a, b) => (a.dateOperation || "").localeCompare(b.dateOperation || ""));
+  // Le compteur de la case doit dire ce qu'elle masque DANS la vue affichée.
+  // Octobre 2026 : sous « Factures à obtenir », il annonçait 41 lignes
+  // (2 818,87 €) — salaires, emprunts, commissions — que ce filtre écarte
+  // déjà ; décocher la case ne faisait rien apparaître.
+  const dansLaVue = (l: Ligne) => (filtre === "exclues" ? l.rapprochementExclu : !l.rapprochementExclu && (filtre !== "manquantes" || etatPiece(l) === "facture-a-obtenir") && (filtre !== "sans-tva" || l.statutTVA === "sans-tva") && (filtre !== "a-ventiler" || comptesProposes(l).aVentiler)) && `${l.fournisseur} ${l.poste} ${l.montant} ${l.compte} ${comptesProposes(l).imputation.compte}`.toLowerCase().includes(recherche.toLowerCase());
+  const visibles = lignes.filter(l => !(masquerFrais && sansFactureParNature(l)) && dansLaVue(l)).sort((a, b) => (a.dateOperation || "").localeCompare(b.dateOperation || ""));
+  const sansFactureVue = lignes.filter(l => sansFactureParNature(l) && dansLaVue(l));
   const ligne = lignes.find(l => l.id === cible), extraction = choix?.extraction;
   const montantPiece = extraction?.typeDocument === "paie" ? extraction.netAPayer : extraction?.ttc;
   const lectureControle = correction || extraction;
@@ -334,7 +340,7 @@ export default function DepensesPage() {
       <div className="flex flex-wrap gap-3"><label>Mois <input type="month" className="border rounded p-2" disabled={busy} value={mois} onChange={e => { if(e.target.value) { setMois(e.target.value); setCible(null); setChoix(null); } }} /></label>
         <select className="border rounded p-2" aria-label="État" value={filtre} onChange={e => setFiltre(e.target.value)}><option value="actives">Toutes les lignes actives</option><option value="manquantes">Factures à obtenir</option><option value="sans-tva">Sans TVA</option><option value="a-ventiler">Comptes à ventiler</option><option value="exclues">Exclues du rapprochement</option></select>
         <input className="border rounded p-2" aria-label="Rechercher" placeholder="Fournisseur, montant, catégorie, compte…" value={recherche} onChange={e => setRecherche(e.target.value)} />
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={masquerFrais} onChange={e => basculerMasquerFrais(e.target.checked)} /> <span title="Commissions et frais bancaires, emprunts et intérêts, assurances et impôts prélevés, compte FFE, salaires et cotisations, virements internes, dépenses personnelles">Masquer ce qui n’attend aucune facture</span>{sansFacture.length ? ` (${sansFacture.length} · ${eurosCourt(sansFacture.reduce((t, l) => t + (l.montant || 0), 0))})` : ""}</label>
+        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={masquerFrais} onChange={e => basculerMasquerFrais(e.target.checked)} /> <span title="Commissions et frais bancaires, emprunts et intérêts, assurances et impôts prélevés, compte FFE, salaires et cotisations, virements internes, dépenses personnelles">Masquer ce qui n’attend aucune facture</span>{sansFactureVue.length ? ` (${sansFactureVue.length} · ${eurosCourt(sansFactureVue.reduce((t, l) => t + (l.montant || 0), 0))})` : sansFacture.length ? " (aucune dans cette vue)" : ""}</label>
         <button disabled={busy} className="underline" onClick={() => { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); }}>Actualiser</button>
         <button disabled={busy} className="underline" onClick={() => void rapprocherAuto()}>Rapprocher automatiquement les pièces</button><button disabled={busy} className="underline" onClick={() => void completerDates()}>Compléter les dates manquantes</button>
         <button disabled={busy} className="underline" onClick={() => setVue("pieces")}>Importer un dossier Drive</button></div>
