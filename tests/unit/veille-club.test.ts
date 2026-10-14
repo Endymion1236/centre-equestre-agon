@@ -23,6 +23,21 @@ const vide = (): DonneesVeille => ({
 const codes = (d: DonneesVeille) => analyserVeille(d).map(p => p.code);
 const pointDe = (d: DonneesVeille, code: string) => analyserVeille(d).find(p => p.code === code);
 
+test("8 bis. cavalier inscrit à deux endroits à la même heure (Léonie VASSEUR, Poney Aventure + Stage bronze)", () => {
+  const d = vide();
+  const leonie = { childId: "leonie", childName: "Léonie VASSEUR" };
+  d.creneaux = [
+    { id: "pa", date: "2026-10-28", startTime: "14:00", endTime: "16:00", activityTitle: "Poney Aventure", enrolled: [leonie, { childId: "lisa", childName: "Lisa" }] },
+    { id: "sb", date: "2026-10-28", startTime: "14:00", endTime: "16:00", activityTitle: "Stage bronze", enrolled: [leonie] },
+    { id: "passe", date: "2026-09-20", startTime: "14:00", endTime: "16:00", activityTitle: "Ancien", enrolled: [leonie] },
+    { id: "passe2", date: "2026-09-20", startTime: "15:00", endTime: "16:00", activityTitle: "Ancien 2", enrolled: [leonie] },
+  ];
+  const p = pointDe(d, "cavalier-deux-endroits");
+  assert.equal(p?.nb, 1, "un seul cas, et pas ceux du passé");
+  assert.equal(p?.lignes[0], "Léonie VASSEUR — 28/10 : Poney Aventure (14:00–16:00) et Stage bronze (14:00–16:00)");
+  assert.equal(p?.niveau, "orange");
+});
+
 test("rien à signaler : aucune ligne (pas d'email)", () => {
   assert.deepEqual(analyserVeille(vide()), []);
 });

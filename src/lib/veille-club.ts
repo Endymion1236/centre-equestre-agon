@@ -17,6 +17,7 @@
  * jour (heure de Paris) aussi — c'est ce qui la rend testable.
  */
 
+import { doublonsInscriptions } from "./conflit-horaire";
 import { analyserCoherence } from "@/lib/coherence";
 import { listerImpayes, duMaintenant } from "@/app/admin/paiements/impayes-utils";
 import { statutPaiementCavalier } from "@/app/admin/planning/types";
@@ -208,6 +209,16 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
     if (habituel) suspects.push(`${c.activityTitle} — ${dateFr(c.date)} ${c.startTime} : ce cours a lieu d'habitude le ${NOMS_JOURS[habituel[0]]}`);
   }
   points.push(point(8, "creneaux-suspects", "orange", "Créneaux suspects dans les 14 prochains jours (doublon ou copie par erreur ?)", suspects, "/admin/planning"));
+
+  // ── 🟠 8 bis. Cavaliers attendus à deux endroits à la même heure ──
+  // Octobre 2026 : Charlie et Léonie VASSEUR sur « Poney Aventure » ET sur
+  // le « Stage bronze » le même après-midi. L'inscription en double n'est
+  // facturée qu'une fois, mais elle occupe une place et fausse le montoir.
+  points.push(point(8, "cavalier-deux-endroits", "orange",
+    "Cavaliers inscrits à deux endroits à la même heure (inscription en double ?)",
+    doublonsInscriptions(creneaux.filter(c => c?.date && c.date >= J)).map(x =>
+      `${x.childName} — ${dateFr(x.date)} : ${x.creneaux.map(c => `${c.activityTitle} (${c.startTime || "?"}–${c.endTime || "?"})`).join(" et ")}`),
+    "/admin/planning"));
 
   // ── 🟠 9. Cavaliers des 7 prochains jours sans aucun règlement ni carte ──
   const paiementsAvance = avecAvancementSepa(paiements, ech);
