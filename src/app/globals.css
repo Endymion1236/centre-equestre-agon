@@ -66,6 +66,11 @@ body {
 input, select, textarea {
   color: #1C2A3E;
   font-size: 14px;
+  /* Un champ ne rétrécit pas sous sa largeur naturelle dans une ligne
+     flexible : sur téléphone, le champ d'à côté (téléphone, heure de fin…)
+     sortait de l'écran. Il se resserre désormais, sans jamais déborder. */
+  min-width: 0;
+  max-width: 100%;
 }
 
 /* Options de select : sur certains navigateurs (Firefox surtout), les

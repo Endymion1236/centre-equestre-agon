@@ -213,8 +213,9 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
           />
         )}
 
-        <div className="flex gap-2">
-          <div className="flex-1">
+        {/* Sur téléphone : la date sur toute la largeur, début et fin dessous. */}
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <div className="col-span-2 sm:flex-1 min-w-0">
             <label className="font-body text-[10px] text-slate-500 block mb-1">{multiDay ? "Date de début" : "Date"}</label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp}/>
             {/* Alerte sur une année aberrante : une faute de frappe (ex. 1926)
@@ -228,11 +229,11 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
               return null;
             })()}
           </div>
-          <div className="w-24">
+          <div className="min-w-0 sm:w-28">
             <label className="font-body text-[10px] text-slate-500 block mb-1">Début{multiDay ? " (défaut)" : ""}</label>
             <input type="time" value={st} onChange={e => updateGlobalHours(e.target.value, et)} className={inp}/>
           </div>
-          <div className="w-24">
+          <div className="min-w-0 sm:w-28">
             <label className="font-body text-[10px] text-slate-500 block mb-1">Fin{multiDay ? " (défaut)" : ""}</label>
             <input type="time" value={et} onChange={e => updateGlobalHours(st, e.target.value)} className={inp}/>
           </div>
@@ -344,11 +345,11 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
                   <div className="flex items-center gap-2 pl-7">
                     <input type="time" value={hours.st}
                       onChange={e => setCustomHours(prev => ({ ...prev, [idx]: { ...(prev[idx]||{st,et}), st: e.target.value } }))}
-                      className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
+                      className="w-24 shrink-0 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
                     <span className="font-body text-xs text-slate-400">→</span>
                     <input type="time" value={hours.et}
                       onChange={e => setCustomHours(prev => ({ ...prev, [idx]: { ...(prev[idx]||{st,et}), et: e.target.value } }))}
-                      className="w-20 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
+                      className="w-24 shrink-0 px-2 py-1 rounded-lg border border-blue-200 font-body text-xs bg-white focus:outline-none focus:border-blue-500" />
                     <span className={`font-body text-[10px] capitalize flex-1 ${isDateCustom ? "text-orange-600 font-semibold" : "text-slate-400"}`}>
                       {dayLabel}
                       {isDateCustom && <span className="ml-1.5 bg-orange-200 text-orange-700 px-1.5 py-0.5 rounded text-[9px]">modifié</span>}
