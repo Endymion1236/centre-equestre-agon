@@ -683,6 +683,13 @@ export default function PlanningPage() {
         // ── Appliquer aux jours SÉLECTIONNÉS du stage ──
         // L'admin choisit les jours dans la modale ; par défaut = le jour cliqué.
         const dayIds = editSelectedDayIds.length > 0 ? editSelectedDayIds : [editCreneau.id];
+        // Renommer UNE PARTIE des jours d'un stage en fait un autre stage :
+        // ces jours quittent le lot (nouveau stageGroupId), sinon l'application
+        // continuait de les voir comme des jours du stage d'origine.
+        const titreChange = (editForm.activityTitle || "").trim() !== (editCreneau.activityTitle || "").trim();
+        if (titreChange && editStageDays.length > 0 && dayIds.length < editStageDays.length) {
+          update.stageGroupId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : `sg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        }
         for (const id of dayIds) {
           await updateDoc(doc(db, "creneaux", id), update);
         }
@@ -748,7 +755,14 @@ export default function PlanningPage() {
         ex.date === d && ex.startTime === src.startTime && ex.activityTitle === src.activityTitle
       );
       if (isDup) { skipped++; continue; }
-      const { id: _id, ...srcData } = src as any;
+      // La copie ne garde pas l'identifiant de lot du stage d'origine : un
+      // jour dupliqué puis renommé en autre stage (« Poney Aventure » à côté
+      // du « Stage bronze ») restait sinon dans le même lot, et le panneau
+      // d'inscription proposait ses jours comme ceux du stage d'origine —
+      // d'où des cavaliers inscrits à deux endroits à la même heure. Sans
+      // lot, un jour du même titre au même horaire reste reconnu comme le
+      // même stage (lib/meme-stage).
+      const { id: _id, stageGroupId: _lot, ...srcData } = src as any;
       await addDoc(collection(db, "creneaux"), {
         ...srcData,
         date: d,

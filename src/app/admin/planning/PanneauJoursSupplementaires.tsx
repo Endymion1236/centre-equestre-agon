@@ -93,8 +93,18 @@ export function PanneauJoursSupplementaires({ showAddDays, setShowAddDays, famil
                             : Math.round(prixJour * totalDaysNow * 100) / 100;
 
                           const crRef = showAddDays.creneauRef as any;
+                          // Seules les lignes des cavaliers qu'on vient d'inscrire,
+                          // et de CE stage, bougent. La commande de la famille
+                          // porte souvent les stages des frères et sœurs : le
+                          // jour ajouté à Léonie réécrivait aussi la ligne de
+                          // Lisa (prix, nombre de jours, dates, créneaux d'un
+                          // autre stage), et la facture mentait.
+                          const enfantsConcernes = new Set(showAddDays.enfants.map(e => e.childId));
+                          const deCeStage = (item: any) =>
+                            String(item.stageKey || "").includes(showAddDays.stageTitle) || String(item.activityTitle || "").includes(showAddDays.stageTitle);
                           const updatedItems = oldItems.map((item: any) => {
                             if (item.activityType !== "stage" && item.activityType !== "stage_journee") return item;
+                            if (!enfantsConcernes.has(item.childId) || !deCeStage(item)) return item;
                             // Prix jour brut, sans réduction ni plancher.
                             const newPriceTTC = Math.max(0, Math.round(prixBase * 100) / 100);
                             // Mettre à jour le libellé pour refléter le nb de jours réel.
