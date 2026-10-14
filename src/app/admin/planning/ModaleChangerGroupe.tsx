@@ -16,7 +16,8 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Loader2, ArrowRight } from "lucide-react";
 import { grouperEnStages, type CreneauStage, type PlanChangementGroupe } from "@/lib/changement-groupe";
-import { memeStage } from "@/lib/meme-stage";
+import { lundiDe, memeStage } from "@/lib/meme-stage";
+import { ecartSemaines, libelleSemaine, ordonnerDestinations } from "./changer-groupe-utils";
 import { fetchVacationPeriods, getPeriodForDate, type VacationPeriod } from "@/lib/discounts";
 import { appliquerChangement, prepererChangement } from "./changer-groupe-actions";
 
@@ -37,6 +38,9 @@ function libelleStage(jours: CreneauStage[]): string {
   const heure = jours[0].startTime ? ` · ${jours[0].startTime}` : "";
   return `${debut}${fin}${heure} · ${jours.length}j`;
 }
+
+/** Lundi de la semaine d'une date ISO, en Date UTC (cf. lib/meme-stage). */
+const lundiEnDate = (dateISO: string) => new Date(lundiDe(dateISO) + "T12:00:00Z");
 
 interface Props {
   /** Le créneau depuis lequel on ouvre le panneau. */
@@ -66,16 +70,19 @@ export function ModaleChangerGroupe({
   const [envoi, setEnvoi] = useState(false);
 
   // ── Les destinations possibles ─────────────────────────────────────────
-  // Tous les stages à venir, le stage actuel mis à part. On part du lundi du
-  // stage en cours pour que les autres groupes de la MÊME semaine — le cas le
-  // plus courant — apparaissent en tête.
+  // Tous les stages à venir, le stage actuel mis à part : ceux de la même
+  // semaine, mais aussi des semaines d'avant (à partir d'aujourd'hui) et
+  // d'après. Octobre 2026 : la liste partait du lundi du stage en cours, et
+  // décaler un enfant sur la semaine précédente des vacances était impossible.
   useEffect(() => {
     let annule = false;
     (async () => {
       try {
-        const debut = new Date(creneau.date + "T12:00:00Z");
-        debut.setUTCDate(debut.getUTCDate() - ((debut.getUTCDay() + 6) % 7));
-        const fin = new Date(debut);
+        const lundiStage = lundiEnDate(creneau.date);
+        const aujourdhui = new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+        const lundiActuel = lundiEnDate(aujourdhui);
+        const debut = lundiActuel < lundiStage ? lundiActuel : lundiStage;
+        const fin = new Date(lundiStage);
         fin.setUTCDate(fin.getUTCDate() + HORIZON_JOURS);
 
         const snap = await getDocs(query(
@@ -87,8 +94,13 @@ export function ModaleChangerGroupe({
           .map((d) => ({ id: d.id, ...d.data() } as any))
           .filter((c) => c.activityType === "stage" || c.activityType === "stage_journee");
 
-        const lots = grouperEnStages(stages).filter((lot) => !memeStage(lot[0], creneau));
-        if (!annule) setDestinations(lots);
+        // Un stage déjà terminé n'est pas une destination.
+        const lots = grouperEnStages(stages)
+          .filter((lot) => !memeStage(lot[0], creneau))
+          .filter((lot) => lot[lot.length - 1].date >= aujourdhui);
+        const ordonnes = ordonnerDestinations(lots.map((lot) => ({ lot, ecart: ecartSemaines(creneau.date, lot[0].date), date: lot[0].date })))
+          .map((x) => x.lot);
+        if (!annule) setDestinations(ordonnes);
         const vacances = await fetchVacationPeriods();
         if (!annule) setPeriodes(vacances);
       } catch (e) {
@@ -131,15 +143,10 @@ export function ModaleChangerGroupe({
 
   const plan: PlanChangementGroupe | null = prepare?.plan || null;
 
-  const groupesDeLaSemaine = useMemo(() => {
-    const lundi = new Date(creneau.date + "T12:00:00Z");
-    lundi.setUTCDate(lundi.getUTCDate() - ((lundi.getUTCDay() + 6) % 7));
-    const dimanche = new Date(lundi);
-    dimanche.setUTCDate(dimanche.getUTCDate() + 6);
-    return new Set(destinations
-      .map((lot, i) => (lot[0].date >= enISO(lundi) && lot[0].date <= enISO(dimanche) ? i : -1))
-      .filter((i) => i >= 0));
-  }, [destinations, creneau.date]);
+  // Semaine de chaque destination par rapport au stage actuel.
+  const semaineDe = useMemo(
+    () => destinations.map((lot) => ecartSemaines(creneau.date, lot[0].date)),
+    [destinations, creneau.date]);
 
   const valider = async () => {
     if (!prepare || !plan?.possible || choix === null) return;
@@ -202,7 +209,7 @@ export function ModaleChangerGroupe({
             </div>
           ) : destinations.length === 0 ? (
             <p className="font-body text-sm text-slate-500 italic py-6 text-center">
-              Aucun autre stage sur les {HORIZON_JOURS} prochains jours.
+              Aucun autre stage à venir sur les {HORIZON_JOURS} prochains jours.
             </p>
           ) : (
             <div className="flex flex-col gap-1.5 mb-4">
@@ -226,7 +233,7 @@ export function ModaleChangerGroupe({
                     </div>
                     <div className="font-body text-[11px] text-slate-500">
                       {libelleStage(lot)}
-                      {groupesDeLaSemaine.has(i) && <span className="text-blue-600"> · même semaine</span>}
+                      <span className={semaineDe[i] === 0 ? "text-blue-600" : "text-violet-600"}> · {libelleSemaine(semaineDe[i])}</span>
                     </div>
                   </button>
                 );

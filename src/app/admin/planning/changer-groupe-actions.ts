@@ -60,6 +60,22 @@ export async function prepererChangement(
   const source = (tousLesJours as any[]).filter((c) =>
     (c.enrolled || []).some((e: any) => e.childId === ctx.childId));
 
+  // Les créneaux des jours visés, relus en base : le stage de destination
+  // peut être sur une autre semaine que celle affichée à l'écran, et un
+  // conflit d'horaire ne doit pas dépendre de ce que le planning montre.
+  const creneauxConnus = [...ctx.creneauxConnus];
+  try {
+    const dates = Array.from(new Set(cible.creneaux.map((c) => c.date).filter(Boolean))).slice(0, 30);
+    if (dates.length > 0) {
+      const snap = await getDocs(query(collection(db, "creneaux"), where("date", "in", dates)));
+      const dejaConnus = new Set(creneauxConnus.map((c) => c.id).filter(Boolean));
+      for (const d of snap.docs) {
+        if (dejaConnus.has(d.id)) continue;
+        creneauxConnus.push({ id: d.id, ...(d.data() as any) });
+      }
+    }
+  } catch (e) { console.warn("[changement de groupe] relecture des jours visés :", e); }
+
   // La ligne de commande : on la cherche par le stageKey porté par
   // l'inscription, qui est la seule clé fiable entre les deux (cf. types.ts).
   const { payment, item } = await trouverLigneDeStage(inscrit.familyId, ctx.childId, inscrit.stageKey, creneau.activityTitle);
@@ -70,7 +86,7 @@ export async function prepererChangement(
     childName: inscrit.childName || "",
     source: source.length > 0 ? source : [creneau],
     cible: cible.creneaux,
-    creneauxConnus: ctx.creneauxConnus,
+    creneauxConnus,
     item,
     autresItems: (payment?.items || []).filter((i: any) => i !== item),
     dejaEncaisse,
