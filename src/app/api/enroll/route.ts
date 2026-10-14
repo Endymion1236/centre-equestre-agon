@@ -26,6 +26,7 @@ import { champsFixationFormule, deciderInscriptionSurDemande, type FormuleSurDem
 import { deciderInscriptionNiveau, compatibiliteCavalier, LIBELLE_NIVEAU, estNiveauPromenade } from "@/lib/promenade-niveau";
 import { carteCouvreCreneau, compterReservationsParCarte, libelleCarte, seancesDisponibles, type CarteLike } from "@/lib/cartes-seances";
 import { toParisDateString } from "@/lib/date-local";
+import { creneauxEnConflit, libelleConflit } from "@/lib/conflit-horaire";
 
 interface EnrollItem {
   childId: string;
@@ -197,6 +198,7 @@ export async function POST(req: NextRequest) {
       // facturé en entier (faille corrigée).
       try {
         const outcome = await adminDb.runTransaction(async (tx) => {
+          const memeJourParDate = new Map<string, any[]>();
           const refs = creneauIds.map((cid) => adminDb.collection("creneaux").doc(cid));
           const snaps = await Promise.all(refs.map((r) => tx.get(r)));
           // 1) Vérifier tous les créneaux avant toute écriture
@@ -213,6 +215,21 @@ export async function POST(req: NextRequest) {
             // « pré-inscrit » survivait au paiement et la famille était
             // relancée pour un dossier déjà réglé.
             if (list.some((e: any) => e.childId === item.childId)) continue; // déjà inscrit (ou pré-inscrit : sa place est déjà comptée) = ok
+            // Un cavalier ne peut pas être à deux endroits en même temps : les
+            // créneaux du même jour sont relus dans la transaction. Le panier
+            // vérifiait déjà, mais seulement ce que le navigateur avait chargé.
+            if (cr.date) {
+              let memeJour = memeJourParDate.get(cr.date);
+              if (!memeJour) {
+                const q = await tx.get(adminDb.collection("creneaux").where("date", "==", cr.date));
+                memeJour = q.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+                memeJourParDate.set(cr.date, memeJour);
+              }
+              const conflits = creneauxEnConflit(item.childId, { id: creneauIds[i], ...cr }, memeJour, creneauIds);
+              if (conflits.length > 0) {
+                return { status: "conflit" as const, cid: creneauIds[i], date: String(cr.date), detail: conflits.map(libelleConflit).join(" et ") };
+              }
+            }
             // Créneau sur demande : la première famille choisit la formule et
             // privatise le créneau ; décidé dans la transaction, comme le niveau.
             const surDemande = deciderInscriptionSurDemande(cr, item.formuleSurDemande, uid, estStaff);
@@ -313,6 +330,13 @@ export async function POST(req: NextRequest) {
           );
         }
         else if (outcome.status === "missing") missing.push(outcome.cid);
+        else if (outcome.status === "conflit") {
+          const [a, m, j] = outcome.date.split("-");
+          return NextResponse.json(
+            { error: `${childName} est déjà inscrit(e) le ${j}/${m}/${a} à ${outcome.detail} : un cavalier ne peut pas être à deux endroits en même temps.`, code: "CONFLIT_HORAIRE", creneauId: outcome.cid },
+            { status: 409 },
+          );
+        }
         else if (String(outcome.status).startsWith("sur_demande_")) {
           // Créneau sur demande : formule à choisir, déjà prise, ou réservé à une autre famille.
           const formule = (outcome as any).formule || "";

@@ -13,6 +13,7 @@
 import { champsNiveauApresRetrait } from "@/lib/promenade-niveau";
 import { trouverLigneLiee } from "@/lib/ligne-seance";
 import { memeStage } from "@/lib/meme-stage";
+import { creneauxEnConflit, type CreneauHoraire } from "@/lib/conflit-horaire";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 import { collection, getDocs, getDoc, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, runTransaction } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -285,6 +286,23 @@ export async function computeStageReductionsAsync(params: {
   return results;
 }
 
+
+/**
+ * Les créneaux du même jour, relus en base, où ce cavalier est déjà inscrit
+ * à une heure qui chevauche `creneau` (lib/conflit-horaire). Relu en base et
+ * non pris à l'écran : la vue du planning ne montre qu'un jour ou qu'une
+ * semaine, et ce qu'elle montre peut dater.
+ */
+export async function creneauxEnConflitEnBase(
+  creneau: CreneauHoraire,
+  childId: string,
+  ignorer: Iterable<string> = [],
+): Promise<(CreneauHoraire & { id: string })[]> {
+  if (!creneau?.date) return [];
+  const snap = await getDocs(query(collection(db, "creneaux"), where("date", "==", creneau.date)));
+  const memeJour = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as (CreneauHoraire & { id: string })[];
+  return creneauxEnConflit(childId, creneau, memeJour, ignorer) as (CreneauHoraire & { id: string })[];
+}
 
 /** Inscrit un enfant dans un créneau (lecture fraîche Firestore) */
 export async function enrollChildInCreneau(creneauId: string, child: EnrolledChild): Promise<boolean> {

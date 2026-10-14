@@ -36,8 +36,9 @@ import { prixInscriptionCavalier } from "@/lib/tarif-forfaitaire";
 import type { Creneau, EnrolledChild } from "./types";
 import {
   enrollChildInCreneau, removeChildFromCreneau, createReservation, deleteReservations,
-  findStageCreneaux, findLinkedPayment, computeTropPercu, createAvoir,
+  findStageCreneaux, findLinkedPayment, computeTropPercu, createAvoir, creneauxEnConflitEnBase,
 } from "@/lib/planning-services";
+import { libelleConflit } from "@/lib/conflit-horaire";
 import { encadreConditionsPourType } from "@/lib/cgv-clauses";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { inscritsMemeFamille, prixCreneauTTC } from "@/lib/tarif-forfaitaire";
@@ -105,6 +106,21 @@ export async function inscrireCavalier(ctx: ContexteInscription, cid: string, ch
     creneaux, families, payments, allForfaits, vacationPeriods, discountSettings,
     refreshCreneaux, fetchData, setAllForfaits, setSelectedCreneau, toast,
   } = ctx;
+  // Un cavalier ne peut pas être à deux endroits en même temps. Vérifié en
+  // base, pour TOUS les chemins qui passent ici (panneau, jours
+  // supplémentaires d'un stage, inscription annuelle…) : le contrôle du
+  // panneau ne voyait que la vue courante du planning, et Charlie et Léonie
+  // VASSEUR se sont retrouvées sur deux stages à la même heure.
+  try {
+    const cSnap = await getDoc(doc(db, "creneaux", cid));
+    if (cSnap.exists()) {
+      const conflits = await creneauxEnConflitEnBase({ id: cid, ...(cSnap.data() as any) }, child.childId);
+      if (conflits.length > 0) {
+        toast(`${child.childName} est déjà inscrit(e) ce jour-là à ${conflits.map(libelleConflit).join(" et ")} : inscription refusée, un cavalier ne peut pas être à deux endroits en même temps.`, "error");
+        return false;
+      }
+    }
+  } catch (e) { console.warn("Vérification des conflits d'horaire :", e); }
   const enrolled = await enrollChildInCreneau(cid, child);
   // Sortir en silence laissait les appelants croire l'inscription faite :
   // l'ajout d'un jour de stage facturait alors 2 jours pour 1 seul inscrit.
@@ -955,6 +971,19 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
   let creneauxIds = [cid];
   let isPartialStageUnenroll = false; // true si on désinscrit 1 jour seulement d'un stage
   let skipAvoir = false; // true si l'admin a choisi "sans avoir" (absence tardive, le montant reste dû)
+  // Inscription en double : le cavalier est aussi attendu ailleurs à la même
+  // heure (Charlie et Léonie VASSEUR, « Poney Aventure » + « Stage bronze »).
+  // Retirer le doublon du planning n'annule rien : la commande et la facture
+  // ne bougent pas, aucun avoir. Sans cette voie, la désinscription aurait
+  // retrouvé la ligne du stage et créé un avoir que rien ne justifie.
+  let doublon = false;
+  let ailleurs: string[] = [];
+  try {
+    ailleurs = (await creneauxEnConflitEnBase(c, childId)).map(libelleConflit);
+  } catch (e) { console.warn("Recherche d'inscription en double :", e); }
+  const texteDoublon = ailleurs.length > 0
+    ? `\n⚠️ ${child.childName} est aussi inscrit(e) ce jour-là à ${ailleurs.join(" et ")} : il s'agit sans doute d'une inscription en double.\n`
+    : "";
   if (isStageType) {
     const stageCreneaux = await findStageCreneaux(c.activityTitle, c.date, c);
     const allCreneauxIds = stageCreneaux.map((sc: any) => sc.id);
@@ -964,14 +993,16 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
       const dateStr = new Date(c.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
       // window.confirm n'offre que 2 choix (OK/Annuler). On utilise un prompt avec 3 options.
       const choice = window.prompt(
-        `${child.childName} est inscrit(e) au stage "${c.activityTitle}" (${allCreneauxIds.length} jours).\n\n` +
-        `Que veux-tu désinscrire ?\n\n` +
+        `${child.childName} est inscrit(e) au stage "${c.activityTitle}" (${allCreneauxIds.length} jours).\n` +
+        texteDoublon +
+        `\nQue veux-tu désinscrire ?\n\n` +
         `  1 → Tout le stage (${allCreneauxIds.length} jours, avoir plein)\n` +
         `  2 → Seulement ce jour (${dateStr}) — avoir au prorata\n` +
         `  3 → Seulement ce jour (${dateStr}) — SANS avoir (absence tardive, le stage reste dû)\n` +
+        (ailleurs.length > 0 ? `  4 → Inscription en double : retirer du planning tout le stage (${allCreneauxIds.length} jours) SANS avoir — la commande et la facture ne bougent pas\n` : "") +
         `  (Annuler pour abandonner)\n\n` +
-        `Saisis 1, 2 ou 3 :`,
-        "1"
+        `Saisis ${ailleurs.length > 0 ? "1, 2, 3 ou 4" : "1, 2 ou 3"} :`,
+        ailleurs.length > 0 ? "4" : "1"
       );
       if (choice === null) return; // Annulé
       const trimmed = choice.trim();
@@ -982,6 +1013,10 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
         creneauxIds = [cid]; // juste ce jour
         isPartialStageUnenroll = true;
         skipAvoir = true; // pas d'avoir : le montant reste dû (ex: absence tardive non prévue)
+      } else if (trimmed === "4" && ailleurs.length > 0) {
+        creneauxIds = allCreneauxIds;
+        skipAvoir = true;
+        doublon = true;
       } else if (trimmed === "1") {
         creneauxIds = allCreneauxIds;
       } else {
@@ -992,9 +1027,26 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
       creneauxIds = allCreneauxIds;
     }
   }
+  // Cours, ou stage d'un seul jour : la question du doublon se pose à part.
+  if (ailleurs.length > 0 && !doublon && !isPartialStageUnenroll && creneauxIds.length === 1) {
+    const choix = window.prompt(
+      `${child.childName} — "${c.activityTitle}" le ${new Date(c.date).toLocaleDateString("fr-FR")}\n` +
+      texteDoublon +
+      `\n  1 → Inscription en double : retirer du planning SANS avoir — la commande et la facture ne bougent pas\n` +
+      `  2 → Désinscription normale (avoir si un paiement a été encaissé)\n` +
+      `  (Annuler pour abandonner)\n\n` +
+      `Saisis 1 ou 2 :`,
+      "1"
+    );
+    if (choix === null) return;
+    if (choix.trim() === "1") { skipAvoir = true; doublon = true; }
+    else if (choix.trim() !== "2") { alert("Choix invalide — désinscription annulée."); return; }
+  }
 
   const nbJours = creneauxIds.length;
-  const msg = isStageType && !isPartialStageUnenroll
+  const msg = doublon
+    ? `Retirer ${child.childName} de "${c.activityTitle}"${isStageType ? ` (${nbJours} jour${nbJours > 1 ? "s" : ""})` : ` le ${new Date(c.date).toLocaleDateString("fr-FR")}`} — inscription en double ?\n\nAucun avoir ne sera créé : la commande et la facture ne bougent pas.`
+    : isStageType && !isPartialStageUnenroll
     ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" (${nbJours} jour${nbJours > 1 ? "s" : ""}) ?\n\nSi un paiement a été encaissé, un avoir sera créé automatiquement.`
     : isPartialStageUnenroll && skipAvoir
       ? `Désinscrire ${child.childName} du stage "${c.activityTitle}" UNIQUEMENT pour le ${new Date(c.date).toLocaleDateString("fr-FR")} ?\n\n⚠️ AUCUN avoir ne sera créé (absence tardive).\nLe stage reste dû en totalité.`
@@ -1061,7 +1113,9 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
   // recréditée automatiquement.
   if (skipAvoir) {
     toast(
-      `${child.childName} désinscrit(e) du ${new Date(c.date).toLocaleDateString("fr-FR")} — Aucun avoir (absence tardive)`,
+      doublon
+        ? `${child.childName} retiré(e) de "${c.activityTitle}"${isStageType ? ` (${nbJours} jour${nbJours > 1 ? "s" : ""})` : ""} — inscription en double, aucun avoir, commande inchangée`
+        : `${child.childName} désinscrit(e) du ${new Date(c.date).toLocaleDateString("fr-FR")} — Aucun avoir (absence tardive)`,
       "success"
     );
     // Journal d'audit pour garder une trace de cette décision
@@ -1070,7 +1124,7 @@ export async function desinscrireCavalier(ctx: ContexteInscription, cid: string,
       date: c.date,
       activityTitle: c.activityTitle,
       paymentSource: child.paymentSource,
-      reason: "absence tardive — montant reste dû, carte non recréditée",
+      reason: doublon ? "inscription en double — le cavalier reste inscrit ailleurs à la même heure" : "absence tardive — montant reste dû, carte non recréditée",
     });
     await fetchData();
     return;
