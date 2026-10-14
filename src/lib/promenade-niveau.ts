@@ -49,6 +49,8 @@ export interface CreneauNiveau {
   activityType?: string;
   niveauADefinir?: boolean;
   niveauFixe?: NiveauPromenade | null;
+  /** « club » quand le niveau a été fixé depuis le planning : il tient même créneau vide. */
+  niveauFixePar?: string;
   enrolled?: unknown[];
 }
 
@@ -188,6 +190,7 @@ export function champsNiveauApresRetrait(
   const surDemande = champsSurDemandeApresRetrait(c as CreneauSurDemande, enrolledRestants);
   if (!estPromenadeADefinir(c)) return surDemande;
   if (enrolledRestants.length > 0) return surDemande;
+  if (c?.niveauFixePar === NIVEAU_FIXE_PAR_CLUB) return surDemande; // choix du club : il reste
   return c?.niveauFixe ? { ...surDemande, niveauFixe: null } : surDemande;
 }
 
@@ -206,7 +209,7 @@ export function deciderInscriptionNiveau(
   estStaff: boolean,
 ): { ok: true; fixer: NiveauPromenade | null } | { ok: false; code: "niveau_requis" | "niveau_different"; niveauFixe: NiveauPromenade | null } {
   if (!estPromenadeADefinir(c)) return { ok: true, fixer: null };
-  const fixe = estNiveauPromenade(c.niveauFixe) && (c.enrolled || []).length > 0 ? c.niveauFixe : null;
+  const fixe = estNiveauPromenade(c.niveauFixe) && ((c.enrolled || []).length > 0 || c.niveauFixePar === NIVEAU_FIXE_PAR_CLUB) ? c.niveauFixe : null;
   const declare = estNiveauPromenade(niveauDeclare) ? niveauDeclare : null;
   if (!fixe) {
     if (declare) return { ok: true, fixer: declare };
@@ -216,4 +219,26 @@ export function deciderInscriptionNiveau(
   if (!declare) return estStaff ? { ok: true, fixer: null } : { ok: false, code: "niveau_requis", niveauFixe: fixe };
   if (declare !== fixe) return { ok: false, code: "niveau_different", niveauFixe: fixe };
   return { ok: true, fixer: null };
+}
+
+/** Marque d'un niveau fixé par le club depuis le planning. */
+export const NIVEAU_FIXE_PAR_CLUB = "club";
+
+/**
+ * Le club fixe (ou remet « à définir ») le niveau d'une promenade depuis le
+ * planning. Octobre 2026 : un cavalier inscrit par le club sur la
+ * « Promenade du dimanche — niveau à définir » ne fixait aucun niveau (le
+ * panneau ne le demandait pas) : le planning n'affichait rien et les
+ * familles pouvaient encore choisir n'importe quel niveau en ligne.
+ * Renvoie null pour un créneau qui n'est pas une promenade « à définir ».
+ */
+export function champsNiveauAdmin(
+  c: CreneauNiveau | null | undefined,
+  niveau: NiveauPromenade | null,
+  quand: string,
+): Record<string, unknown> | null {
+  if (!estPromenadeADefinir(c)) return null;
+  if (niveau === null) return { niveauFixe: null, niveauFixeLe: null, niveauFixePar: null };
+  if (!estNiveauPromenade(niveau)) return null;
+  return { niveauFixe: niveau, niveauFixeLe: quand, niveauFixePar: NIVEAU_FIXE_PAR_CLUB };
 }

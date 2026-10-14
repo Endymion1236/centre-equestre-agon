@@ -42,6 +42,8 @@ import { PanneauJoursSupplementaires } from "./PanneauJoursSupplementaires";
 import { ModaleChangerGroupe } from "./ModaleChangerGroupe";
 import * as actions from "./enroll-panel-actions";
 import { ChoixFormuleSurDemande } from "./ChoixFormuleSurDemande";
+import { ChoixNiveauPromenade } from "./ChoixNiveauPromenade";
+import { estPromenadeADefinir, titreAvecNiveau } from "@/lib/promenade-niveau";
 import { estSurDemande } from "@/lib/creneau-sur-demande";
 import { estCoursParticulier, libelleTypeCarte, typeCarteCouvre, typeCarteDuCreneau } from "@/lib/cartes-seances";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
@@ -864,7 +866,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92dvh] md:max-h-[88vh] my-auto flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
         <div className="flex-1 overflow-auto">
         <div className="p-5 border-b border-blue-500/8" style={{ borderLeftWidth: 4, borderLeftColor: color }}>
-          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button type="button" onClick={confirmClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
+          <div className="flex justify-between items-start"><div><div className="font-body text-sm font-semibold" style={{ color }}>{creneau.startTime}–{creneau.endTime}</div><h2 className="font-display text-lg font-bold text-blue-800">{estPromenadeADefinir(creneau as any) ? titreAvecNiveau(creneau as any) : creneau.activityTitle}</h2><div className="font-body text-xs text-slate-500 mt-1">{new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · {creneau.monitor}{displayPrice > 0 ? ` · ${displayPrice.toFixed(2)}€${isStage ? "" : "/séance"}` : ""}</div></div><button type="button" onClick={confirmClose} className="text-slate-500 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button></div>
           <div className="flex items-center gap-3 mt-3">
             <Badge color={spots > 2 ? "green" : spots > 0 ? "orange" : "red"}>{spots > 0 ? `${spots} place${spots > 1 ? "s" : ""}` : "COMPLET"}</Badge>
             <span className="font-body text-xs text-slate-500">{enrolled.length}/{creneau.maxPlaces}</span>
@@ -1111,6 +1113,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             filteredFamilies={filteredFamilies}
             setInscriptionFaite={setInscriptionFaite} rechargerToken={rechargerAttente} />
 
+          {/* Promenade « niveau à définir » : niveau retenu, à fixer quand le club inscrit */}
+          <ChoixNiveauPromenade creneau={creneau}
+            onFixer={(n) => actions.fixerNiveauPromenade(ctxActions(), rappelsActions(), n)} />
           {spots > 0 && (creneau as any).status !== "closed" && (<div className="border-t border-blue-500/8 pt-4"><h3 className="font-body text-sm font-semibold text-blue-800 mb-3"><UserPlus size={16} className="inline mr-1"/>Inscrire</h3><div className="flex flex-col gap-3">
             {/* Créneau sur demande : la formule se choisit ici (rien pour un cours ordinaire) */}
             <ChoixFormuleSurDemande creneau={creneau}

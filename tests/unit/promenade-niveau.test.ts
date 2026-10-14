@@ -14,7 +14,7 @@ import {
   niveauxAdmissibles,
   niveauConseille,
   niveauxAtteignables,
-  niveauxAtteignablesParAuMoinsUn,
+  niveauxAtteignablesParAuMoinsUn, champsNiveauAdmin, NIVEAU_FIXE_PAR_CLUB,
 } from "../../src/lib/promenade-niveau";
 
 let passes = 0;
@@ -160,6 +160,20 @@ test("rien de connu : null, on ne filtre pas", () => {
 test("plusieurs cavaliers : union — un Galop 4 de 14 ans rouvre confirmés pour la liste", () => {
   assert.deepEqual(niveauxAtteignablesParAuMoinsUn([{ age: 13, galopLevel: "2" }, { age: 14, galopLevel: "4" }]), ["debutant", "debrouille", "confirme"]);
   assert.deepEqual(niveauxAtteignablesParAuMoinsUn([{ age: 13, galopLevel: "2" }, {}]), ["debutant", "debrouille"]);
+});
+
+test("le club fixe le niveau depuis le planning, et il tient même créneau vide", () => {
+  const c = { activityType: "balade", niveauADefinir: true, enrolled: [{ childId: "a" }] };
+  assert.deepEqual(champsNiveauAdmin(c, "debrouille", "2026-10-14T10:00:00Z"), { niveauFixe: "debrouille", niveauFixeLe: "2026-10-14T10:00:00Z", niveauFixePar: NIVEAU_FIXE_PAR_CLUB });
+  assert.deepEqual(champsNiveauAdmin(c, null, "x"), { niveauFixe: null, niveauFixeLe: null, niveauFixePar: null });
+  assert.equal(champsNiveauAdmin({ activityType: "balade" }, "debutant", "x"), null);
+  const fixeParClub = { activityType: "balade", niveauADefinir: true, niveauFixe: "debutant" as const, niveauFixePar: NIVEAU_FIXE_PAR_CLUB, enrolled: [] };
+  // Créneau vide : le choix du club s'impose quand même aux familles…
+  assert.deepEqual(deciderInscriptionNiveau(fixeParClub, "confirme", false), { ok: false, code: "niveau_different", niveauFixe: "debutant" });
+  // … et n'est pas effacé quand le dernier inscrit part.
+  assert.deepEqual(champsNiveauApresRetrait(fixeParClub, []), {});
+  // Niveau fixé par une famille : effacé quand le créneau se vide (inchangé).
+  assert.deepEqual(champsNiveauApresRetrait({ ...fixeParClub, niveauFixePar: "Léa" }, []), { niveauFixe: null });
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

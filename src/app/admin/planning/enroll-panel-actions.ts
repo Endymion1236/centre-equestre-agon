@@ -8,6 +8,7 @@
  * à l'identique.
  */
 
+import { champsNiveauAdmin, type NiveauPromenade } from "@/lib/promenade-niveau";
 import { collection, getDocs, getDoc, updateDoc, deleteField, doc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { authFetch } from "@/lib/auth-fetch";
@@ -479,6 +480,18 @@ export async function choisirFormuleSurDemande(ctx: ContexteActions, rappels: Ra
     await rappels.onRefresh?.();
   } catch (e: any) {
     rappels.panelToast(`Formule non enregistrée : ${e?.message || e}`, "error");
+  }
+}
+
+/** Promenade « niveau à définir » : le club fixe le niveau (ou le remet à définir). */
+export async function fixerNiveauPromenade(ctx: ContexteActions, rappels: RappelsActions, niveau: NiveauPromenade | null) {
+  const champs = champsNiveauAdmin(ctx.creneau as any, niveau, new Date().toISOString());
+  if (!champs) { rappels.panelToast("Ce créneau n'est pas une promenade au niveau à définir.", "error"); return; }
+  try {
+    await updateDoc(doc(db, "creneaux", ctx.creneau.id), champs);
+    await rappels.onRefresh?.();
+  } catch (e: any) {
+    rappels.panelToast(`Niveau non enregistré : ${e?.message || e}`, "error");
   }
 }
 
