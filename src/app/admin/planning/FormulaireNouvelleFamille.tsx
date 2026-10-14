@@ -58,19 +58,19 @@ export default function FormulaireNouvelleFamille({
           </div>
           <input value={newFam.parentName} onChange={e => setNewFam({...newFam, parentName: e.target.value})}
             placeholder="Nom du parent *" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input value={newFam.parentEmail} onChange={e => setNewFam({...newFam, parentEmail: e.target.value})}
-              placeholder="Email" type="email" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+              placeholder="Email" type="email" className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
             <input value={newFam.parentPhone} onChange={e => setNewFam({...newFam, parentPhone: e.target.value})}
-              placeholder="Téléphone" type="tel" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+              placeholder="Téléphone" type="tel" className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
           </div>
           <input value={newFam.address} onChange={e => setNewFam({...newFam, address: e.target.value})}
             placeholder="Adresse" className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
           <div className="flex gap-2">
             <input value={newFam.zipCode} onChange={e => setNewFam({...newFam, zipCode: e.target.value})}
-              placeholder="Code postal" className="w-28 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+              placeholder="Code postal" className="w-28 shrink-0 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
             <input value={newFam.city} onChange={e => setNewFam({...newFam, city: e.target.value})}
-              placeholder="Ville" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+              placeholder="Ville" className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
           </div>
           <div>
             <div className="font-body text-[10px] text-slate-400 uppercase mb-1.5">Fléchage</div>
@@ -97,16 +97,16 @@ export default function FormulaireNouvelleFamille({
               <div key={idx} className="mb-3 border border-gray-100 rounded-lg p-2.5 bg-white">
                 <div className="flex gap-2 mb-2 items-center">
                   <input value={child.firstName} onChange={e => { const u = [...newChildren]; u[idx].firstName = e.target.value; setNewChildren(u); }}
-                    placeholder="Prénom *" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                    placeholder="Prénom *" className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                   <input value={child.lastName ?? nomFoyerDeduit} onChange={e => { const u = [...newChildren]; u[idx].lastName = e.target.value; setNewChildren(u); }}
-                    placeholder="Nom" className="flex-1 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
+                    placeholder="Nom" className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 font-body text-sm focus:outline-none focus:border-green-500" />
                   {newChildren.length > 1 && (
                     <button type="button" onClick={() => setNewChildren(newChildren.filter((_, i) => i !== idx))}
                       className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><X size={14} /></button>
                   )}
                 </div>
                 <div className="flex gap-2">
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <label className="font-body text-[10px] text-slate-400 block mb-1">Date de naissance</label>
                     <input value={child.birthDate} onChange={e => { const u = [...newChildren]; u[idx].birthDate = e.target.value; setNewChildren(u); }}
                       type="date" min="1920-01-01" max={new Date().toISOString().slice(0, 10)}
@@ -125,7 +125,7 @@ export default function FormulaireNouvelleFamille({
                       return null;
                     })()}
                   </div>
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <label className="font-body text-[10px] text-slate-400 block mb-1">Niveau Galop</label>
                     <select value={child.galopLevel} onChange={e => { const u = [...newChildren]; u[idx].galopLevel = e.target.value; setNewChildren(u); }}
                       className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm bg-white focus:outline-none focus:border-green-500">
