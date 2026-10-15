@@ -75,13 +75,13 @@ function dateFec(secondes: number | undefined, repli: Date): string {
   return `${p.year}${p.month}${p.day}`;
 }
 /** Virgule décimale : Test Compta Démat rejette le point dans DEBIT et CREDIT. */
-const euros = (centimes: number) => (centimes / 100).toFixed(2).replace(".", ",");
+export const euros = (centimes: number) => (centimes / 100).toFixed(2).replace(".", ",");
 /** Relit un montant écrit au format du FEC (« 12,50 »). */
 const centimesFec = (v: string | undefined) => Math.round((Number(String(v || "0").replace(",", ".")) || 0) * 100);
 /** Tabulation et retours à la ligne cassent le format : on les remplace. */
-const propre = (t: unknown) => String(t ?? "").replace(/[\t\r\n]+/g, " ").trim();
+export const propre = (t: unknown) => String(t ?? "").replace(/[\t\r\n]+/g, " ").trim();
 
-function ligneFec(c: {
+export function ligneFec(c: {
   journal: { code: string; libelle: string }; numero: number; date: string; compte: CompteFec;
   piece: string; libelle: string; debit?: number; credit?: number; auxNum?: string; auxLib?: string;
 }): string {

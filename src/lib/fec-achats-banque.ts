@@ -1,0 +1,213 @@
+/**
+ * src/lib/fec-achats-banque.ts — journaux HA (achats) et BQ (banque) du FEC.
+ *
+ * Octobre 2026, la comptable : « Pouvez-vous nous renvoyer un FEC
+ * comprenant les achats, ventes, banque, règlements. Votre FEC doit
+ * contenir tous les journaux. » Le FEC de l'application ne portait que les
+ * ventes (VE) et les règlements clients (RG). Les deux journaux manquants
+ * sont construits ici, à partir de ce que l'application tient déjà :
+ *
+ *   - les DÉBITS du relevé : « Dépenses et justificatifs » (lignes suivies)
+ *     et les autres opérations du tableau (salaires, emprunts, virements
+ *     internes…), avec le compte proposé (plan-comptable-achats), le compte
+ *     fournisseur et la TVA justifiée par la pièce ;
+ *   - les CRÉDITS du relevé : le rapprochement bancaire du mois
+ *     (rapprochements/{mois}), qui dit ce que chaque crédit encaisse.
+ *
+ * HA — une écriture par achat (classes 2, 60, 61, 62 hors frais bancaires) :
+ *      charge HT + TVA déductible justifiée au débit, fournisseur au crédit.
+ *      Sans TVA justifiée par une facture d'achat unique et cohérente
+ *      (tvaJustifiee), le TTC part en charge : aucune TVA inventée.
+ * BQ — une écriture par mouvement du relevé :
+ *      - débit d'achat : fournisseur au débit, banque au crédit ;
+ *      - autre débit (frais bancaires, salaires, cotisations, emprunt,
+ *        impôt, virement interne, avance FFE…) : compte proposé au débit ;
+ *      - crédit : banque au débit, contre les « valeurs à l'encaisser » du
+ *        mode (chèques 51120000, cartes 51150000, chèques-vacances 51180000)
+ *        soldées par la remise, la commission retenue (carte, ANCV) en
+ *        charge. Un crédit déjà passé en banque par le journal RG (virement,
+ *        prélèvement SEPA, versement d'espèces) n'est pas repassé.
+ *
+ * Rien n'est rangé au jugé : ce que l'application ne sait pas classer part
+ * au 47100000 « à ventiler » et remonte dans les anomalies. Les doublons
+ * probables du relevé sont écartés tant qu'ils ne sont pas tranchés.
+ *
+ * Module pur, testé seul (tests/unit/fec-achats-banque.test.ts).
+ */
+import { ventilerDepense, compteFournisseur, COMPTES } from "./plan-comptable-achats";
+import { banqueDepense } from "./banque-depense";
+import { tvaJustifiee, type LigneMois } from "./bilan-justificatifs";
+import { COMPTES_REGLEMENT, COMPTE_ATTENTE, euros, ligneFec, propre, type CompteFec } from "./fec-complet";
+
+export const JOURNAL_ACHATS = { code: "HA", libelle: "Achats" };
+export const JOURNAL_BANQUE = { code: "BQ", libelle: "Banque" };
+export const COMPTE_FOURNISSEURS: CompteFec = { compte: "40100000", libelle: "Fournisseurs" };
+const COMPTE_COMMISSIONS_CB: CompteFec = { compte: "62710000", libelle: COMPTES["62710000"] };
+const COMPTE_FRAIS_ANCV: CompteFec = { compte: "62840000", libelle: COMPTES["62840000"] };
+const BANQUE_PAR_DEFAUT: CompteFec = { compte: "51200000", libelle: COMPTES["51200000"] };
+
+/** Un crédit du relevé, tel que le rapprochement l'enregistre. */
+export interface CreditBancaireFec {
+  date: string;
+  label: string;
+  amount: number;
+  matched?: boolean;
+  matchType?: string;
+  matchDetail?: string;
+  matchedEncs?: { familyName?: string; montant: number; date?: string; mode?: string }[];
+  manualPaymentId?: string;
+  remiseSepaId?: string;
+  commissionAncv?: number;
+}
+
+/** Modes dont le règlement est déjà en banque dans le journal RG. */
+const MODES_DEJA_EN_BANQUE = new Set(["virement", "prelevement_sepa", "sepa"]);
+
+const cents = (n: unknown) => Math.round((Number(n) || 0) * 100);
+
+/** « 12/10/2026 », « 2026-10-12 » → « 20261012 ». */
+export function dateReleveFec(d: string): string | null {
+  const fr = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/.exec(d || "");
+  if (fr) return `${fr[3]}${fr[2].padStart(2, "0")}${fr[1].padStart(2, "0")}`;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || "");
+  return iso ? `${iso[1]}${iso[2]}${iso[3]}` : null;
+}
+
+/** Achat (facture fournisseur) ou mouvement passé directement en banque ? */
+export function estAchat(compte: string): boolean {
+  return /^(2|60|61|62)/.test(compte) && !/^627/.test(compte);
+}
+
+/** Compte de valeurs à l'encaissement soldé par un crédit, d'après ses écritures ou son type. */
+export function transitDuCredit(c: CreditBancaireFec): { compte: CompteFec | null; dejaEnBanque: boolean } {
+  const modes = [...new Set((c.matchedEncs || []).map((e) => String(e.mode || "")))].filter(Boolean);
+  if (modes.length) {
+    if (modes.every((m) => MODES_DEJA_EN_BANQUE.has(m) || m === "especes")) return { compte: null, dejaEnBanque: true };
+    const comptes = [...new Set(modes.filter((m) => !MODES_DEJA_EN_BANQUE.has(m)).map((m) => COMPTES_REGLEMENT[m]?.compte).filter(Boolean))];
+    if (comptes.length === 1) {
+      const def = Object.values(COMPTES_REGLEMENT).find((x) => x.compte === comptes[0])!;
+      return { compte: { compte: def.compte, libelle: def.libelle }, dejaEnBanque: false };
+    }
+    return { compte: null, dejaEnBanque: false };
+  }
+  const t = `${c.matchType || ""}`;
+  if (c.manualPaymentId || c.remiseSepaId || /virement|pr[ée]l[èe]vement sepa/i.test(t)) return { compte: null, dejaEnBanque: true };
+  if (/esp[èe]ces/i.test(t)) return { compte: null, dejaEnBanque: true }; // versement : journal RG
+  if (/ch[èe]que/i.test(t)) return { compte: { compte: COMPTES_REGLEMENT.cheque.compte, libelle: COMPTES_REGLEMENT.cheque.libelle }, dejaEnBanque: false };
+  if (/\bcb\b|carte/i.test(t)) return { compte: { compte: COMPTES_REGLEMENT.cb_terminal.compte, libelle: COMPTES_REGLEMENT.cb_terminal.libelle }, dejaEnBanque: false };
+  return { compte: null, dejaEnBanque: false };
+}
+
+export interface ResultatAchatsBanque {
+  lignes: string[];
+  ecrituresAchats: number;
+  ecrituresBanque: number;
+  anomalies: string[];
+  /** Euros passés au 47100000 (débits + crédits). */
+  compteAttente: number;
+}
+
+export function construireAchatsBanque(params: {
+  mois: string;
+  /** Débits du relevé du mois (chargerLignesMois). */
+  debits: LigneMois[];
+  /** Crédits du relevé du mois (rapprochements/{mois}.bankLines). */
+  credits: CreditBancaireFec[];
+  /** Premier numéro d'écriture libre dans le fichier. */
+  numeroDepart: number;
+  /** Ne pas produire HA (achats déjà dans les écritures importées). */
+  sansAchats?: boolean;
+  /** Ne pas produire les crédits (banque déjà tenue dans les écritures importées). */
+  sansCredits?: boolean;
+}): ResultatAchatsBanque {
+  const { mois } = params;
+  const lignesHa: string[] = [], lignesBq: string[] = [], anomalies: string[] = [];
+  let numero = params.numeroDepart, nbHa = 0, nbBq = 0, attente = 0;
+  const finDeMois = (() => { const [a, m] = mois.split("-").map(Number); return `${mois.replace("-", "")}${String(new Date(Date.UTC(a, m, 0)).getUTCDate()).padStart(2, "0")}`; })();
+  const enAttente = (c: CompteFec, montant: number) => { if (c.compte === COMPTE_ATTENTE.compte) attente += montant; };
+
+  // ── Débits : HA + BQ ─────────────────────────────────────────────────
+  const debits = [...params.debits]
+    .filter((l) => (l.mois || l.dateOperation?.slice(0, 7)) === mois && Number.isFinite(l.montant) && l.montant > 0)
+    .sort((a, b) => (a.dateOperation || "").localeCompare(b.dateOperation || "") || a.id.localeCompare(b.id));
+  for (const l of debits) {
+    const fournisseurTexte = propre(l.fournisseur) || "Sans libellé";
+    const montant = cents(l.montant);
+    if (l.doublonProbable) {
+      anomalies.push(`Débit ${fournisseurTexte} (${euros(montant)} €, ${l.dateOperation || "?"}) : doublon probable du relevé, laissé hors FEC tant qu'il n'est pas tranché dans Dépenses.`);
+      continue;
+    }
+    if (l.source && l.source !== "releve-bancaire") continue; // dépense saisie à la main : pas un mouvement du relevé
+    const date = dateReleveFec(l.dateOperation || "") || finDeMois;
+    if (!l.dateOperation) anomalies.push(`Débit ${fournisseurTexte} (${euros(montant)} €) sans date : daté du dernier jour du mois.`);
+    const banqueProposee = banqueDepense(l);
+    const banque: CompteFec = banqueProposee.compte ? { compte: banqueProposee.compte, libelle: banqueProposee.libelle } : BANQUE_PAR_DEFAUT;
+    if (!banqueProposee.compte) anomalies.push(`Débit ${fournisseurTexte} (${euros(montant)} €) : compte bancaire non identifié, passé au 51200000.`);
+    const v = ventilerDepense(l);
+    const imputation: CompteFec = v.compte ? { compte: v.compte, libelle: v.libelle || COMPTES[v.compte] || v.compte } : COMPTE_ATTENTE;
+    if (!v.compte) anomalies.push(`Débit ${fournisseurTexte} (${euros(montant)} €, ${l.poste || "sans catégorie"}) passé au 47100000 : ${v.note || "compte à préciser"}.`);
+    const facture = propre(l.piece?.extraction?.numero);
+    const piece = (facture || `DEP-${l.id.slice(0, 12)}`).slice(0, 40);
+
+    if (estAchat(imputation.compte) && !params.sansAchats) {
+      const f = compteFournisseur(l.fournisseur);
+      const aux = f.collectif ? {} : { auxNum: f.compte, auxLib: f.libelle };
+      const tva = Math.min(cents(tvaJustifiee(l) ?? 0), montant - 1);
+      const libelle = `${fournisseurTexte}${facture ? ` — facture ${facture}` : ""}`;
+      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date, compte: imputation, piece, libelle, debit: montant - Math.max(tva, 0) }));
+      if (tva > 0) lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date, compte: { compte: /^2/.test(imputation.compte) ? "44562000" : "44566000", libelle: COMPTES[/^2/.test(imputation.compte) ? "44562000" : "44566000"] }, piece, libelle, debit: tva }));
+      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date, compte: COMPTE_FOURNISSEURS, piece, libelle, credit: montant, ...aux }));
+      enAttente(imputation, montant);
+      numero++; nbHa++;
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_FOURNISSEURS, piece, libelle: `Règlement ${libelle}`, debit: montant, ...aux }));
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banque, piece, libelle: `Règlement ${libelle}`, credit: montant }));
+      numero++; nbBq++;
+    } else {
+      const libelle = `${fournisseurTexte}${l.poste ? ` (${propre(l.poste)})` : ""}`;
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: imputation, piece, libelle, debit: montant }));
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banque, piece, libelle, credit: montant }));
+      enAttente(imputation, montant);
+      numero++; nbBq++;
+    }
+  }
+
+  // ── Crédits : BQ ─────────────────────────────────────────────────────
+  const credits = params.sansCredits ? [] : [...params.credits]
+    .filter((c) => cents(c.amount) > 0 && (dateReleveFec(c.date) || "").startsWith(mois.replace("-", "")))
+    .sort((a, b) => (dateReleveFec(a.date) || "").localeCompare(dateReleveFec(b.date) || ""));
+  let dejaEnBanque = 0;
+  for (const c of credits) {
+    const net = cents(c.amount);
+    const date = dateReleveFec(c.date)!;
+    const libelle = propre(c.label).slice(0, 120) || "Crédit bancaire";
+    const piece = `REL-${date}-${String(numero)}`;
+    const ignore = !c.matched || c.matchType === "Ignoré";
+    const t = ignore ? { compte: null, dejaEnBanque: false } : transitDuCredit(c);
+    if (t.dejaEnBanque) { dejaEnBanque++; continue; }
+    lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: net }));
+    if (!t.compte) {
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_ATTENTE, piece, libelle, credit: net }));
+      attente += net;
+      anomalies.push(`Crédit du ${date.slice(6)}/${date.slice(4, 6)} « ${libelle.slice(0, 60)} » (${euros(net)} €) ${ignore ? "non rapproché" : "d'origine indéterminée"} : passé au 47100000.`);
+    } else {
+      // Brut des écritures soldées ; la différence avec le net reçu est la commission.
+      const brut = (c.matchedEncs || []).reduce((s, e) => s + cents(e.montant), 0) || net;
+      const ecart = brut - net;
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: t.compte, piece, libelle, credit: brut }));
+      if (ecart > 0) {
+        const commission = t.compte.compte === COMPTES_REGLEMENT.cheque_vacances.compte ? COMPTE_FRAIS_ANCV : t.compte.compte === COMPTES_REGLEMENT.cb_terminal.compte ? COMPTE_COMMISSIONS_CB : COMPTE_ATTENTE;
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: commission, piece, libelle: `Commission retenue — ${libelle}`, debit: ecart }));
+        if (commission === COMPTE_ATTENTE) { attente += ecart; anomalies.push(`Crédit du ${date.slice(6)}/${date.slice(4, 6)} (${euros(net)} €) inférieur de ${euros(ecart)} € aux écritures rapprochées : écart au 47100000.`); }
+      } else if (ecart < 0) {
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_ATTENTE, piece, libelle: `Écart de remise — ${libelle}`, credit: -ecart }));
+        attente += -ecart;
+        anomalies.push(`Crédit du ${date.slice(6)}/${date.slice(4, 6)} (${euros(net)} €) supérieur de ${euros(-ecart)} € aux écritures rapprochées : écart au 47100000.`);
+      }
+    }
+    numero++; nbBq++;
+  }
+  if (!params.sansCredits && credits.length === 0) anomalies.push(`Aucun crédit du relevé de ${mois} dans le rapprochement bancaire : importez le relevé du mois (Rapprochement) pour que le journal Banque soit complet.`);
+  if (dejaEnBanque) anomalies.push(`${dejaEnBanque} crédit(s) du relevé (virements, prélèvements SEPA, versements d'espèces) déjà passés en banque par le journal des règlements : non repris en BQ.`);
+
+  return { lignes: [...lignesHa, ...lignesBq], ecrituresAchats: nbHa, ecrituresBanque: nbBq, anomalies, compteAttente: attente / 100 };
+}

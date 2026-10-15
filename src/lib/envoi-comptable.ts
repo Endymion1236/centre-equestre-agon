@@ -22,6 +22,7 @@ import { REPLY_TO } from "@/lib/email-reply-to";
 import { genererPdfSyntheseCompta } from "@/lib/compta-synthese-pdf";
 import { adressesComptable, construireColisComptable, corpsEmailComptable, encaissementsDuMois, facturesDuMois, fecDuMois, nomMoisLong } from "@/lib/envoi-comptable-utils";
 import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
+import type { CreditBancaireFec } from "@/lib/fec-achats-banque";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -83,19 +84,29 @@ export async function chargerReglesVentilation(): Promise<Record<string, string>
 }
 
 /** Mois tenus dans Céleris (un document par mois importé). */
+/** Crédits du relevé du mois, tels que le rapprochement bancaire les a enregistrés. */
+async function chargerCreditsReleve(mois: string): Promise<CreditBancaireFec[]> {
+  const snap = await adminDb.collection("rapprochements").doc(mois).get().catch(() => null);
+  const lignes = snap?.exists ? (snap.data() as any)?.bankLines : null;
+  return Array.isArray(lignes) ? lignes : [];
+}
+
 async function chargerMoisCeleris(): Promise<string[]> {
   const snap = await adminDb.collection("historiqueComptableCeleris").select().get().catch(() => null);
   return (snap?.docs || []).map((d) => d.id).filter((m) => /^\d{4}-\d{2}$/.test(m));
 }
 
 export async function chargerFecMois(mois: string) {
-  const [paySnap, encSnap, celerisSnap, club, regles, moisCeleris] = await Promise.all([
+  const [paySnap, encSnap, celerisSnap, club, regles, moisCeleris, tableau, credits] = await Promise.all([
     adminDb.collection("payments").get(),
     adminDb.collection("encaissements").get(),
     adminDb.collection("historiqueComptableCeleris").doc(mois).get().catch(() => null),
     getClubInfo(),
     chargerReglesVentilation(),
     chargerMoisCeleris(),
+    // Achats et banque : débits du relevé (Dépenses) et crédits (rapprochement).
+    chargerLignesMois(mois).catch((e) => { console.error("[fec] lignes du mois illisibles", e); return null; }),
+    chargerCreditsReleve(mois),
   ]);
   const payments = paySnap.docs.map(normaliserDoc);
   const encaissements = encSnap.docs.map(normaliserDoc);
@@ -106,6 +117,7 @@ export async function chargerFecMois(mois: string) {
     celeris: celerisDoc && Array.isArray(celerisDoc.lignes) ? { lignes: celerisDoc.lignes } : null,
     siret: club.siret,
     regles,
+    achatsBanque: tableau ? { debits: tableau.lignes, credits } : null,
   });
 }
 
@@ -137,7 +149,7 @@ export async function envoyerEcrituresComptable(params: {
   const resendKey = process.env.RESEND_API_KEY;
   if (!resendKey) return { ok: false, code: "resend", error: "Clé d'envoi d'email absente (RESEND_API_KEY)." };
 
-  const [paySnap, encSnap, depSnap, club, tableau, celerisSnap] = await Promise.all([
+  const [paySnap, encSnap, depSnap, club, tableau, celerisSnap, creditsReleve] = await Promise.all([
     adminDb.collection("payments").get(),
     adminDb.collection("encaissements").get(),
     adminDb.collection("depenses").where("mois", "==", mois).get(),
@@ -145,6 +157,7 @@ export async function envoyerEcrituresComptable(params: {
     chargerLignesMois(mois).catch((e) => { console.error("[envoi-comptable] lignes du mois illisibles", e); return null; }),
     // Mois tenu dans Céleris : ses écritures partent avec le colis.
     adminDb.collection("historiqueComptableCeleris").doc(mois).get().catch(() => null),
+    chargerCreditsReleve(mois),
   ]);
   if (!tableau || tableau.limite) return { ok: false, code: "donnees", error: "Le tableau des opérations ou des justificatifs est incomplet. Actualisez-le et vérifiez les limites avant l’envoi comptable." };
   const payments = paySnap.docs.map(normaliserDoc);
@@ -157,7 +170,7 @@ export async function envoyerEcrituresComptable(params: {
     : null;
 
   const [regles, moisCeleris] = await Promise.all([chargerReglesVentilation(), chargerMoisCeleris()]);
-  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles, moisCeleris });
+  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles, moisCeleris, creditsReleve });
   if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0 && !colis.resume.ventilationAchats?.total && !colis.resume.celeris) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
   }

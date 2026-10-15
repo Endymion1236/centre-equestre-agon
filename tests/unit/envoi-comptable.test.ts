@@ -70,7 +70,7 @@ test("le résumé compte ce qui part", () => {
     nbDepenses: 1, totalDepenses: 420.5,
     // Le FEC : la facture Enaux (VE) et ses deux règlements du mois (RG),
     // virement et contre-passation, tous deux au compte bancaire du cabinet.
-    fec: { fichier: "FEC_202609.txt", source: "application", ecrituresVentes: 1, ecrituresReglements: 2, anomalies: [], nbAnomalies: 0,
+    fec: { fichier: "FEC_202609.txt", source: "application", ecrituresVentes: 1, ecrituresReglements: 2, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [], nbAnomalies: 0,
       // TVA sur les encaissements : le compte de TVA en attente est soumis au cabinet.
       comptesAConfirmer: [{ compte: "44574000", libelle: "TVA collectée en attente d'encaissement" }] },
   });
