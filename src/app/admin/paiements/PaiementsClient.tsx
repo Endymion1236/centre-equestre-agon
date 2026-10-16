@@ -1706,6 +1706,7 @@ ${payLinkEmail !== families.find(f => f.firestoreId === p.familyId)?.parentEmail
 Règles :
 - Commence par "Bonjour" (pas de nom si le destinataire est différent du titulaire)
 - Mentionne les prestations et le montant
+- Précise clairement que la place n'est garantie que sous réserve du paiement (à réception du règlement) ; n'en parle pas seulement si toutes les prestations sont déjà passées
 - Ton chaleureux et professionnel
 - 3-4 phrases max
 - Pas de formule de politesse finale (le template email s'en charge)
