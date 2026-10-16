@@ -15,7 +15,7 @@ import TabDocuments from "./components/TabDocuments";
 import TabCharge from "./components/TabCharge";
 import TabIndispos from "./components/TabIndispos";
 import TabOrdre from "./components/TabOrdre";
-import MouvementModal from "./components/MouvementModal";
+import MouvementModal, { type MouvementParDefaut } from "./components/MouvementModal";
 
 const fmtDate = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -48,6 +48,7 @@ export default function CavaleriePage() {
   const [showSoinForm, setShowSoinForm] = useState(false);
   const [soinDefaultEquideId, setSoinDefaultEquideId] = useState<string | undefined>();
   const [showMouvForm, setShowMouvForm] = useState(false);
+  const [mouvParDefaut, setMouvParDefaut] = useState<MouvementParDefaut | undefined>(undefined);
   const [showIndispoForm, setShowIndispoForm] = useState(false);
 
   const fetchData = async () => {
@@ -121,7 +122,7 @@ export default function CavaleriePage() {
 
   const TABS = [
     { id: "fiches" as TabId, label: "Fiches équidés", count: equides.length },
-    { id: "registre" as TabId, label: "Registre", count: mouvements.length },
+    { id: "registre" as TabId, label: "Mouvements", count: mouvements.length },
     { id: "soins" as TabId, label: "Soins & alertes", count: nbAlertes || undefined, alert: nbAlertes > 0 },
     { id: "documents" as TabId, label: "Documents", count: documents.length },
     { id: "charge" as TabId, label: "Charge de travail" },
@@ -153,7 +154,7 @@ export default function CavaleriePage() {
     if (tab === "registre") {
       return (
         <button type="button"
-          onClick={() => setShowMouvForm(true)}
+          onClick={() => { setMouvParDefaut(undefined); setShowMouvForm(true); }}
           className="inline-flex items-center justify-center gap-2 rounded-xl border-none bg-blue-600 px-5 py-3 font-body text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700"
         >
           <Plus size={17} /> Nouveau mouvement
@@ -281,7 +282,13 @@ export default function CavaleriePage() {
           onEdit={equide => { setEditingEquide(equide); setShowEquideForm(true); }}
         />
       )}
-      {tab === "registre" && <TabRegistre mouvements={mouvements} />}
+      {tab === "registre" && (
+        <TabRegistre
+          mouvements={mouvements}
+          equides={equides}
+          onRetour={(parDefaut) => { setMouvParDefaut(parDefaut); setShowMouvForm(true); }}
+        />
+      )}
       {tab === "soins" && (
         <TabSoins
           equides={equides}
@@ -305,7 +312,7 @@ export default function CavaleriePage() {
       {tab === "ordre" && <TabOrdre equides={equides} onRefresh={fetchData} />}
 
       {showMouvForm && (
-        <MouvementModal equides={equides} onClose={() => setShowMouvForm(false)} onDone={fetchData} />
+        <MouvementModal equides={equides} parDefaut={mouvParDefaut} onClose={() => { setShowMouvForm(false); setMouvParDefaut(undefined); }} onDone={fetchData} />
       )}
     </div>
   );

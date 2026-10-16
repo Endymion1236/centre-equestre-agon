@@ -51,6 +51,8 @@ export interface SoinRecord {
 export interface MouvementRegistre {
   id: string;
   equideId: string;
+  /** Nom de l'équidé au moment du mouvement (recopié, la fiche peut être renommée). */
+  equideName?: string;
   type: "entree" | "sortie";
   date: string;
   motif: string;

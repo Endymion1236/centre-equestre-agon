@@ -422,7 +422,7 @@ export default function TabFiches({
                         </div>
                       ))}
                     </div>
-                    <p className="font-body text-[10px] text-gray-400 mt-2">Pour ajouter un mouvement, utilisez l&apos;onglet &quot;Registre&quot;.</p>
+                    <p className="font-body text-[10px] text-gray-400 mt-2">Pour ajouter un mouvement, utilisez l&apos;onglet &quot;Mouvements&quot;.</p>
                   </section>
                 ) : null;
               })()}

@@ -1,30 +1,40 @@
 "use client";
 import { useState } from "react";
-import { collection, addDoc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, addDoc, doc, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { X, Save, Loader2 } from "lucide-react";
 import type { Equide } from "../types";
+import { champsEquideApresMouvement } from "@/lib/cavalerie-mouvements";
 
 const inputStyle = "w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:outline-none focus:border-blue-400";
 const labelStyle = "font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1";
 
+/** Ce que l'écran peut pré-remplir : le retour d'une sortie temporaire. */
+export interface MouvementParDefaut {
+  equideId?: string;
+  type?: "entree" | "sortie";
+  motif?: string;
+  provenance?: string;
+}
+
 interface Props {
   equides: Equide[];
   defaultEquideId?: string;
+  parDefaut?: MouvementParDefaut;
   onClose: () => void;
   onDone: () => void;
 }
 
-export default function MouvementModal({ equides, defaultEquideId, onClose, onDone }: Props) {
+export default function MouvementModal({ equides, defaultEquideId, parDefaut, onClose, onDone }: Props) {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    equideId: defaultEquideId || equides[0]?.id || "",
-    type: "entree" as "entree" | "sortie",
+    equideId: parDefaut?.equideId || defaultEquideId || equides[0]?.id || "",
+    type: parDefaut?.type || ("entree" as "entree" | "sortie"),
     date: new Date().toISOString().split("T")[0],
-    motif: "Achat",
+    motif: parDefaut?.motif || (parDefaut?.type === "sortie" ? "Vente" : "Achat"),
     temporaire: false,
     dateRetour: "",
-    provenance: "",
+    provenance: parDefaut?.provenance || "",
     destination: "",
     prixAchat: "",
     prixVente: "",
@@ -35,21 +45,30 @@ export default function MouvementModal({ equides, defaultEquideId, onClose, onDo
     setSaving(true);
     try {
       const eq = equides.find(e => e.id === form.equideId);
-      await addDoc(collection(db, "mouvements_registre"), {
+      const mouvement = {
         equideId: form.equideId,
         equideName: eq?.name || "",
         type: form.type,
         date: Timestamp.fromDate(new Date(form.date)),
         motif: form.motif,
-        temporaire: form.temporaire,
-        dateRetour: form.dateRetour ? form.dateRetour : null,
+        temporaire: form.type === "sortie" && form.temporaire,
+        dateRetour: form.type === "sortie" && form.temporaire && form.dateRetour ? form.dateRetour : null,
         provenance: form.provenance,
         destination: form.destination,
         prixAchat: form.prixAchat ? Number(form.prixAchat) : null,
         prixVente: form.prixVente ? Number(form.prixVente) : null,
         observations: form.observations,
         createdAt: serverTimestamp(),
-      });
+      };
+      await addDoc(collection(db, "mouvements_registre"), mouvement);
+      // La fiche suit le registre : une vente ou un décès sort l'équidé, une
+      // entrée le remet en service (lib/cavalerie-mouvements).
+      if (eq) {
+        const champs = champsEquideApresMouvement(eq, { ...mouvement, date: form.date });
+        if (Object.keys(champs).length > 0) {
+          await updateDoc(doc(db, "equides", eq.id), { ...champs, updatedAt: serverTimestamp() });
+        }
+      }
       onDone();
       onClose();
     } catch (e) { console.error(e); }
@@ -63,7 +82,7 @@ export default function MouvementModal({ equides, defaultEquideId, onClose, onDo
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100 flex-shrink-0">
-          <h2 className="font-display text-lg font-bold text-blue-800">Nouveau mouvement</h2>
+          <h2 className="font-display text-lg font-bold text-blue-800">{parDefaut?.type === "entree" && parDefaut.motif ? "Enregistrer le retour" : "Nouveau mouvement"}</h2>
           <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1">
