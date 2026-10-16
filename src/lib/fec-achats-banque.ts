@@ -18,6 +18,12 @@
  *      charge HT + TVA déductible justifiée au débit, fournisseur au crédit.
  *      Sans TVA justifiée par une facture d'achat unique et cohérente
  *      (tvaJustifiee), le TTC part en charge : aucune TVA inventée.
+ *      Réponses du cabinet (16/10/2026) : écriture à la DATE DE LA FACTURE
+ *      (celle du débit à défaut) ; un compte par fournisseur (401AGRIAL…,
+ *      40100000 pour l'occasionnel) ; facture et règlement LETTRÉS (même
+ *      code, colonnes EcritureLet/DateLet) ; le cabinet a saisi les achats
+ *      jusqu'en juillet 2026 inclus : une facture antérieure à
+ *      DEBUT_ACHATS_APPLICATION n'est pas reprise, seul son règlement l'est.
  * BQ — une écriture par mouvement du relevé :
  *      - débit d'achat : fournisseur au débit, banque au crédit ;
  *      - autre débit (frais bancaires, salaires, cotisations, emprunt,
@@ -45,6 +51,23 @@ export const COMPTE_FOURNISSEURS: CompteFec = { compte: "40100000", libelle: "Fo
 const COMPTE_COMMISSIONS_CB: CompteFec = { compte: "62710000", libelle: COMPTES["62710000"] };
 const COMPTE_FRAIS_ANCV: CompteFec = { compte: "62840000", libelle: COMPTES["62840000"] };
 const BANQUE_PAR_DEFAUT: CompteFec = { compte: "51200000", libelle: COMPTES["51200000"] };
+
+/** Premier jour des achats tenus par l'application : le cabinet a saisi jusqu'à juillet 2026. */
+export const DEBUT_ACHATS_APPLICATION = "2026-08-01";
+
+/**
+ * Code de lettrage d'un achat, stable d'un export à l'autre : quatre lettres
+ * tirées de l'identifiant du débit (la facture et son règlement le portent).
+ */
+export function codeLettrage(id: string): string {
+  let h = 2166136261;
+  for (const ch of id) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+  let code = "";
+  for (let i = 0; i < 4; i++) { code += String.fromCharCode(65 + (h % 26)); h = Math.floor(h / 26); }
+  return code;
+}
+
+const dateIsoValide = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s;
 
 /** Un crédit du relevé, tel que le rapprochement l'enregistre. */
 export interface CreditBancaireFec {
@@ -119,7 +142,10 @@ export function construireAchatsBanque(params: {
   sansAchats?: boolean;
   /** Ne pas produire les crédits (banque déjà tenue dans les écritures importées). */
   sansCredits?: boolean;
+  /** Factures antérieures : déjà saisies par le cabinet (défaut DEBUT_ACHATS_APPLICATION). */
+  debutAchats?: string;
 }): ResultatAchatsBanque {
+  const debutAchats = params.debutAchats || DEBUT_ACHATS_APPLICATION;
   const { mois } = params;
   const lignesHa: string[] = [], lignesBq: string[] = [], anomalies: string[] = [];
   let numero = params.numeroDepart, nbHa = 0, nbBq = 0, attente = 0;
@@ -150,16 +176,30 @@ export function construireAchatsBanque(params: {
     const piece = (facture || `DEP-${l.id.slice(0, 12)}`).slice(0, 40);
 
     if (estAchat(imputation.compte) && !params.sansAchats) {
+      // Un compte par fournisseur (401AGRIAL…), le collectif pour l'occasionnel.
       const f = compteFournisseur(l.fournisseur);
-      const aux = f.collectif ? {} : { auxNum: f.compte, auxLib: f.libelle };
+      const fournisseur: CompteFec = f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle };
+      const dateFactureIso = l.piece?.extraction?.date;
+      const libelle = `${fournisseurTexte}${facture ? ` — facture ${facture}` : ""}${dateIsoValide(dateFactureIso) ? ` du ${dateFactureIso.split("-").reverse().join("/")}` : ""}`;
+      // Facture d'avant la reprise par l'application : saisie par le cabinet.
+      if (dateIsoValide(dateFactureIso) && dateFactureIso < debutAchats) {
+        anomalies.push(`${fournisseurTexte} (${euros(montant)} €) : facture du ${dateFactureIso.split("-").reverse().join("/")}, déjà saisie par le cabinet ; seul le règlement est repris (BQ, compte ${fournisseur.compte}, à lettrer avec votre écriture).`);
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Règlement ${libelle}`, debit: montant }));
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banque, piece, libelle: `Règlement ${libelle}`, credit: montant }));
+        numero++; nbBq++;
+        continue;
+      }
+      // Date de la facture (préférence du cabinet), celle du débit à défaut
+      // ou si la facture est postérieure au paiement (acompte).
+      const dateAchat = dateIsoValide(dateFactureIso) && dateFactureIso.replace(/-/g, "") <= date ? dateFactureIso.replace(/-/g, "") : date;
+      const lettrage = { lettrage: codeLettrage(l.id), dateLettrage: date };
       const tva = Math.min(cents(tvaJustifiee(l) ?? 0), montant - 1);
-      const libelle = `${fournisseurTexte}${facture ? ` — facture ${facture}` : ""}`;
-      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date, compte: imputation, piece, libelle, debit: montant - Math.max(tva, 0) }));
-      if (tva > 0) lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date, compte: { compte: /^2/.test(imputation.compte) ? "44562000" : "44566000", libelle: COMPTES[/^2/.test(imputation.compte) ? "44562000" : "44566000"] }, piece, libelle, debit: tva }));
-      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date, compte: COMPTE_FOURNISSEURS, piece, libelle, credit: montant, ...aux }));
+      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: imputation, piece, libelle, debit: montant - Math.max(tva, 0) }));
+      if (tva > 0) lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: { compte: /^2/.test(imputation.compte) ? "44562000" : "44566000", libelle: COMPTES[/^2/.test(imputation.compte) ? "44562000" : "44566000"] }, piece, libelle, debit: tva }));
+      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: fournisseur, piece, libelle, credit: montant, ...lettrage }));
       enAttente(imputation, montant);
       numero++; nbHa++;
-      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_FOURNISSEURS, piece, libelle: `Règlement ${libelle}`, debit: montant, ...aux }));
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Règlement ${libelle}`, debit: montant, ...lettrage }));
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banque, piece, libelle: `Règlement ${libelle}`, credit: montant }));
       numero++; nbBq++;
     } else {

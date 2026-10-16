@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/fec-achats-banque.test.ts
  */
 import assert from "node:assert/strict";
-import { construireAchatsBanque, dateReleveFec, estAchat, transitDuCredit } from "../../src/lib/fec-achats-banque";
+import { codeLettrage, construireAchatsBanque, dateReleveFec, estAchat, transitDuCredit } from "../../src/lib/fec-achats-banque";
 import { ENTETE_FEC } from "../../src/app/admin/comptabilite/fec-utils";
 import { controlerStructureFec } from "../../src/lib/controle-fec";
 import { fecDuMois } from "../../src/lib/envoi-comptable-utils";
@@ -18,15 +18,39 @@ const resume = (lignes: string[][]) => lignes.map((c) => `${c[4]}${c[6] ? `/${c[
 
 const debit = (x: any) => ({ id: x.id || "d1", mois: "2026-09", dateOperation: "2026-09-10", source: "releve-bancaire", compte: "51200000", suivie: true, ...x });
 
-test("achat avec facture et TVA justifiée : HA (charge HT + TVA + fournisseur) puis BQ", () => {
+test("achat avec facture et TVA justifiée : HA à la date de facture, compte du fournisseur, lettré avec son règlement", () => {
   const r = construireAchatsBanque({
     mois: "2026-09", numeroDepart: 10, credits: [],
-    debits: [debit({ fournisseur: "AGRIAL GRANULES", poste: "Aliments, litières, paille", montant: 120, piece: { id: "p1", extraction: { typeDocument: "achat", devise: "EUR", numero: "FA-77", ht: 100, tva: 20, ttc: 120 } } })],
+    debits: [debit({ id: "dep-agrial", fournisseur: "AGRIAL GRANULES", poste: "Aliments, litières, paille", montant: 120, piece: { id: "p1", extraction: { typeDocument: "achat", devise: "EUR", numero: "FA-77", date: "2026-09-02", ht: 100, tva: 20, ttc: 120 } } })],
   });
   assert.equal(r.ecrituresAchats, 1);
-  assert.deepEqual(resume(ecriture(r.lignes, "HA", 10)), ["60141000 D100,00", "44566000 D20,00", "40100000/401AGRIAL C120,00"]);
-  assert.deepEqual(resume(ecriture(r.lignes, "BQ", 11)), ["40100000/401AGRIAL D120,00", "51200000 C120,00"]);
-  assert.equal(ecriture(r.lignes, "HA", 10)[0][8], "FA-77"); // PieceRef = n° de facture
+  const ha = ecriture(r.lignes, "HA", 10), bq = ecriture(r.lignes, "BQ", 11);
+  assert.deepEqual(resume(ha), ["60141000 D100,00", "44566000 D20,00", "401AGRIAL C120,00"]);
+  assert.deepEqual(resume(bq), ["401AGRIAL D120,00", "51200000 C120,00"]);
+  assert.equal(ha[0][8], "FA-77"); // PieceRef = n° de facture
+  assert.equal(ha[0][3], "20260902"); // date de la facture
+  assert.equal(bq[0][3], "20260910"); // date du débit
+  // Lettrage : même code sur la facture et le règlement (401), daté du règlement.
+  const code = codeLettrage("dep-agrial");
+  assert.match(code, /^[A-Z]{4}$/);
+  assert.deepEqual([ha[2][13], ha[2][14]], [code, "20260910"]);
+  assert.deepEqual([bq[0][13], bq[0][14]], [code, "20260910"]);
+  assert.equal(ha[0][13], ""); // la charge n'est pas lettrée
+});
+
+test("facture antérieure à août 2026 : déjà saisie par le cabinet, seul le règlement", () => {
+  const r = construireAchatsBanque({
+    mois: "2026-08", numeroDepart: 1, credits: [],
+    debits: [debit({ mois: "2026-08", dateOperation: "2026-08-05", fournisseur: "PADD", poste: "Fournitures & petit équipement (dont sellerie)", montant: 80, piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", numero: "P-9", date: "2026-07-28", ttc: 80 } } })],
+  });
+  assert.equal(r.ecrituresAchats, 0);
+  assert.deepEqual(resume(ecriture(r.lignes, "BQ", 1)), ["401PADD D80,00", "51200000 C80,00"]);
+  assert.ok(r.anomalies.some((a) => a.includes("déjà saisie par le cabinet")));
+});
+
+test("facture postérieure au débit (acompte) : datée du débit", () => {
+  const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [], debits: [debit({ fournisseur: "Orange", poste: "Informatique, logiciels & abonnements", montant: 30, piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", date: "2026-09-20" } } })] });
+  assert.equal(ecriture(r.lignes, "HA", 1)[0][3], "20260910");
 });
 
 test("achat sans justificatif : le TTC en charge, aucune TVA inventée", () => {

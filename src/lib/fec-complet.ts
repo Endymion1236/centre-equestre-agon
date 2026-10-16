@@ -84,12 +84,14 @@ export const propre = (t: unknown) => String(t ?? "").replace(/[\t\r\n]+/g, " ")
 export function ligneFec(c: {
   journal: { code: string; libelle: string }; numero: number; date: string; compte: CompteFec;
   piece: string; libelle: string; debit?: number; credit?: number; auxNum?: string; auxLib?: string;
+  /** Lettrage : même code sur la facture et son règlement, avec la date du lettrage (AAAAMMJJ). */
+  lettrage?: string; dateLettrage?: string;
 }): string {
   return [
     c.journal.code, c.journal.libelle, String(c.numero), c.date, c.compte.compte, propre(c.compte.libelle),
     propre(c.auxNum), propre(c.auxLib), propre(c.piece), c.date, propre(c.libelle) || "(sans libellé)",
     c.debit !== undefined ? euros(c.debit) : "", c.credit !== undefined ? euros(c.credit) : "",
-    "", "", c.date, "", "",
+    c.lettrage ? propre(c.lettrage) : "", c.lettrage && c.dateLettrage ? c.dateLettrage : "", c.date, "", "",
   ].join("\t");
 }
 
