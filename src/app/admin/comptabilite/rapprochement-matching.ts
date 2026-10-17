@@ -39,9 +39,11 @@ import {
   parserDateBancaire,
   periodePrecedente,
   remiseSepaDansFenetre,
+  jourDuLibelleRemise,
   trouverSousEnsembleMontant,
 } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
+import { toParisDateString } from "@/lib/date-local";
 
 /**
  * Un virement qui règle plusieurs écritures d'une même famille : la grand-mère
@@ -244,15 +246,26 @@ export function rapprocherReleve(
       // « CB en ligne » pour l'e-commerce, pour qu'on voie d'où vient la remise.
       const motCanal = (canal: typeof CANAUX_REMISE_CARTE[number]) =>
         canal.cle === "terminal" ? "CB" : canal.libelle;
+      // Terminal du club : le libellé dit de quel jour sont les transactions
+      // (« … 1535134 001 378593 29/09 », télécollecte du soir) ; seuls les
+      // paiements de ce jour sont candidats — un montant égal un autre jour
+      // n'est pas cette remise. Pour l'e-commerce (CAWL), la date du libellé
+      // est celle du versement, les paiements sont des jours précédents :
+      // pas de filtre.
+      const jourRemise = jourDuLibelleRemise(bl.label, bankDate);
+      const jourParis = (e: any) => (e.date?.seconds ? toParisDateString(new Date(e.date.seconds * 1000)) : "");
+      const duJour = (canal: typeof CANAUX_REMISE_CARTE[number]) => (e: any) =>
+        canal.cle !== "terminal" || !jourRemise || jourParis(e) === jourRemise;
 
       // a) Grouper les encaissements du canal par jour, b) chercher un jour
       //    dont le total = montant de la remise (dans une fenêtre J+0 à J+5).
       for (const canal of CANAUX_REMISE_CARTE) {
         const cbByDay: Record<string, { total: number; count: number; encs: any[] }> = {};
-        for (const e of poolCanal(canal)) {
+        for (const e of poolCanal(canal).filter(duJour(canal))) {
           const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;
           if (!d) continue;
-          const dayKey = d.toISOString().split("T")[0];
+          // Jour en heure de Paris : un paiement de 0 h 30 n'est pas de la veille.
+          const dayKey = toParisDateString(d);
           if (!cbByDay[dayKey]) cbByDay[dayKey] = { total: 0, count: 0, encs: [] };
           cbByDay[dayKey].total += (e.montant || 0);
           cbByDay[dayKey].count++;
@@ -304,7 +317,7 @@ export function rapprocherReleve(
       // d) Dernier recours : match exact montant unitaire, canal par canal
       //    (le terminal d'abord, comme avant l'ouverture aux paiements en ligne).
       for (const canal of CANAUX_REMISE_CARTE) {
-        const exactCB = poolCanal(canal).filter(inWindow).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
+        const exactCB = poolCanal(canal).filter(inWindow).filter(duJour(canal)).find(e => Math.abs((e.montant || 0) - bl.amount) < 0.02);
         if (exactCB) {
           usedEncIds.add(exactCB.id);
           return { ...bl, matched: true, matchType: canal.libelle, matchDetail: `${motCanal(canal)} ${exactCB.familyName} — ${exactCB.activityTitle || ""}`, matchedEncs: [encaissementEnDetail(exactCB)] };

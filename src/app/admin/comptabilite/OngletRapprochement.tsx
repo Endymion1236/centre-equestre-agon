@@ -22,11 +22,12 @@ import {
   apparierRemiseCarte, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
   encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
-  estEncaissementCarte, estLibellePrelevement,
+  estEncaissementCarte, estLibellePrelevement, jourDuLibelleRemise,
 } from "./rapprochement-utils";
 import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 import { estLigneAncv, estModeAncv, ecartAncv, libelleEcartAncv } from "@/lib/ancv-rapprochement";
+import { toParisDateString } from "@/lib/date-local";
 
 export interface OngletRapprochementProps {
   tab: string;
@@ -845,6 +846,10 @@ export default function OngletRapprochement({
                 // ou en ligne) des jours précédents : plusieurs factures payées
                 // en un seul passage de carte = plusieurs écritures à cocher.
                 const remiseCarte = /remise\s*carte/i.test(ligne.label || "");
+                // « Remise carte … 29/09 » du terminal : les transactions sont du
+                // 29/09 (pour l'e-commerce 8067954, c'est la date du versement).
+                const jourRemiseCarte = remiseCarte && !/8067954/.test(ligne.label || "") ? jourDuLibelleRemise(ligne.label || "", dateLigne) : null;
+                const jourEnc = (e: any) => (e.date?.seconds ? toParisDateString(new Date(e.date.seconds * 1000)) : "");
                 // Un remboursement de l'ANCV (viré par la DRFIP) : chèques-vacances
                 // Connect ou papier, net de la commission ANCV — cf. lib/ancv-rapprochement.
                 const ligneAncv = estLigneAncv(ligne.label);
@@ -863,6 +868,11 @@ export default function OngletRapprochement({
                       || (e.ref || "").toLowerCase().includes(q);
                   })
                   .sort((a: any, b: any) => {
+                    // Remise carte : les paiements du jour écrit dans le libellé d'abord.
+                    if (jourRemiseCarte) {
+                      const ja = jourEnc(a) === jourRemiseCarte ? 0 : 1, jb = jourEnc(b) === jourRemiseCarte ? 0 : 1;
+                      if (ja !== jb) return ja - jb;
+                    }
                     const ea = montantProche(a.montant) ? 0 : 1;
                     const eb = montantProche(b.montant) ? 0 : 1;
                     if (ea !== eb) return ea - eb;
@@ -985,6 +995,7 @@ export default function OngletRapprochement({
                             <div className="font-body text-sm font-semibold text-blue-800 truncate">{ligneAncv ? (e.mode === "cheque_vacances_connect" ? "📱" : "🎫") : remiseCarte ? "💳" : "🏦"} {e.familyName || "—"}</div>
                             <div className="font-body text-xs text-slate-500 truncate">
                               {d} · {e.activityTitle || "—"}{e.ref ? ` · ${e.ref}` : ""}
+                              {jourRemiseCarte && jourEnc(e) === jourRemiseCarte && <span className="ml-1 text-green-700 font-semibold">· jour de la remise</span>}
                             </div>
                           </div>
                           <div className="text-right">

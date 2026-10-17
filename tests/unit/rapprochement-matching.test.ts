@@ -12,7 +12,7 @@
  */
 
 import { rapprocherReleve } from "../../src/app/admin/comptabilite/rapprochement-matching";
-import { encaissementsCouvertsParLigne } from "../../src/app/admin/comptabilite/rapprochement-utils";
+import { encaissementsCouvertsParLigne, jourDuLibelleRemise } from "../../src/app/admin/comptabilite/rapprochement-utils";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -404,6 +404,29 @@ console.log("\n✓ Relevé vide :");
   const r = rapprocherReleve([], etatVide);
   assert("aucune ligne", r.finalMatched.length === 0);
   assert("aucun avertissement", r.autoOverwritten === 0);
+}
+
+console.log("\n✓ Remise du terminal : le jour écrit dans le libellé fait foi :");
+{
+  // Cas vécu (octobre 2026) : « Remise carte CARTE 1535134 001 378593 29/09 »
+  // de 56 €, créditée le 30/09 = Elva 26 € + Lefebvre 30 € du 29/09. Elle
+  // était reliée à un AUTRE paiement de 56 € du 27/09 (montant égal) et les
+  // deux du 29/09 restaient « à remettre ».
+  const encaissements = [
+    enc("autre56", 56, "cb_terminal", "2026-09-27", "Autre"),
+    enc("elva", 26, "cb_terminal", "2026-09-29", "Elva"),
+    enc("lefebvre", 30, "cb_terminal", "2026-09-29", "Lefebvre"),
+  ];
+  const r = rapprocherReleve(
+    [ligne("30/09/2026", "Remise carte CARTE 1535134 001 378593 29/09", 56)],
+    { ...etatVide, encaissementsCompta: encaissements },
+  );
+  assert("la remise est rapprochée", r.finalMatched[0].matched, r.finalMatched[0].matchDetail);
+  assert("avec les deux paiements du 29/09", [...r.usedEncIds].sort().join() === "elva,lefebvre", [...r.usedEncIds].join());
+  assert("le 56 € du 27/09 reste libre", !r.usedEncIds.has("autre56"));
+  assert("jour lu dans le libellé", jourDuLibelleRemise("Remise carte CARTE 1535134 001 378593 29/09", new Date("2026-09-30")) === "2026-09-29");
+  assert("décembre lu en janvier", jourDuLibelleRemise("Remise carte CARTE 1535134 001 1 31/12", new Date("2027-01-02")) === "2026-12-31");
+  assert("sans date au bout : rien", jourDuLibelleRemise("Remise carte CARTE 1535134", new Date("2026-09-30")) === null);
 }
 
 console.log("\n══════════════════════════════════════════════════════════════");

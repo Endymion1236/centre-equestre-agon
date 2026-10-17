@@ -544,3 +544,25 @@ export function remiseSepaDansFenetre(
   const fin = Math.max(...reperes) + 10 * JOUR_MS_RAPPROCHEMENT;
   return b >= debut && b <= fin;
 }
+
+/**
+ * Jour des transactions d'une remise carte, lu à la fin du libellé :
+ * « Remise carte CARTE 1535134 001 378593 29/09 » → « 2026-09-29 ».
+ *
+ * Octobre 2026 : cette remise de 56 € (Elva 26 € + Lefebvre 30 €, le 29/09)
+ * avait été reliée à un AUTRE paiement de 56 €, du 27/09, parce que le
+ * montant tombait juste. Le libellé dit pourtant de quel jour sont les
+ * transactions. L'année est celle de la date bancaire (celle d'avant pour
+ * une remise de début janvier portant des paiements de décembre).
+ */
+export function jourDuLibelleRemise(label: string, dateBancaire: Date | null): string | null {
+  const m = /(?:^|\s)(\d{2})\/(\d{2})\s*$/.exec(label || "");
+  if (!m || !dateBancaire) return null;
+  const jour = Number(m[1]), mois = Number(m[2]);
+  if (mois < 1 || mois > 12 || jour < 1 || jour > 31) return null;
+  let annee = dateBancaire.getFullYear();
+  if (mois > dateBancaire.getMonth() + 1 + 1) annee -= 1; // décembre lu en janvier
+  const d = new Date(Date.UTC(annee, mois - 1, jour));
+  if (d.getUTCDate() !== jour) return null;
+  return `${annee}-${String(mois).padStart(2, "0")}-${String(jour).padStart(2, "0")}`;
+}
