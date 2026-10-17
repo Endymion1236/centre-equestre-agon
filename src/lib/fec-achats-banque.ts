@@ -83,6 +83,31 @@ export interface CreditBancaireFec {
   commissionAncv?: number;
 }
 
+/**
+ * Code du mode d'une écriture rapprochée. Le rapprochement enregistre le
+ * LIBELLÉ quand il existe (« CB Terminal », « Virement », « Chèque »…,
+ * encaissementEnDetail) : sans cette lecture, aucun mode n'était reconnu et
+ * 21 159,70 € de crédits pointés partaient au 47100000 (septembre 2026).
+ */
+export function codeModeRapproche(mode: unknown): string {
+  const brut = String(mode ?? "").trim();
+  if (!brut) return "";
+  if (COMPTES_REGLEMENT[brut]) return brut;
+  const t = brut.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (/virement/.test(t)) return "virement";
+  if (/prelevement|sepa/.test(t)) return "prelevement_sepa";
+  if (/espece/.test(t)) return "especes";
+  if (/vacances.*connect|connect/.test(t)) return "cheque_vacances_connect";
+  if (/vacances|ancv/.test(t)) return "cheque_vacances";
+  if (/differe/.test(t)) return "cheque_differe";
+  if (/cheque|chq/.test(t)) return "cheque";
+  if (/pass/.test(t)) return "pass_sport";
+  if (/avoir/.test(t)) return "avoir";
+  if (/en ligne|cawl|online/.test(t)) return "cb_online";
+  if (/\bcb\b|carte/.test(t)) return "cb_terminal";
+  return brut;
+}
+
 /** Modes dont le règlement est déjà en banque dans le journal RG. */
 const MODES_DEJA_EN_BANQUE = new Set(["virement", "prelevement_sepa", "sepa"]);
 
@@ -103,7 +128,7 @@ export function estAchat(compte: string): boolean {
 
 /** Compte de valeurs à l'encaissement soldé par un crédit, d'après ses écritures ou son type. */
 export function transitDuCredit(c: CreditBancaireFec): { compte: CompteFec | null; dejaEnBanque: boolean } {
-  const modes = [...new Set((c.matchedEncs || []).map((e) => String(e.mode || "")))].filter(Boolean);
+  const modes = [...new Set((c.matchedEncs || []).map((e) => codeModeRapproche(e.mode)))].filter(Boolean);
   if (modes.length) {
     if (modes.every((m) => MODES_DEJA_EN_BANQUE.has(m) || m === "especes")) return { compte: null, dejaEnBanque: true };
     const comptes = [...new Set(modes.filter((m) => !MODES_DEJA_EN_BANQUE.has(m)).map((m) => COMPTES_REGLEMENT[m]?.compte).filter(Boolean))];

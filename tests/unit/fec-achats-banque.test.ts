@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/fec-achats-banque.test.ts
  */
 import assert from "node:assert/strict";
-import { codeLettrage, construireAchatsBanque, dateReleveFec, estAchat, transitDuCredit } from "../../src/lib/fec-achats-banque";
+import { codeLettrage, codeModeRapproche, construireAchatsBanque, dateReleveFec, estAchat, transitDuCredit } from "../../src/lib/fec-achats-banque";
 import { ENTETE_FEC } from "../../src/app/admin/comptabilite/fec-utils";
 import { controlerStructureFec } from "../../src/lib/controle-fec";
 import { fecDuMois } from "../../src/lib/envoi-comptable-utils";
@@ -104,6 +104,25 @@ test("crédits : remise carte, ANCV net de commission, virement déjà en RG, cr
   assert.deepEqual(parNum(3), ["51200000 D50,00", "47100000 C50,00"]);
   assert.equal(r.ecrituresBanque, 3);
   assert.ok(r.anomalies.some((a) => a.includes("déjà passés en banque")));
+});
+
+test("modes enregistrés sous leur libellé par le rapprochement : reconnus", () => {
+  assert.equal(codeModeRapproche("CB Terminal"), "cb_terminal");
+  assert.equal(codeModeRapproche("CB en ligne"), "cb_online");
+  assert.equal(codeModeRapproche("Chèque"), "cheque");
+  assert.equal(codeModeRapproche("Chèques Vacances"), "cheque_vacances");
+  assert.equal(codeModeRapproche("Chq. Vacances Connect"), "cheque_vacances_connect");
+  assert.equal(codeModeRapproche("Virement"), "virement");
+  assert.equal(codeModeRapproche("Prélèvement SEPA"), "prelevement_sepa");
+  assert.equal(codeModeRapproche("Espèces"), "especes");
+  assert.equal(codeModeRapproche("cb_terminal"), "cb_terminal");
+  const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, debits: [], credits: [
+    { date: "10/09/2026", label: "Remise carte CARTE 1535134 001 1 09/09", amount: 80, matched: true, matchType: "CB Terminal", matchedEncs: [{ montant: 50, mode: "CB Terminal" }, { montant: 30, mode: "CB Terminal" }] },
+    { date: "11/09/2026", label: "REMISE CHQ", amount: 100, matched: true, matchType: "Chèques", matchedEncs: [{ montant: 100, mode: "Chèque" }] },
+    { date: "12/09/2026", label: "VIR DUPONT", amount: 60, matched: true, matchType: "Virement", matchedEncs: [{ montant: 60, mode: "Virement" }] },
+  ] });
+  assert.equal(r.compteAttente, 0);
+  assert.equal(r.ecrituresBanque, 2); // le virement est déjà en banque par RG
 });
 
 test("transit d'un crédit et règles de classement", () => {
