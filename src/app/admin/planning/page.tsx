@@ -1127,9 +1127,10 @@ export default function PlanningPage() {
       )}
 
       {viewMode==="day"&&<>
-        <div className="flex items-center justify-between mb-5">
-          <button type="button" onClick={()=>setDayOffset(d=>d-1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Veille</button>
-          <div className="flex flex-col items-center gap-1">
+        {/* Sur téléphone : la date sur toute la largeur, les boutons dessous. */}
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-5">
+          <button type="button" onClick={()=>setDayOffset(d=>d-1)} className="order-2 sm:order-none flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer"><ChevronLeft size={16}/>Veille</button>
+          <div className="order-1 sm:order-none w-full sm:w-auto min-w-0 flex flex-col items-center gap-1 text-center">
             <div className="font-display text-lg font-bold text-blue-800 capitalize">{currentDay.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
             <div className="font-body text-xs text-slate-600">{dayCreneaux.length} créneau{dayCreneaux.length>1?"x":""}</div>
             <input type="date" title="Aller à cette date"
@@ -1143,7 +1144,7 @@ export default function PlanningPage() {
                 setDayOffset(Math.round((picked.getTime() - today.getTime()) / 86400000));
               }}/>
           </div>
-          <div className="flex gap-2"><button type="button" onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button type="button" onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
+          <div className="order-3 sm:order-none flex gap-2"><button type="button" onClick={()=>setDayOffset(0)} className="font-body text-sm text-blue-500 bg-blue-50 px-3 sm:px-4 py-2 rounded-lg border-none cursor-pointer">Auj.</button><button type="button" onClick={()=>setDayOffset(d=>d+1)} className="flex items-center gap-1 font-body text-sm text-slate-600 bg-white px-3 sm:px-4 py-2 rounded-lg border border-gray-200 cursor-pointer">Lendemain<ChevronRight size={16}/></button></div>
         </div>
         <MareesBandeau date={fmtDate(currentDay)} />
         {loading?<div className="text-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500 mx-auto"/></div>:

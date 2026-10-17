@@ -56,7 +56,7 @@ export default function MareesBandeau({ date }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2 mb-3 px-3 py-2 rounded-xl bg-gradient-to-r from-blue-50 to-cyan-50 border border-blue-100">
-      <div className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-800">
+      <div className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-800 w-full sm:w-auto">
         <span className="text-base">🌊</span>
         <span>Marées</span>
       </div>
@@ -64,7 +64,7 @@ export default function MareesBandeau({ date }: Props) {
       <div className="flex flex-wrap items-center gap-2 flex-1">
         {marees.map((m, i) => (
           <div key={i}
-            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono ${
+            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] font-mono whitespace-nowrap ${
               m.type === "PM"
                 ? "bg-white/70 border border-blue-200 text-blue-900"
                 : "bg-white/40 border border-slate-200 text-slate-600"
