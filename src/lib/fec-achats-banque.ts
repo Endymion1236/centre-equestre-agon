@@ -128,6 +128,10 @@ export interface ResultatAchatsBanque {
   anomalies: string[];
   /** Euros passés au 47100000 (débits + crédits). */
   compteAttente: number;
+  /** Dont débits du relevé non classés (catégorie inconnue, emprunt, PER…). */
+  compteAttenteDebits: number;
+  /** Dont crédits du relevé non rapprochés ou écarts de remise. */
+  compteAttenteCredits: number;
 }
 
 export function construireAchatsBanque(params: {
@@ -148,9 +152,9 @@ export function construireAchatsBanque(params: {
   const debutAchats = params.debutAchats || DEBUT_ACHATS_APPLICATION;
   const { mois } = params;
   const lignesHa: string[] = [], lignesBq: string[] = [], anomalies: string[] = [];
-  let numero = params.numeroDepart, nbHa = 0, nbBq = 0, attente = 0;
+  let numero = params.numeroDepart, nbHa = 0, nbBq = 0, attente = 0, attenteDebits = 0;
   const finDeMois = (() => { const [a, m] = mois.split("-").map(Number); return `${mois.replace("-", "")}${String(new Date(Date.UTC(a, m, 0)).getUTCDate()).padStart(2, "0")}`; })();
-  const enAttente = (c: CompteFec, montant: number) => { if (c.compte === COMPTE_ATTENTE.compte) attente += montant; };
+  const enAttente = (c: CompteFec, montant: number) => { if (c.compte === COMPTE_ATTENTE.compte) { attente += montant; attenteDebits += montant; } };
 
   // ── Débits : HA + BQ ─────────────────────────────────────────────────
   const debits = [...params.debits]
@@ -249,5 +253,5 @@ export function construireAchatsBanque(params: {
   if (!params.sansCredits && credits.length === 0) anomalies.push(`Aucun crédit du relevé de ${mois} dans le rapprochement bancaire : importez le relevé du mois (Rapprochement) pour que le journal Banque soit complet.`);
   if (dejaEnBanque) anomalies.push(`${dejaEnBanque} crédit(s) du relevé (virements, prélèvements SEPA, versements d'espèces) déjà passés en banque par le journal des règlements : non repris en BQ.`);
 
-  return { lignes: [...lignesHa, ...lignesBq], ecrituresAchats: nbHa, ecrituresBanque: nbBq, anomalies, compteAttente: attente / 100 };
+  return { lignes: [...lignesHa, ...lignesBq], ecrituresAchats: nbHa, ecrituresBanque: nbBq, anomalies, compteAttente: attente / 100, compteAttenteDebits: attenteDebits / 100, compteAttenteCredits: (attente - attenteDebits) / 100 };
 }

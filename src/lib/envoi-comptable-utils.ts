@@ -214,13 +214,17 @@ export function fecDuMois(params: {
    * Absent : FEC des seuls ventes et règlements.
    */
   achatsBanque?: { debits: LigneMois[]; credits: CreditBancaireFec[] } | null;
-}): { fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; ecrituresAchats: number; ecrituresBanque: number; anomalies: string[]; comptesAConfirmer: CompteFec[]; compteAttente: number } {
+}): {
+  fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; ecrituresAchats: number; ecrituresBanque: number; anomalies: string[]; comptesAConfirmer: CompteFec[];
+  /** Total au 47100000, et sa répartition : ventes/règlements (à ventiler par le club), débits et crédits du relevé (à classer, ou par la comptable). */
+  compteAttente: number; attente: { ventes: number; debits: number; credits: number };
+} {
   const fichier = nomFichierFec(params.siret, params.mois);
   // Achats et banque, ajoutés à la suite des écritures de ventes et de règlements.
   const ajouterAchatsBanque = (contenu: string, numeroDepart: number, options: { sansAchats?: boolean; sansCredits?: boolean } = {}) => {
-    if (!params.achatsBanque) return { contenu, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [] as string[], compteAttente: 0 };
+    if (!params.achatsBanque) return { contenu, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [] as string[], compteAttente: 0, debits: 0, credits: 0 };
     const ab = construireAchatsBanque({ mois: params.mois, debits: params.achatsBanque.debits, credits: params.achatsBanque.credits, numeroDepart, ...options });
-    return { contenu: contenu + (ab.lignes.length ? ab.lignes.join("\n") + "\n" : ""), ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque, anomalies: ab.anomalies, compteAttente: ab.compteAttente };
+    return { contenu: contenu + (ab.lignes.length ? ab.lignes.join("\n") + "\n" : ""), ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque, anomalies: ab.anomalies, compteAttente: ab.compteAttente, debits: ab.compteAttenteDebits, credits: ab.compteAttenteCredits };
   };
   if (params.celeris && params.celeris.lignes.length) {
     const c = construireFecCeleris(params.celeris.lignes);
@@ -233,6 +237,7 @@ export function fecDuMois(params: {
     return {
       fichier, contenu: ab.contenu, source: "celeris",
       ecrituresVentes: c.ecritures, ecrituresReglements: 0, ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque, comptesAConfirmer: [], compteAttente: ab.compteAttente,
+      attente: { ventes: 0, debits: ab.debits, credits: ab.credits },
       anomalies: [
         ...controlerStructureFec(ab.contenu).map((e) => `Structure du FEC : ${e}`),
         ...c.anomalies,
@@ -258,6 +263,7 @@ export function fecDuMois(params: {
     // Le contrôle de Test Compta Démat, refait ici : une anomalie de structure passe en tête.
     anomalies: [...controlerStructureFec(ab.contenu).map((e) => `Structure du FEC : ${e}`), ...f.anomalies, ...ab.anomalies],
     comptesAConfirmer: f.resume.comptesAConfirmer, compteAttente: Math.round((f.resume.compteAttente + ab.compteAttente) * 100) / 100,
+    attente: { ventes: f.resume.compteAttente, debits: ab.debits, credits: ab.credits },
   };
 }
 

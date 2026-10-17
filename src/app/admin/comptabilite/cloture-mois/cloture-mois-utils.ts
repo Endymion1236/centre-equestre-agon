@@ -60,7 +60,7 @@ export function construirePointsCloture(params: {
   /** Complétude des justificatifs du tableau des opérations (lib/bilan-justificatifs). Absent : point non affiché. */
   justificatifs?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number; perdues?: number; montantPerdues?: number };
   /** FEC du mois : montants au compte d'attente 47100000 et points signalés. Absent : point non affiché. */
-  fec?: { compteAttente: number; anomalies: string[] } | null;
+  fec?: { compteAttente: number; anomalies: string[]; attente?: { ventes: number; debits: number; credits: number } } | null;
 }): PointCloture[] {
   const { mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs, fec } = params;
   const ligneResultat = resultat.find((ligne) => ligne.mois === mois);
@@ -119,15 +119,33 @@ export function construirePointsCloture(params: {
   ];
 
   // Compte d'attente du FEC : une sécurité (rien n'est rangé d'office dans un
-  // produit), mais le mois ne se clôture pas tant qu'il n'est pas vidé.
-  if (fec) {
-    const aVentiler = fec.anomalies.filter((a) => /47100000/.test(a));
+  // produit). Une VENTE au 47100000 bloque la clôture : c'est au club de lui
+  // donner un compte. Octobre 2026 : avec les journaux Achats et Banque, les
+  // débits non classés et les crédits non rapprochés y vont aussi — la
+  // comptable a accepté de les reclasser (« Oui c'est parfait ») : signalés
+  // en orange, avec leur montant, mais non bloquants.
+  const eur = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const att = fec?.attente;
+  if (fec && att && att.ventes === 0 && fec.compteAttente > 0) {
+    const releve = fec.anomalies.filter((a) => /47100000/.test(a) && !/^Ventes/.test(a));
+    points.push({
+      etat: "info",
+      titre: "FEC : compte d'attente côté banque",
+      detail: `${eur(fec.compteAttente)} € au 47100000, que la comptable reclassera : ${[
+        att.debits ? `${eur(att.debits)} € de débits du relevé sans compte (catégorie « hors dépenses », échéances d'emprunt non ventilées, PER…)` : "",
+        att.credits ? `${eur(att.credits)} € de crédits du relevé non rapprochés` : "",
+      ].filter(Boolean).join(" et ")}. Les ventes sont toutes sur leur compte. Pour en réduire : classe les débits dans Dépenses, pointe les crédits dans le Rapprochement.${releve.length ? ` Exemples : ${releve.slice(0, 2).join(" ; ")}` : ""}`,
+      href: "/admin/comptabilite/depenses",
+      lien: "Dépenses",
+    });
+  } else if (fec) {
+    const aVentiler = fec.anomalies.filter((a) => /47100000/.test(a) && (!att || /^Ventes|^Règlement/.test(a)));
     points.push({
       etat: fec.compteAttente === 0 ? "ok" : "manque",
       titre: "FEC : rien au compte d'attente",
       detail: fec.compteAttente === 0
         ? `Toutes les ventes et tous les règlements sont sur leur compte.${fec.anomalies.length ? ` ${fec.anomalies.length} point(s) signalé(s) au cabinet dans l'envoi.` : ""}`
-        : `⚠️ ${fec.compteAttente.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € au 47100000 « à ventiler »${aVentiler.length ? ` — ${aVentiler.slice(0, 3).join(" ; ")}` : ""}. Donne un compte à ces prestations (Ventilation des ventes), puis recharge.`,
+        : `⚠️ ${eur(att ? att.ventes : fec.compteAttente)} € de ventes au 47100000 « à ventiler »${aVentiler.length ? ` — ${aVentiler.slice(0, 3).join(" ; ")}` : ""}. Donne un compte à ces prestations (Ventilation des ventes), puis recharge.${att && att.debits + att.credits > 0 ? ` S'y ajoutent ${eur(att.debits + att.credits)} € côté banque (débits sans compte, crédits non rapprochés), que la comptable reclassera.` : ""}`,
       href: "/admin/comptabilite/export-ca",
       lien: "Ventilation des ventes",
     });

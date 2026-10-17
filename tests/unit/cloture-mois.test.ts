@@ -68,6 +68,21 @@ test("FEC : un montant au compte d'attente 471 bloque la clôture, un compte vid
   assert.ok(!construirePointsCloture(base).some((p) => /compte d'attente/.test(p.titre)), "sans FEC lu, pas de point");
 });
 
+test("FEC : le compte d'attente côté banque est signalé sans bloquer, une vente au 471 bloque", () => {
+  const base = { mois: "2026-09", releves, comptes: ["CIC", "CA", "Livret"], horsTotal: ["Livret"], lignesMS, resultat };
+  const banque = construirePointsCloture({ ...base, fec: { compteAttente: 21617.86, anomalies: ["Débit PRLV X (9,00 €, hors-depenses) passé au 47100000 : Débit non classé."], attente: { ventes: 0, debits: 20000, credits: 1617.86 } } });
+  const p = banque.find((x) => /compte d'attente/.test(x.titre))!;
+  assert.equal(p.etat, "info");
+  assert.match(p.detail, /21\u202f617,86 €|21 617,86 €/);
+  assert.match(p.detail, /crédits du relevé non rapprochés/);
+  assert.equal(p.lien, "Dépenses");
+  const ventes = construirePointsCloture({ ...base, fec: { compteAttente: 100, anomalies: ["Ventes au compte d'attente 47100000 (prestation non reconnue) : Halloween"], attente: { ventes: 40, debits: 60, credits: 0 } } });
+  const v = ventes.find((x) => /compte d'attente/.test(x.titre))!;
+  assert.equal(v.etat, "manque");
+  assert.match(v.detail, /40,00 € de ventes/);
+  assert.match(v.detail, /60,00 € côté banque/);
+});
+
 test("un relevé manquant reste bloquant", () => {
   const points = construirePointsCloture({
     mois: "2026-08",

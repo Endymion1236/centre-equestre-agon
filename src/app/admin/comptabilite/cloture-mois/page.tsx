@@ -32,7 +32,7 @@ export default function ClotureMoisPage() {
   const [horsTotal, setHorsTotal] = useState<string[]>([]);
   const [lignesMS, setLignesMS] = useState<LigneMS[]>([]);
   const [lignesTableau, setLignesTableau] = useState<LigneMois[] | null>(null);
-  const [fecMois, setFecMois] = useState<{ compteAttente: number; anomalies: string[] } | null>(null);
+  const [fecMois, setFecMois] = useState<{ compteAttente: number; anomalies: string[]; attente?: { ventes: number; debits: number; credits: number } } | null>(null);
   // Les deux autres mois du trimestre civil, pour l'encart TVA (déclaration trimestrielle).
   const [lignesTrimestre, setLignesTrimestre] = useState<Record<string, LigneMois[] | null>>({});
   const [resultat, setResultat] = useState<MoisResultat[]>([]);
@@ -93,7 +93,7 @@ export default function ClotureMoisPage() {
         fetch(`/api/admin/depenses/tableau?mois=${mois}`, { headers: h }).then(r => r.ok ? r.json() : null).catch(() => null),
         fetch(`/api/admin/fec?mois=${mois}`, { headers: h }).then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
-      setFecMois(fec && typeof fec.compteAttente === "number" ? { compteAttente: fec.compteAttente, anomalies: Array.isArray(fec.anomalies) ? fec.anomalies : [] } : null);
+      setFecMois(fec && typeof fec.compteAttente === "number" ? { compteAttente: fec.compteAttente, anomalies: Array.isArray(fec.anomalies) ? fec.anomalies : [], ...(fec.attente ? { attente: fec.attente } : {}) } : null);
       setReleves(tre.releves || []); setComptes(tre.comptes || []); setHorsTotal(tre.horsTotal || []);
       setLignesMS(ms.lignes || []);
       setResultat(res.mois || []);
