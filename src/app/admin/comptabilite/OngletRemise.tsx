@@ -23,7 +23,7 @@ import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Printer } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
-import { passeParRemise } from "@/lib/modes-remise";
+import { passeParRemise, RUBRIQUES_REMISE, RUBRIQUE_AUTRES, rubriqueRemise } from "@/lib/modes-remise";
 import { createEncaissement } from "@/lib/compta-encaissement";
 
 export interface OngletRemiseProps {
@@ -263,14 +263,12 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
             <span className="font-body text-[11px] text-slate-500 uppercase tracking-wider">Afficher :</span>
             {[
               { id: "", label: "Tous" },
-              { id: "cb_terminal", label: "CB" },
-              { id: "cheque", label: "Chèques" },
-              { id: "especes", label: "Espèces" },
+              ...RUBRIQUES_REMISE.map(r => ({ id: r.id, label: r.label })),
+              { id: RUBRIQUE_AUTRES, label: "Autres" },
             ].map(m => {
-              const count = m.id ? (nonRemisByModeEnc[m.id]?.length || 0) : nonRemisEnc.length;
-              const total = m.id
-                ? (nonRemisByModeEnc[m.id] || []).reduce((s: number, e: any) => s + (e.montant || 0), 0)
-                : totalNonRemisEnc;
+              const duGroupe = m.id ? nonRemisEnc.filter((e: any) => rubriqueRemise(e.mode) === m.id) : nonRemisEnc;
+              const count = duGroupe.length;
+              const total = m.id ? duGroupe.reduce((s: number, e: any) => s + (e.montant || 0), 0) : totalNonRemisEnc;
               if (m.id && count === 0) return null;
               const isActive = remiseModeView === m.id;
               return (
@@ -291,7 +289,7 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
           {/* Liste des encaissements filtrée par mode ET par date */}
           <div className="flex flex-col gap-1 mb-4 max-h-[300px] overflow-y-auto">
             {nonRemisEnc
-              .filter((e: any) => !remiseModeView || e.mode === remiseModeView)
+              .filter((e: any) => !remiseModeView || rubriqueRemise(e.mode) === remiseModeView)
               .filter((e: any) => {
                 // Filtre par date
                 if (!aRemettreDateFrom && !aRemettreDateTo) return true;
@@ -358,7 +356,7 @@ export default function OngletRemise({ payments, remises, encaissementsCompta, f
             // Dans la vue filtrée uniquement : quels encaissements sont affichés ?
             // On applique LE MÊME filtre que la liste visible (mode + date)
             const visibleEncs = nonRemisEnc
-              .filter((e: any) => !remiseModeView || e.mode === remiseModeView)
+              .filter((e: any) => !remiseModeView || rubriqueRemise(e.mode) === remiseModeView)
               .filter((e: any) => {
                 if (!aRemettreDateFrom && !aRemettreDateTo) return true;
                 const d = e.date?.seconds ? new Date(e.date.seconds * 1000) : null;

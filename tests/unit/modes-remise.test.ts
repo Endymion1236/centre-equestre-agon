@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MODE_CHEQUES_VACANCES_CONNECT, passeParRemise } from "../../src/lib/modes-remise";
+import { MODE_CHEQUES_VACANCES_CONNECT, passeParRemise, rubriqueRemise, RUBRIQUES_REMISE } from "../../src/lib/modes-remise";
 import { COMPTES_REGLEMENT } from "../../src/lib/fec-complet";
 import { paymentModes, manualPaymentModes } from "../../src/app/admin/paiements/types";
 
@@ -51,6 +51,18 @@ test("Connect se choisit à la main, à côté du papier", () => {
   const ids = manualPaymentModes.map((m) => m.id);
   assert.ok(ids.includes(MODE_CHEQUES_VACANCES_CONNECT));
   assert.equal(paymentModes.find((m) => m.id === "cheque_vacances")?.label, "Chèques vacances papier");
+});
+
+test("rubriques à remettre : chèques-vacances papier visibles, rien d'oublié", () => {
+  assert.equal(rubriqueRemise("cheque_vacances"), "cheque_vacances");
+  assert.equal(rubriqueRemise("ancv"), "cheque_vacances");
+  assert.equal(rubriqueRemise("cb_terminal"), "cb_terminal");
+  assert.equal(rubriqueRemise("pass_sport"), "autres");
+  assert.equal(rubriqueRemise(undefined), "autres");
+  // Chaque mode remis en banque a une rubrique, ou tombe dans « Autres ».
+  const modes = RUBRIQUES_REMISE.flatMap((r) => r.modes);
+  assert.equal(new Set(modes).size, modes.length);
+  assert.ok(modes.every((m) => passeParRemise(m)));
 });
 
 if (!process.exitCode) console.log(`✅ ${passes} tests passés`);

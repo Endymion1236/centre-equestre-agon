@@ -31,3 +31,25 @@ export const MODES_SANS_REMISE: readonly string[] = [
 export function passeParRemise(mode: string | null | undefined): boolean {
   return !MODES_SANS_REMISE.includes(String(mode ?? ""));
 }
+
+/**
+ * Rubriques du filtre « Encaissements à remettre ».
+ *
+ * Octobre 2026 : 13 encaissements à remettre, mais les boutons CB, Chèques
+ * et Espèces n'en montraient que 9 ; les chèques-vacances papier (à envoyer
+ * à l'ANCV) n'avaient pas de bouton et ne se voyaient que sous « Tous ».
+ * Tout mode sans rubrique tombe dans « Autres » : rien ne reste invisible.
+ */
+export const RUBRIQUES_REMISE: readonly { id: string; label: string; modes: readonly string[] }[] = [
+  { id: "cb_terminal", label: "CB", modes: ["cb_terminal"] },
+  { id: "cheque", label: "Chèques", modes: ["cheque"] },
+  { id: "cheque_vacances", label: "Chèques vacances", modes: ["cheque_vacances", "ancv"] },
+  { id: "especes", label: "Espèces", modes: ["especes"] },
+];
+export const RUBRIQUE_AUTRES = "autres";
+
+/** Rubrique d'un mode d'encaissement (« autres » si aucune). */
+export function rubriqueRemise(mode: string | null | undefined): string {
+  const m = String(mode ?? "");
+  return RUBRIQUES_REMISE.find((r) => r.modes.includes(m))?.id ?? RUBRIQUE_AUTRES;
+}
