@@ -3,6 +3,7 @@
  *   npx tsx tests/unit/fec-complet.test.ts
  */
 import assert from "node:assert/strict";
+import { controlerStructureFec } from "../../src/lib/controle-fec";
 import { construireFecCeleris, construireFecComplet, libelleJournal, nomFichierFec } from "../../src/lib/fec-complet";
 import { ENTETE_FEC } from "../../src/app/admin/comptabilite/fec-utils";
 
@@ -136,6 +137,23 @@ test("un montant négatif Céleris passe du côté opposé ; journal inconnu gar
   const ls = r.contenu.split("\n").filter(Boolean).slice(1);
   assert.deepEqual(ls.map((l) => [cols(l)[1], cols(l)[4], cols(l)[11], cols(l)[12]]), [["ZZ", "41100000", "", "12,00"], ["ZZ", "70611000", "12,00", ""]]);
   assert.equal(libelleJournal("OD"), "Opérations diverses");
+});
+
+test("export Céleris réel : libellé de compte manquant complété, banque 51210000 réunie au 51200000", () => {
+  const r = construireFecCeleris([
+    { journal: "VTE", compte: "70605000", piece: "10602", date: "2026-08-05", debit: 0, credit: 3500, libelle: "", libelleCompte: "" },
+    { journal: "VTE", compte: "411", piece: "10602", date: "2026-08-05", debit: 3500, credit: 0, libelle: "Facture", libelleCompte: "Client" },
+    { journal: "VTE", compte: "70605000", piece: "10603", date: "2026-08-06", debit: 0, credit: 1000, libelle: "Pension", libelleCompte: "Pensions" },
+    { journal: "VTE", compte: "411", piece: "10603", date: "2026-08-06", debit: 1000, credit: 0, libelle: "Facture", libelleCompte: "Client" },
+    { journal: "BNQ", compte: "51210000", piece: "B1", date: "2026-08-07", debit: 2010, credit: 0, libelle: "Remise CB", libelleCompte: "Banque" },
+    { journal: "BNQ", compte: "51125000", piece: "B1", date: "2026-08-07", debit: 0, credit: 2010, libelle: "Remise CB", libelleCompte: "Paiement par CB (offline)" },
+  ]);
+  assert.deepEqual(controlerStructureFec(r.contenu), []);
+  const ls = r.contenu.split("\n").filter(Boolean).slice(1).map(cols);
+  assert.equal(ls.find((c) => c[8] === "10602" && c[4] === "70605000")![5], "Pensions");
+  assert.ok(ls.some((c) => c[4] === "51200000" && c[5] === "Crédit Agricole"));
+  assert.ok(!ls.some((c) => c[4] === "51210000"));
+  assert.ok(r.anomalies.some((a) => a.includes("51210000")));
 });
 
 console.log("\n── Nom du fichier ──");

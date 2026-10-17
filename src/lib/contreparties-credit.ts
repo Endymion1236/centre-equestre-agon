@@ -9,7 +9,8 @@
  */
 export const CONTREPARTIES_CREDIT: readonly { id: string; libelle: string; compte: string; compteLib: string }[] = [
   { id: "facture-anterieure", libelle: "Règlement d'une facture Céleris ou antérieure", compte: "41100000", compteLib: "Clients" },
-  { id: "ancv-anterieur", libelle: "Remboursement ANCV de chèques-vacances remis avant l'application", compte: "51180000", compteLib: "Chèques vacances à encaisser" },
+  // Chèques-vacances reçus sous Céleris : il les passait au 51122000.
+  { id: "ancv-anterieur", libelle: "Remboursement ANCV de chèques-vacances reçus sous Céleris", compte: "51122000", compteLib: "Paiement par chèques vacances (Céleris)" },
   { id: "subvention", libelle: "Aide ou subvention (ASP, État, région, commune)", compte: "74000000", compteLib: "Subventions d'exploitation" },
   { id: "virement-interne", libelle: "Virement depuis un autre compte du club", compte: "58000000", compteLib: "Virements internes" },
   { id: "apport", libelle: "Apport personnel de l'exploitant", compte: "45511000", compteLib: "Associés, compte courant" },

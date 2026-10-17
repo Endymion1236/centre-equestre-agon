@@ -322,7 +322,21 @@ export function libelleJournal(code: string): string {
   return LIBELLES_JOURNAUX.find(([re]) => re.test(code))?.[1] || code;
 }
 
+/**
+ * Compte de banque de Céleris (« 51210000 Banque ») = le compte courant du
+ * Crédit Agricole, tenu au 51200000 dans le plan du cabinet et par les
+ * journaux Achats et Banque de l'application. Réunis, pour qu'un mois
+ * Céleris n'éclate pas la même banque sur deux comptes.
+ */
+export const BANQUE_CELERIS = "51210000";
+
 export function construireFecCeleris(lignes: EcritureCelerisFec[]): { contenu: string; ecritures: number; anomalies: string[] } {
+  // Libellé de compte absent sur une ligne (août 2026 : une vente de 35 € au
+  // 70605000) : CompteLib est obligatoire, Test Compta Démat rejetterait le
+  // fichier. On reprend le libellé du même compte ailleurs dans l'export.
+  const libelles = new Map<string, string>();
+  for (const l of lignes) if (String(l.libelleCompte || "").trim() && !libelles.has(l.compte)) libelles.set(l.compte, l.libelleCompte);
+  let banqueReunie = false;
   // Regrouper par écriture (journal, pièce, date), dans l'ordre chronologique.
   const groupes = new Map<string, EcritureCelerisFec[]>();
   for (const l of lignes) {
@@ -342,13 +356,17 @@ export function construireFecCeleris(lignes: EcritureCelerisFec[]): { contenu: s
       if (net === 0) continue;
       solde += net;
       const date = l.date.replace(/-/g, "");
+      const banque = l.compte === BANQUE_CELERIS;
+      if (banque) banqueReunie = true;
+      const compte = banque ? COMPTE_BANQUE : { compte: l.compte, libelle: String(l.libelleCompte || "").trim() || libelles.get(l.compte) || `Compte ${l.compte}` };
       sortie.push(ligneFec({
         journal: { code: l.journal, libelle: libelleJournal(l.journal) }, numero, date,
-        compte: { compte: l.compte, libelle: l.libelleCompte }, piece: l.piece, libelle: l.libelle,
+        compte, piece: l.piece, libelle: l.libelle,
         ...(net > 0 ? { debit: net } : { credit: -net }),
       }));
     }
     if (solde !== 0) anomalies.push(`Écriture Céleris ${groupe[0].journal} ${groupe[0].piece} du ${groupe[0].date} déséquilibrée de ${euros(solde)} €.`);
   }
+  if (banqueReunie) anomalies.push(`Banque de Céleris (${BANQUE_CELERIS}) reprise au ${COMPTE_BANQUE.compte} ${COMPTE_BANQUE.libelle}, comme le reste du mois.`);
   return { contenu: [ENTETE_FEC, ...sortie].join("\n") + "\n", ecritures: numero, anomalies };
 }
