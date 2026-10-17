@@ -12,7 +12,7 @@
  */
 
 import { rapprocherReleve } from "../../src/app/admin/comptabilite/rapprochement-matching";
-import { encaissementsCouvertsParLigne, jourDuLibelleRemise } from "../../src/app/admin/comptabilite/rapprochement-utils";
+import { encaissementsCouvertsParLigne, jourDuLibelleRemise, virementsAttendus } from "../../src/app/admin/comptabilite/rapprochement-utils";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -427,6 +427,21 @@ console.log("\n✓ Remise du terminal : le jour écrit dans le libellé fait foi
   assert("jour lu dans le libellé", jourDuLibelleRemise("Remise carte CARTE 1535134 001 378593 29/09", new Date("2026-09-30")) === "2026-09-29");
   assert("décembre lu en janvier", jourDuLibelleRemise("Remise carte CARTE 1535134 001 1 31/12", new Date("2027-01-02")) === "2026-12-31");
   assert("sans date au bout : rien", jourDuLibelleRemise("Remise carte CARTE 1535134", new Date("2026-09-30")) === null);
+}
+
+console.log("\n✓ Virements attendus : une échéance à sa date, pour ce qui reste dû :");
+{
+  const maintenant = new Date("2026-10-17T10:00:00");
+  const cree = { seconds: Math.floor(new Date("2026-09-24T10:00:00").getTime() / 1000) };
+  const echeances = Array.from({ length: 10 }, (_, i) => ({
+    id: `g${i + 1}`, paymentMode: "virement", status: "pending", totalTTC: 69.9, paidAmount: 0, date: cree,
+    echeanceDate: `2026-${String(9 + i > 12 ? i - 3 : 9 + i).padStart(2, "0")}-24`.replace(/^2026-(0[1-6])/, "2027-$1"),
+  }));
+  const barbey = { id: "b", paymentMode: "virement", status: "partial", totalTTC: 679, paidAmount: 67.9, date: cree };
+  const r = virementsAttendus([...echeances, barbey], maintenant);
+  assert("seule l'échéance de septembre est attendue", r.filter(v => v.paiement.id.startsWith("g")).map(v => v.paiement.id).join() === "g1", r.map(v => v.paiement.id).join());
+  assert("BARBEY pour son reste dû", r.find(v => v.paiement.id === "b")?.reste === 611.1);
+  assert("une facture réglée n'apparaît pas", virementsAttendus([{ ...barbey, paidAmount: 679 }], maintenant).length === 0);
 }
 
 console.log("\n══════════════════════════════════════════════════════════════");

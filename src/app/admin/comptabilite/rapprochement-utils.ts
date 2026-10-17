@@ -566,3 +566,29 @@ export function jourDuLibelleRemise(label: string, dateBancaire: Date | null): s
   if (d.getUTCDate() !== jour) return null;
   return `${annee}-${String(mois).padStart(2, "0")}-${String(jour).padStart(2, "0")}`;
 }
+
+/**
+ * Virements attendus depuis plus de `jours` jours (alerte du rapprochement).
+ *
+ * Octobre 2026 : un paiement en 10 fois par virement (GAGNARD, 10 × 69,90 €)
+ * apparaissait dix fois, toutes ses échéances comptées comme dues depuis la
+ * commande, et BARBEY pour son total alors qu'une échéance était payée.
+ * Une échéance n'est attendue qu'à partir de SA date (echeanceDate, ou
+ * dueDate d'une facture pro) ; le montant est ce qui reste dû.
+ */
+export function virementsAttendus<T extends {
+  paymentMode?: string; status?: string; totalTTC?: number; paidAmount?: number;
+  date?: { seconds?: number } | null; echeanceDate?: string; dueDate?: string;
+}>(payments: T[], maintenant: Date, jours = 7): { paiement: T; reste: number; depuis: number }[] {
+  const jour = 86_400_000;
+  return payments.flatMap((p) => {
+    if (p.paymentMode !== "virement" || (p.status !== "pending" && p.status !== "partial")) return [];
+    const reste = Math.round(((Number(p.totalTTC) || 0) - (Number(p.paidAmount) || 0)) * 100) / 100;
+    if (reste <= 0) return [];
+    const echeance = /^\d{4}-\d{2}-\d{2}/.test(String(p.echeanceDate || p.dueDate || "")) ? String(p.echeanceDate || p.dueDate).slice(0, 10) : "";
+    const reference = echeance ? new Date(`${echeance}T12:00:00`).getTime() : p.date?.seconds ? p.date.seconds * 1000 : NaN;
+    if (!Number.isFinite(reference)) return [];
+    const depuis = Math.floor((maintenant.getTime() - reference) / jour);
+    return depuis > jours ? [{ paiement: p, reste, depuis }] : [];
+  });
+}

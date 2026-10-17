@@ -22,7 +22,7 @@ import {
   apparierRemiseCarte, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
   encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
-  estEncaissementCarte, estLibellePrelevement, jourDuLibelleRemise,
+  estEncaissementCarte, estLibellePrelevement, jourDuLibelleRemise, virementsAttendus,
 } from "./rapprochement-utils";
 import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
@@ -86,14 +86,9 @@ export default function OngletRapprochement({
 
           {/* ── Dashboard rapprochement ────────────────────────────────── */}
           {(() => {
-            // Virements en attente depuis > 7 jours
-            const sevenDaysAgo = new Date();
-            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-            const virAttendus = payments.filter(p =>
-              p.paymentMode === "virement" &&
-              (p.status === "pending" || p.status === "partial") &&
-              p.date?.seconds && new Date(p.date.seconds * 1000) < sevenDaysAgo
-            );
+            // Virements attendus depuis > 7 jours : une échéance à partir de sa
+            // date, pour ce qui reste dû (cf. virementsAttendus).
+            const virAttendus = virementsAttendus(payments as any[], new Date());
             // Stats bankLines
             const nbMatched = bankLines.filter(b => b.matched).length;
             const nbPending = bankLines.filter(b => !b.matched).length;
@@ -129,19 +124,17 @@ export default function OngletRapprochement({
                       ⚠️ {virAttendus.length} virement{virAttendus.length > 1 ? "s" : ""} attendu{virAttendus.length > 1 ? "s" : ""} depuis plus de 7 jours
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      {virAttendus.map((p: any) => {
-                        const d = p.date?.seconds ? new Date(p.date.seconds * 1000) : null;
-                        const joursAttente = d ? Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)) : "?";
+                      {virAttendus.map(({ paiement: p, reste, depuis: joursAttente }: any) => {
                         return (
                           <div key={p.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2">
                             <div>
                               <span className="font-body text-sm font-semibold text-blue-800">{p.familyName}</span>
                               <span className="font-body text-xs text-slate-500 ml-2">
-                                {(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 40)}
+                                {(p.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60)}
                               </span>
                             </div>
                             <div className="text-right flex-shrink-0">
-                              <div className="font-body text-sm font-bold text-orange-600">{(p.totalTTC || 0).toFixed(2)}€</div>
+                              <div className="font-body text-sm font-bold text-orange-600">{reste.toFixed(2)}€</div>
                               <div className="font-body text-[10px] text-slate-400">J+{joursAttente}</div>
                             </div>
                           </div>
@@ -149,7 +142,7 @@ export default function OngletRapprochement({
                       })}
                     </div>
                     <div className="font-body text-xs text-orange-600 mt-2">
-                      Total attendu : <strong>{virAttendus.reduce((s: number, p: any) => s + (p.totalTTC || 0), 0).toFixed(2)}€</strong>
+                      Total attendu : <strong>{virAttendus.reduce((s: number, v: any) => s + v.reste, 0).toFixed(2)}€</strong>
                     </div>
                   </Card>
                 )}
