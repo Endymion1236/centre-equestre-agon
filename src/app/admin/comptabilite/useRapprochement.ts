@@ -50,6 +50,8 @@ export interface LigneBancaire {
   remiseSepaId?: string;
   /** Commission retenue par l'ANCV (brut des chèques-vacances − net viré). */
   commissionAncv?: number;
+  /** Crédit hors application classé par le club (lib/fec-achats-banque, CONTREPARTIES_CREDIT). */
+  compteContrepartie?: { id?: string; compte: string; libelle: string } | null;
   uncertain?: boolean;
 }
 
@@ -387,6 +389,8 @@ export function useRapprochement({
           missingAmounts: nb.missingAmounts || null,
           manualPaymentId: nb.manualPaymentId || null,
           remiseSepaId: nb.remiseSepaId || null,
+          commissionAncv: nb.commissionAncv ?? null,
+          compteContrepartie: nb.compteContrepartie || null,
           uncertain: nb.uncertain || false,
         }));
         const allBls = fusionnerLignesBancaires(existingBls as any, aEcrire as any, mode);

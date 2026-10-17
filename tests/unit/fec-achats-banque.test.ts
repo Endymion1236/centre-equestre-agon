@@ -141,6 +141,20 @@ test("remise mêlant chèques et chèques-vacances : chaque mode soldé ; « Ign
   assert.ok(r.anomalies.some((a) => a.includes("« Ignoré »")));
 });
 
+test("crédit hors application classé au rapprochement : sur son compte", () => {
+  const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, debits: [], credits: [
+    { date: "07/09/2026", label: "VIR SGC COUTANCES FAC NO10736", amount: 1920, matched: true, matchType: "Manuel", compteContrepartie: { id: "facture-anterieure", compte: "41100000", libelle: "Règlement d'une facture Céleris ou antérieure" } },
+    { date: "03/09/2026", label: "VIR ASP AIDE UNIQUE", amount: 833.48, matched: true, matchType: "Manuel", compteContrepartie: { id: "subvention", compte: "74000000", libelle: "Aide" } },
+    { date: "15/09/2026", label: "DRFIP ANCV", amount: 682.5, matched: true, matchType: "Manuel", compteContrepartie: { id: "autre", compte: "47100000", libelle: "Autre" } },
+  ] });
+  const bq = r.lignes.map(champs);
+  const parNum = (num: number) => resume(bq.filter((c) => c[2] === String(num)));
+  assert.deepEqual(parNum(1), ["51200000 D833,48", "74000000 C833,48"]);
+  assert.deepEqual(parNum(2), ["51200000 D1920,00", "41100000 C1920,00"]);
+  assert.deepEqual(parNum(3), ["51200000 D682,50", "47100000 C682,50"]);
+  assert.equal(r.compteAttenteCredits, 682.5);
+});
+
 test("transit d'un crédit et règles de classement", () => {
   assert.deepEqual(transitDuCredit({ date: "", label: "", amount: 1, matchType: "Chèques" }).compte?.compte, "51120000");
   assert.equal(transitDuCredit({ date: "", label: "", amount: 1, matchType: "Espèces" }).dejaEnBanque, true);

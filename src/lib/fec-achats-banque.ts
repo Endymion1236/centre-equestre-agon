@@ -69,6 +69,9 @@ export function codeLettrage(id: string): string {
 
 const dateIsoValide = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s;
 
+import { CONTREPARTIES_CREDIT } from "./contreparties-credit";
+export { CONTREPARTIES_CREDIT };
+
 /** Un crédit du relevé, tel que le rapprochement l'enregistre. */
 export interface CreditBancaireFec {
   date: string;
@@ -81,6 +84,8 @@ export interface CreditBancaireFec {
   manualPaymentId?: string;
   remiseSepaId?: string;
   commissionAncv?: number;
+  /** Crédit hors application, classé au rapprochement (CONTREPARTIES_CREDIT). */
+  compteContrepartie?: { id?: string; compte: string; libelle: string } | null;
 }
 
 /**
@@ -257,6 +262,15 @@ export function construireAchatsBanque(params: {
       attente += montant;
       anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(montant)} €) ${motif} : passé au 47100000.`);
     };
+    // Crédit classé par le club au rapprochement (hors application).
+    const cp = c.matched ? c.compteContrepartie : null;
+    if (cp?.compte) {
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: net }));
+      if (cp.compte === COMPTE_ATTENTE.compte) versAttente(net, "classé « autre recette » au rapprochement");
+      else lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: { compte: cp.compte, libelle: CONTREPARTIES_CREDIT.find((x) => x.compte === cp.compte)?.compteLib || cp.libelle }, piece, libelle, credit: net }));
+      numero++; nbBq++;
+      continue;
+    }
     if (ignore) {
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: net }));
       versAttente(net, c.matchType === "Ignoré" ? "marqué « Ignoré » au rapprochement (virement interne, apport, subvention, remboursement ?)" : "non rapproché");

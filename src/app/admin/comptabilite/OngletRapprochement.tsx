@@ -28,6 +28,7 @@ import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 import { estLigneAncv, estModeAncv, ecartAncv, libelleEcartAncv } from "@/lib/ancv-rapprochement";
 import { toParisDateString } from "@/lib/date-local";
+import { CONTREPARTIES_CREDIT } from "@/lib/contreparties-credit";
 
 export interface OngletRapprochementProps {
   tab: string;
@@ -594,7 +595,7 @@ export default function OngletRapprochement({
                     {bl.matched && bl.matchType !== "Ignoré" && (
                       <button onClick={async () => {
                         const updated = [...bankLines];
-                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", matchedEncs: undefined, manualPaymentId: undefined, remiseSepaId: undefined, uncertain: false };
+                        updated[i] = { ...updated[i], matched: false, matchType: "", matchDetail: "", matchedEncs: undefined, manualPaymentId: undefined, remiseSepaId: undefined, compteContrepartie: undefined, commissionAncv: undefined, uncertain: false };
                         await updateAndSaveBankLines(updated);
                       }}
                         className="font-body text-[10px] text-orange-500 bg-orange-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-orange-100"
@@ -1059,6 +1060,34 @@ export default function OngletRapprochement({
                         </div>
                       );
                     })}
+
+                    {/* Crédit hors application : le club dit ce que c'est, le FEC le
+                        range sur le bon compte (lib/fec-achats-banque). */}
+                    {titre("Ce n'est pas un paiement saisi dans l'appli")}
+                    <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
+                      Facture Céleris réglée par une structure, remboursement ANCV d'avant l'appli, aide de l'État, virement d'un autre compte… Rien n'est encaissé : la ligne est seulement classée pour la comptabilité.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CONTREPARTIES_CREDIT.map((cp) => (
+                        <button key={cp.id} type="button"
+                          onClick={async () => {
+                            const updated = [...bankLines];
+                            updated[showManualMatch!] = {
+                              ...updated[showManualMatch!],
+                              matched: true,
+                              matchType: "Manuel",
+                              matchDetail: `Autre recette — ${cp.libelle} (${cp.compte})`,
+                              compteContrepartie: { id: cp.id, compte: cp.compte, libelle: cp.libelle },
+                              matchedEncs: undefined, manualPaymentId: undefined, remiseSepaId: undefined, uncertain: false,
+                            };
+                            await updateAndSaveBankLines(updated);
+                            setShowManualMatch(null);
+                          }}
+                          className="font-body text-xs text-left px-3 py-2 rounded-lg border border-gray-200 bg-white hover:border-blue-300 cursor-pointer">
+                          {cp.libelle}
+                        </button>
+                      ))}
+                    </div>
 
                     {encsVirement.length === 0 && enAttente.length === 0 && remisesCandidates.length === 0 && duMois.length === 0 && (
                       <div className="font-body text-sm text-slate-500 text-center py-6">Aucune écriture, facture ni remise ne correspond à cette recherche.</div>

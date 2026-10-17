@@ -853,6 +853,8 @@ export function rapprocherReleve(
         matchedEncs: prev.matchedEncs || bl.matchedEncs,
         manualPaymentId: prev.manualPaymentId,
         ...(prev.remiseSepaId ? { remiseSepaId: prev.remiseSepaId } : {}),
+        ...(prev.compteContrepartie ? { compteContrepartie: prev.compteContrepartie } : {}),
+        ...(prev.commissionAncv ? { commissionAncv: prev.commissionAncv } : {}),
       };
     }
     return bl;
