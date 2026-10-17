@@ -581,22 +581,13 @@ export function useRapprochement({
               reconciledByBank: true,
               reconciledAt: serverTimestamp(),
             }));
-          } else if (!isUsed && wasReconciled) {
-            // Ne pas dé-marquer si l'encaissement a été rapproché lors d'un autre
-            // import (ex : CSV précédent). On ne dé-marque QUE si l'encaissement
-            // est dans la période du CSV courant (sinon on pourrait casser un
-            // rapprochement précédent).
-            const encDate = data.date?.seconds ? new Date(data.date.seconds * 1000) : null;
-            if (encDate) {
-              const pm = `${encDate.getFullYear()}-${String(encDate.getMonth() + 1).padStart(2, "0")}`;
-              if (pm === period) {
-                updates.push(updateDoc(doc(db, "encaissements", d.id), {
-                  reconciledByBank: false,
-                  reconciledAt: null,
-                }));
-              }
-            }
           }
+          // Pas de dé-marquage ici. Octobre 2026 : un CSV de cinq jours
+          // (29/09 → 03/10) dé-rapprochait tous les encaissements du mois
+          // pointés par les AUTRES lignes du relevé (du 4 au 14), pointages
+          // manuels compris — 42 encaissements revenus « à remettre ». Ce qui
+          // ne l'est plus se décide sur le relevé COMPLET du mois, après la
+          // sauvegarde (syncReconciledFromBankLines, ci-dessous).
         }
         if (updates.length > 0) {
           await Promise.all(updates);
@@ -626,32 +617,8 @@ export function useRapprochement({
             updatedAt: serverTimestamp(),
           }));
         }
-        // Réciproquement, dé-pointer les remises qui ont été dé-matchées dans le CSV courant
-        // (si pointeeNote = "Pointée automatiquement..." et remise n'est plus dans usedRemiseIds)
-        // IMPORTANT : on ne traite que les remises de la période courante. Sans ce filtre,
-        // un import CSV partiel d'avril dépointerait toutes les remises pointées-auto
-        // de mars et antérieures (un bug réel observé : Nicolas a perdu l'état pointé de
-        // remises antérieures en réimportant un CSV plus court).
-        const allRemisesSnap = await getDocs(collection(db, "remises"));
-        for (const d of allRemisesSnap.docs) {
-          const r = d.data() as any;
-          if (!r.pointee) continue;
-          if (r.pointeeNote !== "Pointée automatiquement par rapprochement bancaire") continue;
-          if (usedRemiseIds.has(d.id)) continue; // toujours matchée
-
-          // Filtre période : ne dé-pointer que les remises créées dans le mois courant
-          const rDate = r.createdAt?.seconds ? new Date(r.createdAt.seconds * 1000) : null;
-          if (!rDate) continue;
-          const rPeriod = `${rDate.getFullYear()}-${String(rDate.getMonth() + 1).padStart(2, "0")}`;
-          if (rPeriod !== period) continue;
-
-          remiseUpdates.push(updateDoc(doc(db, "remises", d.id), {
-            pointee: false,
-            pointeeDate: null,
-            pointeeNote: null,
-            updatedAt: serverTimestamp(),
-          }));
-        }
+        // Pas de dé-pointage des bordereaux à l'import : le fichier importé
+        // n'est qu'une partie du relevé (même défaut que ci-dessus).
         if (remiseUpdates.length > 0) {
           await Promise.all(remiseUpdates);
           console.log(`✅ ${remiseUpdates.length} remise(s) synchronisée(s) (pointée/dépointée)`);
@@ -689,6 +656,9 @@ export function useRapprochement({
         // doit montrer l'ensemble, sans quoi importer deux jours donne
         // l'impression d'avoir effacé les vingt lignes déjà pointées.
         setBankLines(moisComplet);
+        // Encaissements rapprochés ou non : d'après TOUT le relevé du mois,
+        // comme après un pointage manuel — jamais d'après le seul fichier.
+        await syncReconciledFromBankLines(moisComplet);
         // Synchroniser les versements bancaires (sorties du livre de caisse)
         await syncVersementsEspeces(moisComplet);
       } catch (e) { console.error("Erreur sauvegarde rapprochement:", e); }
