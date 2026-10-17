@@ -10,11 +10,11 @@ export class ErreurImportBancaire extends Error {}
 export const CATEGORIES_IMPORT = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
 export type OperationImport = { ref: string; date: string; libelle: string; centimes: number; poste: string };
 export type SourceImport = { format: "csv" | "pdf"; empreinte: string; compte: string; nom: string; debut: string; fin: string; operations: OperationImport[]; credits: number; creditsCentimes: number };
-export type ExistanteImport = { id: string; collection: "depenses" | "mouvements-rapprochement"; dateOperation: string; mois: string; fournisseur: string; montant: number; compte?: string; compteBanqueConfirme?: string; sourceOperation?: string; source?: string; origineBancaire?: string; poste: string; rapprochementExclu?: boolean; archive?: boolean };
+export type ExistanteImport = { id: string; collection: "depenses" | "mouvements-rapprochement"; dateOperation: string; mois: string; fournisseur: string; montant: number; compte?: string; compteBanqueConfirme?: string; sourceOperation?: string; source?: string; origineBancaire?: string; poste: string; rapprochementExclu?: boolean; archive?: boolean; dateEstimee?: boolean };
 export type DecisionImport = { mode?: "lier" | "nouveau" | "ignorer"; cible?: string; motif?: string; poste?: string };
 export type DecisionsImport = Record<string, DecisionImport>;
 export type LienImport = { cible: string; date: string; centimes: number; libelle: string; ignore?: boolean };
-export type LignePlanImport = { operation: OperationImport; etat: "nouveau" | "rapproche" | "deja" | "ambigu" | "ignore" | "archive"; cible: string | null; motif: string; candidats: ExistanteImport[]; manuel: boolean };
+export type LignePlanImport = { operation: OperationImport; etat: "nouveau" | "rapproche" | "deja" | "ambigu" | "ignore" | "archive"; cible: string | null; motif: string; candidats: ExistanteImport[]; manuel: boolean; corrigerDate?: boolean };
 export const dateImportValide = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
 const normal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function dateCsv(s: string) {
@@ -242,6 +242,17 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
       if (!d.motif?.trim()) return { ...r, etat: "ambigu", motif: "Expliquer pourquoi ce mouvement est distinct de ceux proposés." };
       if (exactes.some(e => e.archive || e.rapprochementExclu)) return { ...r, etat: "ambigu", motif: "Une opération identique est archivée ou exclue. La contrôler avant toute recréation." };
       return { ...r, motif: `Nouveau mouvement confirmé : ${d.motif.trim()}`, manuel: true };
+    }
+    // Dépense déjà saisie sans sa vraie date (aucune, ou « fin de mois »
+    // posée par convention, dateEstimee) : le CSV la donne. Octobre 2026 :
+    // les débits d'août étaient tous au 31/08, journal Banque du FEC
+    // compris. Même compte, même mois, même montant, libellé compatible et
+    // une seule candidate : c'est elle, et sa date est corrigée.
+    // CSV seulement : ses dates sont celles de la banque (un PDF lu peut se tromper).
+    if (source.format === "csv" && !d.mode && (counts.get(cle(o.date, o.centimes, o.libelle)) || 0) === 1) {
+      const sansDate = existantes.filter(e => inAccount(e) && (!banque(e) || banque(e) === source.compte) && sameAmount(e) && !e.archive && !e.rapprochementExclu
+        && e.mois === o.date.slice(0, 7) && (!dateImportValide(e.dateOperation) || e.dateEstimee) && (sameLabel(e) || libellesCompatibles(e.fournisseur, o.libelle)));
+      if (sansDate.length === 1 && !exactes.length) return { ...r, candidats: [sansDate[0]], etat: "rapproche", cible: sansDate[0].id, corrigerDate: true, motif: "Même compte, mois et montant ; la date du relevé remplace la date estimée. Informations existantes conservées." };
     }
     if (exactes.length === 1 && counts.get(cle(o.date, o.centimes, o.libelle)) === 1) {
       const e = exactes[0]; return { ...r, candidats: [e], etat: e.archive || e.rapprochementExclu ? "archive" : "rapproche", cible: e.id, motif: e.archive || e.rapprochementExclu ? "Déjà archivé ou exclu : aucune réactivation." : "Même compte, date, montant et fournisseur ; informations existantes conservées." };

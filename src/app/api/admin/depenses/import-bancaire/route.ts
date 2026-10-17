@@ -24,7 +24,7 @@ function projeter(id: string, collection: typeof collections[number], data: Docu
   return { id, collection: collection === "mouvements-rapprochement" ? collection : "depenses", dateOperation: String(d.dateOperation || ""), mois: String(d.mois || data.mois || ""),
     fournisseur: String(d.fournisseur || ""), montant: Number(d.montant || 0), compte: String(d.compte || ""), compteBanqueConfirme: String(d.compteBanqueConfirme || ""),
     sourceOperation: String(d.sourceOperation || ""), source: String(d.source || ""), origineBancaire: String(d.origineBancaire || ""), poste: String(d.poste || ""),
-    rapprochementExclu: d.rapprochementExclu === true, archive: collection === "depenses-doublons-archives" };
+    rapprochementExclu: d.rapprochementExclu === true, archive: collection === "depenses-doublons-archives", dateEstimee: d.dateEstimee === true };
 }
 /** Même lecture dans l’aperçu et dans la transaction : les modifications concurrentes invalident l’aperçu. */
 async function lireEtat(source: SourceImport, tx?: Transaction) {

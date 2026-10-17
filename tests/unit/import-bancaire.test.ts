@@ -231,3 +231,19 @@ test("remises de cartes et de chèques, prélèvements émis lus comme débits s
   assert.deepEqual(plan.lignes.map(l => l.etat), ["ignore", "ignore", "ignore", "nouveau"]);
   assert.equal(plan.nouveaux, 1);
 });
+test("Dépense sans vraie date (fin de mois estimée, ou aucune) : le CSV la retrouve et corrige sa date", () => {
+  const s = csv("12/08/2026;PRLV ENGIE ELECTRICITE;416,02;");
+  const base = { id: "engie-aout", collection: "depenses" as const, source: "releve-bancaire", mois: "2026-08", fournisseur: "Engie électricité", montant: 416.02, poste: "Eau & électricité", compte: "51200000" };
+  for (const estimee of [{ dateOperation: "2026-08-31", dateEstimee: true }, { dateOperation: "" }]) {
+    const plan = rapprocherImportBancaire(s, [{ ...base, ...estimee }], {});
+    assert.equal(plan.lignes[0].etat, "rapproche");
+    assert.equal(plan.lignes[0].corrigerDate, true);
+    const ecr = ecrituresImport(s, plan, [{ ...base, ...estimee }], [s.operations[0].ref], "uid", "2026-10-18T10:00:00Z");
+    const maj = ecr.find((e) => e.id === "engie-aout")!;
+    assert.equal(maj.data.dateOperation, "2026-08-12");
+    assert.equal(maj.data.dateEstimee, false);
+  }
+  // Une date certaine différente n'est jamais réécrite : reste à vérifier.
+  const certaine = rapprocherImportBancaire(s, [{ ...base, dateOperation: "2026-08-31" }], {});
+  assert.notEqual(certaine.lignes[0].corrigerDate, true);
+});

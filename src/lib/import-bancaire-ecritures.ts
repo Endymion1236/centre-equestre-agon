@@ -70,6 +70,8 @@ export function ecrituresImport(s: SourceImport, plan: PlanImportBancaire, exist
     } else if (cible && ligne.etat !== "archive") {
       const existante = existantes.find(e => e.id === cible)!;
       ecritures.push({ collection: existante.collection, id: cible, mode: "update", data: { ...meta,
+        // Date estimée (fin de mois) ou absente : le relevé donne la vraie.
+        ...(ligne.corrigerDate ? { dateOperation: o.date, dateEstimee: false, dateCorrigeeDepuis: existante.dateOperation || null } : {}),
         ...(ligne.manuel && !existante.compteBanqueConfirme ? { compteBanqueConfirme: s.compte, compteBanqueConfirmePar: uid, compteBanqueConfirmeLe: date } : {}) } });
     }
     ecritures.push({ collection: "imports-bancaires-liens", id: idLienImport(s, ref), mode: "create", data: {
