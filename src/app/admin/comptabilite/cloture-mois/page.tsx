@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Card } from "@/components/ui";
 import { ClipboardCheck, Loader2, RefreshCw, ChevronLeft, ChevronRight, Send, Check } from "lucide-react";
 import {
@@ -32,6 +34,7 @@ export default function ClotureMoisPage() {
   const [horsTotal, setHorsTotal] = useState<string[]>([]);
   const [lignesMS, setLignesMS] = useState<LigneMS[]>([]);
   const [lignesTableau, setLignesTableau] = useState<LigneMois[] | null>(null);
+  const [pointage, setPointage] = useState<any[] | null>(null);
   const [fecMois, setFecMois] = useState<{ compteAttente: number; anomalies: string[]; attente?: { ventes: number; debits: number; credits: number } } | null>(null);
   // Les deux autres mois du trimestre civil, pour l'encart TVA (déclaration trimestrielle).
   const [lignesTrimestre, setLignesTrimestre] = useState<Record<string, LigneMois[] | null>>({});
@@ -98,6 +101,9 @@ export default function ClotureMoisPage() {
       setLignesMS(ms.lignes || []);
       setResultat(res.mois || []);
       setLignesTableau(tab?.lignes || null);
+      // Crédits du relevé du mois, tels que pointés au Rapprochement.
+      const rap = await getDoc(doc(db, "rapprochements", mois)).catch(() => null);
+      setPointage(rap ? (rap.exists() ? ((rap.data() as any).bankLines || []) : []) : null);
       const autres = trimestreDe(mois).mois.filter(m => m !== mois);
       const tabs = await Promise.all(autres.map(m => fetch(`/api/admin/depenses/tableau?mois=${m}`, { headers: h }).then(r => r.ok ? r.json() : null).catch(() => null)));
       setLignesTrimestre(Object.fromEntries(autres.map((m, i) => [m, tabs[i]?.lignes || null])));
@@ -108,8 +114,8 @@ export default function ClotureMoisPage() {
   useEffect(() => { if (isAdmin && user) load(); }, [isAdmin, user, load]);
 
   const points = useMemo(
-    () => construirePointsCloture({ mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs: lignesTableau ? completudeJustificatifs(lignesTableau) : undefined, fec: fecMois }),
-    [mois, releves, comptes, horsTotal, lignesMS, resultat, lignesTableau, fecMois],
+    () => construirePointsCloture({ mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs: lignesTableau ? completudeJustificatifs(lignesTableau) : undefined, fec: fecMois, pointage }),
+    [mois, releves, comptes, horsTotal, lignesMS, resultat, lignesTableau, fecMois, pointage],
   );
   const { bloquants, boucle } = useMemo(() => resumerCloture(points), [points]);
   // TVA du trimestre : collectée (API résultat) − déductible justifiée

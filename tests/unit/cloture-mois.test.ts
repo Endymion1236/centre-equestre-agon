@@ -83,6 +83,22 @@ test("FEC : le compte d'attente côté banque est signalé sans bloquer, une ven
   assert.match(v.detail, /60,00 € côté banque/);
 });
 
+test("pointage bancaire : remplace la comparaison banque ↔ caisse quand le Rapprochement est lu", () => {
+  const base = { mois: "2026-09", releves, comptes: ["CIC", "CA", "Livret"], horsTotal: ["Livret"], lignesMS, resultat };
+  const tous = construirePointsCloture({ ...base, pointage: [{ amount: 1300, matched: true, matchType: "Chèques" }, { amount: -40, matched: false }, { amount: 56, matched: true, matchType: "CB Terminal" }] });
+  const ok = tous.find((p) => p.titre === "Pointage bancaire du mois")!;
+  assert.equal(ok.etat, "ok");
+  assert.match(ok.detail, /2 crédit\(s\) du relevé, tous pointés/);
+  assert.ok(!tous.some((p) => /banque ↔ caisse/.test(p.titre)));
+  const reste = construirePointsCloture({ ...base, pointage: [{ amount: 100, matched: false }, { amount: 5000, matched: true, matchType: "Ignoré" }, { amount: 20, matched: true, matchType: "Virement" }] });
+  const p = reste.find((x) => x.titre === "Pointage bancaire du mois")!;
+  assert.equal(p.etat, "info");
+  assert.match(p.detail, /1 crédit\(s\) du relevé encore « À traiter »/);
+  assert.match(p.detail, /1 marqué\(s\) « Ignoré »/);
+  const vide = construirePointsCloture({ ...base, pointage: [] });
+  assert.match(vide.find((x) => x.titre === "Pointage bancaire du mois")!.detail, /importe le relevé/);
+});
+
 test("un relevé manquant reste bloquant", () => {
   const points = construirePointsCloture({
     mois: "2026-08",

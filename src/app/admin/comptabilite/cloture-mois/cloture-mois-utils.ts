@@ -61,8 +61,14 @@ export function construirePointsCloture(params: {
   justificatifs?: { total: number; justifies: number; sansPiece: number; montantSansPiece: number; perdues?: number; montantPerdues?: number };
   /** FEC du mois : montants au compte d'attente 47100000 et points signalés. Absent : point non affiché. */
   fec?: { compteAttente: number; anomalies: string[]; attente?: { ventes: number; debits: number; credits: number } } | null;
+  /**
+   * Crédits du relevé du mois tels que pointés au Rapprochement
+   * (rapprochements/{mois}). Présent : il remplace la comparaison banque ↔
+   * caisse, trop grossière. Absent (non chargé) : l'ancienne comparaison.
+   */
+  pointage?: { amount: number; matched?: boolean; matchType?: string; label?: string }[] | null;
 }): PointCloture[] {
-  const { mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs, fec } = params;
+  const { mois, releves, comptes, horsTotal, lignesMS, resultat, justificatifs, fec, pointage } = params;
   const ligneResultat = resultat.find((ligne) => ligne.mois === mois);
   const comptesComptes = comptes.filter((compte) => !horsTotal.includes(compte));
   const relevesMois = releves.filter((releve) => releve.mois === mois);
@@ -153,7 +159,36 @@ export function construirePointsCloture(params: {
     });
   }
 
-  if (ca === 0) {
+  // Pointage bancaire du mois. Octobre 2026 : la comparaison « crédits clients
+  // lus sur le relevé PDF ↔ caisse » affichait +22 014 € en août (ventes dans
+  // Céleris, caisse de l'application presque vide) et −11 333 € en septembre
+  // (prélèvements SEPA, remises carte, collectivités non reconnus comme
+  // clients) : des écarts qui ne disaient rien. Ce qui compte — la comptable
+  // le demande — c'est qu'aucun crédit du relevé ne reste sans explication.
+  if (pointage) {
+    const credits = pointage.filter((l) => Number(l.amount) > 0);
+    const aTraiter = credits.filter((l) => !l.matched);
+    const ignores = credits.filter((l) => l.matched && l.matchType === "Ignoré");
+    const somme = (ls: typeof credits) => ls.reduce((s, l) => s + Number(l.amount || 0), 0);
+    points.push(credits.length === 0
+      ? {
+          etat: "info",
+          titre: "Pointage bancaire du mois",
+          detail: "Aucun crédit du relevé de ce mois dans le Rapprochement : importe le relevé CSV du mois pour le pointer.",
+          href: "/admin/comptabilite?tab=rapprochement",
+          lien: "Pointage bancaire",
+        }
+      : {
+          etat: aTraiter.length === 0 ? "ok" : "info",
+          titre: "Pointage bancaire du mois",
+          detail: (aTraiter.length === 0
+            ? `${credits.length} crédit(s) du relevé, tous pointés (${formaterEurosCloture(somme(credits))}).`
+            : `${aTraiter.length} crédit(s) du relevé encore « À traiter » (${formaterEurosCloture(somme(aTraiter))}) sur ${credits.length} — ils partiront au compte d'attente du FEC.`)
+            + (ignores.length ? ` ${ignores.length} marqué(s) « Ignoré » (${formaterEurosCloture(somme(ignores))}) : la comptable les classera, ou classe-les (« Ce n'est pas un paiement saisi dans l'appli »).` : ""),
+          href: "/admin/comptabilite?tab=rapprochement",
+          lien: "Pointage bancaire",
+        });
+  } else if (ca === 0) {
     points.push({
       etat: "neutre",
       titre: "Rapprochement banque ↔ caisse",
