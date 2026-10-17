@@ -251,27 +251,59 @@ export function construireAchatsBanque(params: {
     const libelle = propre(c.label).slice(0, 120) || "Crédit bancaire";
     const piece = `REL-${date}-${String(numero)}`;
     const ignore = !c.matched || c.matchType === "Ignoré";
-    const t = ignore ? { compte: null, dejaEnBanque: false } : transitDuCredit(c);
-    if (t.dejaEnBanque) { dejaEnBanque++; continue; }
-    lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: net }));
-    if (!t.compte) {
-      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_ATTENTE, piece, libelle, credit: net }));
-      attente += net;
-      anomalies.push(`Crédit du ${date.slice(6)}/${date.slice(4, 6)} « ${libelle.slice(0, 60)} » (${euros(net)} €) ${ignore ? "non rapproché" : "d'origine indéterminée"} : passé au 47100000.`);
-    } else {
-      // Brut des écritures soldées ; la différence avec le net reçu est la commission.
-      const brut = (c.matchedEncs || []).reduce((s, e) => s + cents(e.montant), 0) || net;
-      const ecart = brut - net;
-      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: t.compte, piece, libelle, credit: brut }));
-      if (ecart > 0) {
-        const commission = t.compte.compte === COMPTES_REGLEMENT.cheque_vacances.compte ? COMPTE_FRAIS_ANCV : t.compte.compte === COMPTES_REGLEMENT.cb_terminal.compte ? COMPTE_COMMISSIONS_CB : COMPTE_ATTENTE;
-        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: commission, piece, libelle: `Commission retenue — ${libelle}`, debit: ecart }));
-        if (commission === COMPTE_ATTENTE) { attente += ecart; anomalies.push(`Crédit du ${date.slice(6)}/${date.slice(4, 6)} (${euros(net)} €) inférieur de ${euros(ecart)} € aux écritures rapprochées : écart au 47100000.`); }
-      } else if (ecart < 0) {
-        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_ATTENTE, piece, libelle: `Écart de remise — ${libelle}`, credit: -ecart }));
-        attente += -ecart;
-        anomalies.push(`Crédit du ${date.slice(6)}/${date.slice(4, 6)} (${euros(net)} €) supérieur de ${euros(-ecart)} € aux écritures rapprochées : écart au 47100000.`);
+    const jj = `${date.slice(6)}/${date.slice(4, 6)}`;
+    const versAttente = (montant: number, motif: string) => {
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_ATTENTE, piece, libelle, credit: montant }));
+      attente += montant;
+      anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(montant)} €) ${motif} : passé au 47100000.`);
+    };
+    if (ignore) {
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: net }));
+      versAttente(net, c.matchType === "Ignoré" ? "marqué « Ignoré » au rapprochement (virement interne, apport, subvention, remboursement ?)" : "non rapproché");
+      numero++; nbBq++;
+      continue;
+    }
+    // Ce que la ligne solde, mode par mode : une remise peut mêler chèques et
+    // chèques-vacances, un pointage manuel plusieurs écritures. La part déjà
+    // passée en banque par RG (virement, SEPA, espèces) n'est pas reprise.
+    const encs = (c.matchedEncs || []).filter((e) => cents(e.montant) !== 0);
+    const parts = new Map<string, number>();
+    let dejaRg = 0, inconnu = 0;
+    if (encs.length) {
+      for (const e of encs) {
+        const code = codeModeRapproche(e.mode);
+        if (MODES_DEJA_EN_BANQUE.has(code) || code === "especes") dejaRg += cents(e.montant);
+        else if (COMPTES_REGLEMENT[code]) parts.set(COMPTES_REGLEMENT[code].compte, (parts.get(COMPTES_REGLEMENT[code].compte) || 0) + cents(e.montant));
+        else inconnu += cents(e.montant);
       }
+    } else {
+      const t = transitDuCredit(c);
+      if (t.dejaEnBanque) dejaRg = net;
+      else if (t.compte) parts.set(t.compte.compte, net);
+      else inconnu = net;
+    }
+    if (parts.size === 0 && inconnu === 0) { dejaEnBanque++; continue; }
+    const enBanque = net - dejaRg;
+    if (enBanque <= 0) { anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : écritures rapprochées supérieures au crédit, à revoir dans le rapprochement.`); continue; }
+    lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: enBanque }));
+    let solde = 0;
+    for (const [compte, montant] of parts) {
+      const def = Object.values(COMPTES_REGLEMENT).find((x) => x.compte === compte)!;
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: { compte, libelle: def.libelle }, piece, libelle, credit: montant }));
+      solde += montant;
+    }
+    if (inconnu) { versAttente(inconnu, encs.length ? "rapproché à des écritures de mode inconnu" : "d'origine indéterminée"); solde += inconnu; }
+    // Brut des écritures soldées ; la différence avec le net reçu est la commission.
+    const ecart = solde - enBanque;
+    if (ecart > 0) {
+      const seul = parts.size === 1 && !inconnu ? [...parts.keys()][0] : "";
+      const commission = seul === COMPTES_REGLEMENT.cheque_vacances.compte ? COMPTE_FRAIS_ANCV : seul === COMPTES_REGLEMENT.cb_terminal.compte ? COMPTE_COMMISSIONS_CB : COMPTE_ATTENTE;
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: commission, piece, libelle: `Commission retenue — ${libelle}`, debit: ecart }));
+      if (commission === COMPTE_ATTENTE) { attente += ecart; anomalies.push(`Crédit du ${jj} (${euros(net)} €) inférieur de ${euros(ecart)} € aux écritures rapprochées : écart au 47100000.`); }
+    } else if (ecart < 0) {
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_ATTENTE, piece, libelle: `Écart de remise — ${libelle}`, credit: -ecart }));
+      attente += -ecart;
+      anomalies.push(`Crédit du ${jj} (${euros(net)} €) supérieur de ${euros(-ecart)} € aux écritures rapprochées : écart au 47100000.`);
     }
     numero++; nbBq++;
   }

@@ -125,6 +125,22 @@ test("modes enregistrés sous leur libellé par le rapprochement : reconnus", ()
   assert.equal(r.ecrituresBanque, 2); // le virement est déjà en banque par RG
 });
 
+test("remise mêlant chèques et chèques-vacances : chaque mode soldé ; « Ignoré » nommé", () => {
+  const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, debits: [], credits: [
+    { date: "15/09/2026", label: "REMISE CHQ 12", amount: 1300, matched: true, matchType: "Chèques", matchedEncs: [{ montant: 1000, mode: "Chèque" }, { montant: 300, mode: "Chèques Vacances" }] },
+    { date: "16/09/2026", label: "VIR EXCEDENT PRO", amount: 5000, matched: true, matchType: "Ignoré" },
+    { date: "17/09/2026", label: "VIR + CHQ", amount: 150, matched: true, matchType: "Manuel", matchedEncs: [{ montant: 100, mode: "Virement" }, { montant: 50, mode: "Chèque" }] },
+  ] });
+  const bq = r.lignes.map(champs);
+  const parNum = (num: number) => resume(bq.filter((c) => c[2] === String(num)));
+  assert.deepEqual(parNum(1), ["51200000 D1300,00", "51120000 C1000,00", "51180000 C300,00"]);
+  assert.deepEqual(parNum(2), ["51200000 D5000,00", "47100000 C5000,00"]);
+  // La part virement est déjà en banque par RG : seule la part chèque passe ici.
+  assert.deepEqual(parNum(3), ["51200000 D50,00", "51120000 C50,00"]);
+  assert.equal(r.compteAttenteCredits, 5000);
+  assert.ok(r.anomalies.some((a) => a.includes("« Ignoré »")));
+});
+
 test("transit d'un crédit et règles de classement", () => {
   assert.deepEqual(transitDuCredit({ date: "", label: "", amount: 1, matchType: "Chèques" }).compte?.compte, "51120000");
   assert.equal(transitDuCredit({ date: "", label: "", amount: 1, matchType: "Espèces" }).dejaEnBanque, true);

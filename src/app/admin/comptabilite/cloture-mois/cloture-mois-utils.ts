@@ -127,14 +127,16 @@ export function construirePointsCloture(params: {
   const eur = (n: number) => n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const att = fec?.attente;
   if (fec && att && att.ventes === 0 && fec.compteAttente > 0) {
-    const releve = fec.anomalies.filter((a) => /47100000/.test(a) && !/^Ventes/.test(a));
+    // Les plus gros montants d'abord : c'est là que se joue l'essentiel.
+    const montant = (a: string) => Number((/\(([\d\s\u202f\u00a0]+,\d{2}) €/.exec(a)?.[1] || "0").replace(/[\s\u202f\u00a0]/g, "").replace(",", ".")) || 0;
+    const releve = fec.anomalies.filter((a) => /47100000/.test(a) && !/^Ventes/.test(a)).sort((x, y) => montant(y) - montant(x));
     points.push({
       etat: "info",
       titre: "FEC : compte d'attente côté banque",
       detail: `${eur(fec.compteAttente)} € au 47100000, que la comptable reclassera : ${[
         att.debits ? `${eur(att.debits)} € de débits du relevé sans compte (catégorie « hors dépenses », échéances d'emprunt non ventilées, PER…)` : "",
         att.credits ? `${eur(att.credits)} € de crédits du relevé non rapprochés` : "",
-      ].filter(Boolean).join(" et ")}. Les ventes sont toutes sur leur compte. Pour en réduire : classe les débits dans Dépenses, pointe les crédits dans le Rapprochement.${releve.length ? ` Exemples : ${releve.slice(0, 2).join(" ; ")}` : ""}`,
+      ].filter(Boolean).join(" et ")}. Les ventes sont toutes sur leur compte. Pour en réduire : classe les débits dans Dépenses, pointe les crédits dans le Rapprochement.${releve.length ? ` Les plus gros : ${releve.slice(0, 5).join(" ; ")}` : ""}`,
       href: "/admin/comptabilite/depenses",
       lien: "Dépenses",
     });
