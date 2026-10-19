@@ -18,6 +18,7 @@
  */
 
 import { doublonsInscriptions } from "./conflit-horaire";
+import { dateFactureSecondes, estFactureNumerotee, moisParisDeSecondes } from "./envoi-comptable-utils";
 import { analyserCoherence } from "@/lib/coherence";
 import { listerImpayes, duMaintenant } from "@/app/admin/paiements/impayes-utils";
 import { statutPaiementCavalier } from "@/app/admin/planning/types";
@@ -58,6 +59,8 @@ export interface DonneesVeille {
   messagesContact: any[];
   avis: any[];
   cloturesJournalieres: any[];
+  /** Mois déjà transmis au cabinet (« AAAA-MM »), facultatif. */
+  moisTransmis?: string[];
 }
 
 export const LIBELLES_NIVEAU: Record<NiveauVeille, string> = {
@@ -324,6 +327,32 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
     points.push(point(18, "tva-trimestre", "gris",
       "Déclaration de TVA du trimestre écoulé à préparer",
       ["Préparer la déclaration dans Comptabilité (encart TVA du trimestre), à valider avec le cabinet."],
+      "/admin/comptabilite"));
+  }
+
+  // ── ⚪ 18 bis. Factures numérotées absentes d'un FEC déjà transmis ──
+  // Jusqu'au 19/10/2026, une facture émise avant paiement restait « en
+  // attente » et était écartée du FEC comme une proforma ; et une vente
+  // était rangée au mois de la commande, pas de la facture. Les cas déjà
+  // passés : à signaler au cabinet (FEC complémentaire).
+  const transmis = new Set(d.moisTransmis || []);
+  if (transmis.size > 0) {
+    const horsFec = paiements
+      .filter(p => vivant(p) && estFactureNumerotee(p))
+      .map(p => {
+        const moisFacture = moisParisDeSecondes(dateFactureSecondes(p)) || "";
+        const moisCommande = moisParisDeSecondes(p.date?.seconds) || "";
+        const motif = p.status === "pending" && transmis.has(moisFacture)
+          ? "émise avant paiement, donc absente du FEC transmis"
+          : moisFacture !== moisCommande && transmis.has(moisCommande) && transmis.has(moisFacture)
+            ? `rangée au mois de la commande (${dateFr(moisCommande + "-01")}) dans l'ancien FEC, au mois de la facture désormais`
+            : "";
+        return motif ? `${p.invoiceNumber} — ${p.familyName || "Famille"}, ${eur(p.totalTTC)}, ${motif}` : "";
+      })
+      .filter(Boolean);
+    points.push(point(18, "factures-hors-fec-transmis", "gris",
+      "Factures numérotées à signaler au cabinet (absentes ou déplacées dans un FEC déjà transmis)",
+      horsFec,
       "/admin/comptabilite"));
   }
 

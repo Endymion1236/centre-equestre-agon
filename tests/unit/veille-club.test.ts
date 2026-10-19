@@ -38,6 +38,29 @@ test("8 bis. cavalier inscrit à deux endroits à la même heure (Léonie VASSEU
   assert.equal(p?.niveau, "orange");
 });
 
+test("18 bis. factures numérotées absentes ou déplacées dans un FEC déjà transmis", () => {
+  const d = vide();
+  const sec = (iso: string) => Date.parse(iso) / 1000;
+  d.moisTransmis = ["2026-08", "2026-09"];
+  d.paiements = [
+    // Émise avant paiement en septembre, toujours en attente : écartée de l'ancien FEC.
+    { id: "a", invoiceNumber: "F-2026-0100", familyName: "Mairie", status: "pending", totalTTC: 500, date: { seconds: sec("2026-09-05T10:00:00Z") }, invoiceDate: { seconds: sec("2026-09-05T10:00:00Z") } },
+    // Commande d'août, facturée en septembre : rangée en août dans l'ancien FEC.
+    { id: "b", invoiceNumber: "F-2026-0101", familyName: "DUPONT", status: "paid", totalTTC: 108, date: { seconds: sec("2026-08-20T10:00:00Z") }, invoiceDate: { seconds: sec("2026-09-03T10:00:00Z") } },
+    // Rien à dire : payée, même mois.
+    { id: "c", invoiceNumber: "F-2026-0102", familyName: "OK", status: "paid", totalTTC: 50, date: { seconds: sec("2026-09-10T10:00:00Z") } },
+    // Proforma en attente : jamais dans un FEC, rien à signaler.
+    { id: "d", familyName: "Proforma", status: "pending", totalTTC: 30, date: { seconds: sec("2026-09-10T10:00:00Z") } },
+    // Mois non transmis : pas encore un problème.
+    { id: "e", invoiceNumber: "F-2026-0103", familyName: "Octobre", status: "pending", totalTTC: 70, date: { seconds: sec("2026-10-05T10:00:00Z") }, invoiceDate: { seconds: sec("2026-10-05T10:00:00Z") } },
+  ];
+  const p = pointDe(d, "factures-hors-fec-transmis");
+  assert.equal(p?.nb, 2);
+  assert.match(p!.lignes[0], /F-2026-0100 — Mairie, 500,00 €, émise avant paiement/);
+  assert.match(p!.lignes[1], /F-2026-0101 — DUPONT.*rangée au mois de la commande \(01\/08\)/);
+  assert.equal(pointDe({ ...d, moisTransmis: [] }, "factures-hors-fec-transmis"), undefined, "sans mois transmis, rien");
+});
+
 test("rien à signaler : aucune ligne (pas d'email)", () => {
   assert.deepEqual(analyserVeille(vide()), []);
 });
