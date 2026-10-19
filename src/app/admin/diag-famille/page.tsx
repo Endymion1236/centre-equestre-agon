@@ -22,11 +22,18 @@ interface Fiche {
   enfants: string[]; nbEnfants: number; status: string | null; mergedInto: string | null;
   commandes: number; commandesVivantes: number; totalCommandes: number; totalRegle: number; inscriptionsAVenir: number;
 }
+interface Encaissement { id: string; date: string | null; mode: string | null; modeLabel: string | null; montant: number; ref: string | null; raison: string | null }
+interface Commande { id: string; familyId: string; invoiceNumber: string | null; status: string | null; totalTTC: number; paidAmount: number; date: string | null; lignes: string[]; encaissements: Encaissement[] }
+interface Avoir { id: string; familyId: string; reference: string | null; type: string; status: string | null; amount: number; usedAmount: number; remainingAmount: number; reason: string | null; utilisations: { date: string | null; montant: number; paymentId: string | null; invoiceRef: string | null }[] }
 interface Diagnostic {
   fiches: Fiche[];
   inscriptionsPlanning: { creneauId: string; date: string; activite: string; enfant: string; familyId: string; enAttente: boolean }[];
+  detailCommandes?: Commande[];
+  detailAvoirs?: Avoir[];
   lecture: Record<string, string | null>;
 }
+const dateHeure = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : "—");
+const STATUT: Record<string, string> = { paid: "réglée", partial: "partielle", pending: "en attente", cancelled: "annulée", draft: "brouillon" };
 
 const eur = (n: number) => `${(Math.round((n || 0) * 100) / 100).toFixed(2).replace(".", ",")} €`;
 const dateFr = (iso: string) => (iso ? iso.split("-").reverse().join("/") : "");
@@ -169,6 +176,57 @@ export default function DiagFamillePage() {
               </div>
             );
           })}
+
+          {(diag.detailCommandes || []).length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Commandes et règlements ({diag.detailCommandes!.length})</div>
+              <div className="flex flex-col gap-3">
+                {diag.detailCommandes!.map(c => {
+                  const journal = c.encaissements.reduce((s, e) => s + e.montant, 0);
+                  const ecart = Math.round((journal - c.paidAmount) * 100) / 100;
+                  return (
+                    <div key={c.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
+                      <div className="flex flex-wrap items-center gap-2 font-body text-sm">
+                        <strong className="text-slate-800">{c.invoiceNumber || `Proforma PF-${c.id.slice(-6).toUpperCase()}`}</strong>
+                        <span className="text-slate-500">{dateHeure(c.date)} · fiche « {nomDe(c.familyId)} » · {STATUT[c.status || ""] || c.status}</span>
+                        <span className="ml-auto text-slate-700">{eur(c.totalTTC)} · payé {eur(c.paidAmount)}{c.totalTTC - c.paidAmount > 0.005 ? ` · reste ${eur(c.totalTTC - c.paidAmount)}` : ""}</span>
+                      </div>
+                      {c.lignes.length > 0 && <div className="font-body text-[11px] text-slate-500 mt-1">{c.lignes.join(" · ")}</div>}
+                      <div className="mt-2 flex flex-col gap-0.5">
+                        {c.encaissements.length === 0 && <div className="font-body text-xs text-slate-400 italic">Aucune écriture au journal.</div>}
+                        {c.encaissements.map(e => (
+                          <div key={e.id} className="font-body text-xs text-slate-600">
+                            {dateHeure(e.date)} · {e.modeLabel || e.mode || "?"}{e.ref ? ` · ${e.ref}` : ""}{e.raison ? ` · ${e.raison}` : ""} · <strong className={e.montant < 0 ? "text-rose-600" : "text-emerald-700"}>{eur(e.montant)}</strong>
+                          </div>
+                        ))}
+                        {ecart !== 0 && <div className="font-body text-xs text-rose-700 mt-1">⚠️ Le journal totalise {eur(journal)} mais la commande affiche {eur(c.paidAmount)} payés (écart {eur(ecart)}).</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {(diag.detailAvoirs || []).length > 0 && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">Avoirs de la famille ({diag.detailAvoirs!.length})</div>
+              <div className="flex flex-col gap-2">
+                {diag.detailAvoirs!.map(a => (
+                  <div key={a.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3 font-body text-xs text-slate-600">
+                    <div className="text-sm"><strong className="text-slate-800">{a.reference || a.id}</strong> · {a.type} · {a.status} · {eur(a.amount)} dont {eur(a.usedAmount)} utilisés, {eur(a.remainingAmount)} restants · fiche « {nomDe(a.familyId)} »{a.reason ? ` · ${a.reason}` : ""}</div>
+                    {a.utilisations.map((u, i) => (
+                      <div key={i} className="mt-1">
+                        {dateHeure(u.date)} · {eur(u.montant)} · {u.paymentId
+                          ? <>commande {diag.detailCommandes?.find(c => c.id === u.paymentId)?.invoiceNumber || u.paymentId}</>
+                          : <span className="text-amber-700 font-semibold">déduction enregistrée sans commande (référence « {u.invoiceRef || "—"} ») : la facture ne la voit pas. <a href="/admin/avoirs" className="underline">Appliquer depuis Avoirs</a></span>}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {diag.inscriptionsPlanning.length > 0 && (
             <div className="rounded-2xl border border-slate-200 bg-white p-4">

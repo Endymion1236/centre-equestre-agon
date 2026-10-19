@@ -114,6 +114,30 @@ export async function GET(req: NextRequest) {
       compter("payment_declarations"),
     ]);
 
+    // Le détail de chaque commande : ses écritures au journal, et les avoirs
+    // de la famille avec leurs utilisations. C'est ce qui dit où est passé
+    // un règlement ou une déduction d'avoir que la facture ne montre pas.
+    const encTousSnap = await adminDb.collection("encaissements").get();
+    const encParCommande = new Map<string, any[]>();
+    for (const d of encTousSnap.docs) {
+      const e = d.data() as any;
+      if (!e.paymentId) continue;
+      const l = encParCommande.get(e.paymentId) || [];
+      l.push({ id: d.id, date: e.dateIso || (e.date?.seconds ? new Date(e.date.seconds * 1000).toISOString() : null), mode: e.mode || null, modeLabel: e.modeLabel || null, montant: Number(e.montant) || 0, ref: e.ref || null, raison: e.raison || null });
+      encParCommande.set(e.paymentId, l);
+    }
+    const detailCommandes: any[] = [];
+    const avoirsSnap = await adminDb.collection("avoirs").get();
+    const detailAvoirs = avoirsSnap.docs
+      .map((d) => ({ id: d.id, ...(d.data() as any) }))
+      .filter((a) => ids.includes(a.familyId))
+      .map((a) => ({
+        id: a.id, familyId: a.familyId, reference: a.reference || null, type: a.type || "avoir", status: a.status || null,
+        amount: Number(a.amount) || 0, usedAmount: Number(a.usedAmount) || 0, remainingAmount: Number(a.remainingAmount) || 0,
+        reason: a.reason || null,
+        utilisations: (a.usageHistory || []).map((u: any) => ({ date: u.date || null, montant: Number(u.montant ?? u.amount) || 0, paymentId: u.paymentId || null, invoiceRef: u.invoiceRef || null })),
+      }));
+
     // Par fiche : ses commandes (hors annulées) et ce qui est réglé dessus.
     // C'est ce qui dit, en un coup d'œil, sur quelle fiche vit le dossier.
     const paySnap = await adminDb.collection("payments").get();
@@ -121,6 +145,13 @@ export async function GET(req: NextRequest) {
       const p = d.data() as any;
       const fiche = fiches.find((f) => f.docId === p.familyId);
       if (!fiche) continue;
+      detailCommandes.push({
+        id: d.id, familyId: p.familyId, invoiceNumber: p.invoiceNumber || null, status: p.status || null,
+        totalTTC: Number(p.totalTTC) || 0, paidAmount: Number(p.paidAmount) || 0,
+        date: p.date?.seconds ? new Date(p.date.seconds * 1000).toISOString() : null,
+        lignes: (p.items || []).map((i: any) => `${i.activityTitle || "?"} (${(Number(i.priceTTC) || 0).toFixed(2)} €)`),
+        encaissements: (encParCommande.get(d.id) || []).sort((x, y) => String(x.date || "").localeCompare(String(y.date || ""))),
+      });
       fiche.commandes += 1;
       if (p.status === "cancelled") continue;
       fiche.commandesVivantes += 1;
@@ -184,6 +215,8 @@ export async function GET(req: NextRequest) {
       identifiantsScrutes: ids,
       donnees: { payments, reservations, encaissements, waitlist, declarations },
       inscriptionsPlanning: inscriptions,
+      detailCommandes: detailCommandes.sort((x, y) => String(y.date || "").localeCompare(String(x.date || ""))),
+      detailAvoirs,
       // Non vide = des réservations pointent vers des créneaux supprimés.
       reservationsOrphelines,
       lecture: {
