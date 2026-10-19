@@ -1,5 +1,6 @@
 "use client";
 
+import { telephoneValide } from "@/lib/phone";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -375,6 +376,11 @@ export default function ProfilPage() {
 
   const saveProfile = async () => {
     if (!user) return;
+    // Téléphone obligatoire : seul moyen de prévenir d'une annulation de dernière minute.
+    if (!telephoneValide(familyForm.parentPhone)) {
+      toast("Indiquez un numéro de téléphone valide (ex. 06 12 34 56 78) : il nous sert à vous prévenir en cas d'imprévu.", "warning");
+      return;
+    }
     setSavingProfile(true);
     try {
       const firstName = familyForm.firstName.trim();
@@ -576,8 +582,8 @@ export default function ProfilPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Téléphone</label>
-                  <input type="tel" value={familyForm.parentPhone} onChange={(event) => setFamilyForm({ ...familyForm, parentPhone: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
+                  <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Téléphone *</label>
+                  <input type="tel" required placeholder="06 12 34 56 78" value={familyForm.parentPhone} onChange={(event) => setFamilyForm({ ...familyForm, parentPhone: event.target.value })} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 font-body text-sm focus:outline-none focus:border-blue-400" />
                 </div>
                 <div>
                   <label className="font-body text-xs font-semibold text-gray-600 block mb-1">Adresse *</label>
@@ -608,7 +614,7 @@ export default function ProfilPage() {
                 </div>
                 <div>
                   <div className="font-body text-xs font-semibold text-gray-500 mb-1">Téléphone</div>
-                  <div className="font-body text-sm text-blue-800">{family?.parentPhone || "Non renseigné"}</div>
+                  <div className="font-body text-sm text-blue-800">{family?.parentPhone || <span className="text-red-600 font-semibold">À renseigner — obligatoire pour réserver</span>}</div>
                 </div>
                 <div>
                   <div className="font-body text-xs font-semibold text-gray-500 mb-1">Email</div>

@@ -16,6 +16,19 @@ export function phoneKey(raw: string | null | undefined): string {
   return digits.length >= 9 ? digits.slice(-9) : "";
 }
 
+/**
+ * Un numéro joignable : 10 chiffres commençant par 0 (France), ou un numéro
+ * international (+ / 00, 9 à 15 chiffres). Octobre 2026 : des familles
+ * créaient leur compte et réservaient sans téléphone — impossible de les
+ * prévenir d'une annulation de dernière minute.
+ */
+export function telephoneValide(raw: string | null | undefined): boolean {
+  const t = (raw || "").trim();
+  const digits = t.replace(/\D/g, "");
+  if (/^(\+|00)/.test(t)) return digits.replace(/^00/, "").length >= 9 && digits.length <= 15;
+  return /^0[1-9]\d{8}$/.test(digits);
+}
+
 /** Affichage lisible : "0635254429" → "06 35 25 44 29". */
 export function phoneDisplay(raw: string | null | undefined): string {
   const key = phoneKey(raw);

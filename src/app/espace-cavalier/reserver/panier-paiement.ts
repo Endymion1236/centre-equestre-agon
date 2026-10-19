@@ -8,6 +8,7 @@
  * l'écran.
  */
 
+import { telephoneValide } from "@/lib/phone";
 import type { Dispatch, SetStateAction } from "react";
 import { collection, getDocs, getDoc, addDoc, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -20,7 +21,7 @@ export interface ContextePaiement {
   cart: CartItem[];
   creneaux: Creneau[];
   user: { uid: string; email?: string | null } | null | undefined;
-  family: { parentName?: string; lastName?: string; parentEmail?: string } | null | undefined;
+  family: { parentName?: string; lastName?: string; parentEmail?: string; parentPhone?: string } | null | undefined;
   reservationsFermees: boolean;
   messageFermeture: string;
   depositMode: "full" | "deposit";
@@ -53,6 +54,13 @@ export async function payerPanier(ctx: ContextePaiement, rappels: RappelsPaiemen
     // paiement, pas après (cf. lib/nom-destinataire).
     if (!String(family.lastName || family.parentName || "").trim()) {
       toast("Avant de réserver, indiquez votre nom dans « Mon profil ».", "warning", 9000);
+      setTimeout(() => { window.location.href = "/espace-cavalier/profil"; }, 1500);
+      return;
+    }
+    // Sans téléphone, le club ne peut pas prévenir d'une annulation de
+    // dernière minute : demandé avant le paiement, comme le nom.
+    if (!telephoneValide(family.parentPhone)) {
+      toast("Avant de réserver, indiquez votre numéro de téléphone dans « Mon profil ».", "warning", 9000);
       setTimeout(() => { window.location.href = "/espace-cavalier/profil"; }, 1500);
       return;
     }
