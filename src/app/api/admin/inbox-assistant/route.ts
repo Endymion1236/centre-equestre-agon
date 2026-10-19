@@ -1,4 +1,5 @@
 import { LIMITE_REPONSE, MODELE_LEGER, MODELE_REDACTION } from "@/lib/ia-modeles";
+import { marquerSuivi } from "@/lib/boite-suivi-serveur";
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
 import Anthropic from "@anthropic-ai/sdk";
@@ -141,6 +142,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const { from, subject, body, threadId } = await req.json();
+    // Un collègue qui ouvre ce fil voit qu'une réponse est en préparation (lib/boite-suivi).
+    if (typeof threadId === "string" && threadId.trim()) await marquerSuivi(threadId.trim(), "enCours", auth);
 
     // ── Contexte du FIL : si le mail vient de Gmail (threadId), on charge
     //    l'historique complet de la conversation. Indispensable quand la

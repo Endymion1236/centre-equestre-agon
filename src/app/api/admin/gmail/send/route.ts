@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { gmailSend, gmailIsConnected, gmailAccountEmail } from "@/lib/gmail";
 import { logEmail } from "@/lib/email-log";
+import { marquerSuivi } from "@/lib/boite-suivi-serveur";
 
 // POST /api/admin/gmail/send — adminOnly. Envoie une réponse depuis la boîte
 // connectée. Déclenché par un clic humain (bouton Envoyer), jamais automatique.
@@ -43,6 +44,10 @@ export async function POST(req: NextRequest) {
       // « Envoyés » de celui-ci, et nulle part ailleurs, qu'on le retrouve.
       template: compte ? `gmail:${compte}` : "gmail",
     });
+
+    // Un collègue qui ouvre ce fil voit qu'il a déjà été répondu, et par qui
+    // (lib/boite-suivi). Un transfert n'a pas de fil : il ne compte pas.
+    if (threadId) await marquerSuivi(threadId, "repondu", auth, { a: to });
 
     return NextResponse.json({ ok: true, messageId: sent?.id, account: compte });
   } catch (e: any) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { gmailIsConnected, gmailListRecent, gmailConfigured, gmailAccount } from "@/lib/gmail";
+import { lireSuivis } from "@/lib/boite-suivi-serveur";
 
 // GET /api/admin/gmail/messages — adminOnly. Statut + mails récents.
 export async function GET(req: NextRequest) {
@@ -23,7 +24,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const { messages, nextPageToken } = await gmailListRecent(25, pageToken);
-    return NextResponse.json({ configured: true, connected: true, messages, nextPageToken, ...compte });
+    // Qui a répondu, qui prépare une réponse (lib/boite-suivi).
+    const suivis = await lireSuivis(messages.map((m) => m.threadId));
+    const avecSuivi = messages.map((m) => (suivis[m.threadId] ? { ...m, suivi: suivis[m.threadId] } : m));
+    return NextResponse.json({ configured: true, connected: true, messages: avecSuivi, nextPageToken, ...compte });
   } catch (e: any) {
     // "Mail service not enabled" = compte Google sans boite Gmail : message
     // clair plutot qu'un code HTTP brut.

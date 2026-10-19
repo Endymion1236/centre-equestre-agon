@@ -1,4 +1,5 @@
 "use client";
+import { etatSuivi, heureSuivi, type EtatSuivi } from "@/lib/boite-suivi";
 import { useState, useEffect, useRef } from "react";
 import { authFetch } from "@/lib/auth-fetch";
 import { contientUnRib } from "@/lib/rib-texte";
@@ -81,6 +82,30 @@ function estVocal(m: any): boolean {
   );
 }
 
+/** Badge de la liste : répondu, en préparation, ou la famille a réécrit (lib/boite-suivi). */
+function BadgeSuivi({ message }: { message: any }) {
+  if (!message?.suivi) return null;
+  const maintenant = new Date();
+  const e = etatSuivi(message.date || "", message.suivi, maintenant);
+  const quand = e.le ? heureSuivi(e.le, maintenant) : "";
+  if (e.etat === "repondu") return <span className="mt-0.5 inline-block rounded-full bg-green-100 px-2 py-0.5 font-body text-[11px] font-semibold text-green-700">✓ Répondu par {e.par} · {quand}</span>;
+  if (e.etat === "en-cours") return <span className="mt-0.5 inline-block rounded-full bg-amber-100 px-2 py-0.5 font-body text-[11px] font-semibold text-amber-700">✍️ Réponse en préparation par {e.par} · {quand}</span>;
+  if (e.relance) return <span className="mt-0.5 inline-block rounded-full bg-blue-100 px-2 py-0.5 font-body text-[11px] font-semibold text-blue-700">↩︎ Nouveau message après la réponse de {e.par}</span>;
+  return null;
+}
+
+/** Bandeau au-dessus du message ouvert, quand un collègue y a déjà touché. */
+function BandeauSuivi({ suivi }: { suivi: EtatSuivi | null }) {
+  if (!suivi || (suivi.etat === "a-traiter" && !suivi.relance)) return null;
+  const quand = suivi.le ? heureSuivi(suivi.le, new Date()) : "";
+  const [fond, texte] = suivi.etat === "repondu"
+    ? ["bg-green-50 border-green-200 text-green-800", `✓ Déjà répondu par ${suivi.par} (${quand}). Vérifie avant de renvoyer une réponse.`]
+    : suivi.etat === "en-cours"
+      ? ["bg-amber-50 border-amber-200 text-amber-800", `✍️ ${suivi.par} prépare une réponse depuis ${quand}. Vois avec lui ou elle avant d'en envoyer une autre.`]
+      : ["bg-blue-50 border-blue-200 text-blue-800", `↩︎ La famille a réécrit après la réponse de ${suivi.par} (${quand}).`];
+  return <div className={`mb-3 rounded-lg border px-3 py-2 font-body text-sm ${fond}`}>{texte}</div>;
+}
+
 export default function BoiteAssistantPage() {
   const [vocal, setVocal] = useState<any>(null);
   const [vocalLoading, setVocalLoading] = useState(false);
@@ -129,6 +154,8 @@ export default function BoiteAssistantPage() {
   }>({ loading: true, configured: false, connected: false, messages: [], error: "", email: null, nextPageToken: null });
   const [connecting, setConnecting] = useState(false);
   const [replyMeta, setReplyMeta] = useState<{ threadId: string; messageId: string }>({ threadId: "", messageId: "" });
+  // Suivi du message ouvert : déjà répondu, ou réponse en préparation par un collègue (lib/boite-suivi).
+  const [suiviSel, setSuiviSel] = useState<EtatSuivi | null>(null);
   const [selectedId, setSelectedId] = useState<string>("");
   const [mailboxBusy, setMailboxBusy] = useState<"" | "trash" | "forward">("");
   const [mailboxMsg, setMailboxMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -248,7 +275,8 @@ export default function BoiteAssistantPage() {
 
   const sendReply = async () => {
     if (!from.trim() || !draft.trim() || sending) return;
-    if (!confirm(`Envoyer cette réponse à ${from} ?`)) return;
+    const dejaRepondu = suiviSel?.etat === "repondu" ? `\n\n⚠️ ${suiviSel.par} a DÉJÀ répondu à ce message (${heureSuivi(suiviSel.le || "", new Date())}).` : "";
+    if (!confirm(`Envoyer cette réponse à ${from} ?${dejaRepondu}`)) return;
     setSending(true);
     setSendMsg(null);
     try {
@@ -269,6 +297,12 @@ export default function BoiteAssistantPage() {
       setSendMsg(r.ok
         ? { ok: true, text: d.account ? `Réponse envoyée depuis ${d.account} ✓` : "Réponse envoyée ✓" }
         : { ok: false, text: d.error || "Échec de l'envoi" });
+      // Le badge « Répondu » de la liste se met à jour sans recharger.
+      if (r.ok && replyMeta.threadId) {
+        const marque = { le: new Date().toISOString(), par: "vous" };
+        setGmail((g) => ({ ...g, messages: g.messages.map((x: any) => x.threadId === replyMeta.threadId ? { ...x, suivi: { ...(x.suivi || {}), repondu: marque } } : x) }));
+        setSuiviSel({ etat: "repondu", par: "vous", le: marque.le });
+      }
     } catch {
       setSendMsg({ ok: false, text: "Erreur réseau" });
     }
@@ -375,6 +409,7 @@ export default function BoiteAssistantPage() {
     setSubject(decodeHtml(m.subject || ""));
     setBody(decodeHtml(m.body || m.snippet || ""));
     setReplyMeta({ threadId: m.threadId || "", messageId: m.messageId || "" });
+    setSuiviSel(m.suivi ? etatSuivi(m.date || "", m.suivi, new Date()) : null);
     setSelectedId(m.id || "");
     setMailboxMsg(null);
     setRes(null);
@@ -561,7 +596,7 @@ export default function BoiteAssistantPage() {
       setFrom(String(m.from || ""));
       setSubject(String(m.subject || ""));
       setBody(String(m.body || ""));
-      setReplyMeta({ threadId: "", messageId: "" });
+      setReplyMeta({ threadId: "", messageId: "" }); setSuiviSel(null);
       setSelectedId("");
       setRes(null);
       setDraft("");
@@ -706,6 +741,7 @@ export default function BoiteAssistantPage() {
                       )}
                     </div>
                     <div className="truncate font-body text-sm text-slate-800">{decodeHtml(m.subject) || "(sans objet)"}</div>
+                    <BadgeSuivi message={m} />
                     <div className="truncate font-body text-[13px] sm:text-[11px] text-slate-400">{decodeHtml(m.snippet)}</div>
                   </button>
                 </div>
@@ -964,6 +1000,7 @@ export default function BoiteAssistantPage() {
             placeholder="Objet"
             className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
           />
+          <BandeauSuivi suivi={suiviSel} />
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value)}
