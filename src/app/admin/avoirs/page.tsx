@@ -493,7 +493,14 @@ export default function AvoirsPage() {
               <label className={labelStyle}>Famille *</label>
               <select className={inputStyle} value={selFamily} onChange={e => setSelFamily(e.target.value)}>
                 <option value="">— Sélectionner —</option>
-                {families.map(f => <option key={f.firestoreId} value={f.firestoreId}>{f.parentName}</option>)}
+                {/* Les fiches absorbées n'apparaissent pas : un avoir créé sur
+                    l'ancienne fiche COSTEGROSSE ne trouvait pas la commande,
+                    passée sur le compte de connexion (19/10/2026). */}
+                {families
+                  .filter((f: any) => f.status !== "merged")
+                  .slice()
+                  .sort((a: any, b: any) => String(a.parentName || "").localeCompare(String(b.parentName || ""), "fr"))
+                  .map(f => <option key={f.firestoreId} value={f.firestoreId}>{f.parentName}{f.parentEmail ? ` · ${f.parentEmail}` : ""}</option>)}
               </select>
             </div>
             <div>
