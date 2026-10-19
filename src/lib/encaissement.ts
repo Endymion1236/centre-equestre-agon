@@ -71,7 +71,15 @@ export async function enregistrerEncaissement(
   // On relit APRÈS l'écriture — le snapshot contient forcément le doc qu'on vient de créer
   const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", paymentId)));
   const totalEncaisse = Math.round(encSnap.docs.reduce((s, d) => s + safeNumber(d.data().montant), 0) * 100) / 100;
-  const totalTTC = safeNumber(paymentData.totalTTC);
+  // Total et numéro relus en base : l'écran peut tenir une copie d'avant
+  // une correction de prix (36 € ramenés à 26 €), et la commande réglée en
+  // entier restait « partielle », sans facture.
+  let actuelle: any = paymentData;
+  try {
+    const snap = await getDoc(doc(db, "payments", paymentId));
+    if (snap.exists()) actuelle = { ...paymentData, ...snap.data() };
+  } catch (e) { console.error("Relecture de la commande:", e); }
+  const totalTTC = safeNumber(actuelle.totalTTC);
   const newStatus = totalEncaisse >= totalTTC ? "paid" : totalEncaisse > 0 ? "partial" : "pending";
 
   // 3. Déterminer le mode de paiement à afficher
@@ -91,7 +99,7 @@ export async function enregistrerEncaissement(
   // 4b. Attribuer un numéro de facture séquentiel quand le paiement est soldé
   //     via une transaction atomique côté serveur (évite doublons en cas de
   //     paiements simultanés — conformité CGI art. 242 nonies A)
-  if (newStatus === "paid" && !paymentData.invoiceNumber) {
+  if (newStatus === "paid" && !actuelle.invoiceNumber) {
     try {
       const res = await authFetch("/api/invoice/next-number", {
         method: "POST",
