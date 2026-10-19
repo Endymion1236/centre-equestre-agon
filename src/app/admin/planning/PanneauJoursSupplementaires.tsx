@@ -4,10 +4,13 @@
  * du même stage, et recalculer la commande (prix jour × nb de jours) à chaque
  * ajout. Sorti du panneau d'inscription tel quel.
  */
-import { collection, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, getDocs, updateDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { EnrolledChild } from "./types";
 import { prixJourStage } from "./enroll-panel-utils";
+import { commandeDuStage, complementJour, ligneDuStage } from "./jours-supplementaires-utils";
+import { verrouCommande } from "@/app/admin/paiements/commande-verrou";
+import { generateOrderId } from "@/lib/utils";
 
 export interface JoursSupplementaires {
   familyId: string;
@@ -69,16 +72,54 @@ export function PanneauJoursSupplementaires({ showAddDays, setShowAddDays, famil
                       }
                       // Recalcul tarif : jours inscrits AVANT + 1 (ce jour qu'on vient d'ajouter)
                       try {
-                        const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", showAddDays.familyId), where("status", "==", "pending")));
-                        const stagePayment = paySnap.docs.find(d => {
-                          const items = d.data().items || [];
-                          return items.some((i: any) => (i.activityType === "stage" || i.activityType === "stage_journee") && i.stageKey?.includes(showAddDays.stageTitle));
-                        }) || paySnap.docs.find(d => {
-                          const items = d.data().items || [];
-                          return items.some((i: any) => i.activityType === "stage" || i.activityType === "stage_journee");
-                        });
-                        if (stagePayment) {
-                          const pData = stagePayment.data();
+                        // Toutes les commandes de la famille, payées comprises : la
+                        // recherche parmi les seules impayées ratait une commande
+                        // réglée (Marin, 27 €), et les jours ajoutés n'étaient
+                        // facturés nulle part (cf. jours-supplementaires-utils).
+                        const paySnap = await getDocs(query(collection(db, "payments"), where("familyId", "==", showAddDays.familyId)));
+                        const commandes = paySnap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+                        const enfantsIds = showAddDays.enfants.map(e => e.childId);
+                        const creneauOrigine = (showAddDays.creneauRef as any)?.id as string | undefined;
+                        const stagePayment = commandeDuStage(commandes, showAddDays.stageTitle, creneauOrigine, enfantsIds);
+                        const totalJoursStageC = showAddDays.totalJoursStage || 1;
+                        const crC = showAddDays.creneauRef as any;
+                        const prixCompletC = (crC.priceTTC || (crC.priceHT || 0) * (1 + (crC.tvaTaux ?? 5.5) / 100)) || 0;
+                        const prixJourC = prixJourStage(crC, prixCompletC, totalJoursStageC).prix;
+                        if (!stagePayment || verrouCommande(stagePayment).verrouillee) {
+                          // Commande payée ou facturée (intouchable), ou introuvable :
+                          // le jour ajouté part dans une nouvelle commande, pour le
+                          // complément de chaque cavalier (déjà facturé déduit).
+                          const taux = Number(crC.tvaTaux ?? 5.5);
+                          const fam2 = families.find(f => f.firestoreId === showAddDays.familyId);
+                          const lignes = showAddDays.enfants.map(e => {
+                            const deja = commandes.filter((c: any) => c.status !== "cancelled")
+                              .flatMap((c: any) => c.items || [])
+                              .filter((i: any) => ligneDuStage(i, showAddDays.stageTitle, creneauOrigine, new Set([e.childId])))
+                              .reduce((t: number, i: any) => t + (Number(i.priceTTC) || 0), 0);
+                            const montant = complementJour(deja, showAddDays.joursInscrits + 1, totalJoursStageC, prixJourC, prixCompletC);
+                            return {
+                              activityTitle: `${showAddDays.stageTitle} — jour ajouté (${j.label}) — ${e.childName}`,
+                              activityType: crC.activityType || "stage",
+                              childId: e.childId, childName: e.childName,
+                              creneauIds: [j.id], creneauId: j.id,
+                              stageKey: `${showAddDays.stageTitle}_${crC.date || j.date}`,
+                              stageDates: [{ date: j.date, startTime: crC.startTime || "", endTime: crC.endTime || "" }],
+                              priceTTC: montant, priceHT: Math.round(montant / (1 + taux / 100) * 100) / 100, tva: taux,
+                            };
+                          }).filter(l => l.priceTTC > 0);
+                          if (lignes.length && fam2) {
+                            const total = Math.round(lignes.reduce((t, l) => t + l.priceTTC, 0) * 100) / 100;
+                            await addDoc(collection(db, "payments"), {
+                              orderId: generateOrderId(), familyId: showAddDays.familyId, familyName: fam2.parentName || "", familyEmail: fam2.parentEmail || "",
+                              items: lignes, totalTTC: total, paymentMode: "", paymentRef: "", status: "pending", paidAmount: 0,
+                              stageDate: j.date, stageTitle: showAddDays.stageTitle, date: serverTimestamp(),
+                            });
+                            panelToast(`Jour ajouté facturé à part (${total.toFixed(2)} €, en impayé) : la commande d'origine est déjà réglée ou facturée.`, "success");
+                          } else if (!lignes.length) {
+                            panelToast("Jour ajouté sans supplément : le prix de la semaine est déjà atteint.", "success");
+                          }
+                        } else {
+                          const pData = stagePayment as any;
                           const oldItems = pData.items || [];
                           const totalDaysNow = showAddDays.joursInscrits + 1;
                           const totalJoursStage = showAddDays.totalJoursStage || 1;
