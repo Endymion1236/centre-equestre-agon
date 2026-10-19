@@ -149,7 +149,9 @@ export default function DoublonsPage() {
       ) : error ? (
         <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 font-body text-sm text-rose-700">{error}</div>
       ) : paires.length === 0 ? (
-        <div className="text-center py-10 font-body text-slate-400">Aucun doublon potentiel détecté 🎉<div className="text-xs mt-1">{total} familles analysées</div></div>
+        <div className="text-center py-10 font-body text-slate-400">Aucun doublon potentiel détecté 🎉<div className="text-xs mt-1">{total} familles analysées</div>
+          <div className="text-xs mt-3">Une famille qui ne voit pas ses inscriptions dans son espace ? <a href="/admin/diag-famille" className="text-blue-600 underline">Diagnostic famille</a> : cherchez-la par son nom, l'écran montre toutes ses fiches et les rattache au compte.</div>
+        </div>
       ) : (
         <div className="space-y-3">
           <div className="font-body text-xs text-slate-400">{paires.length} paire{paires.length > 1 ? "s" : ""} à vérifier · {total} familles analysées</div>

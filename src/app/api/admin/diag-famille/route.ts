@@ -22,6 +22,8 @@ import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { getActiveProjectId } from "@/lib/reset-guard";
+import { ficheCorrespondA } from "@/lib/famille-existante";
+import { toParisDateString } from "@/lib/date-local";
 
 export const dynamic = "force-dynamic";
 
@@ -31,8 +33,12 @@ export async function GET(req: NextRequest) {
 
   const email = (req.nextUrl.searchParams.get("email") || "").trim().toLowerCase();
   const uid = (req.nextUrl.searchParams.get("uid") || "").trim();
-  if (!email && !uid) {
-    return NextResponse.json({ error: "email ou uid requis" }, { status: 400 });
+  // Recherche libre (nom du parent, nom d'un cavalier, adresse) : retrouve
+  // la fiche du bureau ET le compte de la famille même quand leurs adresses
+  // diffèrent — ce que l'écran Doublons ne voit pas (COSTEGROSSE, 10/2026).
+  const q = (req.nextUrl.searchParams.get("q") || "").trim();
+  if (!email && !uid && q.length < 2) {
+    return NextResponse.json({ error: "email, uid ou q (au moins 2 caractères) requis" }, { status: 400 });
   }
 
   try {
@@ -45,7 +51,7 @@ export async function GET(req: NextRequest) {
       .filter((d) => {
         const f = d.data() as any;
         const e = String(f.parentEmail || f.email || "").trim().toLowerCase();
-        return (email && e === email) || (uid && (d.id === uid || f.authUid === uid));
+        return (email && e === email) || (uid && (d.id === uid || f.authUid === uid)) || (q && ficheCorrespondA({ id: d.id, ...f }, q));
       })
       .map((d) => {
         const f = d.data() as any;
@@ -53,11 +59,20 @@ export async function GET(req: NextRequest) {
           docId: d.id,
           parentName: f.parentName || null,
           parentEmail: f.parentEmail || null,
+          parentPhone: f.parentPhone || null,
           authUid: f.authUid || null,
+          authProvider: f.authProvider || null,
+          // Le compte de connexion de la famille : son identifiant Firebase
+          // est celui du document (cf. /api/famille/lier-compte).
+          estCompte: !!f.authUid && f.authUid === d.id,
+          enfants: (f.children || []).map((c: any) => `${c?.firstName || ""} ${c?.lastName || ""}`.trim() || c?.name || "?"),
           nbEnfants: (f.children || []).length,
           nbLies: (f.linkedChildren || []).length,
           status: f.status || null,
+          mergedInto: f.mergedInto || null,
           creePar: f.source || null,
+          // Rempli plus bas : ce que porte cette fiche-là.
+          commandes: 0, commandesVivantes: 0, totalCommandes: 0, totalRegle: 0, inscriptionsAVenir: 0,
         };
       });
 
@@ -99,6 +114,20 @@ export async function GET(req: NextRequest) {
       compter("payment_declarations"),
     ]);
 
+    // Par fiche : ses commandes (hors annulées) et ce qui est réglé dessus.
+    // C'est ce qui dit, en un coup d'œil, sur quelle fiche vit le dossier.
+    const paySnap = await adminDb.collection("payments").get();
+    for (const d of paySnap.docs) {
+      const p = d.data() as any;
+      const fiche = fiches.find((f) => f.docId === p.familyId);
+      if (!fiche) continue;
+      fiche.commandes += 1;
+      if (p.status === "cancelled") continue;
+      fiche.commandesVivantes += 1;
+      fiche.totalCommandes = Math.round((fiche.totalCommandes + (Number(p.totalTTC) || 0)) * 100) / 100;
+      fiche.totalRegle = Math.round((fiche.totalRegle + (Number(p.paidAmount) || 0)) * 100) / 100;
+    }
+
     // ── 3. Inscriptions réellement posées dans le planning ────────────────
     // Et surtout : les réservations qui pointent vers un créneau DISPARU.
     // C'est la signature de l'incident — /api/enroll répondait « ok » quand le
@@ -107,20 +136,25 @@ export async function GET(req: NextRequest) {
     const creneauxSnap = await adminDb.collection("creneaux").get();
     const creneauxExistants = new Set(creneauxSnap.docs.map((d) => d.id));
     const inscriptions: any[] = [];
+    const aujourdhui = toParisDateString();
     creneauxSnap.docs.forEach((d) => {
       const c = d.data() as any;
       (c.enrolled || []).forEach((e: any) => {
         if (!ids.includes(e.familyId)) return;
+        const fiche = fiches.find((f) => f.docId === e.familyId);
+        if (fiche && c.date >= aujourdhui) fiche.inscriptionsAVenir += 1;
         inscriptions.push({
           creneauId: d.id,
           date: c.date,
           activite: c.activityTitle,
           enfant: e.childName,
+          familyId: e.familyId,
           enAttente: !!e.pending,
           expireLe: e.holdUntil || null,
         });
       });
     });
+    inscriptions.sort((a, b) => String(a.date).localeCompare(String(b.date)));
 
     const resaSnap = await adminDb.collection("reservations").get();
     const reservationsOrphelines = resaSnap.docs
@@ -145,7 +179,7 @@ export async function GET(req: NextRequest) {
       // navigateur utilise, tout le reste est normal — vous regardez deux bases.
       projetFirebase: getActiveProjectId(),
       buildSha: process.env.NEXT_PUBLIC_BUILD_SHA || "inconnu",
-      recherche: { email: email || null, uid: uid || null },
+      recherche: { email: email || null, uid: uid || null, q: q || null },
       fiches,
       identifiantsScrutes: ids,
       donnees: { payments, reservations, encaissements, waitlist, declarations },
@@ -153,8 +187,18 @@ export async function GET(req: NextRequest) {
       // Non vide = des réservations pointent vers des créneaux supprimés.
       reservationsOrphelines,
       lecture: {
-        plusieursFiches: fiches.length > 1
-          ? "⚠️ Plusieurs fiches pour cette personne : les données sont réparties entre elles."
+        plusieursFiches: fiches.filter((f) => f.status !== "merged").length > 1
+          ? "⚠️ Plusieurs fiches vivantes pour cette personne : les données sont réparties entre elles. Rattachez la fiche du bureau au compte de connexion."
+          : null,
+        dossierHorsCompte: (() => {
+          const compte = fiches.find((f) => f.estCompte && f.status !== "merged");
+          const ailleurs = fiches.filter((f) => f.status !== "merged" && !f.estCompte && (f.commandesVivantes > 0 || f.inscriptionsAVenir > 0));
+          return compte && ailleurs.length > 0
+            ? `⚠️ Le compte de connexion (« ${compte.parentName || compte.docId} ») ne porte ni les commandes ni les inscriptions : elles sont sur ${ailleurs.map((f) => `« ${f.parentName || f.docId} »`).join(", ")}. La famille ne les voit donc pas dans son espace.`
+            : null;
+        })(),
+        sansCompte: fiches.length > 0 && !fiches.some((f) => f.estCompte)
+          ? "Aucune de ces fiches n'est un compte de connexion : la famille ne s'est pas encore connectée (ou s'est connectée avec une autre adresse — cherchez-la par le nom)."
           : null,
         orphelines: reservationsOrphelines.length > 0
           ? "⚠️ Réservations pointant vers un créneau supprimé — voir /api/enroll, cas « créneau introuvable »."

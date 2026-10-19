@@ -135,6 +135,9 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/admin/veille", icon: Eye, label: "Veille du club" },
       { href: "/admin/coherence", icon: ShieldCheck, label: "Cohérence" },
       { href: "/admin/doublons", icon: GitMerge, label: "Doublons" },
+      // « Où est passé le dossier de cette famille ? » : toutes ses fiches,
+      // ce que chacune porte, et le rattachement au compte en un clic.
+      { href: "/admin/diag-famille", icon: Search, label: "Diagnostic famille" },
       { href: "/admin/comptes-orphelins", icon: UserX, label: "Comptes orphelins" },
     ],
   },

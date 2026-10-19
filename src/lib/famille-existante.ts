@@ -40,3 +40,28 @@ export function messageFicheExistante(fiches: FicheConnue[]): string {
     ? `Une fiche existe déjà à cette adresse : « ${nom} »${cavaliers}. Inscrivez depuis cette fiche plutôt que d'en créer une seconde — sinon la famille ne verrait ni ses inscriptions ni ses paiements dans son espace.`
     : `${fiches.length} fiches portent déjà cette adresse (« ${nom} »…). Fusionnez-les depuis Cavaliers → Doublons avant d'en créer une nouvelle.`;
 }
+
+/** Texte comparable : minuscules, sans accents ni ponctuation. */
+export const texteNormalise = (s: unknown) =>
+  String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9@. ]/g, " ").replace(/\s+/g, " ").trim();
+
+export interface FicheRecherchable extends FicheConnue {
+  lastName?: string | null;
+  firstName?: string | null;
+  children?: { firstName?: string; lastName?: string; name?: string }[] | null;
+}
+
+/**
+ * La fiche répond-elle à une recherche libre (nom du parent, nom d'un
+ * cavalier, adresse) ? « COSTEGROSSE » retrouve la fiche du bureau ET le
+ * compte que la famille s'est créé, quelle que soit l'adresse de chacun.
+ */
+export function ficheCorrespondA(fiche: FicheRecherchable, recherche: unknown): boolean {
+  const q = texteNormalise(recherche);
+  if (!q) return false;
+  const champs = [
+    fiche.parentName, fiche.lastName, fiche.firstName, fiche.parentEmail,
+    ...(fiche.children || []).map((c) => `${c?.firstName || ""} ${c?.lastName || ""} ${c?.name || ""}`),
+  ];
+  return champs.some((v) => texteNormalise(v).includes(q));
+}
