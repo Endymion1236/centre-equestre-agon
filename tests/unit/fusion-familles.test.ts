@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import {
   apparierEnfants, champsACompleter, choisirFicheARattacher, fusionnerChampsFiche,
-  COLLECTIONS_SUIVANT_LA_FAMILLE, nomCavalier, estCompteDeConnexion, sensDeFusion,
+  COLLECTIONS_SUIVANT_LA_FAMILLE, nomCavalier, estCompteDeConnexion, sensDeFusion, identifiantsRattaches,
 } from "../../src/lib/fusion-familles";
 
 let passes = 0;
@@ -91,6 +91,19 @@ test("deux comptes de connexion : le choix est respecté, avec un avertissement"
   const sens = sensDeFusion(compte, { id: "uid-2", authUid: "uid-2", parentName: "Autre" });
   assert.equal(sens.inverse, false);
   assert.match(sens.avertissements[0], /devra se connecter avec le compte conservé/);
+});
+
+test("identifiants rattachés : la fiche, celle qui l'a absorbée, et toutes les absorbées", () => {
+  const fiches = [
+    { id: "compte", status: null, mergedInto: null },
+    { id: "bureau", status: "merged", mergedInto: "compte" },
+    { id: "vieille", status: "merged", mergedInto: "bureau" },
+    { id: "autre", status: null, mergedInto: null },
+  ];
+  assert.deepEqual(identifiantsRattaches("bureau", fiches).sort(), ["bureau", "compte", "vieille"]);
+  assert.deepEqual(identifiantsRattaches("compte", fiches).sort(), ["bureau", "compte", "vieille"]);
+  assert.deepEqual(identifiantsRattaches("autre", fiches), ["autre"]);
+  assert.deepEqual(identifiantsRattaches("inconnue", fiches), ["inconnue"], "une fiche absente reste cherchable par son identifiant");
 });
 
 console.log("\n── Quelle fiche rattacher à un compte ──");

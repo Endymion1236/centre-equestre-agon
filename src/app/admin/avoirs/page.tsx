@@ -6,6 +6,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimest
 import { db } from "@/lib/firebase";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { commandesApplicables, planifierApplicationAvoir, resteDu, utilisationsSansCommande, montantUtilisation } from "@/lib/avoir-application";
+import { identifiantsRattaches } from "@/lib/fusion-familles";
 import { echeanceAvoir } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
@@ -78,7 +79,11 @@ export default function AvoirsPage() {
     setShowUseModal(true);
     setUseChargement(true);
     try {
-      const snap = await getDocs(query(collection(db, "payments"), where("familyId", "==", a.familyId)));
+      // La famille a pu avoir plusieurs fiches (compte de connexion, fiche du
+      // bureau absorbée) : la commande du stage peut vivre sur une autre que
+      // celle de l'avoir. On cherche sur toutes (lib/fusion-familles).
+      const ids = identifiantsRattaches(a.familyId, families.map((f: any) => ({ id: f.firestoreId, status: f.status, mergedInto: f.mergedInto }))).slice(0, 30);
+      const snap = await getDocs(query(collection(db, "payments"), where("familyId", "in", ids)));
       const commandes = commandesApplicables(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })))
         .sort((x: any, y: any) => (y.date?.seconds || 0) - (x.date?.seconds || 0));
       setUseCommandes(commandes);
@@ -211,7 +216,11 @@ export default function AvoirsPage() {
     if (!plan.ok) { alert(plan.erreur); return; }
     setSaving(true);
     try {
-      await updateDoc(doc(db, "avoirs", useAvoirId), { ...plan.avoirMaj, updatedAt: serverTimestamp() });
+      // L'avoir suit la commande qu'il crédite : même fiche, même dossier.
+      const suivi = commande.familyId && commande.familyId !== avoir.familyId
+        ? { familyId: commande.familyId, familyName: commande.familyName || avoir.familyName }
+        : {};
+      await updateDoc(doc(db, "avoirs", useAvoirId), { ...plan.avoirMaj, ...suivi, updatedAt: serverTimestamp() });
       await enregistrerEncaissement(commande.id, commande, plan.montant, "avoir", avoir.reference || "", plan.libelle);
       setShowUseModal(false);
       setUseAvoirId(null); setUseAmount(""); setUseCommandeId(""); setUseReparation(null);
@@ -544,7 +553,7 @@ export default function AvoirsPage() {
                   {useChargement ? (
                     <div className="font-body text-xs text-slate-500 flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Chargement des commandes…</div>
                   ) : useCommandes.length === 0 ? (
-                    <div className="font-body text-xs text-rose-600">Aucune commande à régler pour cette famille : rien à déduire.</div>
+                    <div className="font-body text-xs text-rose-600">Aucune commande à régler pour cette famille, ni sur sa fiche ni sur celles qui lui sont rattachées. Si la commande existe pourtant, ouvrez Diagnostic famille pour voir sur quelle fiche elle vit.</div>
                   ) : (
                     <select className={inputStyle} value={useCommandeId} onChange={e => {
                       setUseCommandeId(e.target.value);
