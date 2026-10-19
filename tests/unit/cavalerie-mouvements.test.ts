@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import {
   champsEquideApresMouvement, dateFr, dateISO, htmlRegistre, motifRetour, situationEquides, sortiesTemporairesEnCours, trierMouvements,
+  MOTIFS_ENTREE, MOTIFS_SORTIE, MOTIFS_SORTIE_DEFINITIVE, MOTIFS_SORTIE_TEMPORAIRE,
 } from "../../src/lib/cavalerie-mouvements";
 
 let passes = 0;
@@ -63,7 +64,8 @@ test("motif du retour d'après le motif de sortie", () => {
 
 test("fiche : une vente sort l'équidé, un décès et une retraite ont leur statut, une sortie temporaire ne change rien", () => {
   assert.deepEqual(champsEquideApresMouvement(pompon, { equideId: "pompon", type: "sortie", date: "2026-10-16", motif: "Vente" }),
-    { status: "sorti", dateSortie: "2026-10-16", motifSortie: "Vente", available: false });
+    { status: "sorti", dateSortie: "2026-10-16", motifSortie: "Vente", destinationSortie: "", available: false });
+  assert.equal(champsEquideApresMouvement(pompon, { equideId: "pompon", type: "sortie", date: "2026-10-16", motif: "Vente", destination: "Famille Martin" }).destinationSortie, "Famille Martin");
   assert.equal(champsEquideApresMouvement(pompon, { equideId: "pompon", type: "sortie", date: "2026-10-16", motif: "Décès" }).status, "deces");
   assert.equal(champsEquideApresMouvement(pompon, { equideId: "pompon", type: "sortie", date: "2026-10-16", motif: "Retraite" }).status, "retraite");
   assert.deepEqual(champsEquideApresMouvement(pompon, { equideId: "pompon", type: "sortie", date: "2026-10-16", motif: "Concours", temporaire: true }), {});
@@ -71,9 +73,9 @@ test("fiche : une vente sort l'équidé, un décès et une retraite ont leur sta
 
 test("fiche : une entrée pose la date d'arrivée si elle manque, et remet « actif » un équidé sorti", () => {
   assert.deepEqual(champsEquideApresMouvement({ id: "x", status: "sorti" }, { equideId: "x", type: "entree", date: ts("2026-10-16"), motif: "Achat" }),
-    { dateSortie: null, motifSortie: null, dateArrivee: "2026-10-16", status: "actif", available: true });
+    { dateSortie: null, motifSortie: null, destinationSortie: "", dateArrivee: "2026-10-16", status: "actif", available: true });
   assert.deepEqual(champsEquideApresMouvement({ id: "x", status: "actif", dateArrivee: "2025-09-01" }, { equideId: "x", type: "entree", date: "2026-10-16", motif: "Retour concours" }),
-    { dateSortie: null, motifSortie: null });
+    { dateSortie: null, motifSortie: null, destinationSortie: "" });
 });
 
 
@@ -110,6 +112,17 @@ test("registre imprimable : détenteur, présents, sortis, chronologie, texte é
   assert.ok(iAchat > 0 && iConcours > iAchat, "ordre chronologique");
   assert.match(html, /retour prévu le 12\/10\/2026/);
   assert.match(html, /arrêté du 5 juin 2000/);
+});
+
+
+// ─── Motifs ────────────────────────────────────────────────────────────────
+
+test("motifs : les temporaires (prêt, concours, pension) ne sont pas proposés comme sortie définitive sur la fiche", () => {
+  assert.ok(MOTIFS_ENTREE.includes("Achat") && MOTIFS_SORTIE.includes("Vente"));
+  for (const m of MOTIFS_SORTIE_TEMPORAIRE) assert.ok(MOTIFS_SORTIE.includes(m) && !MOTIFS_SORTIE_DEFINITIVE.includes(m), m);
+  assert.deepEqual(MOTIFS_SORTIE_DEFINITIVE, ["Vente", "Départ définitif", "Retraite", "Décès", "Fin demi-pension", "Autre"]);
+  // Chaque motif temporaire a son motif de retour.
+  for (const m of MOTIFS_SORTIE_TEMPORAIRE) assert.notEqual(motifRetour(m), "Autre", m);
 });
 
 if (process.exitCode) { console.error("❌ échec"); } else console.log(`✅ ${passes} tests passés`);

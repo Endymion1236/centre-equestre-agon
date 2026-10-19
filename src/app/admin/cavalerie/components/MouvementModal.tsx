@@ -4,7 +4,7 @@ import { collection, addDoc, doc, serverTimestamp, Timestamp, updateDoc } from "
 import { db } from "@/lib/firebase";
 import { X, Save, Loader2 } from "lucide-react";
 import type { Equide } from "../types";
-import { champsEquideApresMouvement } from "@/lib/cavalerie-mouvements";
+import { champsEquideApresMouvement, MOTIFS_ENTREE, MOTIFS_SORTIE } from "@/lib/cavalerie-mouvements";
 
 const inputStyle = "w-full px-3 py-2.5 rounded-xl border border-blue-500/8 font-body text-sm bg-cream focus:outline-none focus:border-blue-400";
 const labelStyle = "font-body text-[10px] font-semibold text-slate-600 uppercase block mb-1";
@@ -75,14 +75,14 @@ export default function MouvementModal({ equides, defaultEquideId, parDefaut, on
     setSaving(false);
   };
 
-  const entreesMotifs = ["Achat", "Naissance", "Retour de prêt", "Retour concours", "Retour pension", "Demi-pension", "Don", "Autre"];
-  const sortiesMotifs = ["Vente", "Départ définitif", "Retraite", "Décès", "Prêt extérieur", "Concours", "Pension extérieure", "Fin demi-pension", "Autre"];
+  const entreesMotifs = MOTIFS_ENTREE;
+  const sortiesMotifs = MOTIFS_SORTIE;
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end sm:items-center justify-center sm:p-4" onClick={onClose}>
       <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center p-5 border-b border-gray-100 flex-shrink-0">
-          <h2 className="font-display text-lg font-bold text-blue-800">{parDefaut?.type === "entree" && parDefaut.motif ? "Enregistrer le retour" : "Nouveau mouvement"}</h2>
+          <h2 className="font-display text-lg font-bold text-blue-800">{parDefaut?.type === "entree" && parDefaut.motif ? "Enregistrer le retour" : parDefaut?.type === "sortie" ? "Enregistrer une sortie" : parDefaut?.type === "entree" ? "Enregistrer une entrée" : "Nouveau mouvement"}</h2>
           <button type="button" onClick={onClose} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16}/></button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto flex-1">

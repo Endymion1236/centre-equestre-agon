@@ -53,6 +53,14 @@ export function trierMouvements<T extends MouvementLike>(mouvements: T[]): T[] {
     .map((x) => x.m);
 }
 
+/** Les motifs proposés, écrits une seule fois (modale de mouvement, fiche). */
+export const MOTIFS_ENTREE = ["Achat", "Naissance", "Retour de prêt", "Retour concours", "Retour pension", "Demi-pension", "Don", "Autre"];
+export const MOTIFS_SORTIE = ["Vente", "Départ définitif", "Retraite", "Décès", "Prêt extérieur", "Concours", "Pension extérieure", "Fin demi-pension", "Autre"];
+/** Les motifs qui ne valent que pour une sortie temporaire (l'équidé revient). */
+export const MOTIFS_SORTIE_TEMPORAIRE = ["Prêt extérieur", "Concours", "Pension extérieure"];
+/** Les motifs d'une sortie définitive, tels que la fiche les propose. */
+export const MOTIFS_SORTIE_DEFINITIVE = MOTIFS_SORTIE.filter((m) => !MOTIFS_SORTIE_TEMPORAIRE.includes(m));
+
 export type EtatPresence = "present" | "sorti_temporaire" | "sorti";
 
 export interface SituationEquide {
@@ -128,9 +136,9 @@ export function champsEquideApresMouvement(equide: EquideLike, m: MouvementLike)
   if (m.type === "sortie") {
     if (m.temporaire) return {};
     const status = m.motif === "Décès" ? "deces" : m.motif === "Retraite" ? "retraite" : "sorti";
-    return { status, dateSortie: jour || null, motifSortie: m.motif || null, available: false };
+    return { status, dateSortie: jour || null, motifSortie: m.motif || null, destinationSortie: m.destination || "", available: false };
   }
-  const champs: Record<string, unknown> = { dateSortie: null, motifSortie: null };
+  const champs: Record<string, unknown> = { dateSortie: null, motifSortie: null, destinationSortie: "" };
   if (!dateISO(equide.dateArrivee)) champs.dateArrivee = jour || null;
   if (equide.status === "sorti" || equide.status === "deces" || equide.status === "retraite") {
     champs.status = "actif";

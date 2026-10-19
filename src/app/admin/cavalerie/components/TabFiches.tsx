@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { equideCorrespond } from "@/lib/recherche-equide";
 import type { Equide, SoinRecord, DocumentEquide, MouvementRegistre, EquideType, EquideSex, EquideStatus } from "../types";
+import { champsEquideApresMouvement, dateISO, MOTIFS_SORTIE_DEFINITIVE } from "@/lib/cavalerie-mouvements";
 import LastUpdated from "@/components/admin/LastUpdated";
 
 // ── Constantes ────────────────────────────────────────────────────────────────
@@ -84,12 +85,14 @@ interface Props {
   onCloseForm: () => void;
   onRefresh: () => void;
   onOpenSoinForm: (equideId: string) => void;
+  /** Ouvre la modale de mouvement pré-remplie (sortie d'un poney présent, entrée d'un poney sorti). */
+  onOpenMouvement: (equideId: string, type: "entree" | "sortie") => void;
   onEdit: (equide: Equide) => void;
 }
 
 export default function TabFiches({
   equides, soins, documents, mouvements,
-  showForm, editingEquide, onCloseForm, onRefresh, onOpenSoinForm, onEdit,
+  showForm, editingEquide, onCloseForm, onRefresh, onOpenSoinForm, onOpenMouvement, onEdit,
 }: Props) {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<EquideStatus | "all">("all");
@@ -103,7 +106,7 @@ export default function TabFiches({
     robe: "Bai", race: "", birthDate: "", toise: "", photo: null as string | null,
     provenance: "Achat", proprietaire: "Centre",
     dateArrivee: new Date().toISOString().split("T")[0],
-    dateSortie: "", motifSortie: "",
+    dateSortie: "", motifSortie: "", destinationSortie: "",
     status: "actif" as EquideStatus, available: true, niveauCavalier: "Débutant",
     disciplines: [] as string[], temperament: "", cavaliersFavoris: [] as string[],
     maxReprisesPerDay: 3, maxHeuresHebdo: 15, notes: "",
@@ -122,7 +125,7 @@ export default function TabFiches({
         toise: editingEquide.toise ? String(editingEquide.toise) : "", photo: editingEquide.photo,
         provenance: editingEquide.provenance || "Achat", proprietaire: editingEquide.proprietaire || "Centre",
         dateArrivee: toDateStr(editingEquide.dateArrivee), dateSortie: toDateStr(editingEquide.dateSortie),
-        motifSortie: editingEquide.motifSortie || "",
+        motifSortie: editingEquide.motifSortie || "", destinationSortie: (editingEquide as any).destinationSortie || "",
         status: editingEquide.status, available: editingEquide.available,
         niveauCavalier: editingEquide.niveauCavalier || "Débutant",
         disciplines: editingEquide.disciplines || [], temperament: editingEquide.temperament || "",
@@ -158,7 +161,8 @@ export default function TabFiches({
         provenance: form.provenance, proprietaire: form.proprietaire.trim(),
         dateArrivee: form.dateArrivee ? Timestamp.fromDate(new Date(form.dateArrivee)) : Timestamp.now(),
         dateSortie: form.dateSortie ? Timestamp.fromDate(new Date(form.dateSortie)) : null,
-        motifSortie: form.motifSortie || null,
+        motifSortie: form.dateSortie ? (form.motifSortie || null) : null,
+        destinationSortie: form.dateSortie ? form.destinationSortie.trim() : "",
         status: form.status, available: form.status === "actif" || form.status === "en_formation",
         niveauCavalier: form.niveauCavalier, disciplines: form.disciplines,
         temperament: form.temperament, cavaliersFavoris: form.cavaliersFavoris,
@@ -168,11 +172,37 @@ export default function TabFiches({
         publicDescription: form.publicDescription.trim(),
         updatedAt: serverTimestamp(),
       };
+      // Une sortie saisie sur la fiche vaut sortie définitive : le statut suit
+      // le motif (vente → sorti, décès, retraite) et le registre reçoit le
+      // mouvement, sauf s'il l'a déjà pour ce jour-là (lib/cavalerie-mouvements).
+      const sortieNouvelle = !!form.dateSortie && form.dateSortie !== toDateStr(editingEquide?.dateSortie);
+      if (form.dateSortie && form.motifSortie) {
+        Object.assign(data, champsEquideApresMouvement(
+          { id: editingId || "", status: form.status, dateArrivee: form.dateArrivee },
+          { equideId: editingId || "", type: "sortie", date: form.dateSortie, motif: form.motifSortie },
+        ));
+      }
+      let equideId = editingId;
       if (editingId) {
         await updateDoc(doc(db, "equides", editingId), data);
       } else {
         data.createdAt = serverTimestamp();
-        await addDoc(collection(db, "equides"), data);
+        const ref = await addDoc(collection(db, "equides"), data);
+        equideId = ref.id;
+      }
+      if (sortieNouvelle && form.motifSortie && equideId) {
+        const dejaAuRegistre = mouvements.some(m =>
+          m.equideId === equideId && m.type === "sortie" && !m.temporaire && dateISO(m.date) === form.dateSortie);
+        if (!dejaAuRegistre) {
+          await addDoc(collection(db, "mouvements_registre"), {
+            equideId, equideName: form.name.trim(), type: "sortie",
+            date: Timestamp.fromDate(new Date(form.dateSortie)),
+            motif: form.motifSortie, temporaire: false, dateRetour: null,
+            provenance: "", destination: form.destinationSortie.trim(),
+            prixAchat: null, prixVente: null, observations: "Saisi depuis la fiche",
+            createdAt: serverTimestamp(),
+          });
+        }
       }
       onCloseForm();
       setEditingId(null);
@@ -327,6 +357,36 @@ export default function TabFiches({
                       {statusOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </div>
+                </div>
+                {/* Sortie définitive : date, motif, destination. Une sortie
+                    saisie ici est reportée au registre (onglet Mouvements).
+                    Pour un prêt, un concours ou une pension (retour prévu),
+                    passer par « Enregistrer une sortie » sur la carte. */}
+                <div className="mt-3 p-3 rounded-lg border border-red-500/15 bg-red-50/30">
+                  <div className="font-body text-xs font-semibold text-red-500 uppercase tracking-wider mb-2">Sortie définitive</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelStyle}>Date de sortie</label>
+                      <input type="date" className={inputStyle} value={form.dateSortie}
+                        onChange={e => setForm(f => ({ ...f, dateSortie: e.target.value, motifSortie: e.target.value ? (f.motifSortie || "Vente") : "" }))}/>
+                    </div>
+                    <div>
+                      <label className={labelStyle}>Motif</label>
+                      <select className={inputStyle} value={form.motifSortie} disabled={!form.dateSortie}
+                        onChange={e => setForm(f => ({ ...f, motifSortie: e.target.value }))}>
+                        <option value="">—</option>
+                        {MOTIFS_SORTIE_DEFINITIVE.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                    </div>
+                    <div className="col-span-2">
+                      <label className={labelStyle}>Destination (acheteur, lieu…)</label>
+                      <input className={inputStyle} value={form.destinationSortie} disabled={!form.dateSortie}
+                        onChange={e => setForm(f => ({ ...f, destinationSortie: e.target.value }))} placeholder="Où va-t-il ?"/>
+                    </div>
+                  </div>
+                  <p className="font-body text-[10px] text-gray-400 mt-2">
+                    Le statut suit le motif (sorti, retraite, décédé) et la sortie est inscrite au registre. Prêt, concours ou pension (retour prévu) : bouton « Enregistrer une sortie » sur la carte du poney.
+                  </p>
                 </div>
               </section>
               {/* Travail */}
@@ -519,7 +579,7 @@ export default function TabFiches({
                       <div>
                         <div className="font-body text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Identité</div>
                         <div className="space-y-1.5 text-xs font-body text-gray-600">
-                          {[["SIRE", e.sire], ["Puce", e.puce], ["Race", e.race], ["Toise", e.toise ? `${e.toise} cm` : null], ["Propriétaire", e.proprietaire], ["Provenance", e.provenance], ["Arrivée", formatDate(e.dateArrivee)]].map(([k, v]) => v ? (
+                          {[["SIRE", e.sire], ["Puce", e.puce], ["Race", e.race], ["Toise", e.toise ? `${e.toise} cm` : null], ["Propriétaire", e.proprietaire], ["Provenance", e.provenance], ["Arrivée", formatDate(e.dateArrivee)], ["Sortie", e.dateSortie ? `${formatDate(e.dateSortie)}${e.motifSortie ? ` · ${e.motifSortie}` : ""}` : null]].map(([k, v]) => v ? (
                             <div key={k as string}><span className="text-gray-400">{k} :</span> {v as string}</div>
                           ) : null)}
                         </div>
@@ -570,6 +630,17 @@ export default function TabFiches({
                         className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                         💊 Ajouter un soin
                       </button>
+                      {["sorti", "deces", "retraite"].includes(e.status) ? (
+                        <button type="button" onClick={() => onOpenMouvement(e.id, "entree")}
+                          className="font-body text-xs text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100">
+                          ↩ Enregistrer une entrée
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => onOpenMouvement(e.id, "sortie")}
+                          className="font-body text-xs text-orange-600 bg-orange-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-100">
+                          🚪 Enregistrer une sortie
+                        </button>
+                      )}
                       <button type="button" onClick={() => deleteEquide(e.id, e.name)}
                         className="font-body text-xs text-red-500 bg-red-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-red-100 ml-auto">
                         <Trash2 size={12} className="inline mr-1"/> Supprimer

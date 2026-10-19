@@ -21,6 +21,8 @@ export interface Equide {
   dateArrivee: any;
   dateSortie: any;
   motifSortie: string | null;
+  /** Où est parti l'équidé (acheteur, lieu), saisi avec la sortie définitive. */
+  destinationSortie?: string;
   status: EquideStatus;
   available: boolean;
   niveauCavalier: string;
