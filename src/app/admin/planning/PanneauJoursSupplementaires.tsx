@@ -167,6 +167,9 @@ export function PanneauJoursSupplementaires({ showAddDays, setShowAddDays, famil
                               newSchedule = `du ${fmt(existingDates[0].date)} au ${fmt(existingDates[existingDates.length - 1].date)} · ${crRef?.startTime || ""}–${crRef?.endTime || ""}`;
                             }
                             const existingCreneauIds = Array.isArray(item.creneauIds) ? [...item.creneauIds] : (item.creneauId ? [item.creneauId] : []);
+                            // Ligne ancienne sans identifiant : le jour d'origine d'abord,
+                            // sinon seul le jour ajouté serait libéré à la désinscription.
+                            if (existingCreneauIds.length === 0 && crRef?.id) existingCreneauIds.push(crRef.id);
                             if (!existingCreneauIds.includes(j.id)) existingCreneauIds.push(j.id);
                             return {
                               ...item,

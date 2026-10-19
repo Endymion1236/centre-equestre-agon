@@ -487,13 +487,15 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
 
       // Ajouter les lignes au panier de la famille (1 seul paiement pending)
       const scheduleDesc = formatStageSchedule(creneauxAInscrire);
-      const newItems = stageLines.map(l => ({
+      const newItems: any[] = stageLines.map(l => ({
         activityTitle: `${creneau.activityTitle} (${creneauxAInscrire.length}j) — ${l.childName}${l.remiseEuros > 0 ? ` (-${l.remiseEuros}€)` : ""}`,
         childId: l.childId, childName: l.childName,
         stageKey, // ← maintenant STABLE (avant : dépendait du créneau cliqué)
         activityType: creneau.activityType,
         stageSchedule: scheduleDesc,
         stageDates: creneauxAInscrire.map(c => ({ date: c.date, startTime: c.startTime, endTime: c.endTime })),
+        // Les créneaux eux-mêmes : la désinscription depuis Paiements s'y fie.
+        creneauIds: creneauxAInscrire.map(c => c.id).filter(Boolean),
         priceHT: l.prixReduit / 1.055, tva: 5.5, priceTTC: l.prixReduit,
       }));
 

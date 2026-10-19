@@ -6,6 +6,7 @@ import { estCommandeInscriptionAnnuelle } from "@/lib/inscription-annuelle-paiem
 import AnnulationModal from "./AnnulationModal";
 import { useSearchParams } from "next/navigation";
 import { collection, getDocs, addDoc, deleteDoc, updateDoc, doc, getDoc, serverTimestamp, query, where, orderBy, limit } from "firebase/firestore";
+import { creneauxDeLaLigne, datesDeLaLigne } from "@/lib/creneaux-de-ligne";
 import { db } from "@/lib/firebase";
 import { safeNumber, round2, generateOrderId } from "@/lib/utils";
 import { createEncaissement } from "@/lib/compta-encaissement";
@@ -370,9 +371,19 @@ export default function PaiementsPage() {
     };
 
     try {
-      // Cas 1 : stage avec creneauIds array → désinscrire de TOUS les jours
-      if (item.creneauIds && item.creneauIds.length > 0) {
-        for (const cid of item.creneauIds) {
+      // Cas 1 : stage → désinscrire de TOUS les jours de la ligne, y compris
+      // ceux que la ligne ne désigne que par leur date (cf. creneaux-de-ligne).
+      const dates = datesDeLaLigne(item);
+      let candidats: any[] = [];
+      if (dates.length > 0) {
+        try {
+          const snap = await getDocs(query(collection(db, "creneaux"), where("date", "in", dates.slice(0, 30))));
+          candidats = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+        } catch (e) { console.error("Lecture des créneaux de la ligne:", e); }
+      }
+      const creneauxLigne = item.creneauIds?.length || dates.length ? creneauxDeLaLigne(item, candidats) : [];
+      if (creneauxLigne.length > 0) {
+        for (const cid of creneauxLigne) {
           await removeFromCreneau(cid, item.childId);
           // Supprimer les réservations liées à chaque jour
           try {
