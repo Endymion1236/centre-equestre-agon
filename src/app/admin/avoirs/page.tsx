@@ -2,8 +2,10 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { enregistrerEncaissement } from "@/lib/encaissement";
+import { commandesApplicables, planifierApplicationAvoir, resteDu, utilisationsSansCommande, montantUtilisation } from "@/lib/avoir-application";
 import { echeanceAvoir } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
@@ -30,7 +32,7 @@ interface Avoir {
   reference: string; // N° avoir ou référence paiement
   expiryDate: any;
   status: AvoirStatus;
-  usageHistory: { date: string; amount: number; invoiceRef: string }[];
+  usageHistory: { date: string; amount?: number; montant?: number; invoiceRef?: string; paymentId?: string }[];
   createdAt: any;
   updatedAt: any;
 }
@@ -60,11 +62,33 @@ export default function AvoirsPage() {
   const [expiryMonths, setExpiryMonths] = useState("saison");
   const [saving, setSaving] = useState(false);
 
-  // Use avoir
+  // Use avoir — sur UNE commande de la famille (lib/avoir-application).
   const [showUseModal, setShowUseModal] = useState(false);
   const [useAvoirId, setUseAvoirId] = useState<string | null>(null);
   const [useAmount, setUseAmount] = useState("");
-  const [useInvoiceRef, setUseInvoiceRef] = useState("");
+  const [useCommandes, setUseCommandes] = useState<any[]>([]);
+  const [useCommandeId, setUseCommandeId] = useState("");
+  /** Rang de l'utilisation à réparer (faite sans commande), sinon null. */
+  const [useReparation, setUseReparation] = useState<number | null>(null);
+  const [useChargement, setUseChargement] = useState(false);
+
+  const ouvrirUtilisation = async (a: Avoir, reparationIndex: number | null) => {
+    setUseAvoirId(a.id); setUseReparation(reparationIndex); setUseCommandeId(""); setUseCommandes([]);
+    setUseAmount(reparationIndex === null ? "" : montantUtilisation((a.usageHistory || [])[reparationIndex] || {}).toFixed(2));
+    setShowUseModal(true);
+    setUseChargement(true);
+    try {
+      const snap = await getDocs(query(collection(db, "payments"), where("familyId", "==", a.familyId)));
+      const commandes = commandesApplicables(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })))
+        .sort((x: any, y: any) => (y.date?.seconds || 0) - (x.date?.seconds || 0));
+      setUseCommandes(commandes);
+      if (commandes.length === 1) {
+        setUseCommandeId(commandes[0].id);
+        if (reparationIndex === null) setUseAmount(Math.min(a.remainingAmount || 0, resteDu(commandes[0])).toFixed(2));
+      }
+    } catch (e) { console.error(e); }
+    setUseChargement(false);
+  };
 
   // Rembourser avoir
   const [showRembModal, setShowRembModal] = useState(false);
@@ -171,38 +195,28 @@ export default function AvoirsPage() {
   };
 
   // ─── Use avoir ───
+  // L'avoir se déduit d'une commande précise : écriture « avoir » au journal
+  // (lib/encaissement recalcule le payé, le statut, numérote la facture si
+  // elle est soldée) et trace de la commande sur l'avoir. Jusqu'au 19/10/2026
+  // ce bouton ne touchait qu'à l'avoir : la facture ne bougeait pas.
   const handleUseAvoir = async () => {
-    if (!useAvoirId || !useAmount) return;
-    setSaving(true);
+    if (!useAvoirId || !useCommandeId) return;
     const avoir = avoirs.find(a => a.id === useAvoirId);
-    if (!avoir) return;
-    const amt = parseFloat(useAmount);
-    if (amt <= 0 || amt > (avoir.remainingAmount || 0)) {
-      alert(`Montant invalide. Maximum : ${(avoir.remainingAmount || 0).toFixed(2)}€`);
-      setSaving(false);
-      return;
-    }
-    const newUsed = (avoir.usedAmount || 0) + amt;
-    const newRemaining = avoir.amount - newUsed;
-    const newHistory = [...(avoir.usageHistory || []), {
-      date: new Date().toISOString(),
-      amount: amt,
-      invoiceRef: useInvoiceRef || "—",
-    }];
+    const commande = useCommandes.find(c => c.id === useCommandeId);
+    if (!avoir || !commande) return;
+    const plan = planifierApplicationAvoir({
+      avoir, commande, montant: parseFloat(useAmount || "0"),
+      reparation: useReparation === null ? undefined : { index: useReparation },
+    });
+    if (!plan.ok) { alert(plan.erreur); return; }
+    setSaving(true);
     try {
-      await updateDoc(doc(db, "avoirs", useAvoirId), {
-        usedAmount: newUsed,
-        remainingAmount: Math.max(0, newRemaining),
-        status: newRemaining <= 0 ? "utilise" : "actif",
-        usageHistory: newHistory,
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(doc(db, "avoirs", useAvoirId), { ...plan.avoirMaj, updatedAt: serverTimestamp() });
+      await enregistrerEncaissement(commande.id, commande, plan.montant, "avoir", avoir.reference || "", plan.libelle);
       setShowUseModal(false);
-      setUseAvoirId(null);
-      setUseAmount("");
-      setUseInvoiceRef("");
+      setUseAvoirId(null); setUseAmount(""); setUseCommandeId(""); setUseReparation(null);
       fetchData();
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); alert("Erreur lors de l'application de l'avoir."); }
     setSaving(false);
   };
 
@@ -384,7 +398,7 @@ export default function AvoirsPage() {
                         <div className="font-body text-[10px] text-gray-400">restant</div>
                         {a.status === "actif" && (
                           <div className="flex gap-1 mt-2">
-                            <button type="button" onClick={() => { setUseAvoirId(a.id); setUseAmount(""); setUseInvoiceRef(""); setShowUseModal(true); }}
+                            <button type="button" onClick={() => ouvrirUtilisation(a, null)}
                               className="font-body text-xs text-blue-500 bg-blue-50 px-3 py-1 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                               Utiliser
                             </button>
@@ -419,12 +433,26 @@ export default function AvoirsPage() {
                     {(a.usageHistory || []).length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-100">
                         <div className="font-body text-[10px] text-gray-400 uppercase tracking-wider mb-1">Utilisations</div>
-                        {(a.usageHistory || []).map((u: any, i: number) => (
-                          <div key={i} className="flex justify-between font-body text-xs text-gray-500 py-0.5">
-                            <span>{new Date(u.date).toLocaleDateString("fr-FR")} · {u.invoiceRef}</span>
-                            <span className="font-semibold">-{(u.amount || 0).toFixed(2)}€</span>
-                          </div>
-                        ))}
+                        {(a.usageHistory || []).map((u: any, i: number) => {
+                          const sansCommande = utilisationsSansCommande(a).some(x => x.index === i);
+                          return (
+                            <div key={i} className="flex flex-wrap items-center justify-between gap-2 font-body text-xs text-gray-500 py-0.5">
+                              <span>
+                                {new Date(u.date).toLocaleDateString("fr-FR")} · {u.invoiceRef || u.paymentId || "—"}
+                                {sansCommande && (
+                                  <span className="ml-2 inline-flex items-center gap-2 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                                    Déduction non appliquée à une commande
+                                    <button type="button" onClick={() => ouvrirUtilisation(a, i)}
+                                      className="rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-semibold text-white border-none cursor-pointer hover:bg-amber-500">
+                                      Appliquer maintenant
+                                    </button>
+                                  </span>
+                                )}
+                              </span>
+                              <span className="font-semibold">-{montantUtilisation(u).toFixed(2)}€</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </Card>
@@ -491,36 +519,68 @@ export default function AvoirsPage() {
       )}
 
       {/* ─── Modal : Utiliser un avoir ─── */}
-      {showUseModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowUseModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-sm mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center p-5 border-b border-gray-100">
-              <h2 className="font-display text-lg font-bold text-blue-800">Utiliser un avoir</h2>
-              <button type="button" onClick={() => setShowUseModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className={labelStyle}>Montant à déduire (€) *</label>
-                <input type="number" step="0.01" className={inputStyle} value={useAmount} onChange={e => setUseAmount(e.target.value)}
-                  placeholder={`Max : ${avoirs.find(a => a.id === useAvoirId)?.remainingAmount.toFixed(2) || "0"}€`} />
+      {showUseModal && (() => {
+        const avoir = avoirs.find(a => a.id === useAvoirId);
+        const commande = useCommandes.find(c => c.id === useCommandeId);
+        const reparation = useReparation !== null;
+        return (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center" onClick={() => setShowUseModal(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-md mx-4 shadow-xl" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center p-5 border-b border-gray-100">
+                <div>
+                  <h2 className="font-display text-lg font-bold text-blue-800">{reparation ? "Appliquer la déduction à une commande" : "Utiliser un avoir"}</h2>
+                  <p className="font-body text-xs text-slate-500 mt-0.5">{avoir?.familyName} · {avoir?.reference}{reparation ? "" : ` · ${(avoir?.remainingAmount || 0).toFixed(2)}€ disponible`}</p>
+                </div>
+                <button type="button" onClick={() => setShowUseModal(false)} className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center cursor-pointer border-none"><X size={16} /></button>
               </div>
-              <div>
-                <label className={labelStyle}>Référence facture</label>
-                <input className={inputStyle} value={useInvoiceRef} onChange={e => setUseInvoiceRef(e.target.value)} placeholder="Ex: F2026-042" />
+              <div className="p-5 space-y-4">
+                {reparation && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 font-body text-xs text-amber-900">
+                    Cette déduction avait été enregistrée sur l&apos;avoir sans toucher à la commande : la facture ne la voyait pas. Choisissez la commande, elle sera créditée de ce montant et sa facture mise à jour.
+                  </div>
+                )}
+                <div>
+                  <label className={labelStyle}>Commande à créditer *</label>
+                  {useChargement ? (
+                    <div className="font-body text-xs text-slate-500 flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Chargement des commandes…</div>
+                  ) : useCommandes.length === 0 ? (
+                    <div className="font-body text-xs text-rose-600">Aucune commande à régler pour cette famille : rien à déduire.</div>
+                  ) : (
+                    <select className={inputStyle} value={useCommandeId} onChange={e => {
+                      setUseCommandeId(e.target.value);
+                      const c = useCommandes.find(x => x.id === e.target.value);
+                      if (c && !reparation && avoir) setUseAmount(Math.min(avoir.remainingAmount || 0, resteDu(c)).toFixed(2));
+                    }}>
+                      <option value="">— Choisir —</option>
+                      {useCommandes.map(c => (
+                        <option key={c.id} value={c.id}>
+                          {c.invoiceNumber || `PF-${String(c.orderId || c.id).slice(-6).toUpperCase()}`} · {(c.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60) || "commande"} · reste dû {resteDu(c).toFixed(2)}€
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className={labelStyle}>Montant à déduire (€) *</label>
+                  <input type="number" step="0.01" className={inputStyle} value={useAmount} disabled={reparation}
+                    onChange={e => setUseAmount(e.target.value)}
+                    placeholder={commande && avoir ? `Max : ${Math.min(avoir.remainingAmount || 0, resteDu(commande)).toFixed(2)}€` : ""} />
+                  {commande && <div className="font-body text-[11px] text-slate-500 mt-1">Reste dû sur cette commande : {resteDu(commande).toFixed(2)}€</div>}
+                </div>
               </div>
-            </div>
-            <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
-              <button type="button" onClick={() => setShowUseModal(false)}
-                className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
-              <button type="button" onClick={handleUseAvoir} disabled={saving || !useAmount}
-                className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer
-                  ${(saving || !useAmount) ? "opacity-50" : ""}`}>
-                {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Valider
-              </button>
+              <div className="flex justify-end gap-3 p-5 border-t border-gray-100">
+                <button type="button" onClick={() => setShowUseModal(false)}
+                  className="font-body text-sm text-gray-500 bg-white px-4 py-2.5 rounded-lg border border-gray-200 cursor-pointer">Annuler</button>
+                <button type="button" onClick={handleUseAvoir} disabled={saving || !useCommandeId || !useAmount}
+                  className={`flex items-center gap-2 font-body text-sm font-semibold text-white bg-blue-500 px-5 py-2.5 rounded-lg border-none cursor-pointer
+                    ${(saving || !useCommandeId || !useAmount) ? "opacity-50" : ""}`}>
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} {reparation ? "Appliquer à la commande" : "Déduire de la commande"}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* ─── Modal : Rembourser un avoir ─── */}
       {showRembModal && (() => {
         const avoir = avoirs.find(a => a.id === rembAvoirId);
