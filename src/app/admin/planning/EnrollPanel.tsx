@@ -48,7 +48,7 @@ import { estSurDemande } from "@/lib/creneau-sur-demande";
 import { estCoursParticulier, libelleTypeCarte, typeCarteCouvre, typeCarteDuCreneau } from "@/lib/cartes-seances";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
-  libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche, prixJourStage,
+  libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche, prixJourStage, lotUnJourAuPrixJournee,
   holdActifDuCreneau, cavaliersDisponibles, finSaisonEffective,
   rangEnfantFamille as calculerRangEnfantFamille, frequenceDejaInscrite as calculerFrequenceDejaInscrite,
 } from "./enroll-panel-utils";
@@ -340,6 +340,11 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       })
       .catch(() => setStageDaysCount(1));
   }, [isStage, creneau.date, creneau.activityTitle]);
+
+  // Lot d'un seul jour avec un prix journée : « ce jour uniquement » d'office.
+  useEffect(() => {
+    if (isStage && stageDaysCount > 0 && lotUnJourAuPrixJournee(creneau, stageDaysCount)) setStageMode("jour");
+  }, [isStage, stageDaysCount, creneau]);
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
 

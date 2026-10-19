@@ -85,6 +85,19 @@ export function prixJourStage(creneau: any, prixSemaine: number, nbJours: number
   return { prix: Math.round(((prixSemaine || 0) / Math.max(1, nbJours || 1)) * 100) / 100, origine: "prorata" };
 }
 
+/**
+ * Le lot du stage ne compte qu'un jour, et ce jour a un prix journée : on
+ * inscrit « ce jour uniquement », au prix journée.
+ *
+ * Octobre 2026 : le lundi du « Premiers Sabots » de l'après-midi, renommé
+ * seul, a quitté son lot (cf. memeStage) ; le panneau n'y voyait plus qu'un
+ * stage d'un jour, cachait le choix « Ce jour uniquement » et facturait le
+ * prix semaine, 36 €, au lieu des 27 € saisis.
+ */
+export function lotUnJourAuPrixJournee(creneau: any, nbJours: number): boolean {
+  return (nbJours || 1) <= 1 && !!creneau?.allowDayBooking && Number(creneau?.priceTTCDay) > 0;
+}
+
 /** Prix affiché dans l'en-tête : pour les stages, le tarif configuré du nombre de jours si disponible. */
 export function prixAffiche(creneau: Creneau, isStage: boolean, priceTTC: number, stageDaysCount: number): number {
   if (!isStage) return priceTTC;

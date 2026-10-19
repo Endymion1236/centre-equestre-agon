@@ -6,7 +6,7 @@ import {
   frequenceDejaInscrite,
   holdActifDuCreneau,
   prixAffiche,
-  prixJourStage,
+  prixJourStage, lotUnJourAuPrixJournee,
   rangEnfantFamille,
   seasonOf,
   nomActuelInscrit,
@@ -110,6 +110,13 @@ test("prix d'une journée de stage : le prix journée du créneau prime sur le t
   assert.equal(prixJourStage({ allowDayBooking: true, priceTTCDay: "", price1day: 36 }, 135, 5).prix, 36);
   assert.deepEqual(prixJourStage({}, 135, 5), { prix: 27, origine: "prorata" });
   assert.equal(prixJourStage({}, 100, 0).prix, 100);
+});
+
+test("lot réduit à un jour (renommé seul) : le prix journée s'applique d'office", () => {
+  assert.equal(lotUnJourAuPrixJournee({ allowDayBooking: true, priceTTCDay: 27 }, 1), true);
+  assert.equal(lotUnJourAuPrixJournee({ allowDayBooking: true, priceTTCDay: 27 }, 5), false);
+  assert.equal(lotUnJourAuPrixJournee({ allowDayBooking: false, priceTTCDay: 27 }, 1), false);
+  assert.equal(lotUnJourAuPrixJournee({ allowDayBooking: true, priceTTCDay: "" }, 1), false);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
