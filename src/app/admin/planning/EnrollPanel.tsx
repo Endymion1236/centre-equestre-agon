@@ -944,7 +944,16 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             return (
               <div key={e.childId} className="flex flex-wrap items-center justify-between gap-y-1.5 bg-sand rounded-lg px-3 py-2">
                 <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 min-w-0 flex-1">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} title={`${statusLabel} — ${statut.detail}`}></span>
+                  {/* Point rouge ou orange : un clic ouvre les impayés de la famille. */}
+                  {isAdmin && statut.etat !== "regle" && e.familyId ? (
+                    <a href={`/admin/paiements?tab=impayes&family=${encodeURIComponent(e.familyId)}`}
+                      title={`${statusLabel} — ${statut.detail} · cliquer pour voir les impayés de la famille`}
+                      className="flex-shrink-0 p-1.5 -m-1.5 rounded-full hover:bg-red-100" onClick={ev => ev.stopPropagation()}>
+                      <span className={`block w-2.5 h-2.5 rounded-full ${statusColor}`}></span>
+                    </a>
+                  ) : (
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusColor}`} title={`${statusLabel} — ${statut.detail}`}></span>
+                  )}
                   <a
                     href={
                       isMoniteur && !isAdmin
