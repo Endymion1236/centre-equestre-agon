@@ -3,7 +3,8 @@
  *   npx tsx tests/unit/avoir-application.test.ts
  */
 import assert from "node:assert/strict";
-import { commandesApplicables, planifierApplicationAvoir, resteDu, utilisationsSansCommande } from "../../src/lib/avoir-application";
+import { commandesApplicables, fichesOuChercherLaCommande, nomDeFamille, planifierApplicationAvoir, resteDu, utilisationsSansCommande } from "../../src/lib/avoir-application";
+import { identifiantsRattaches } from "../../src/lib/fusion-familles";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -63,4 +64,18 @@ test("réparation quand la commande doit moins : la différence revient sur l'av
   assert.equal(plan.avoirMaj.status, "actif");
 });
 
+
+test("fiches où chercher la commande : rattachées, puis même nom de famille", () => {
+  const fiches = [
+    { id: "compte", parentName: "COSTEGROSSE Olivier" },
+    { id: "bureau", status: "merged", mergedInto: "compte", parentName: "Costegrosse" },
+    { id: "autre", parentName: "GROSSE Olivier" },
+    { id: "homonyme", parentName: "Costégrosse Marie" },
+  ];
+  const ids = fichesOuChercherLaCommande({ familyId: "bureau", familyName: "COSTEGROSSE Olivier" }, fiches, identifiantsRattaches);
+  assert.deepEqual([...ids].sort(), ["bureau", "compte", "homonyme"]);
+  // Sans nom : seulement le rattachement.
+  assert.deepEqual(fichesOuChercherLaCommande({ familyId: "autre" }, fiches, identifiantsRattaches), ["autre"]);
+  assert.equal(nomDeFamille(" Costégrosse Olivier "), "costegrosse");
+});
 if (process.exitCode) { console.error("❌ échec"); } else console.log(`✅ ${passes} tests passés`);

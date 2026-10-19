@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimestamp, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { enregistrerEncaissement } from "@/lib/encaissement";
-import { commandesApplicables, planifierApplicationAvoir, resteDu, utilisationsSansCommande, montantUtilisation } from "@/lib/avoir-application";
+import { commandesApplicables, fichesOuChercherLaCommande, planifierApplicationAvoir, resteDu, utilisationsSansCommande, montantUtilisation } from "@/lib/avoir-application";
 import { identifiantsRattaches } from "@/lib/fusion-familles";
 import { echeanceAvoir } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
@@ -68,6 +68,7 @@ export default function AvoirsPage() {
   const [useAvoirId, setUseAvoirId] = useState<string | null>(null);
   const [useAmount, setUseAmount] = useState("");
   const [useCommandes, setUseCommandes] = useState<any[]>([]);
+  const [useFichesCherchees, setUseFichesCherchees] = useState(0);
   const [useCommandeId, setUseCommandeId] = useState("");
   /** Rang de l'utilisation à réparer (faite sans commande), sinon null. */
   const [useReparation, setUseReparation] = useState<number | null>(null);
@@ -82,9 +83,19 @@ export default function AvoirsPage() {
       // La famille a pu avoir plusieurs fiches (compte de connexion, fiche du
       // bureau absorbée) : la commande du stage peut vivre sur une autre que
       // celle de l'avoir. On cherche sur toutes (lib/fusion-familles).
-      const ids = identifiantsRattaches(a.familyId, families.map((f: any) => ({ id: f.firestoreId, status: f.status, mergedInto: f.mergedInto }))).slice(0, 30);
-      const snap = await getDocs(query(collection(db, "payments"), where("familyId", "in", ids)));
-      const commandes = commandesApplicables(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })))
+      // Repli : toute fiche du même nom de famille (lib/avoir-application).
+      const ids = fichesOuChercherLaCommande(
+        a,
+        families.map((f: any) => ({ id: f.firestoreId, status: f.status, mergedInto: f.mergedInto, parentName: f.parentName, lastName: f.lastName })),
+        identifiantsRattaches,
+      );
+      const docs: any[] = [];
+      for (let i = 0; i < ids.length; i += 30) {
+        const snap = await getDocs(query(collection(db, "payments"), where("familyId", "in", ids.slice(i, i + 30))));
+        docs.push(...snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+      }
+      setUseFichesCherchees(ids.length);
+      const commandes = commandesApplicables(docs)
         .sort((x: any, y: any) => (y.date?.seconds || 0) - (x.date?.seconds || 0));
       setUseCommandes(commandes);
       if (commandes.length === 1) {
@@ -560,7 +571,7 @@ export default function AvoirsPage() {
                   {useChargement ? (
                     <div className="font-body text-xs text-slate-500 flex items-center gap-2"><Loader2 size={12} className="animate-spin" /> Chargement des commandes…</div>
                   ) : useCommandes.length === 0 ? (
-                    <div className="font-body text-xs text-rose-600">Aucune commande à régler pour cette famille, ni sur sa fiche ni sur celles qui lui sont rattachées. Si la commande existe pourtant, ouvrez Diagnostic famille pour voir sur quelle fiche elle vit.</div>
+                    <div className="font-body text-xs text-rose-600">Aucune commande à régler trouvée ({useFichesCherchees} fiche{useFichesCherchees > 1 ? "s" : ""} au nom de {avoir?.familyName || "cette famille"} ou rattachée{useFichesCherchees > 1 ? "s" : ""} à l&apos;avoir). Si la commande existe pourtant, ouvrez Diagnostic famille pour voir sur quelle fiche elle vit.</div>
                   ) : (
                     <select className={inputStyle} value={useCommandeId} onChange={e => {
                       setUseCommandeId(e.target.value);
@@ -570,7 +581,7 @@ export default function AvoirsPage() {
                       <option value="">— Choisir —</option>
                       {useCommandes.map(c => (
                         <option key={c.id} value={c.id}>
-                          {c.invoiceNumber || `PF-${String(c.orderId || c.id).slice(-6).toUpperCase()}`} · {(c.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60) || "commande"} · reste dû {resteDu(c).toFixed(2)}€
+                          {c.invoiceNumber || `PF-${String(c.orderId || c.id).slice(-6).toUpperCase()}`} · {(c.items || []).map((i: any) => i.activityTitle).join(", ").slice(0, 60) || "commande"} · reste dû {resteDu(c).toFixed(2)}€{c.familyId && c.familyId !== avoir?.familyId ? ` · fiche ${c.familyName || c.familyId}` : ""}
                         </option>
                       ))}
                     </select>

@@ -130,3 +130,32 @@ export function planifierApplicationAvoir(params: {
     libelle: `Avoir ${avoir.reference || avoir.id}`,
   };
 }
+
+/**
+ * Fiches sur lesquelles chercher la commande à créditer.
+ *
+ * D'abord la fiche de l'avoir et toutes celles qui lui sont rattachées
+ * (compte de connexion, fiche du bureau absorbée : lib/fusion-familles).
+ * Puis, par sécurité, toute fiche qui porte le même nom de famille que
+ * l'avoir : un avoir créé sur une fiche que le rattachement n'a pas suivie
+ * (19/10/2026, COSTEGROSSE : « Aucune commande à régler ») retrouve quand
+ * même la commande, et l'écran dit sur quelle fiche elle vit.
+ */
+export function fichesOuChercherLaCommande(
+  avoir: { familyId: string; familyName?: string | null },
+  fiches: { id: string; status?: string | null; mergedInto?: string | null; parentName?: string | null; lastName?: string | null }[],
+  rattachees: (familyId: string, fiches: { id: string; status?: string | null; mergedInto?: string | null }[]) => string[],
+): string[] {
+  const ids = new Set(rattachees(avoir.familyId, fiches));
+  const nom = nomDeFamille(avoir.familyName);
+  if (nom) {
+    for (const f of fiches) {
+      if (nomDeFamille(f.lastName) === nom || nomDeFamille(f.parentName) === nom) ids.add(f.id);
+    }
+  }
+  return [...ids];
+}
+
+/** « COSTEGROSSE Olivier » → « costegrosse » (premier mot, sans accents ni casse). */
+export const nomDeFamille = (s: unknown): string =>
+  String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().split(/\s+/)[0] || "";
