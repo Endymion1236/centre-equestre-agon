@@ -30,6 +30,7 @@ import {
   detecterEncaissementInattendu,
   montantLienAcompte,
   montantsConfirmationDepuisCommande,
+  prixEnfantsDepuisCommande,
 } from "../../src/lib/lien-paiement-regles";
 
 let passed = 0, failed = 0;
@@ -133,6 +134,16 @@ console.log("══════════════════════�
 
   const autreCommande = montantsConfirmationDepuisCommande(lettre, { totalTTC: 500, paidAmount: 0, acompteAmount: 90 });
   assert("commande plus large que la lettre : on garde les sommes de la lettre", autreCommande.source === "lettre" && eq(autreCommande.aRegler, 199.2));
+
+  // Manon : inscrite 36 €, ramenée à 26 € et réglée 26 € avant le départ de la lettre.
+  const manon = montantsConfirmationDepuisCommande({ totalTTC: 36, aRegler: 36, solde: 0 }, { totalTTC: 26, paidAmount: 26 });
+  assert("prix corrigé et réglé avant la lettre : rien à réclamer (et non 10 €)", manon.aRegler === 0 && manon.solde === 0, JSON.stringify(manon));
+  const stagesLus = prixEnfantsDepuisCommande(
+    [{ stageKey: "PS_2026-10-19", enfants: [{ name: "Manon AYRAULT", prix: 36, remise: 0 }, { name: "Léo", prix: 36, remise: 4 }] }],
+    [{ stageKey: "PS_2026-10-19", childName: "Manon AYRAULT", priceTTC: 26 }, { stageKey: "Autre", childName: "Léo", priceTTC: 10 }],
+  );
+  assert("la lettre reprend le prix corrigé sur la commande", stagesLus[0].enfants[0].prix === 26);
+  assert("ligne introuvable : prix de l'inscription gardé", stagesLus[0].enfants[1].prix === 36 && stagesLus[0].enfants[1].remise === 4);
 
   const sansCommande = montantsConfirmationDepuisCommande(lettre, null);
   assert("commande introuvable : sommes de la lettre", sansCommande.source === "lettre" && eq(sansCommande.solde, 150));

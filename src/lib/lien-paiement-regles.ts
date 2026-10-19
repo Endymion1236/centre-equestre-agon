@@ -168,9 +168,14 @@ export function montantsConfirmationDepuisCommande(
     };
   }
   if (Math.abs(commande.totalTTC - lettre.totalTTC) > EPSILON) {
+    // Jamais plus que ce que la commande doit encore. Octobre 2026 : stage
+    // inscrit à 36 €, ramené à 26 € et réglé 26 € avant le départ de la
+    // lettre — elle réclamait les 10 € de différence.
+    const resteCommande = Math.max(0, commande.totalTTC - (commande.paidAmount || 0));
+    const aRegler = Math.min(Math.max(0, lettre.aRegler - dejaRegleLettre), resteCommande);
     return {
-      aRegler: arrondi(Math.max(0, lettre.aRegler - dejaRegleLettre)),
-      solde: arrondi(lettre.solde),
+      aRegler: arrondi(aRegler),
+      solde: arrondi(Math.min(lettre.solde, Math.max(0, resteCommande - aRegler))),
       dejaRegle: arrondi(dejaRegleLettre),
       source: "lettre",
     };
@@ -215,4 +220,26 @@ export function checkoutReutilisable(
   const cree = enMs(checkout.createdAt);
   if (!cree || maintenant - cree > FRAICHEUR_CHECKOUT_MS) return false;
   return Math.abs((checkout.amount || 0) - montant) <= EPSILON;
+}
+
+/**
+ * Prix de chaque enfant dans la lettre, relus sur la commande au moment de
+ * l'envoi : la lettre attend quelques minutes, et le bureau a pu corriger le
+ * prix entre-temps (36 € ramenés à 26 €). Ligne retrouvée par stage et par
+ * prénom ; sinon le prix de l'inscription reste.
+ */
+export function prixEnfantsDepuisCommande<S extends { stageKey: string; enfants: { name: string; prix: number; remise: number }[] }>(
+  stages: S[],
+  items: { stageKey?: string; childName?: string; priceTTC?: number }[] | undefined,
+): S[] {
+  if (!Array.isArray(items) || items.length === 0) return stages;
+  return stages.map((st) => ({
+    ...st,
+    enfants: st.enfants.map((e) => {
+      const lignes = items.filter((i) => i.stageKey === st.stageKey && i.childName === e.name && typeof i.priceTTC === "number");
+      if (lignes.length !== 1) return e;
+      const prix = arrondi(lignes[0].priceTTC as number);
+      return Math.abs(prix - e.prix) > EPSILON ? { ...e, prix, remise: 0 } : e;
+    }),
+  }));
 }

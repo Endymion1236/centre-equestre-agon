@@ -46,7 +46,7 @@ import { REPLY_TO } from "@/lib/email-reply-to";
 import { renderDerouleStage } from "@/lib/stage-deroule";
 import { dateEcheanceSolde } from "@/lib/email-prestations";
 import { envoyerLienPaiement } from "@/lib/lien-paiement";
-import { montantLienAcompte, montantsConfirmationDepuisCommande } from "@/lib/lien-paiement-regles";
+import { montantLienAcompte, montantsConfirmationDepuisCommande, prixEnfantsDepuisCommande } from "@/lib/lien-paiement-regles";
 import { SERVICE_UID } from "@/lib/api-auth";
 
 export const COLLECTION_CONFIRMATIONS = "stage_confirmations";
@@ -238,7 +238,8 @@ async function lireCommande(paymentId?: string): Promise<CommandeLue | null> {
  * une inscription confirmée que rien n'a payée.
  */
 async function construireEmail(f: FileConfirmation): Promise<{ subject: string; html: string; template: string }> {
-  const stages = f.stages || [];
+  const commande = await lireCommande(f.paymentId);
+  const stages = prixEnfantsDepuisCommande(f.stages || [], commande?.items);
   const totalTTC = arrondi(stages.reduce(
     (s, st) => s + st.enfants.reduce((n, e) => n + (e.prix || 0), 0), 0,
   ));
@@ -261,7 +262,7 @@ async function construireEmail(f: FileConfirmation): Promise<{ subject: string; 
   // contre 60 € sur le lien.
   const montants = montantsConfirmationDepuisCommande(
     { totalTTC, aRegler, solde },
-    await lireCommande(f.paymentId),
+    commande,
   );
 
   const { subject, html } = emailTemplates.confirmationStages({
