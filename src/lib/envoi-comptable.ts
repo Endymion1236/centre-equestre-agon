@@ -20,7 +20,7 @@ import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
 import { logEmail } from "@/lib/email-log";
 import { REPLY_TO } from "@/lib/email-reply-to";
 import { genererPdfSyntheseCompta } from "@/lib/compta-synthese-pdf";
-import { adressesComptable, construireColisComptable, corpsEmailComptable, encaissementsDuMois, facturesDuMois, fecDuMois, nomMoisLong } from "@/lib/envoi-comptable-utils";
+import { adressesComptable, construireColisComptable, corpsEmailComptable, encaissementsDuMois, facturesDuMois, fecDuMois, nomMoisLong, dateFactureSecondes } from "@/lib/envoi-comptable-utils";
 import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 import type { CreditBancaireFec } from "@/lib/fec-achats-banque";
 
@@ -111,7 +111,7 @@ export async function chargerFecMois(mois: string) {
   const payments = paySnap.docs.map(normaliserDoc);
   const encaissements = encSnap.docs.map(normaliserDoc);
   const celerisDoc = celerisSnap?.exists ? (celerisSnap.data() as any) : null;
-  const factures = facturesDuMois(payments, mois).sort((a: any, b: any) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
+  const factures = facturesDuMois(payments, mois).sort((a: any, b: any) => (dateFactureSecondes(a) || 0) - (dateFactureSecondes(b) || 0));
   return fecDuMois({
     mois, factures, encaissements: encaissementsDuMois(encaissements, mois), payments, tousEncaissements: encaissements, moisCeleris,
     celeris: celerisDoc && Array.isArray(celerisDoc.lignes) ? { lignes: celerisDoc.lignes } : null,

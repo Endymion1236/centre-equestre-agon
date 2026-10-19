@@ -16,6 +16,8 @@ export interface PaiementFec {
   familyName: string;
   totalTTC: number;
   date?: { seconds?: number } | null;
+  /** Date d'émission de la facture (posée avec le numéro) : c'est elle qui date l'écriture. */
+  invoiceDate?: { seconds?: number } | null;
   /** Numéro de facture réel. À défaut, une référence de rang est fabriquée. */
   invoiceNumber?: string | null;
   items?: Array<{
@@ -181,9 +183,10 @@ export function analyserFecVentes(
   let numeroEcriture = premier;
 
   paiements.forEach((paiement, index) => {
-    const date = paiement.date?.seconds
-      ? new Date(paiement.date.seconds * 1000)
-      : maintenant;
+    // La date d'émission de la facture quand elle existe, sinon celle de la
+    // commande (même règle que facturesDuMois, lib/envoi-comptable-utils).
+    const secondes = paiement.invoiceDate?.seconds || paiement.date?.seconds;
+    const date = secondes ? new Date(secondes * 1000) : maintenant;
     const dateEcriture = dateFec(date);
     const piece =
       paiement.invoiceNumber ||

@@ -11,7 +11,7 @@ import {
   construireColisComptable,
   fecDuMois,
   corpsEmailComptable,
-  facturesDuMois,
+  facturesDuMois, estFactureNumerotee, dateFactureSecondes,
   moisParisDeSecondes,
 } from "../../src/lib/envoi-comptable-utils";
 import {
@@ -57,8 +57,24 @@ const depenses = [
 ];
 
 console.log("\n── Périmètre du mois ──");
-test("les factures du mois excluent les annulées et les en attente", () => {
+test("les factures du mois excluent les annulées et les proformas en attente", () => {
   assert.deepEqual(facturesDuMois(payments, "2026-09").map((p) => p.id), ["f1"]);
+});
+
+test("une facture numérotée émise avant paiement (en attente) entre dans le FEC de son mois d'émission", () => {
+  const pro = { id: "f5", invoiceNumber: "F-2026-0120", familyName: "Mairie", status: "pending", totalTTC: 500, paidAmount: 0,
+    date: { seconds: sec("2026-09-20T10:00:00Z") }, invoiceDate: { seconds: sec("2026-10-02T10:00:00Z") }, dueDate: "2026-11-02", items: [] };
+  assert.deepEqual(facturesDuMois([...payments, pro], "2026-10").map((p) => p.id), ["f5"], "octobre : le mois de la facture, pas de la commande");
+  assert.ok(!facturesDuMois([...payments, pro], "2026-09").some((p) => p.id === "f5"), "plus en septembre");
+  assert.equal(estFactureNumerotee(pro), true);
+  assert.equal(estFactureNumerotee({ invoiceNumber: "PF-ABC123" }), false, "une proforma n'est pas numérotée");
+  assert.equal(dateFactureSecondes(pro), sec("2026-10-02T10:00:00Z"));
+  assert.equal(dateFactureSecondes(payments[1]), sec("2026-09-03T10:00:00Z"), "sans date d'émission : la commande");
+});
+
+test("une facture numérotée puis annulée n'entre pas (l'avoir la contrepasse)", () => {
+  const annulee = { id: "f6", invoiceNumber: "F-2026-0121", status: "cancelled", totalTTC: 10, date: { seconds: sec("2026-09-10T10:00:00Z") }, items: [] };
+  assert.ok(!facturesDuMois([annulee], "2026-09").length);
 });
 
 const colis = construireColisComptable({ mois: "2026-09", payments, encaissements, depenses, maintenant: new Date("2026-10-02T08:00:00Z") });

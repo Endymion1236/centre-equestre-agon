@@ -86,10 +86,44 @@ export function moisParisDeSecondes(seconds: number | undefined | null): string 
   return new Date(seconds * 1000).toLocaleString("sv-SE", { timeZone: "Europe/Paris" }).slice(0, 7);
 }
 
-/** Les factures du mois : datées dans le mois, ni annulées ni en attente. */
-export function facturesDuMois<T extends { date?: { seconds?: number } | null; status?: string }>(payments: T[], mois: string) {
+export interface CommandeDatable {
+  date?: { seconds?: number } | null;
+  /** Date d'émission de la facture, posée quand le numéro est attribué. */
+  invoiceDate?: { seconds?: number } | null;
+  invoiceNumber?: string | null;
+  status?: string;
+}
+
+/** Une facture réellement numérotée (séquence F-AAAA-NNNN), par opposition à une proforma PF-…. */
+export const estFactureNumerotee = (p: { invoiceNumber?: string | null } | null | undefined) =>
+  /^F-\d{4}-\d+$/i.test(String(p?.invoiceNumber || "").trim());
+
+/**
+ * La date qui range une vente dans un mois : la date d'ÉMISSION de la facture
+ * quand elle existe, sinon la date de la commande. Octobre 2026 : une
+ * commande de stage créée en septembre et facturée en octobre était rangée en
+ * septembre — déjà transmis au cabinet — et n'entrait dans aucun FEC.
+ */
+export function dateFactureSecondes(p: CommandeDatable | null | undefined): number | undefined {
+  return p?.invoiceDate?.seconds || p?.date?.seconds || undefined;
+}
+
+/**
+ * Les factures du mois : rangées dans le mois par leur date d'émission.
+ *  - une facture NUMÉROTÉE y est, payée ou non : émise avant paiement
+ *    (client pro, avec échéance), elle restait « en attente » et était
+ *    écartée comme une proforma, pour ne jamais entrer dans aucun FEC ;
+ *  - sans numéro, seules les commandes qui ont reçu de l'argent comptent :
+ *    une proforma sans paiement (en attente), un brouillon, une annulée
+ *    n'entrent pas.
+ */
+export function facturesDuMois<T extends CommandeDatable>(payments: T[], mois: string) {
   const exclus = new Set(["cancelled", "pending", "draft"]);
-  return payments.filter((p) => !(p.status && exclus.has(p.status)) && moisParisDeSecondes(p.date?.seconds) === mois);
+  return payments.filter((p) => {
+    if (p.status === "cancelled") return false;
+    if (!estFactureNumerotee(p) && p.status && exclus.has(p.status)) return false;
+    return moisParisDeSecondes(dateFactureSecondes(p)) === mois;
+  });
 }
 
 /** Les écritures du journal datées dans le mois. */
