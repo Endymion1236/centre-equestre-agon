@@ -17,6 +17,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { construireAffichageReglementsFacture } from "@/lib/facture-reglements";
 import { echeancierSepaFacture, type EcheancierFacture } from "@/lib/echeancier-sepa-facture";
 import { lignesPourPdf } from "@/lib/lignes-facture";
+import { completerHorairesLignes } from "@/lib/format-stage";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -124,6 +125,30 @@ function getTvaRecap(items: any[]) {
   return Object.values(recap);
 }
 
+/** Relit les créneaux des lignes qui n'ont pas de planning, puis complète (lib/format-stage). */
+async function completerHorairesDepuisLaBase(items: any[]): Promise<any[]> {
+  const ids = new Set<string>();
+  for (const item of items || []) {
+    if (!item || item.sousTitre || item.stageSchedule || (Array.isArray(item.stageDates) && item.stageDates.length > 0) || (item.date && item.startTime)) continue;
+    for (const id of Array.isArray(item.creneauIds) ? item.creneauIds : item.creneauId ? [item.creneauId] : []) {
+      if (typeof id === "string" && id) ids.add(id);
+    }
+  }
+  if (ids.size === 0) return items;
+  const creneauxParId = new Map<string, { date: string; startTime: string; endTime: string }>();
+  try {
+    const snaps = await Promise.all([...ids].slice(0, 60).map((id) => adminDb.collection("creneaux").doc(id).get()));
+    for (const snap of snaps) {
+      if (!snap.exists) continue;
+      const c = snap.data() as any;
+      creneauxParId.set(snap.id, { date: String(c.date || ""), startTime: String(c.startTime || ""), endTime: String(c.endTime || "") });
+    }
+  } catch (e) {
+    console.warn("[invoice-pdf] créneaux des lignes illisibles :", e);
+  }
+  return completerHorairesLignes(items, creneauxParId);
+}
+
 export async function POST(request: NextRequest) {
   // 🔒 Auth obligatoire
   const auth = await verifyAuth(request);
@@ -151,7 +176,9 @@ export async function POST(request: NextRequest) {
     // échéance d'un forfait en 3× portait les lignes du forfait entier, d'où
     // un HT plus grand que le TTC et une TVA négative sur le PDF.
     const lignes = lignesPourPdf({ totalTTC, items: Array.isArray(itemsRecus) ? itemsRecus : [], totalHT: totalHTRecu, totalTVA: totalTVARecu });
-    const items: any[] = lignes.items;
+    // Lignes sans planning mais avec leurs créneaux : dates et horaires relus
+    // en base (réservation en ligne d'un mois non chargé, cas COSTEGROSSE).
+    const items: any[] = await completerHorairesDepuisLaBase(lignes.items);
     const totalHT = lignes.totalHT;
     const totalTVA = lignes.totalTVA;
 

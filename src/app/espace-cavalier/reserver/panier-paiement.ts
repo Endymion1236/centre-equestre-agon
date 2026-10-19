@@ -67,6 +67,18 @@ export async function payerPanier(ctx: ContextePaiement, rappels: RappelsPaiemen
 
   setPaying(true);
   try {
+    // Les créneaux du panier que le navigateur n'a pas chargés (stage d'un
+    // autre mois) sont relus en base : sans eux, la ligne de commande partait
+    // sans dates ni horaires, et la facture non plus (COSTEGROSSE, 10/2026).
+    const creneauxConnus: Creneau[] = [...creneaux];
+    const manquants = Array.from(new Set(cart.flatMap(i => i.creneauIds))).filter(id => !creneauxConnus.some(c => c.id === id));
+    for (const id of manquants) {
+      try {
+        const snap = await getDoc(doc(db, "creneaux", id));
+        if (snap.exists()) creneauxConnus.push({ id: snap.id, ...(snap.data() as any) } as Creneau);
+      } catch (e) { console.warn("[handlePay] créneau du panier illisible :", id, e); }
+    }
+
     // 1. Inscrire chaque enfant dans chaque créneau
     for (const item of cart) {
       // Pour les stages multi-jours, recharger les créneaux depuis Firestore
@@ -253,8 +265,8 @@ export async function payerPanier(ctx: ContextePaiement, rappels: RappelsPaiemen
       familyId: user.uid, familyName: family.parentName,
       familyEmail: family.parentEmail || user.email || "",
       items: cartAPayer.map(i => {
-        const firstCr = creneaux.find(c => c.id === i.creneauIds[0]);
-        const stageCrs = i.isStage ? i.creneauIds.map(id => creneaux.find(c => c.id === id)).filter(Boolean) : [];
+        const firstCr = creneauxConnus.find(c => c.id === i.creneauIds[0]);
+        const stageCrs = i.isStage ? i.creneauIds.map(id => creneauxConnus.find(c => c.id === id)).filter(Boolean) : [];
         return {
           activityTitle: `${i.activityTitle} — ${i.childName}${i.remiseEuros > 0 ? ` (-${i.remiseEuros}€)` : ""}`,
           childId: i.childId,

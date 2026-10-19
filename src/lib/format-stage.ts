@@ -41,3 +41,32 @@ export function formatStageSchedule(
   // Horaires variés : détailler chaque jour
   return sorted.map(c => `${fmt(c.date)} ${c.startTime}–${c.endTime}`).join(", ");
 }
+
+/**
+ * Complète les lignes d'une commande qui n'ont pas de planning lisible
+ * (ni `stageSchedule`, ni `stageDates`, ni date à la racine) mais portent
+ * leurs créneaux (`creneauIds` ou `creneauId`) : la facture retrouve alors
+ * les jours et les horaires depuis les créneaux eux-mêmes.
+ *
+ * Octobre 2026, COSTEGROSSE : réservation en ligne d'un stage d'un mois que
+ * le navigateur n'avait pas chargé — la ligne partait sans planning, et la
+ * facture n'affichait ni dates ni horaires.
+ */
+export function completerHorairesLignes<T extends Record<string, any>>(
+  items: T[],
+  creneauxParId: Map<string, { date: string; startTime: string; endTime: string }>,
+): T[] {
+  return (items || []).map((item) => {
+    if (!item || item.sousTitre || item.stageSchedule || (Array.isArray(item.stageDates) && item.stageDates.length > 0) || (item.date && item.startTime)) {
+      return item;
+    }
+    const ids: string[] = Array.isArray(item.creneauIds) && item.creneauIds.length
+      ? item.creneauIds
+      : item.creneauId ? [item.creneauId] : [];
+    const creneaux = ids.map((id) => creneauxParId.get(id)).filter((c): c is { date: string; startTime: string; endTime: string } => !!c?.date);
+    if (creneaux.length === 0) return item;
+    const stageDates = [...creneaux].sort((a, b) => a.date.localeCompare(b.date))
+      .map((c) => ({ date: c.date, startTime: c.startTime || "", endTime: c.endTime || "" }));
+    return { ...item, stageSchedule: formatStageSchedule(stageDates), stageDates };
+  });
+}
