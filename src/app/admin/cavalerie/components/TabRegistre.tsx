@@ -9,10 +9,13 @@
  * et le raccourci « enregistrer le retour » d'une sortie temporaire.
  */
 import { useMemo, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
-import { BookOpen, ChevronRight, ChevronLeft, Undo2 } from "lucide-react";
+import { BookOpen, ChevronRight, ChevronLeft, Printer, Undo2 } from "lucide-react";
 import type { Equide, MouvementRegistre } from "../types";
-import { dateISO, motifRetour, situationEquides, trierMouvements } from "@/lib/cavalerie-mouvements";
+import { dateISO, htmlRegistre, motifRetour, situationEquides, trierMouvements } from "@/lib/cavalerie-mouvements";
+import { fusionnerClubInfo } from "@/lib/club-info-defauts";
 import type { MouvementParDefaut } from "./MouvementModal";
 
 const formatDate = (d: any) => {
@@ -44,6 +47,21 @@ export default function TabRegistre({ mouvements, equides, onRetour }: Props) {
   // Un retour est dû pour chaque sortie temporaire sans entrée depuis.
   const retoursAttendus = new Set(dehors.map(s => s.dernier?.id).filter(Boolean));
 
+  // Le registre à présenter lors d'un contrôle : page A4 dans un nouvel
+  // onglet, impression lancée à l'ouverture. L'identité du club vient des
+  // réglages (settings/centre), sinon des défauts.
+  const imprimer = async () => {
+    const w = window.open("", "_blank");
+    if (!w) return;
+    let reglages: Record<string, unknown> | null = null;
+    try {
+      const snap = await getDoc(doc(db, "settings", "centre"));
+      reglages = snap.exists() ? (snap.data() as Record<string, unknown>) : null;
+    } catch (e) { console.warn("[registre] réglages du club illisibles :", e); }
+    w.document.write(htmlRegistre({ club: fusionnerClubInfo(reglages), equides: equides as any, mouvements, aujourdhui }));
+    w.document.close();
+  };
+
   const liste = trierMouvements(mouvements).reverse()
     .filter(m => filtreEquide === "all" || m.equideId === filtreEquide)
     .filter(m => filtreType === "all" || m.type === filtreType);
@@ -54,6 +72,10 @@ export default function TabRegistre({ mouvements, equides, onRetour }: Props) {
         <BookOpen size={28} className="text-blue-300"/>
       </div>
       <p className="font-body text-sm text-gray-500">Aucun mouvement enregistré. Cet onglet garde la trace de toutes les entrées et sorties des équidés (achat, vente, prêt, concours, pension, retraite, décès) : c&apos;est le registre d&apos;élevage.</p>
+      <button type="button" onClick={imprimer}
+        className="mt-3 inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-3 py-2 font-body text-xs font-semibold text-blue-700 cursor-pointer hover:bg-blue-50">
+        <Printer size={14}/> Imprimer le registre
+      </button>
     </Card>
   );
 
@@ -65,6 +87,10 @@ export default function TabRegistre({ mouvements, equides, onRetour }: Props) {
           <span><strong className="text-green-600">{presents}</strong> présent{presents > 1 ? "s" : ""}</span>
           <span><strong className="text-orange-500">{dehors.length}</strong> sorti{dehors.length > 1 ? "s" : ""} temporairement</span>
           <span><strong className="text-red-500">{sortis}</strong> sorti{sortis > 1 ? "s" : ""} définitivement</span>
+          <button type="button" onClick={imprimer} title="Registre d'élevage complet, à présenter lors d'un contrôle"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-2.5 py-1.5 font-body text-[11px] font-semibold text-blue-700 cursor-pointer hover:bg-blue-50">
+            <Printer size={13}/> Imprimer le registre
+          </button>
         </div>
         {dehors.length > 0 && (
           <div className="mt-2 flex flex-col gap-1">

@@ -5,31 +5,12 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 
-export interface ClubInfo {
-  nom: string;
-  legalName: string;
-  address: string;
-  tel: string;
-  email: string;
-  siret: string;
-  tvaIntra: string;
-  iban: string;
-  bic: string;
-  website: string;
-}
+import { CLUB_DEFAUTS, type ClubInfo } from "@/lib/club-info-defauts";
+export type { ClubInfo } from "@/lib/club-info-defauts";
 
-const DEFAULTS: ClubInfo = {
-  nom: "Centre Equestre d'Agon-Coutainville",
-  legalName: "E.A.R.L. Centre Equestre Poney Club d'Agon-Coutainville",
-  address: "56 Charrière du Commerce, 50230 Agon-Coutainville",
-  tel: "02 44 84 99 96",
-  email: "ceagon50@gmail.com",
-  siret: "50756918400017",
-  tvaIntra: "FR12507569184",
-  iban: "FR76 1660 6100 6400 1353 9343 253",
-  bic: "AGRIFRPP866",
-  website: "https://centreequestreagon.com",
-};
+// Les valeurs par défaut vivent dans club-info-defauts (sans firebase-admin),
+// pour que les écrans du navigateur puissent les lire aussi.
+const DEFAULTS: ClubInfo = CLUB_DEFAUTS;
 
 /** Adresses de contact abandonnées : remplacées par le défaut si elles traînent dans les réglages. */
 const ANCIENNES_ADRESSES = new Set(["ceagon@orange.fr"]);
