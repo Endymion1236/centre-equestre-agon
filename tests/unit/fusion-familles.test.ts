@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import {
   apparierEnfants, champsACompleter, choisirFicheARattacher, fusionnerChampsFiche,
-  COLLECTIONS_SUIVANT_LA_FAMILLE, nomCavalier,
+  COLLECTIONS_SUIVANT_LA_FAMILLE, nomCavalier, estCompteDeConnexion, sensDeFusion,
 } from "../../src/lib/fusion-familles";
 
 let passes = 0;
@@ -62,6 +62,35 @@ test("les collections qui suivent la famille couvrent commandes, cartes et manda
   const c = COLLECTIONS_SUIVANT_LA_FAMILLE as readonly string[];
   for (const attendu of ["payments", "reservations", "cartes", "mandats-sepa", "forfaits", "avoirs"]) assert.ok(c.includes(attendu), attendu);
   assert.ok(!c.includes("encaissements"), "le journal est immuable (NF525)");
+});
+
+console.log("\n── Le sens d'une fusion : le compte de connexion est conservé ──");
+
+const compte = { id: "uid-olivier", authUid: "uid-olivier", parentName: "GROSSE Olivier" };
+const bureau = { id: "jMuroet5", authUid: "", parentName: "COSTEGROSSE" };
+
+test("un compte de connexion : identifiant = identifiant Firebase", () => {
+  assert.equal(estCompteDeConnexion(compte), true);
+  assert.equal(estCompteDeConnexion(bureau), false);
+  assert.equal(estCompteDeConnexion({ id: "a", authUid: "b" }), false, "authUid recopié d'ailleurs");
+});
+
+test("absorber le compte dans la fiche du bureau : le sens est inversé (cas COSTEGROSSE)", () => {
+  const sens = sensDeFusion(bureau, compte);
+  assert.equal(sens.keepId, "uid-olivier");
+  assert.equal(sens.mergeId, "jMuroet5");
+  assert.equal(sens.inverse, true);
+  assert.match(sens.avertissements[0], /compte de connexion/);
+});
+
+test("absorber la fiche du bureau dans le compte : sens respecté, rien à dire", () => {
+  assert.deepEqual(sensDeFusion(compte, bureau), { keepId: "uid-olivier", mergeId: "jMuroet5", inverse: false, avertissements: [] });
+});
+
+test("deux comptes de connexion : le choix est respecté, avec un avertissement", () => {
+  const sens = sensDeFusion(compte, { id: "uid-2", authUid: "uid-2", parentName: "Autre" });
+  assert.equal(sens.inverse, false);
+  assert.match(sens.avertissements[0], /devra se connecter avec le compte conservé/);
 });
 
 console.log("\n── Quelle fiche rattacher à un compte ──");

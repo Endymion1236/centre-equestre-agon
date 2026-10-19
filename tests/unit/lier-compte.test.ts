@@ -54,6 +54,7 @@ function fixture(opts: {
   const ecrits: { id: string; v: any }[] = [];
   const fusions: any[] = [];
   const stock: Record<string, any> = {};
+  for (const f of opts.bureau || []) { const { id, ...reste } = f; if (id !== UID) stock[id] = reste; }
   if (opts.propre) stock[UID] = opts.propre;
 
   const doc = (id: string) => ({
@@ -147,6 +148,28 @@ async function main() {
     assert.equal(f.fusions[0].keepId, UID);
     assert.equal(f.fusions[0].mergeId, "ficheBureau");
     assert.equal(f.ecrits.length, 0, "la fusion fait les écritures, pas la route");
+  });
+
+  await test("compte absorbé par la fiche du bureau (mauvais sens) : rétabli à la connexion, la fiche du bureau le rejoint", async () => {
+    const f = fixture({
+      propre: { parentName: "GROSSE Olivier", parentEmail: EMAIL, authUid: UID, status: "merged", mergedInto: "ficheBureau", children: [] },
+      bureau: [{ id: "ficheBureau", parentName: "COSTEGROSSE", parentEmail: EMAIL, children: [cavalier("b1", "Garance"), cavalier("b2", "Aurèle")] }],
+    });
+    const r = await f.route.POST({});
+    assert.equal(r.status, 200);
+    assert.equal(f.fusions.length, 1);
+    assert.equal(f.fusions[0].keepId, UID, "le compte redevient la fiche conservée");
+    assert.equal(f.fusions[0].mergeId, "ficheBureau");
+  });
+
+  await test("compte absorbé par un AUTRE compte de connexion : on ne touche à rien", async () => {
+    const f = fixture({
+      propre: { parentName: "Ancien", parentEmail: EMAIL, authUid: UID, status: "merged", mergedInto: "uid-2", children: [] },
+      bureau: [{ id: "uid-2", parentName: "Nouveau", parentEmail: EMAIL, authUid: "uid-2", children: [cavalier("k1", "Léa")] }],
+    });
+    const r = await f.route.POST({});
+    assert.equal(f.fusions.length, 0);
+    assert.equal(r.body.family.id, "uid-2", "on suit la fusion vers le compte conservé");
   });
 
   await test("compte déjà rempli + deux autres fiches à l'adresse : on ne tranche pas", async () => {

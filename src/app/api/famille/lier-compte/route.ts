@@ -65,7 +65,7 @@ import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { fournisseurDepuisJeton } from "@/lib/fournisseur-connexion";
-import { choisirFicheARattacher, fusionnerChampsFiche, fusionnerFamilles } from "@/lib/fusion-familles";
+import { choisirFicheARattacher, estCompteDeConnexion, fusionnerChampsFiche, fusionnerFamilles } from "@/lib/fusion-familles";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +84,28 @@ export async function POST(req: NextRequest) {
     // c'est justement la fiche orpheline à réparer, et on continue.
     const propreSnap = await adminDb.collection("families").doc(uid).get();
     const propre = propreSnap.exists ? (propreSnap.data() as Record<string, any>) : null;
+
+    // Le compte absorbé par une fiche du bureau (fusion faite dans le mauvais
+    // sens, avant que fusionnerFamilles ne l'interdise) : la famille retrouvait
+    // sa fiche mais plus rien d'autre. On remet le compte en fiche conservée,
+    // la fiche du bureau le rejoint avec tout ce qu'elle porte.
+    if (propre && propre.status === "merged" && propre.mergedInto) {
+      const cibleId = String(propre.mergedInto);
+      const cibleSnap = await adminDb.collection("families").doc(cibleId).get();
+      const cible = cibleSnap.exists ? (cibleSnap.data() as Record<string, any>) : null;
+      if (cible && estCompteDeConnexion({ id: uid, authUid: propre.authUid }) && !estCompteDeConnexion({ id: cibleId, authUid: cible.authUid })) {
+        try {
+          const { apercu } = await fusionnerFamilles({ keepId: uid, mergeId: cibleId, mergedBy: "system:lier-compte" });
+          console.log(`[lier-compte] compte ${uid} rétabli, fiche ${cibleId} absorbée :`, apercu.reassign, `créneaux=${apercu.creneauxTouches}`);
+          const finale = await adminDb.collection("families").doc(uid).get();
+          return NextResponse.json({ lie: true, family: { id: uid, ...(finale.data() || {}) } });
+        } catch (e) {
+          console.error(`[lier-compte] rétablissement du compte ${uid} impossible — à faire depuis Diagnostic famille`, e);
+        }
+      }
+      // Fusion dans le bon sens (vers un autre compte de connexion) : on suit.
+      if (cible) return NextResponse.json({ lie: true, family: { id: cibleId, ...cible } });
+    }
 
     // Fiches portant l'adresse DU JETON — jamais une adresse fournie par
     // l'appelant. La sienne, et les fiches déjà absorbées, ne comptent pas.

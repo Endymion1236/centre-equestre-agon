@@ -18,6 +18,7 @@
  */
 
 import { adminDb } from "@/lib/firebase-admin";
+import { FieldValue } from "firebase-admin/firestore";
 
 /** Collections dont les documents portent `familyId` et suivent la famille. */
 export const COLLECTIONS_SUIVANT_LA_FAMILLE = [
@@ -154,6 +155,48 @@ export interface ApercuFusion {
   enfantsFusionnes: { de: string; vers: string }[];
   reassign: Record<string, number>;
   creneauxTouches: number;
+  /** Le sens demandé a été inversé pour garder le compte de connexion. */
+  inverse: boolean;
+  avertissements: string[];
+}
+
+/**
+ * Le compte de connexion d'une famille : la fiche dont l'identifiant EST son
+ * identifiant Firebase (cf. /api/famille/lier-compte). L'espace famille ne lit
+ * que les données rattachées à cet identifiant.
+ */
+export const estCompteDeConnexion = (f: { id: string; authUid?: string | null } | null | undefined) =>
+  !!f && !!f.authUid && f.authUid === f.id;
+
+/**
+ * Dans quel sens fusionner ? Le compte de connexion est TOUJOURS la fiche
+ * conservée. Octobre 2026, COSTEGROSSE : le compte de la famille avait été
+ * absorbé par la fiche du bureau ; la famille retrouvait bien sa fiche à la
+ * connexion (le compte absorbé renvoie à la fiche conservée), mais plus
+ * aucune commande ni inscription — l'espace famille cherche tout sous
+ * l'identifiant du compte, et tout était désormais sous celui du bureau.
+ *
+ * Deux comptes de connexion : on respecte le choix, en prévenant que la
+ * famille devra se connecter avec le compte conservé.
+ */
+export function sensDeFusion(
+  keep: { id: string; authUid?: string | null; parentName?: string },
+  merge: { id: string; authUid?: string | null; parentName?: string },
+): { keepId: string; mergeId: string; inverse: boolean; avertissements: string[] } {
+  const avertissements: string[] = [];
+  if (estCompteDeConnexion(merge) && !estCompteDeConnexion(keep)) {
+    avertissements.push(
+      `« ${merge.parentName || merge.id} » est le compte de connexion de la famille : c'est lui qui est conservé, `
+      + `sinon l'espace famille ne verrait plus ni inscriptions ni paiements. « ${keep.parentName || keep.id} » est absorbée.`,
+    );
+    return { keepId: merge.id, mergeId: keep.id, inverse: true, avertissements };
+  }
+  if (estCompteDeConnexion(merge) && estCompteDeConnexion(keep)) {
+    avertissements.push(
+      `Les deux fiches sont des comptes de connexion : la famille devra se connecter avec le compte conservé (« ${keep.parentName || keep.id} »).`,
+    );
+  }
+  return { keepId: keep.id, mergeId: merge.id, inverse: false, avertissements };
 }
 
 async function commitInBatches(ops: { ref: FirebaseFirestore.DocumentReference; data: any }[]) {
@@ -178,12 +221,21 @@ export async function fusionnerFamilles(params: {
   /** Qui a décidé : email de l'admin, ou « system:lier-compte ». */
   mergedBy: string;
 }): Promise<{ apercu: ApercuFusion; applique: boolean }> {
-  const { keepId, mergeId, dryRun = false, mergedBy } = params;
-  if (!keepId || !mergeId || keepId === mergeId) throw new Error("keepId/mergeId invalides");
+  const { dryRun = false, mergedBy } = params;
+  if (!params.keepId || !params.mergeId || params.keepId === params.mergeId) throw new Error("keepId/mergeId invalides");
 
-  const keepSnap = await adminDb.collection("families").doc(keepId).get();
+  // Le sens : le compte de connexion est toujours conservé (sensDeFusion).
+  const demandeKeep = await adminDb.collection("families").doc(params.keepId).get();
+  const demandeMerge = await adminDb.collection("families").doc(params.mergeId).get();
+  const sens = sensDeFusion(
+    { id: params.keepId, ...(demandeKeep.exists ? (demandeKeep.data() as any) : {}) },
+    { id: params.mergeId, ...(demandeMerge.exists ? (demandeMerge.data() as any) : {}) },
+  );
+  const { keepId, mergeId } = sens;
+
+  const keepSnap = keepId === params.keepId ? demandeKeep : demandeMerge;
   if (!keepSnap.exists) throw new Error("fiche conservée introuvable");
-  const mergeSnap = await adminDb.collection("families").doc(mergeId).get();
+  const mergeSnap = mergeId === params.mergeId ? demandeMerge : demandeKeep;
   const keep = keepSnap.data() as any;
   const merge = (mergeSnap.exists ? mergeSnap.data() : {}) as any;
   const keepName = keep.parentName || "";
@@ -235,11 +287,22 @@ export async function fusionnerFamilles(params: {
     }),
     reassign: counts,
     creneauxTouches: creneauOps.length,
+    inverse: sens.inverse,
+    avertissements: sens.avertissements,
   };
   if (dryRun) return { apercu, applique: false };
 
   await commitInBatches(reassignOps);
   await commitInBatches(creneauOps);
+
+  // Une fiche conservée qui avait elle-même été absorbée (le compte de
+  // connexion fusionné dans le mauvais sens) redevient vivante.
+  if (keep.status === "merged") {
+    await adminDb.collection("families").doc(keepId).set(
+      { status: FieldValue.delete(), mergedInto: FieldValue.delete(), mergedAt: FieldValue.delete() },
+      { merge: true },
+    );
+  }
 
   // Cavaliers de la fiche absorbée, et ce qu'elle seule savait : téléphone,
   // adresse postale, civilité. L'espace créé par une famille n'a souvent que

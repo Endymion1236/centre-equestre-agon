@@ -204,6 +204,9 @@ export default function DoublonsPage() {
               ))}
             </div>
 
+            {(preview?.avertissements || []).map((a: string, i: number) => (
+              <div key={i} className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-2 font-body text-xs text-amber-900">{a}</div>
+            ))}
             {preview && (
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 font-body text-xs text-slate-600">
                 <div className="font-semibold text-slate-700 mb-1">Ce qui sera déplacé vers « {preview.keep.name} » :</div>

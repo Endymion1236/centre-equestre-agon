@@ -140,6 +140,14 @@ export default function DiagFamillePage() {
                   <span className="inline-flex items-center gap-1"><CalendarDays size={11} />{f.inscriptionsAVenir} inscription{f.inscriptionsAVenir > 1 ? "s" : ""} à venir au planning</span>
                   <span className="text-[10px] text-slate-400">identifiant {f.docId}{f.authProvider ? ` · connexion ${f.authProvider}` : ""}</span>
                 </div>
+                {absorbee && f.estCompte && f.mergedInto && !diag.fiches.find(x => x.docId === f.mergedInto)?.estCompte && (
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+                    <button type="button" onClick={() => { setFusion({ keepId: f.docId, mergeId: f.mergedInto! }); setApercu(null); }}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 font-body text-xs font-semibold text-white cursor-pointer border-none hover:bg-emerald-500">
+                      <KeyRound size={13} /> Rétablir ce compte comme fiche principale (« {nomDe(f.mergedInto)} » le rejoint)
+                    </button>
+                  </div>
+                )}
                 {!absorbee && compte && !f.estCompte && (
                   <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
                     <button type="button" onClick={() => { setFusion({ keepId: compte.docId, mergeId: f.docId }); setApercu(null); }}
@@ -187,9 +195,12 @@ export default function DiagFamillePage() {
               <button type="button" onClick={() => setFusion(null)} disabled={busy} className="text-slate-400 bg-transparent border-none cursor-pointer"><X size={18} /></button>
             </div>
             <p className="font-body text-sm text-slate-600 mb-3">
-              « {nomDe(fusion.mergeId)} » sera absorbée par « {nomDe(fusion.keepId)} » : cavaliers, commandes, inscriptions au planning, réservations, cartes, avoirs et mandats passent sur le compte.
+              « {nomDe(apercu?.merge?.id || fusion.mergeId)} » sera absorbée par « {nomDe(apercu?.keep?.id || fusion.keepId)} » : cavaliers, commandes, inscriptions au planning, réservations, cartes, avoirs et mandats passent sur le compte.
               Les encaissements ne bougent pas. La fiche absorbée reste en mémoire, masquée.
             </p>
+            {apercu?.avertissements?.length > 0 && apercu.avertissements.map((a: string, i: number) => (
+              <div key={i} className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-2 font-body text-xs text-amber-900">{a}</div>
+            ))}
             {apercu && (
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 mb-3 font-body text-xs text-slate-700 space-y-1">
                 <div><strong>Cavaliers conservés :</strong> {apercu.enfantsConserves?.join(", ") || "—"}</div>

@@ -74,6 +74,9 @@ export default function MergeFamilyModal({ sourceFamilyId, families, onClose, on
             Sont déplacés : enfants, forfaits, avoirs, fidélité, devis, réservations, historique de paiement et créneaux. Les encaissements (immuables) ne sont pas modifiés. Le compte source est masqué (réversible).
           </div>
 
+          {(preview?.avertissements || []).map((a: string, i: number) => (
+            <div key={i} className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 font-body text-xs text-amber-900">{a}</div>
+          ))}
           {preview && (
             <div className="bg-blue-50 rounded-lg p-3 font-body text-xs text-blue-900">
               <div className="font-semibold mb-1">À déplacer vers « {preview.keep.name} » :</div>

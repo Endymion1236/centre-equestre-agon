@@ -121,10 +121,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           let resolved = false;
           // Compte fusionné : on bascule sur le compte conservé.
           if (data.status === "merged" && data.mergedInto) {
-            try {
-              const keptSnap = await getDoc(doc(db, "families", data.mergedInto));
-              if (keptSnap.exists()) { setFamily({ id: keptSnap.id, ...keptSnap.data() } as Family); resolved = true; }
-            } catch { /* fallback ci-dessous */ }
+            // Le compte de connexion lui-même absorbé par une fiche du bureau
+            // (fusion dans le mauvais sens) : le serveur le rétablit et ramène
+            // la fiche du bureau dessus — sinon l'espace famille, qui lit tout
+            // sous l'identifiant du compte, restait sans inscription ni paiement.
+            if (data.authUid === firebaseUser.uid) {
+              try {
+                const token = await firebaseUser.getIdToken();
+                const res = await fetch("/api/famille/lier-compte", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+                if (res.ok) {
+                  const rep = await res.json();
+                  if (rep?.lie && rep.family) { setFamily(rep.family as Family); resolved = true; }
+                }
+              } catch (e) { console.warn("Rétablissement du compte impossible :", e); }
+            }
+            if (!resolved) {
+              try {
+                const keptSnap = await getDoc(doc(db, "families", data.mergedInto));
+                if (keptSnap.exists()) { setFamily({ id: keptSnap.id, ...keptSnap.data() } as Family); resolved = true; }
+              } catch { /* fallback ci-dessous */ }
+            }
           }
           if (!resolved) setFamily({ id: familySnap.id, ...familySnap.data() } as Family);
         } else {

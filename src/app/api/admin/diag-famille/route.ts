@@ -197,6 +197,13 @@ export async function GET(req: NextRequest) {
             ? `⚠️ Le compte de connexion (« ${compte.parentName || compte.docId} ») ne porte ni les commandes ni les inscriptions : elles sont sur ${ailleurs.map((f) => `« ${f.parentName || f.docId} »`).join(", ")}. La famille ne les voit donc pas dans son espace.`
             : null;
         })(),
+        compteAbsorbe: (() => {
+          const absorbe = fiches.find((f) => f.estCompte && f.status === "merged" && f.mergedInto);
+          const cible = absorbe ? fiches.find((f) => f.docId === absorbe.mergedInto) : null;
+          return absorbe && cible && !cible.estCompte
+            ? `⚠️ Le compte de connexion « ${absorbe.parentName || absorbe.docId} » a été absorbé par la fiche du bureau « ${cible.parentName || cible.docId} » : c'est le mauvais sens. La famille retrouve sa fiche mais l'espace famille ne lit que ce qui est rattaché au compte, d'où un espace sans inscription ni paiement. Rétablissez le compte comme fiche principale.`
+            : null;
+        })(),
         sansCompte: fiches.length > 0 && !fiches.some((f) => f.estCompte)
           ? "Aucune de ces fiches n'est un compte de connexion : la famille ne s'est pas encore connectée (ou s'est connectée avec une autre adresse — cherchez-la par le nom)."
           : null,
