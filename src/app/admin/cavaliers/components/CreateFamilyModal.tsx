@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { emailNormalise, fichesVivantesParEmail, messageFicheExistante } from "@/lib/famille-existante";
 import { X, Save, Loader2, Plus, Trash2 } from "lucide-react";
 import { emailTemplates } from "@/lib/email-templates";
 import { useToast } from "@/components/ui/Toast";
@@ -92,6 +93,15 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
     }
     setSaving(true);
     try {
+      // Pas de seconde fiche à une adresse connue (lib/famille-existante).
+      const adresse = emailNormalise(newFamily.parentEmail);
+      const existantes = await getDocs(query(collection(db, "families"), where("parentEmail", "in", Array.from(new Set([adresse, newFamily.parentEmail.trim()])))));
+      const vivantes = fichesVivantesParEmail(existantes.docs.map(d => ({ id: d.id, ...(d.data() as any) })), adresse);
+      if (vivantes.length > 0) {
+        toast(messageFicheExistante(vivantes), "error", 12000);
+        setSaving(false);
+        return;
+      }
       // Nom du foyer : sert de valeur par defaut a chaque enfant dont le champ
       // est reste vide. Un nom saisi explicitement (famille recomposee, garde
       // alternee) reste toujours prioritaire. Meme regle que la route
@@ -123,7 +133,7 @@ export default function CreateFamilyModal({ onClose, onDone }: Props) {
         parentName: computedName,
         lastName: lastName || null,
         firstName: firstName || null,
-        parentEmail: newFamily.parentEmail.trim(),
+        parentEmail: adresse,
         parentPhone: newFamily.parentPhone.trim(),
         parentPhone2: (newFamily.parentPhone2 || "").trim(),
         address: newFamily.address.trim(),

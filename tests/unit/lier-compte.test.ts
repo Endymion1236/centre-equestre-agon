@@ -133,6 +133,46 @@ async function main() {
     assert.equal(f.fusions[0].mergedBy, "system:lier-compte");
   });
 
+  await test("compte déjà rempli + fiche du bureau créée après coup à la même adresse : elle est absorbée (cas COSTEGROSSE)", async () => {
+    const f = fixture({
+      propre: { parentName: "COSTEGROSSE", parentEmail: EMAIL, authUid: UID, children: [cavalier("k1", "Léa"), cavalier("k2", "Tom")] },
+      bureau: [
+        { id: UID, parentName: "COSTEGROSSE", parentEmail: EMAIL, children: [cavalier("k1", "Léa"), cavalier("k2", "Tom")] },
+        { id: "ficheBureau", parentName: "COSTEGROSSE Julie", parentEmail: EMAIL, children: [cavalier("b1", "Léa"), cavalier("b2", "Tom")] },
+      ],
+    });
+    const r = await f.route.POST({});
+    assert.equal(r.status, 200);
+    assert.equal(f.fusions.length, 1, "la fiche du bureau passe le relais au compte");
+    assert.equal(f.fusions[0].keepId, UID);
+    assert.equal(f.fusions[0].mergeId, "ficheBureau");
+    assert.equal(f.ecrits.length, 0, "la fusion fait les écritures, pas la route");
+  });
+
+  await test("compte déjà rempli + deux autres fiches à l'adresse : on ne tranche pas", async () => {
+    const f = fixture({
+      propre: { parentName: "DUPONT", parentEmail: EMAIL, children: [cavalier("k1", "Léa")] },
+      bureau: [
+        { id: "a", parentEmail: EMAIL, children: [cavalier("a1", "Léa")] },
+        { id: "b", parentEmail: EMAIL, children: [cavalier("b1", "Max")] },
+      ],
+    });
+    const r = await f.route.POST({});
+    assert.equal(r.status, 200);
+    assert.equal(f.fusions.length, 0);
+  });
+
+  await test("compte déjà rempli, adresse non vérifiée : la fiche du bureau n'est pas absorbée", async () => {
+    const f = fixture({
+      emailVerifie: false,
+      propre: { parentName: "DUPONT", parentEmail: EMAIL, children: [cavalier("k1", "Léa")] },
+      bureau: [{ id: "ficheBureau", parentEmail: EMAIL, children: [cavalier("b1", "Léa")] }],
+    });
+    const r = await f.route.POST({});
+    assert.equal(r.status, 200, "le compte garde son espace");
+    assert.equal(f.fusions.length, 0);
+  });
+
   await test("ce que la famille avait saisi de son côté n'est pas perdu", async () => {
     const f = fixture({
       propre: { parentName: "Parent Test", parentEmail: EMAIL, parentPhone: "0611111111", children: [] },

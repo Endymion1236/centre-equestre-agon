@@ -39,6 +39,20 @@
  * fiche, et si on la trouve, on la recopie ici et on lui fait passer le
  * relais — commandes, réservations, places au planning.
  *
+ * ── Le compte déjà rempli, et la fiche du bureau à côté ──────────────────
+ *
+ * Octobre 2026, COSTEGROSSE : la famille avait créé son espace et ses deux
+ * cavaliers ; le bureau a ensuite créé une fiche à la même adresse depuis le
+ * planning, inscrit les enfants et envoyé les liens de paiement. Les emails
+ * partaient bien (ils suivent la commande), mais l'espace famille ne
+ * montrait ni inscription ni paiement : tout vivait sur la fiche du bureau,
+ * et le compte, ayant des cavaliers, ne cherchait plus rien.
+ *
+ * Désormais, quand une seule autre fiche vivante porte l'adresse (vérifiée)
+ * du compte, elle est absorbée par le compte à la connexion suivante, comme
+ * une fiche du bureau ordinaire. Plusieurs fiches à la même adresse : on ne
+ * tranche pas, l'écran Doublons le signale.
+ *
  * Réponse :
  *   { lie: true,  family }  → fiche rattachée (ou déjà rattachée)
  *   { lie: true, cree: true, family } → aucune fiche connue, fiche vierge créée
@@ -70,9 +84,6 @@ export async function POST(req: NextRequest) {
     // c'est justement la fiche orpheline à réparer, et on continue.
     const propreSnap = await adminDb.collection("families").doc(uid).get();
     const propre = propreSnap.exists ? (propreSnap.data() as Record<string, any>) : null;
-    if (propre && aDesCavaliers(propre)) {
-      return NextResponse.json({ lie: true, family: { id: uid, ...propre } });
-    }
 
     // Fiches portant l'adresse DU JETON — jamais une adresse fournie par
     // l'appelant. La sienne, et les fiches déjà absorbées, ne comptent pas.
@@ -81,6 +92,27 @@ export async function POST(req: NextRequest) {
       : null;
     const candidates: (Record<string, any> & { id: string })[] =
       (snap?.docs || []).map((d) => ({ ...(d.data() as Record<string, any>), id: d.id }));
+
+    if (propre && aDesCavaliers(propre)) {
+      // Le compte est déjà rattaché. Reste le cas de la fiche créée par le
+      // bureau APRÈS coup, à la même adresse (cf. en-tête) : une seule, et
+      // l'adresse vérifiée, elle est absorbée ici.
+      const autres = candidates.filter((f) => f.id !== uid && f.status !== "merged");
+      if (autres.length === 1 && auth.email_verified === true) {
+        try {
+          const { apercu } = await fusionnerFamilles({ keepId: uid, mergeId: autres[0].id, mergedBy: "system:lier-compte" });
+          console.log(`[lier-compte] fiche du bureau ${autres[0].id} absorbée par le compte ${uid} :`, apercu.reassign, `créneaux=${apercu.creneauxTouches}`);
+          const finale = await adminDb.collection("families").doc(uid).get();
+          return NextResponse.json({ lie: true, family: { id: uid, ...(finale.data() || propre) } });
+        } catch (e) {
+          console.error(`[lier-compte] fusion de la fiche ${autres[0].id} dans le compte ${uid} impossible — à fusionner depuis Doublons`, e);
+        }
+      } else if (autres.length > 1) {
+        console.warn(`[lier-compte] ${email} : ${autres.length} autres fiches à cette adresse, rattachement laissé à l'admin`);
+      }
+      return NextResponse.json({ lie: true, family: { id: uid, ...propre } });
+    }
+
     const ancienne = choisirFicheARattacher(candidates, uid);
 
     if (!ancienne) {

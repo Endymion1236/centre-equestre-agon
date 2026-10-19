@@ -12,9 +12,10 @@
  */
 
 import { useState } from "react";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, query, serverTimestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { nomDeduitDuParent } from "@/lib/nom-foyer";
+import { emailNormalise, fichesVivantesParEmail, messageFicheExistante } from "@/lib/famille-existante";
 import { Loader2, X, Check } from "lucide-react";
 import { emailValide } from "@/lib/utils";
 import { authFetch } from "@/lib/auth-fetch";
@@ -175,6 +176,16 @@ export default function FormulaireNouvelleFamille({
             }
             setCreatingFamily(true);
             try {
+              // Pas de seconde fiche à une adresse connue (lib/famille-existante) :
+              // les inscriptions partiraient sur la nouvelle, invisible du compte.
+              const adresse = emailNormalise(newFam.parentEmail);
+              const existantes = await getDocs(query(collection(db, "families"), where("parentEmail", "in", Array.from(new Set([adresse, newFam.parentEmail.trim()])))));
+              const vivantes = fichesVivantesParEmail(existantes.docs.map(d => ({ id: d.id, ...(d.data() as any) })), adresse);
+              if (vivantes.length > 0) {
+                panelToast(messageFicheExistante(vivantes), "error");
+                setCreatingFamily(false);
+                return;
+              }
               const children = validChildren.map(c => ({
                 id: `child_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
                 firstName: c.firstName.trim(),
@@ -186,7 +197,8 @@ export default function FormulaireNouvelleFamille({
               const famRef = await addDoc(collection(db, "families"), {
                 civilite: newFam.civilite || null,
                 parentName: newFam.parentName.trim(),
-                parentEmail: newFam.parentEmail.trim(),
+                // En minuscules : c'est ainsi que la connexion du parent la retrouve.
+                parentEmail: adresse,
                 parentPhone: newFam.parentPhone.trim(),
                 address: newFam.address.trim(),
                 zipCode: newFam.zipCode.trim(),
