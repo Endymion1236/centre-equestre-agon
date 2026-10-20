@@ -1,6 +1,8 @@
 "use client";
-import { useState } from "react";
-import { Loader2, Mail, X, Paperclip, FileSignature } from "lucide-react";
+import { useRef, useState } from "react";
+import { Loader2, Mail, X, Paperclip, FileSignature, Mic, Square, Sparkles, Undo2 } from "lucide-react";
+import { extensionAudio } from "@/lib/transcription-params";
+import { ajouterDictee, consigneMiseEnFormeEmail, lireMiseEnForme } from "@/lib/email-dicte-ia";
 import { emailTemplates } from "@/lib/email-templates";
 import { useToast } from "@/components/ui/Toast";
 import { authFetch } from "@/lib/auth-fetch";
@@ -36,6 +38,77 @@ export default function EmailModal({ emailModal, allPayments, onClose, destinata
   const [attachments, setAttachments] = useState<{ filename: string; content: string; taille?: number }[]>([]);
   const [attaching, setAttaching] = useState(false);
   const { toast } = useToast();
+  // Dictée (micro → /api/whisper) et mise en forme par l'IA (cf. email-dicte-ia).
+  const [enregistrement, setEnregistrement] = useState(false);
+  const [transcription, setTranscription] = useState(false);
+  const [miseEnForme, setMiseEnForme] = useState(false);
+  const [remarquesIa, setRemarquesIa] = useState<string[]>([]);
+  const [avantIa, setAvantIa] = useState<{ objet: string; message: string } | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const corpsRef = useRef("");
+  corpsRef.current = emailBody;
+
+  const demarrerDictee = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      const morceaux: Blob[] = [];
+      rec.ondataavailable = e => { if (e.data.size > 0) morceaux.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        // Type réellement produit par le navigateur (audio/mp4 sur iPhone).
+        const type = rec.mimeType || mime || "audio/webm";
+        const blob = new Blob(morceaux, { type });
+        if (blob.size < 1000) { toast("Enregistrement vide : vérifiez l'autorisation du micro, puis parlez avant d'arrêter.", "warning", 6000); return; }
+        setTranscription(true);
+        try {
+          const fd = new FormData(); fd.append("audio", new File([blob], `email.${extensionAudio(type)}`, { type }));
+          const res = await authFetch("/api/whisper", { method: "POST", body: fd });
+          const data = await res.json().catch(() => ({ error: res.status === 413 ? "Dictée trop longue : faites-la en plusieurs fois." : `réponse inattendue du serveur (${res.status})` }));
+          if (data.success) setEmailBody(ajouterDictee(corpsRef.current, data.text || ""));
+          else toast(data.error || "Transcription impossible.", "error", 6000);
+        } catch (e: any) { toast("Erreur de transcription : " + (e?.message || ""), "error"); }
+        setTranscription(false);
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setEnregistrement(true);
+    } catch (e: any) { toast("Micro indisponible : " + (e?.message || ""), "error", 6000); }
+  };
+  const arreterDictee = () => {
+    if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
+    setEnregistrement(false);
+  };
+
+  const mettreEnForme = async () => {
+    if (!emailBody.trim()) return;
+    setMiseEnForme(true);
+    try {
+      const enCours = allPayments.filter((p: any) => p.familyId === emailModal.familyId && p.status !== "cancelled" && p.status !== "paid");
+      const resteDu = enCours.reduce((s: number, p: any) => s + Math.max(0, (p.totalTTC || 0) - (p.paidAmount || 0)), 0);
+      const prestations = enCours.flatMap((p: any) => (p.items || []).map((i: any) => i.activityTitle)).filter(Boolean).slice(0, 8).join(", ");
+      const res = await authFetch("/api/ia", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "texte_libre", prompt: consigneMiseEnFormeEmail(emailBody, emailSubject, { nomFamille: emailModal.familyName, resteDu, prestations }) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const lu = lireMiseEnForme(data.text || "");
+      if (!res.ok || !lu) { toast(data.error || "L'IA n'a pas renvoyé de message exploitable. Votre texte est inchangé.", "error", 6000); return; }
+      setAvantIa({ objet: emailSubject, message: emailBody });
+      setEmailBody(lu.message);
+      if (lu.objet) setEmailSubject(lu.objet);
+      setRemarquesIa(lu.remarques);
+    } catch { toast("Erreur IA. Votre texte est inchangé.", "error"); }
+    finally { setMiseEnForme(false); }
+  };
+  const annulerMiseEnForme = () => {
+    if (!avantIa) return;
+    setEmailSubject(avantIa.objet); setEmailBody(avantIa.message);
+    setAvantIa(null); setRemarquesIa([]);
+  };
 
   // Lit un Blob/File en base64 (sans le préfixe data:...;base64,)
   const toBase64 = (blob: Blob) => new Promise<string>((resolve, reject) => {
@@ -195,7 +268,40 @@ export default function EmailModal({ emailModal, allPayments, onClose, destinata
               placeholder={emailTemplate === "libre" ? "Bonjour,\n\nVotre message ici..." : "HTML du template (modifiable)"}
               className="w-full font-body text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:border-blue-400 resize-none"/>
             {emailTemplate === "libre" && (
-              <p className="font-body text-[10px] text-slate-400 mt-1">Le message sera envoyé en texte brut.</p>
+              <>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {enregistrement ? (
+                    <button type="button" onClick={arreterDictee}
+                      className="flex items-center gap-1.5 font-body text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-3 py-2 rounded-lg border-none cursor-pointer animate-pulse">
+                      <Square size={13} /> Arrêter la dictée
+                    </button>
+                  ) : (
+                    <button type="button" onClick={demarrerDictee} disabled={transcription || miseEnForme}
+                      className="flex items-center gap-1.5 font-body text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                      {transcription ? <Loader2 size={13} className="animate-spin" /> : <Mic size={13} />} {transcription ? "Transcription…" : "Dicter"}
+                    </button>
+                  )}
+                  <button type="button" onClick={mettreEnForme} disabled={!emailBody.trim() || enregistrement || transcription || miseEnForme}
+                    className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-lg border-none cursor-pointer disabled:opacity-50">
+                    {miseEnForme ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} Mettre en forme avec l&apos;IA
+                  </button>
+                  {avantIa && (
+                    <button type="button" onClick={annulerMiseEnForme}
+                      className="flex items-center gap-1.5 font-body text-xs font-semibold text-slate-600 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg border-none cursor-pointer">
+                      <Undo2 size={13} /> Revenir à mon texte
+                    </button>
+                  )}
+                </div>
+                {remarquesIa.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+                    <div className="font-body text-[11px] font-semibold text-orange-800 mb-1">À vérifier avant d&apos;envoyer :</div>
+                    <ul className="m-0 pl-4 font-body text-[11px] text-orange-900">
+                      {remarquesIa.map((r, i) => <li key={i}>{r}</li>)}
+                    </ul>
+                  </div>
+                )}
+                <p className="font-body text-[10px] text-slate-400 mt-1">Dictez ou tapez, puis relisez : l&apos;IA met en forme sans rien ajouter. Le message sera envoyé en texte brut.</p>
+              </>
             )}
           </div>
 
