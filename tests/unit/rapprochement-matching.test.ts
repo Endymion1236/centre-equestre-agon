@@ -12,7 +12,7 @@
  */
 
 import { rapprocherReleve } from "../../src/app/admin/comptabilite/rapprochement-matching";
-import { encaissementsCouvertsParLigne, jourDuLibelleRemise, virementsAttendus } from "../../src/app/admin/comptabilite/rapprochement-utils";
+import { bordereauxChequesCandidats, encaissementsCouvertsParLigne, estLigneRemiseCheques, jourDuLibelleRemise, virementsAttendus } from "../../src/app/admin/comptabilite/rapprochement-utils";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -442,6 +442,31 @@ console.log("\n✓ Virements attendus : une échéance à sa date, pour ce qui r
   assert("seule l'échéance de septembre est attendue", r.filter(v => v.paiement.id.startsWith("g")).map(v => v.paiement.id).join() === "g1", r.map(v => v.paiement.id).join());
   assert("BARBEY pour son reste dû", r.find(v => v.paiement.id === "b")?.reste === 611.1);
   assert("une facture réglée n'apparaît pas", virementsAttendus([{ ...barbey, paidAmount: 679 }], maintenant).length === 0);
+}
+
+console.log("\n✓ Bordereaux de chèques proposés au pointage manuel (remise du 19/10/2026) :");
+{
+  const bordereau = (id: string, total: number, jour: string, extra: Record<string, unknown> = {}) => ({
+    id, paymentMode: "cheque", pointee: false, total,
+    date: { seconds: Math.floor(new Date(`${jour}T12:00:00Z`).getTime() / 1000) }, ...extra,
+  });
+  const remises = [
+    bordereau("r-19-10", 3588, "2026-10-19"),
+    bordereau("r-05-10", 410, "2026-10-05"),
+    bordereau("r-pointee", 3588, "2026-10-12", { pointee: true }),
+    bordereau("r-especes", 3588, "2026-10-18", { paymentMode: "especes" }),
+    bordereau("r-mixte", 120, "2026-10-15", { paymentMode: "mixte" }),
+    bordereau("r-vieux", 3588, "2026-06-01"),
+  ];
+  const le21 = new Date("2026-10-21T12:00:00Z");
+  const c = bordereauxChequesCandidats(remises, { amount: 3588 }, le21);
+  assert("le bordereau du 19/10 au montant exact vient en tête", c[0]?.remise.id === "r-19-10" && c[0].montantExact, c.map(x => x.remise.id).join());
+  assert("les autres suivent, le plus proche d'abord", c.map(x => x.remise.id).join() === "r-19-10,r-mixte,r-05-10", c.map(x => x.remise.id).join());
+  assert("un bordereau déjà pointé, d'espèces ou vieux de 4 mois n'est pas proposé", !c.some(x => ["r-pointee", "r-especes", "r-vieux"].includes(x.remise.id)));
+  assert("l'écart en jours est calculé (banque 2 jours après le bordereau)", c[0]?.ecartJours === 2);
+  assert("le filtre par montant garde le bon bordereau", bordereauxChequesCandidats(remises, { amount: 3588 }, le21, "410").map(x => x.remise.id).join() === "r-05-10");
+  assert("sans date bancaire, tout est proposé", bordereauxChequesCandidats(remises, { amount: 1 }, null).length === 4);
+  assert("« REMISE CHEQUES » et « REMISE CHQ » sont des lignes de chèques", estLigneRemiseCheques("REMISE CHEQUES 1234") && estLigneRemiseCheques("Remise chq") && !estLigneRemiseCheques("VIR SEPA DUPONT"));
 }
 
 console.log("\n══════════════════════════════════════════════════════════════");

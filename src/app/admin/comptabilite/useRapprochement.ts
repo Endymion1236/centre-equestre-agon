@@ -279,9 +279,11 @@ export function useRapprochement({
             pointeeNote: "Synchronisation automatique depuis le rapprochement bancaire",
             updatedAt: serverTimestamp(),
           }));
-        } else if (!allConsumed && r.pointee && r.pointeeNote?.includes("Synchronisation")) {
+        } else if (!allConsumed && r.pointee && /Synchronisation|rapprochement bancaire/.test(r.pointeeNote || "")) {
           // Dé-pointer UNIQUEMENT si c'était une remise pointée automatiquement
-          // (on ne touche pas aux remises pointées manuellement par l'utilisateur)
+          // ou depuis la fenêtre de pointage du rapprochement (« Dé-pointer »
+          // la ligne libère alors le bordereau). On ne touche pas aux remises
+          // pointées à la main depuis l'historique des remises.
           remiseUpdates.push(updateDoc(doc(db, "remises", r.id), {
             pointee: false,
             pointeeDate: null,

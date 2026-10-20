@@ -592,3 +592,52 @@ export function virementsAttendus<T extends {
     return depuis > jours ? [{ paiement: p, reste, depuis }] : [];
   });
 }
+
+/** La ligne du relevé est-elle une remise de chèques ? */
+export function estLigneRemiseCheques(label: string) {
+  return /CHQ|CH[EÈ]QUE/i.test(label || "");
+}
+
+export interface BordereauChequesCandidat<T> {
+  remise: T;
+  /** Le total du bordereau est exactement le montant de la ligne. */
+  montantExact: boolean;
+  /** Jours entre le bordereau et la ligne bancaire (positif : la banque a crédité après). */
+  ecartJours: number | null;
+}
+
+/**
+ * Bordereaux de chèques à proposer dans la fenêtre « Pointer manuellement ».
+ *
+ * Octobre 2026 : la remise de chèques du 19/10 (8 chèques, 3 588 €) restait
+ * « Non pointée » et ne pouvait l'être que depuis l'historique des remises.
+ * Le rapprochement automatique ne la reliait pas (montant différent d'un
+ * centime, libellé sans « CHQ », ou plus de 15 jours d'écart), et la fenêtre
+ * de pointage ne proposait aucun bordereau de chèques : Nicolas n'avait rien
+ * à cliquer. On propose ici tous les bordereaux de chèques non pointés dans
+ * les 60 jours autour de la ligne, montant exact d'abord, puis le plus proche
+ * dans le temps.
+ */
+export function bordereauxChequesCandidats<T extends {
+  paymentMode?: string; pointee?: boolean; total?: number; date?: { seconds?: number } | null;
+}>(remises: T[], ligne: { amount: number }, dateLigne: Date | null, filtre = ""): BordereauChequesCandidat<T>[] {
+  const q = filtre.trim().toLowerCase();
+  return (remises || [])
+    .filter((r) => (r.paymentMode === "cheque" || r.paymentMode === "mixte") && !r.pointee)
+    .map((r) => {
+      const ecartJours = dateLigne && r.date?.seconds
+        ? Math.round((dateLigne.getTime() - r.date.seconds * 1000) / 86_400_000)
+        : null;
+      return { remise: r, montantExact: Math.abs((r.total || 0) - ligne.amount) < 0.02, ecartJours };
+    })
+    .filter((c) => c.ecartJours === null || Math.abs(c.ecartJours) <= 60)
+    .filter((c) => {
+      if (!q) return true;
+      const jour = c.remise.date?.seconds ? new Date(c.remise.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
+      return (c.remise.total || 0).toFixed(2).includes(q) || jour.includes(q) || "chèque".includes(q) || "cheque".includes(q);
+    })
+    .sort((a, b) => {
+      if (a.montantExact !== b.montantExact) return a.montantExact ? -1 : 1;
+      return Math.abs(a.ecartJours ?? 999) - Math.abs(b.ecartJours ?? 999);
+    });
+}

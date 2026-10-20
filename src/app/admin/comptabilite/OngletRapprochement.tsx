@@ -19,10 +19,10 @@ import { Card, Badge } from "@/components/ui";
 import { Loader2, Upload, Search, Sparkles, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
 import {
-  apparierRemiseCarte, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
+  apparierRemiseCarte, bordereauxChequesCandidats, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
   encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
-  estEncaissementCarte, estLibellePrelevement, jourDuLibelleRemise, virementsAttendus,
+  estEncaissementCarte, estLibellePrelevement, estLigneRemiseCheques, jourDuLibelleRemise, virementsAttendus,
 } from "./rapprochement-utils";
 import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
@@ -890,6 +890,86 @@ export default function OngletRapprochement({
                   setManualEncSelection(suivant);
                 };
 
+                const titre = (t: string) => (
+                  <div className="font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider mt-3 mb-1.5 first:mt-0">{t}</div>
+                );
+
+                // 5. Bordereaux de chèques non pointés : la remise de chèques
+                //    que le rapprochement automatique n'a pas reliée (montant
+                //    différent, libellé inattendu, plus de 15 jours d'écart).
+                //    Un clic pointe la ligne ET le bordereau, comme depuis
+                //    l'historique des remises — jusqu'ici il fallait y aller.
+                const ligneCheques = estLigneRemiseCheques(ligne.label || "");
+                const bordereauxCheques = bordereauxChequesCandidats(remises || [], ligne, dateLigne, q);
+                const pointerBordereauCheques = async (r: any) => {
+                  const encIds: string[] = r.encaissementIds || [];
+                  const remiseEncs = (encaissementsCompta || []).filter((e: any) => encIds.includes(e.id));
+                  const jourBordereau = r.date?.seconds ? new Date(r.date.seconds * 1000).toLocaleDateString("fr-FR") : "?";
+                  if (!montantProche(r.total)) {
+                    const ok = window.confirm(
+                      `La ligne bancaire fait ${ligne.amount.toFixed(2)}€ et le bordereau du ${jourBordereau} totalise ${(r.total || 0).toFixed(2)}€ (un chèque rejeté, ou deux remises réunies par la banque ?).\n\nPointer quand même ?`,
+                    );
+                    if (!ok) return;
+                  }
+                  const updated = [...bankLines];
+                  updated[showManualMatch!] = {
+                    ...updated[showManualMatch!],
+                    matched: true,
+                    matchType: "Chèques",
+                    matchDetail: `Bordereau du ${jourBordereau} — ${r.nbPaiements || encIds.length} chèque(s) = ${(r.total || 0).toFixed(2)}€ (pointé à la main)`,
+                    matchedEncs: remiseEncs.map(encaissementEnDetail),
+                    manualPaymentId: undefined,
+                    remiseSepaId: undefined,
+                    compteContrepartie: undefined,
+                    uncertain: false,
+                  };
+                  await updateAndSaveBankLines(updated);
+                  // Le bordereau est pointé ici même, à la date du relevé, APRÈS
+                  // la sauvegarde : la synchronisation ne le pointe que s'il a
+                  // été créé dans le mois affiché (une remise de fin de mois
+                  // arrive en banque le mois suivant), et quand elle le fait,
+                  // c'est à la date du jour avec sa propre note — celle-ci
+                  // doit garder le dernier mot.
+                  const dateBanque = dateLigne ? new Date(Date.UTC(dateLigne.getFullYear(), dateLigne.getMonth(), dateLigne.getDate(), 12)) : new Date();
+                  await updateDoc(doc(db, "remises", r.id), {
+                    pointee: true,
+                    pointeeDate: dateBanque.toISOString(),
+                    pointeeNote: `Pointée depuis le rapprochement bancaire — ligne du ${ligne.date} « ${ligne.label} »`,
+                    updatedAt: serverTimestamp(),
+                  });
+                  fetchData();
+                  setShowManualMatch(null);
+                };
+                const blocBordereauxCheques = bordereauxCheques.length > 0 && (
+                  <>
+                    {titre(`Bordereaux de chèques à pointer (${bordereauxCheques.length})`)}
+                    <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
+                      Un clic relie cette ligne du relevé au bordereau et le marque pointé à la date du relevé, comme depuis l'historique des remises. Rien n'est ré-encaissé.
+                    </p>
+                    {bordereauxCheques.map(({ remise: r, montantExact, ecartJours }) => {
+                      const jourBordereau = r.date?.seconds ? new Date(r.date.seconds * 1000).toLocaleDateString("fr-FR") : "?";
+                      const nb = (r as any).nbPaiements || ((r as any).encaissementIds || []).length;
+                      return (
+                        <div key={(r as any).id}
+                          className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${montantExact ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}
+                          onClick={() => pointerBordereauCheques(r)}>
+                          <div>
+                            <div className="font-body text-sm font-semibold text-blue-800">🧾 Bordereau de chèques du {jourBordereau}</div>
+                            <div className="font-body text-xs text-slate-500">
+                              {nb} chèque{nb > 1 ? "s" : ""}{r.paymentMode === "mixte" ? " (remise mixte)" : ""}
+                              {ecartJours !== null && ` · ${ecartJours === 0 ? "le jour même" : ecartJours > 0 ? `crédité ${ecartJours} jour${ecartJours > 1 ? "s" : ""} après` : `${-ecartJours} jour${-ecartJours > 1 ? "s" : ""} après la ligne`}`}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className={`font-body text-sm font-bold ${montantExact ? "text-green-600" : "text-blue-500"}`}>{(r.total || 0).toFixed(2)}€</div>
+                            {montantExact && <div className="font-body text-[10px] text-green-500">Montant exact</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                );
+
                 const pointerEncaissements = async () => {
                   if (encsCoches.length === 0) return;
                   if (!totalJuste) {
@@ -922,10 +1002,6 @@ export default function OngletRapprochement({
                   await updateAndSaveBankLines(updated);
                   setShowManualMatch(null);
                 };
-
-                const titre = (t: string) => (
-                  <div className="font-body text-[11px] font-semibold text-slate-500 uppercase tracking-wider mt-3 mb-1.5 first:mt-0">{t}</div>
-                );
 
                 // Une ligne « Avis de prélèvement emis » : la remise SEPA est la
                 // réponse attendue, elle passe en tête (elle venait après une
@@ -961,6 +1037,7 @@ export default function OngletRapprochement({
                 return (
                   <div className="flex flex-col gap-1.5">
                     {lignePrelevement && blocRemisesSepa}
+                    {ligneCheques && blocBordereauxCheques}
                     {encsVirement.length > 0 && titre(ligneAncv ? `Chèques-vacances encaissés, à relier (${encsVirement.length})` : remiseCarte ? `Encaissements CB de la semaine, à relier (${encsVirement.length})` : `Virements déjà encaissés, à relier (${encsVirement.length})`)}
                     {encsVirement.length > 0 && (
                       <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
@@ -1011,6 +1088,8 @@ export default function OngletRapprochement({
                         </button>
                       </div>
                     )}
+
+                    {!ligneCheques && blocBordereauxCheques}
 
                     {enAttente.length > 0 && titre(`Factures en attente de règlement (${enAttente.length})`)}
                     {enAttente.map((p: any) => {
@@ -1089,7 +1168,7 @@ export default function OngletRapprochement({
                       ))}
                     </div>
 
-                    {encsVirement.length === 0 && enAttente.length === 0 && remisesCandidates.length === 0 && duMois.length === 0 && (
+                    {encsVirement.length === 0 && enAttente.length === 0 && remisesCandidates.length === 0 && duMois.length === 0 && bordereauxCheques.length === 0 && (
                       <div className="font-body text-sm text-slate-500 text-center py-6">Aucune écriture, facture ni remise ne correspond à cette recherche.</div>
                     )}
                   </div>
