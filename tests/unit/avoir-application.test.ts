@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { commandesApplicables, fichesOuChercherLaCommande, nomDeFamille, planifierApplicationAvoir, resteDu, utilisationsSansCommande } from "../../src/lib/avoir-application";
-import { identifiantsRattaches } from "../../src/lib/fusion-familles";
+import { identifiantsRattaches } from "../../src/lib/fusion-familles-regles";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {

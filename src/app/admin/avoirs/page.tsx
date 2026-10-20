@@ -6,7 +6,7 @@ import { collection, getDocs, addDoc, updateDoc, doc, query, where, serverTimest
 import { db } from "@/lib/firebase";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { commandesApplicables, fichesOuChercherLaCommande, planifierApplicationAvoir, resteDu, utilisationsSansCommande, montantUtilisation } from "@/lib/avoir-application";
-import { identifiantsRattaches } from "@/lib/fusion-familles";
+import { identifiantsRattaches } from "@/lib/fusion-familles-regles";
 import { echeanceAvoir } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { downloadAvoirPdf } from "@/lib/download-avoir";

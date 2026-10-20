@@ -116,6 +116,7 @@ responsabilité personnelle de Nicolas — inexacte.
 - Composants React déclarés au niveau module, jamais dans un autre composant (perte du focus à chaque rendu).
 - Textes contractuels et consignes écrits une seule fois : `lib/cgv-clauses.ts` (clauses d'annulation, consigne d'arrivée des balades 30 min avant). Emails : habillage dans `lib/email-templates.ts`, gabarits modifiables par l'admin dans `lib/email-templates-defauts.ts`, chargés par `loadTemplate(clé, variables, supplément)`.
 - Coordonnées du club : `lib/club-info.ts` (serveur : défauts + réglages Firestore `settings/centre`) ; les défauts eux-mêmes et `fusionnerClubInfo()` dans `lib/club-info-defauts.ts`, lisible côté navigateur (documents imprimés depuis un écran). Email de contact `ceagon50@gmail.com` partout ; l'ancienne adresse orange.fr est bannie, y compris des listes d'administrateurs.
+- **Un écran (`"use client"`) n'importe jamais un module qui tire `firebase-admin`** (`fusion-familles.ts`, `firebase-admin.ts`…), même pour une fonction pure : la construction du site échoue (« Can't resolve 'fs' ») et Vercel ne déploie plus rien, sans que les tests le voient (Avoirs, 19/10/2026). Les règles utiles aux écrans vivent dans un module sans import (`fusion-familles-regles.ts`). Vérifier le CI « Build check » après chaque mise en ligne.
 - Lire des extraits ciblés des gros fichiers (`sed -n a,bp`, `grep -n`), jamais le fichier entier.
 
 ## Où sont les choses
