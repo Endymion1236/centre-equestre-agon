@@ -54,4 +54,15 @@ test("prix d'après les commandes : 550 € après correction, fratrie répartie
   assert.equal(prixForfaitDepuisCommandes([{ ...commande, status: "cancelled" }], forfait), null);
 });
 
+test("10× : la 1re échéance porte les lignes du forfait entier, compté une seule fois", () => {
+  const forfait = { familyId: "vm", childId: "jeanne", slotKey: SLOT, activityTitle: "Galop 4" };
+  const lignesForfait = [{ childId: "jeanne", priceTTC: 619 }, { childId: "jeanne", priceTTC: 25 }, { childId: "jeanne", priceTTC: 55 }];
+  const commandes = [
+    { familyId: "vm", forfaitRef: SLOT, status: "paid", totalTTC: 69.9, items: lignesForfait },
+    ...Array.from({ length: 9 }, (_, k) => ({ familyId: "vm", forfaitRef: SLOT, status: "sepa_scheduled", totalTTC: 69.9, items: [{ childId: "jeanne", activityTitle: `Échéance ${k + 2}/10`, priceTTC: 69.9 }] })),
+  ];
+  // Avant : 699 + 9 × 69,90 = 1 328,10 €.
+  assert.equal(prixForfaitDepuisCommandes(commandes, forfait), 699);
+});
+
 console.log(`\n✅ ${passes} tests passés\n`);

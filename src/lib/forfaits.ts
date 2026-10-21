@@ -1,3 +1,5 @@
+import { lignesAuTotal } from "@/lib/lignes-facture";
+
 // ═══ Forfaits annuels : statut et rang de fratrie ═══
 //
 // Ce fichier portait aussi un calendrier scolaire 2025-2026, une saison et une
@@ -103,7 +105,11 @@ export interface ForfaitRegle {
  * est donc bien ce que l'enfant coûte, remise déduite.
  */
 function partEnfant(paiement: any, childId: string): number {
-  const total = (paiement?.items || [])
+  // Lignes ramenées au total de la commande (lignesAuTotal) : la 1re échéance
+  // d'un 3×/10× porte les lignes du forfait ENTIER pour le montant d'une
+  // échéance. Additionnées brutes, elles comptaient le forfait deux fois —
+  // « fiche à 699 €, commandes à 1 328,10 € » (699 + 9 × 69,90), octobre 2026.
+  const total = lignesAuTotal(paiement || {})
     .filter((i: any) => i?.childId === childId)
     .reduce((s: number, i: any) => s + (Number(i.priceTTC) || 0), 0);
   return Math.round(total * 100) / 100;
