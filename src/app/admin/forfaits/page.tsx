@@ -2,7 +2,7 @@
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect, useMemo } from "react";
-import { collection, getDocs, addDoc, updateDoc, doc, getDoc, query, where, serverTimestamp, Timestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, doc, getDoc, query, where, serverTimestamp, Timestamp, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import {
@@ -12,7 +12,7 @@ import type { Family } from "@/types";
 import { authFetch } from "@/lib/auth-fetch";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { compareCreneauxByDow } from "@/lib/creneau-sort";
-import { isForfaitActif, montantRegleForfait, prixForfaitDepuisCommandes, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
+import { isForfaitActif, montantRegleForfait, prixForfaitDepuisCommandes, refsOrphelinesDuCavalier, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
 import { estSemaineAttendue } from "@/lib/rythme";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
 
@@ -937,6 +937,9 @@ export default function ForfaitsPage() {
       const newSlotKey = `${newSlot.activityTitle} — ${newSlot.dayLabel} ${newSlot.startTime}`;
       await updateDoc(doc(db, "forfaits", forfait.id), {
         slotKey: newSlotKey,
+        // L'ancien créneau reste connu : la commande, facturée sous lui, est
+        // toujours celle de ce forfait (cf. lib/forfaits, slotKeysAnterieurs).
+        ...(forfait.slotKey && forfait.slotKey !== newSlotKey ? { slotKeysAnterieurs: arrayUnion(forfait.slotKey) } : {}),
         activityTitle: newSlot.activityTitle,
         dayLabel: newSlot.dayLabel,
         startTime: newSlot.startTime,
@@ -1332,6 +1335,24 @@ export default function ForfaitsPage() {
                         <div className="font-body text-[10px] text-slate-500 mt-0.5">
                           {f.paymentPlan === "1x" ? "Paiement unique" : `${f.paymentPlan} · ${installment.toFixed(2)}€/échéance`}
                         </div>
+                        {prixCommandes === null && refsOrphelinesDuCavalier(payments, forfaits as any[], f as any).map(ref => (
+                          <div key={ref} className="mt-1.5 flex items-center gap-2 flex-wrap font-body text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
+                            <span>Aucune commande pour ce créneau. Une commande de {f.childName} est facturée sous <strong>« {ref} »</strong> (créneau changé ?).</span>
+                            <button type="button" disabled={saving}
+                              onClick={async () => {
+                                if (!confirm(`Rattacher à ce forfait la commande facturée sous « ${ref} » ?\n\nSeule la fiche du forfait change : la commande, ses prélèvements et sa facture ne sont pas touchés.`)) return;
+                                setSaving(true);
+                                try {
+                                  await updateDoc(doc(db, "forfaits", f.id), { slotKeysAnterieurs: arrayUnion(ref), updatedAt: serverTimestamp() });
+                                  await fetchData();
+                                } catch (e) { console.error(e); }
+                                setSaving(false);
+                              }}
+                              className="font-body text-[11px] font-semibold text-white bg-orange-500 px-2 py-0.5 rounded border-none cursor-pointer hover:bg-orange-600 disabled:opacity-50">
+                              Rattacher cette commande
+                            </button>
+                          </div>
+                        ))}
                         {prixEcart && (
                           <div className="mt-1.5 flex items-center gap-2 flex-wrap font-body text-[11px] text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1">
                             <span>Les commandes de ce forfait totalisent <strong>{prixCommandes!.toFixed(2)}€</strong>, la fiche {(f.forfaitPriceTTC || 0).toFixed(2)}€.</span>

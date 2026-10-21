@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { forfaitDejaActif, forfaitsDesCommandes } from "../../src/app/admin/planning/forfait-fiche-utils";
-import { prixForfaitDepuisCommandes } from "../../src/lib/forfaits";
+import { prixForfaitDepuisCommandes, refsOrphelinesDuCavalier } from "../../src/lib/forfaits";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -63,6 +63,20 @@ test("10× : la 1re échéance porte les lignes du forfait entier, compté une s
   ];
   // Avant : 699 + 9 × 69,90 = 1 328,10 €.
   assert.equal(prixForfaitDepuisCommandes(commandes, forfait), 699);
+});
+
+test("créneau changé : la commande facturée sous l'ancien créneau reste celle du forfait", () => {
+  const ANCIEN = "Cours galop 4 — Samedi 10:00", NOUVEAU = "Cours galop 4 et + Ados — Samedi 14:15";
+  const commande = { familyId: "jaouen", forfaitRef: ANCIEN, status: "paid", totalTTC: 699, items: [{ childId: "maeva", activityTitle: "Forfait annuel", priceTTC: 699 }] };
+  const avant = { familyId: "jaouen", childId: "maeva", slotKey: NOUVEAU, activityTitle: "Cours galop 4 et + Ados" };
+  assert.equal(prixForfaitDepuisCommandes([commande], avant), null);
+  assert.deepEqual(refsOrphelinesDuCavalier([commande], [avant], avant), [ANCIEN]);
+  const apres = { ...avant, slotKeysAnterieurs: [ANCIEN] };
+  assert.equal(prixForfaitDepuisCommandes([commande], apres), 699);
+  assert.deepEqual(refsOrphelinesDuCavalier([commande], [apres], apres), []);
+  // La commande d'un autre forfait du même cavalier n'est jamais proposée.
+  const autre = { familyId: "jaouen", childId: "maeva", slotKey: ANCIEN, activityTitle: "Cours galop 4" };
+  assert.deepEqual(refsOrphelinesDuCavalier([commande], [avant, autre], avant), []);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

@@ -96,6 +96,18 @@ export interface ForfaitRegle {
   childId?: string | null;
   slotKey?: string | null;
   activityTitle?: string | null;
+  /**
+   * Créneaux précédents du forfait. La commande garde la référence du
+   * créneau facturé ; après un « Changer de créneau », la fiche porte le
+   * nouveau, et la commande n'était plus reconnue (« forfait sans commande »,
+   * Maéva Jaouen et Léane Guiot, octobre 2026).
+   */
+  slotKeysAnterieurs?: string[] | null;
+}
+
+/** Les références de créneau sous lesquelles ce forfait a été facturé. */
+function refsDuForfait(forfait: ForfaitRegle): string[] {
+  return [forfait.slotKey, ...(forfait.slotKeysAnterieurs || [])].filter((r): r is string => !!r);
 }
 
 /**
@@ -134,7 +146,7 @@ export function commandeDuForfait(paiement: any, forfait: ForfaitRegle): boolean
 
   // Rattachement explicite : couvre toutes les échéances d'un 3× ou 10×,
   // dont les libellés ne disent que « Échéance 2/10 ».
-  if (paiement.forfaitRef && forfait.slotKey && paiement.forfaitRef === forfait.slotKey) return true;
+  if (paiement.forfaitRef && refsDuForfait(forfait).includes(paiement.forfaitRef)) return true;
   // Repli sur le libellé, pour les forfaits saisis avant `forfaitRef`.
   return items.some((i: any) =>
     String(i?.activityTitle || "").includes("Forfait") &&
@@ -185,4 +197,21 @@ export function prixForfaitDepuisCommandes(paiements: any[], forfait: ForfaitReg
   const total = commandes.reduce((s: number, p: any) =>
     s + (forfait.childId ? partEnfant(p, forfait.childId) : Number(p.totalTTC) || 0), 0);
   return Math.round(total * 100) / 100;
+}
+
+/**
+ * Références de commandes de ce cavalier qu'aucun de ses forfaits ne
+ * reconnaît : candidates au rattachement d'un forfait « sans commande »
+ * (créneau changé avant que la fiche ne garde l'ancien, cf. slotKeysAnterieurs).
+ */
+export function refsOrphelinesDuCavalier(paiements: any[], forfaits: ForfaitRegle[], forfait: ForfaitRegle): string[] {
+  const duCavalier = (forfaits || []).filter((f) => f.familyId === forfait.familyId && f.childId === forfait.childId);
+  const refs = new Set<string>();
+  for (const p of paiements || []) {
+    if (!p?.forfaitRef || p.familyId !== forfait.familyId || p.status === "cancelled") continue;
+    if (forfait.childId && !(p.items || []).some((i: any) => i?.childId === forfait.childId)) continue;
+    if (duCavalier.some((f) => commandeDuForfait(p, f))) continue;
+    refs.add(p.forfaitRef);
+  }
+  return [...refs];
 }

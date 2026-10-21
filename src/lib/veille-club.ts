@@ -279,7 +279,7 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
   const sansCommande: string[] = [];
   for (const f of forfaitsActifs) {
     if (f.complement) continue;
-    if (prixForfaitDepuisCommandes(paiements, f) === null) sansCommande.push(`${f.childName} — forfait ${f.slotKey || f.activityTitle} sans commande`);
+    if (prixForfaitDepuisCommandes(paiements, f) === null) sansCommande.push(`${f.childName} — forfait ${f.slotKey || f.activityTitle} sans commande (créneau changé ? Forfaits → « Rattacher cette commande »)`);
   }
   for (const p of paiements.filter(p => p?.status === "sepa_scheduled")) {
     const liees = ech.filter(e => (e.paymentId && e.paymentId === p.id) || (!e.paymentId && p.orderId && e.orderId === p.orderId));
