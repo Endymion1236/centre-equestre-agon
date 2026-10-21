@@ -267,6 +267,12 @@ export function construireAchatsBanque(params: {
     if (cp?.compte) {
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: net }));
       if (cp.compte === COMPTE_ATTENTE.compte) versAttente(net, "classé « autre recette » au rapprochement");
+      else if (cp.id === "remboursement-fournisseur") {
+        // Au compte du fournisseur, à lettrer avec l'achat et l'avoir.
+        const f = compteFournisseur(c.label);
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle }, piece, libelle: `Remboursement ${libelle}`, credit: net }));
+        anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : remboursement fournisseur, au compte ${f.collectif ? COMPTE_FOURNISSEURS.compte : f.compte} ; l'avoir du fournisseur est à transmettre pour annuler l'achat (charge et TVA).`);
+      }
       else lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: { compte: cp.compte, libelle: CONTREPARTIES_CREDIT.find((x) => x.compte === cp.compte)?.compteLib || cp.libelle }, piece, libelle, credit: net }));
       numero++; nbBq++;
       continue;

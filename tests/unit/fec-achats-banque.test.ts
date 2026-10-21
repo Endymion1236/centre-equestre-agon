@@ -155,6 +155,19 @@ test("crédit hors application classé au rapprochement : sur son compte", () =>
   assert.equal(r.compteAttenteCredits, 682.5);
 });
 
+test("avoir d'un fournisseur au relevé : au compte du fournisseur, jamais en recette", () => {
+  const r = construireAchatsBanque({ mois: "2026-10", numeroDepart: 1, debits: [], credits: [
+    { date: "20/10/2026", label: "Avoir CARTE X4673 Prusa Research 05/10", amount: 57.21, matched: true, matchType: "Manuel", compteContrepartie: { id: "remboursement-fournisseur", compte: "40100000", libelle: "Remboursement" } },
+    { date: "21/10/2026", label: "Avoir CARTE X4673 AGRIAL", amount: 10, matched: true, matchType: "Manuel", compteContrepartie: { id: "remboursement-fournisseur", compte: "40100000", libelle: "Remboursement" } },
+  ] });
+  const bq = r.lignes.map(champs);
+  const parNum = (num: number) => resume(bq.filter((c) => c[2] === String(num)));
+  assert.deepEqual(parNum(1), ["51200000 D57,21", "40100000 C57,21"]);
+  assert.deepEqual(parNum(2), ["51200000 D10,00", "401AGRIAL C10,00"]);
+  assert.equal(r.compteAttenteCredits, 0);
+  assert.ok(r.anomalies.some((a) => a.includes("remboursement fournisseur")));
+});
+
 test("transit d'un crédit et règles de classement", () => {
   assert.deepEqual(transitDuCredit({ date: "", label: "", amount: 1, matchType: "Chèques" }).compte?.compte, "51120000");
   assert.equal(transitDuCredit({ date: "", label: "", amount: 1, matchType: "Espèces" }).dejaEnBanque, true);

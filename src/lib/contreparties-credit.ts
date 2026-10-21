@@ -14,5 +14,9 @@ export const CONTREPARTIES_CREDIT: readonly { id: string; libelle: string; compt
   { id: "subvention", libelle: "Aide ou subvention (ASP, État, région, commune)", compte: "74000000", compteLib: "Subventions d'exploitation" },
   { id: "virement-interne", libelle: "Virement depuis un autre compte du club", compte: "58000000", compteLib: "Virements internes" },
   { id: "apport", libelle: "Apport personnel de l'exploitant", compte: "45511000", compteLib: "Associés, compte courant" },
+  // Achat remboursé (retour, commande annulée, « Avoir CARTE … » du relevé) :
+  // ce n'est pas une recette, il revient au compte du fournisseur, nominatif
+  // quand le cabinet en tient un (cf. fec-achats-banque).
+  { id: "remboursement-fournisseur", libelle: "Remboursement ou avoir d'un fournisseur (retour, achat annulé)", compte: "40100000", compteLib: "Fournisseurs" },
   { id: "autre", libelle: "Autre recette (la comptable classera)", compte: "47100000", compteLib: "Compte d'attente — à ventiler" },
 ];

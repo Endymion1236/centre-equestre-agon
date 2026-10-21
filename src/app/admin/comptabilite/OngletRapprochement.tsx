@@ -1144,7 +1144,7 @@ export default function OngletRapprochement({
                         range sur le bon compte (lib/fec-achats-banque). */}
                     {titre("Ce n'est pas un paiement saisi dans l'appli")}
                     <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
-                      Facture Céleris réglée par une structure, remboursement ANCV d'avant l'appli, aide de l'État, virement d'un autre compte… Rien n'est encaissé : la ligne est seulement classée pour la comptabilité.
+                      Facture Céleris réglée par une structure, remboursement ANCV d'avant l'appli, aide de l'État, virement d'un autre compte, avoir d'un fournisseur (« Avoir CARTE … »)… Rien n'est encaissé : la ligne est seulement classée pour la comptabilité.
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {CONTREPARTIES_CREDIT.map((cp) => (
