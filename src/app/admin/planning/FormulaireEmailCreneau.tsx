@@ -39,6 +39,9 @@ export default function FormulaireEmailCreneau({
   const [emailBody, setEmailBody] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailGenerating, setEmailGenerating] = useState(false);
+  // Ce dont le message doit parler (journée Halloween, annulation météo…) :
+  // l'IA rédige autour, sans inventer de détail pratique.
+  const [themeIa, setThemeIa] = useState("");
   const showEmailForm = ouvert;
   const setShowEmailForm = (v: boolean) => { if (!v) onFermer(); };
 
@@ -66,7 +69,7 @@ export default function FormulaireEmailCreneau({
       const res = await authFetch("/api/ia", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "email_reprise", creneau, cavaliers }),
+        body: JSON.stringify({ type: "email_reprise", creneau, cavaliers, context: themeIa.trim() || undefined }),
       });
       const data = await res.json();
       if (data.success) {
@@ -135,6 +138,13 @@ export default function FormulaireEmailCreneau({
             placeholder="Votre message aux familles..."
             rows={6}
             className="w-full px-3 py-2 rounded-lg border border-gray-200 font-body text-sm resize-y focus:outline-none focus:border-blue-500" />
+          <div className="rounded-lg bg-purple-50/60 border border-purple-100 p-2.5">
+            <label className="font-body text-[11px] font-semibold text-purple-700 block mb-1">Sujet du message pour l&apos;IA (facultatif)</label>
+            <textarea value={themeIa} onChange={e => setThemeIa(e.target.value)} rows={2}
+              placeholder="Ex. : journée Halloween, les enfants peuvent venir déguisés, bonbons offerts à la fin"
+              className="w-full px-3 py-2 rounded-lg border border-purple-100 bg-white font-body text-xs resize-y focus:outline-none focus:border-purple-400" />
+            <p className="font-body text-[10px] text-purple-500 mt-1">Dites-le avec vos mots, puis « Générer avec IA » : le message est écrit autour, sans détail pratique que vous n&apos;avez pas donné.</p>
+          </div>
           <div className="flex gap-2">
             <button type="button" onClick={handleEmailGenerate} disabled={emailGenerating}
               className="flex items-center gap-1.5 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-3 py-2 rounded-lg border-none cursor-pointer hover:bg-purple-100 disabled:opacity-50">

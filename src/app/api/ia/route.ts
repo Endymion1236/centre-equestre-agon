@@ -422,13 +422,19 @@ REPRISE :
 - Moniteur : ${creneau.monitor}
 - Cavaliers : ${cavaliers.length} inscrits — prénoms : ${prenoms.join(", ")}${cavaliers.length > 5 ? "..." : ""}
 - Niveaux : ${niveaux.length > 0 ? (niveaux as string[]).join(", ") : "mixtes"}
-${context ? `- Contexte : ${context}` : ""}
-
+${context ? `
+SUJET DU MESSAGE, DONNÉ PAR LE GÉRANT (prioritaire) :
+« ${String(context).slice(0, 2000)} »
+` : ""}
 CONSIGNES :
 - Corps du message uniquement (sans "Objet:")
-- Ton chaleureux, adapté au type (stage=enthousiaste, cours=rassurant, balade=convivial)
+${context
+  ? `- Le message porte d'abord sur le sujet ci-dessus (par exemple une journée à thème) : c'est lui qu'il faut annoncer, avec le ton qui va avec.
+- N'invente aucun détail pratique (horaire, prix, matériel à apporter, déguisement, goûter…) qui ne soit ni dans le sujet ni dans la reprise.
+- Rappel date et heure de la séance ; casque et tenue en une phrase courte, si le sujet n'en dit pas autre chose`
+  : `- Ton chaleureux, adapté au type (stage=enthousiaste, cours=rassurant, balade=convivial)
 - Rappel date, heure et lieu
-- Rappel casque homologué obligatoire, tenue adaptée
+- Rappel casque homologué obligatoire, tenue adaptée`}
 - 8-12 lignes
 - Commence par "Bonjour,"
 - Termine par "Cordialement,\nL'équipe du Centre Équestre d'Agon-Coutainville"` }],
@@ -436,7 +442,7 @@ CONSIGNES :
         client.messages.create({
           model: MODELE_REDACTION, max_tokens: LIMITE_REPONSE, output_config: { effort: "low" },
           messages: [{ role: "user", content:
-            `Propose un objet d'email court (max 60 caractères) pour cette reprise équestre : "${creneau.activityTitle}" le ${dateFormatee} à ${creneau.startTime}. Réponds uniquement avec l'objet, sans guillemets.` }],
+            `Propose un objet d'email court (max 60 caractères) pour cette reprise équestre : "${creneau.activityTitle}" le ${dateFormatee} à ${creneau.startTime}.${context ? ` Le message porte sur : ${String(context).slice(0, 300)}` : ""} Réponds uniquement avec l'objet, sans guillemets.` }],
         }),
       ]);
 
