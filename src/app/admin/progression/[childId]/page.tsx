@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import ProgressionEditor from "@/components/ProgressionEditor";
+import { decoderSuite, positionDans, urlEvaluation } from "@/lib/evaluation-suite";
 
 // Page dédiée progression d'un cavalier.
 // Accessible aux admins ET aux moniteurs (layout admin accepte les deux rôles).
@@ -23,6 +24,11 @@ export default function ProgressionCavalierPage() {
   const { user, loading: authLoading } = useAuth();
   const childId = params?.childId as string;
   const familyIdParam = searchParams.get("familyId");
+  // Évaluations enchaînées depuis le planning : la liste des inscrits de la séance.
+  const suiteParam = searchParams.get("suite") || "";
+  const suite = decoderSuite(suiteParam);
+  const { rang, total, suivant } = positionDans(suite, childId);
+  const allerAuSuivant = () => { if (suivant) router.push(urlEvaluation(suivant, suiteParam)); };
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -160,9 +166,12 @@ export default function ProgressionCavalierPage() {
   const [savedToast, setSavedToast] = useState(false);
   const handleSaved = () => {
     setSavedToast(true);
-    // Laisser le temps au moniteur de voir le ✅ avant de fermer
+    // Laisser le temps au moniteur de voir le ✅ avant de passer au cavalier
+    // suivant de la séance, ou de revenir au planning après le dernier.
     setTimeout(() => {
-      goBack();
+      setSavedToast(false);
+      if (suivant) allerAuSuivant();
+      else goBack();
     }, 1200);
   };
 
@@ -212,8 +221,22 @@ export default function ProgressionCavalierPage() {
         {familyName && (
           <p className="font-body text-xs text-slate-500">Famille {familyName}</p>
         )}
+        {rang > 0 && total > 1 && (
+          <div className="flex items-center justify-between gap-2 flex-wrap mt-1">
+            <span className="font-body text-xs font-semibold text-purple-700 bg-purple-50 px-2 py-1 rounded-lg">
+              Évaluation {rang} / {total}{suivant ? ` · ensuite : ${suivant.prenom || "cavalier suivant"}` : " · dernier cavalier"}
+            </span>
+            {suivant && (
+              <button type="button" onClick={allerAuSuivant}
+                className="font-body text-xs font-semibold text-purple-700 bg-transparent border border-purple-200 hover:bg-purple-50 px-3 py-1 rounded-lg cursor-pointer">
+                Passer sans enregistrer →
+              </button>
+            )}
+          </div>
+        )}
       </div>
       <ProgressionEditor
+        key={childId}
         childId={childId}
         familyId={resolvedFamilyId}
         childName={child.firstName}
@@ -223,7 +246,7 @@ export default function ProgressionCavalierPage() {
       {/* Toast d'enregistrement avec retour automatique */}
       {savedToast && (
         <div className="fixed inset-x-4 bottom-6 md:inset-x-auto md:right-6 md:bottom-6 z-50 bg-green-500 text-white px-4 py-3 rounded-xl shadow-lg font-body text-sm flex items-center gap-2">
-          <span>✅ Progression enregistrée — retour au planning…</span>
+          <span>✅ Progression enregistrée — {suivant ? `au tour de ${suivant.prenom || "cavalier suivant"}…` : "retour au planning…"}</span>
         </div>
       )}
     </div>

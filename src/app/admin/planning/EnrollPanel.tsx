@@ -1,4 +1,5 @@
 "use client";
+import { encoderSuite, urlEvaluation } from "@/lib/evaluation-suite";
 import { toParisDateString } from "@/lib/date-local";
 import ModaleMontantInscription from "./ModaleMontantInscription";
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -347,6 +348,9 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   }, [isStage, stageDaysCount, creneau]);
 
   const enrolled = creneau.enrolled || []; const enrolledIds = enrolled.map((e: any) => e.childId);
+  // Liste des inscrits transmise à la page d'évaluation : elle enchaîne les
+  // cavaliers sans repasser par le planning (lib/evaluation-suite).
+  const suiteEvaluation = encoderSuite(enrolled.map((e: any) => ({ childId: e.childId, familyId: e.familyId || "", prenom: String(e.childName || "").split(" ")[0] })));
 
   // ── Cavaliers en quinzaine non attendus cette semaine ────────────────
   // Ils ne sont pas dans `enrolled` — c'est voulu, sinon la feuille d'appel
@@ -963,7 +967,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     href={
                       isMoniteur && !isAdmin
                         // Moniteur : on va directement à la page progression (pas accès à /admin/cavaliers)
-                        ? `/admin/progression/${e.childId}?familyId=${encodeURIComponent(e.familyId || "")}`
+                        ? urlEvaluation({ childId: e.childId, familyId: e.familyId || "", prenom: e.childName || "" }, suiteEvaluation)
                         // Admin : fiche famille complète avec le bon enfant ciblé
                         : `/admin/cavaliers?search=${encodeURIComponent(e.familyName || e.childName)}&showProgression=${e.childId}`
                     }
@@ -1021,7 +1025,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     🖍️
                   </button>
                   <a
-                    href={`/admin/progression/${e.childId}?familyId=${encodeURIComponent(e.familyId || "")}`}
+                    href={urlEvaluation({ childId: e.childId, familyId: e.familyId || "", prenom: e.childName || "" }, suiteEvaluation)}
                     target="_blank" rel="noopener noreferrer"
                     className="flex items-center gap-1 font-body text-xs text-purple-500 hover:text-purple-700 bg-transparent no-underline px-2 py-1 rounded hover:bg-purple-50"
                     title={`Progression de ${e.childName}`}>
