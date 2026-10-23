@@ -3,6 +3,7 @@ import { Footer } from "@/components/layout/Footer";
 import { Button, SectionHeader, Card } from "@/components/ui";
 import { HeroEditable } from "@/components/ui/HeroEditable";
 import LiveHeroStatus from "@/components/public/LiveHeroStatus";
+import AnnonceAccueilBandeau from "@/components/public/AnnonceAccueil";
 import HomeActivityFinder from "@/components/public/HomeActivityFinder";
 import { SITE_CONFIG } from "@/lib/config";
 import Link from "next/link";
@@ -89,6 +90,7 @@ export default function HomePage() {
             dégager le bandeau (2 rem) et la barre de navigation fixe — d'où
             pt-28, pas moins. */}
         <div className="relative z-10 mx-auto w-full max-w-[1180px] px-6 pb-16 pt-28 sm:pb-20 sm:pt-32">
+          <AnnonceAccueilBandeau />
           <div className="mb-7 animate-fade-in-up">
             <LiveHeroStatus />
           </div>
