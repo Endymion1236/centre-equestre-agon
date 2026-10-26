@@ -223,6 +223,20 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
       `${x.childName} — ${dateFr(x.date)} : ${x.creneaux.map(c => `${c.activityTitle} (${c.startTime || "?"}–${c.endTime || "?"})`).join(" et ")}`),
     "/admin/planning"));
 
+  // ── 🟠 8 ter. Inscriptions remises d'office par un paiement ──
+  // Octobre 2026 : un encaissement étendait l'inscription à toute la semaine
+  // du stage (même titre), et la recréait là où l'enfant n'était pas — un
+  // enfant réglé pour deux jours se retrouvait inscrit cinq jours (corrigé
+  // dans places-tenues-regles). Ces inscriptions portent la marque
+  // `replaceApresPaiement` : à vérifier une à une.
+  points.push(point(8, "inscriptions-retablies", "orange",
+    "Inscriptions ajoutées automatiquement après un paiement (à vérifier)",
+    creneaux.filter(c => c?.date && c.date >= J)
+      .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
+      .flatMap(c => (c.enrolled || []).filter((e: any) => e?.replaceApresPaiement)
+        .map((e: any) => `${e.childName || "Cavalier"} — ${c.activityTitle}, ${dateFr(c.date)} ${c.startTime || ""} : ajouté par le paiement, vérifiez qu'il a bien payé ce jour-là`)),
+    "/admin/planning"));
+
   // ── 🟠 9. Cavaliers des 7 prochains jours sans aucun règlement ni carte ──
   const paiementsAvance = avecAvancementSepa(paiements, ech);
   const sansReglement: string[] = [];

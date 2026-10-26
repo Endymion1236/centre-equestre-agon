@@ -38,6 +38,17 @@ test("8 bis. cavalier inscrit à deux endroits à la même heure (Léonie VASSEU
   assert.equal(p?.niveau, "orange");
 });
 
+test("8 ter. inscriptions ajoutées d'office par un paiement : signalées, les autres non", () => {
+  const d = vide();
+  d.creneaux = [
+    { id: "mer", date: "2026-10-28", startTime: "10:00", activityTitle: "Stage bronze", enrolled: [{ childId: "e1", childName: "Lou", replaceApresPaiement: true }, { childId: "e2", childName: "Max" }] },
+    { id: "passe", date: "2026-09-20", startTime: "10:00", activityTitle: "Ancien", enrolled: [{ childId: "e1", childName: "Lou", replaceApresPaiement: true }] },
+  ];
+  const p = pointDe(d, "inscriptions-retablies");
+  assert.equal(p?.nb, 1);
+  assert.ok(p?.lignes[0].startsWith("Lou — Stage bronze, 28/10"));
+});
+
 test("18 bis. factures numérotées absentes ou déplacées dans un FEC déjà transmis", () => {
   const d = vide();
   const sec = (iso: string) => Date.parse(iso) / 1000;

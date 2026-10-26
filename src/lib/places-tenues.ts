@@ -1,4 +1,5 @@
 import { adminDb } from "@/lib/firebase-admin";
+import { ciblesDeCommande, freresAConfirmer, recreerSiAbsent } from "@/lib/places-tenues-regles";
 
 /**
  * Places tenues pendant le paiement ("hold").
@@ -62,9 +63,9 @@ export async function confirmerPlacesTenues(
     if (!paySnap.exists) return { confirmees, reinscrites };
     const pData = paySnap.data() as any;
 
-    // Créneaux concernés : chaque item porte soit creneauIds (stage), soit
-    // creneauId (cours).
-    const cibles = new Map<string, Set<string>>(); // creneauId → childIds
+    // Créneaux que la commande désigne elle-même (creneauIds d'un stage,
+    // creneauId d'un cours) : les seuls où une inscription peut être recréée.
+    const { explicites: cibles, datesParEnfant } = ciblesDeCommande(pData.items);
     // De quoi RECRÉER une inscription disparue : nom du cavalier et clé de
     // stage, tels que la commande les porte.
     const infosEnfant = new Map<string, { childName: string; stageKey?: string }>();
@@ -75,41 +76,50 @@ export async function confirmerPlacesTenues(
           ...(item.stageKey ? { stageKey: item.stageKey } : {}),
         });
       }
-      const ids: string[] = Array.isArray(item?.creneauIds) && item.creneauIds.length
-        ? item.creneauIds
-        : item?.creneauId ? [item.creneauId] : [];
-      for (const cid of ids) {
-        if (!cid) continue;
-        if (!cibles.has(cid)) cibles.set(cid, new Set());
-        if (item.childId) cibles.get(cid)!.add(item.childId);
-      }
     }
 
     // Filet de sécurité pour les paiements ANCIENS dont les items ne portent
-    // que le premier jour d'un stage : on étend la levée aux jours frères de
-    // la même semaine (même activité) pour les mêmes enfants — sinon un stage
-    // payé gardait mardi→vendredi « pending » et la purge les désinscrivait.
+    // que le premier jour d'un stage : la levée du « pending » s'étend aux
+    // jours frères — mais seulement aux dates que la ligne annonce, au même
+    // horaire, et sans jamais recréer d'inscription (cf. places-tenues-regles :
+    // il inscrivait toute la semaine un enfant réglé pour deux jours).
+    const etendues = new Map<string, Set<string>>();
     for (const [creneauId, childIds] of [...cibles]) {
       try {
         const cSnap = await adminDb.collection("creneaux").doc(creneauId).get();
         if (!cSnap.exists) continue;
         const c = cSnap.data() as any;
         if (c.activityType !== "stage" && c.activityType !== "stage_journee") continue;
-        const jour = new Date(`${c.date}T12:00:00`);
-        const lundi = new Date(jour); lundi.setDate(lundi.getDate() - ((lundi.getDay() + 6) % 7));
-        const dimanche = new Date(lundi); dimanche.setDate(dimanche.getDate() + 6);
-        const ymd = (d: Date) => d.toISOString().slice(0, 10);
-        const freres = await adminDb.collection("creneaux")
-          .where("activityTitle", "==", c.activityTitle).get();
-        freres.docs.forEach((f) => {
-          const fd = (f.data() as any).date;
-          if (f.id === creneauId || !fd || fd < ymd(lundi) || fd > ymd(dimanche)) return;
-          if (!cibles.has(f.id)) cibles.set(f.id, new Set());
-          childIds.forEach((id) => cibles.get(f.id)!.add(id));
-        });
+        const freres = (await adminDb.collection("creneaux").where("activityTitle", "==", c.activityTitle).get())
+          .docs.map((f) => ({ id: f.id, date: (f.data() as any).date, startTime: (f.data() as any).startTime }));
+        for (const childId of childIds) {
+          for (const fid of freresAConfirmer({ id: creneauId, startTime: c.startTime }, freres, datesParEnfant.get(childId))) {
+            if (cibles.get(fid)?.has(childId)) continue;
+            if (!etendues.has(fid)) etendues.set(fid, new Set());
+            etendues.get(fid)!.add(childId);
+          }
+        }
       } catch (e) {
         console.warn("[hold] extension semaine de stage impossible", creneauId, e);
       }
+    }
+
+    // Jours frères : on confirme une place déjà tenue, rien de plus.
+    for (const [creneauId, childIds] of etendues) {
+      const ref = adminDb.collection("creneaux").doc(creneauId);
+      await adminDb.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return;
+        const list: any[] = (snap.data() as any).enrolled || [];
+        let touche = false;
+        const maj = list.map((e) => {
+          if (!childIds.has(e.childId) || !e.pending) return e;
+          touche = true;
+          const { pending, holdUntil, preinscription, preinscriptionMode, ...reste } = e;
+          return reste;
+        });
+        if (touche) { confirmees++; tx.update(ref, { enrolled: maj, enrolledCount: maj.length }); }
+      });
     }
 
     for (const [creneauId, childIds] of cibles) {
@@ -145,7 +155,12 @@ export async function confirmerPlacesTenues(
         // la variable d'ajustement ; un dépassement se voit au planning et se
         // règle humainement.
         const presents = new Set(maj.map((e: any) => e.childId));
-        for (const childId of childIds) {
+        // Seulement pour une commande passée en ligne par la famille : c'est
+        // elle dont la place tenue expire. Une inscription posée par le bureau
+        // n'expire jamais — si l'enfant n'y est plus, c'est qu'on l'a retiré,
+        // et un règlement ultérieur (solde, lien de paiement) ne doit pas l'y
+        // remettre (cf. places-tenues-regles).
+        for (const childId of recreerSiAbsent(pData) ? childIds : []) {
           if (presents.has(childId)) continue;
           const infos = infosEnfant.get(childId);
           maj.push({
