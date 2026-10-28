@@ -217,12 +217,45 @@ export default function FamilyCard({
     setSaving(false);
   };
 
+  // Avec une adresse : la suppression complète du serveur (compte de
+  // connexion, inscriptions à venir, suivi ; pièces comptables anonymisées et
+  // conservées), celle d'une demande RGPD. Ce bouton n'effaçait que la fiche :
+  // le compte de connexion restait, et la fiche revenait à la connexion
+  // suivante (octobre 2026, demande de suppression de Coralie Lefèvre).
   const handleDeleteFamily = async () => {
-    if (!confirm(`Supprimer définitivement la famille "${family.parentName}" et tous ses données ?`)) return;
+    const email = String(family.parentEmail || "").trim().toLowerCase();
+    if (!email) {
+      if (!confirm(`Supprimer la fiche "${family.parentName}" (sans adresse email, donc sans compte de connexion) ?`)) return;
+      try {
+        await deleteDoc(doc(db, "families", family.firestoreId));
+        onRefresh();
+        toast("Famille supprimée", "success");
+      } catch { toast("Erreur lors de la suppression", "error"); }
+      return;
+    }
     try {
-      await deleteDoc(doc(db, "families", family.firestoreId));
+      const res = await authFetch(`/api/admin/delete-family?email=${encodeURIComponent(email)}`);
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(r.error || "Aperçu impossible", "error"); return; }
+      if (r.familyDocId && r.familyDocId !== family.firestoreId) {
+        toast("Une autre fiche porte cette adresse : regroupez-les d'abord (Diagnostic famille), puis supprimez.", "error", 8000);
+        return;
+      }
+      const somme = (o: Record<string, number> = {}) => Object.values(o).reduce((t, n) => t + n, 0);
+      const resume = `Supprimer définitivement le compte de ${family.parentName} (${email}) ?\n\n`
+        + `• ${somme(r.counts)} document(s) supprimé(s) : compte, fiche, enfants, suivi pédagogique\n`
+        + `• ${r.creneauxCleaned || 0} créneau(x) à venir libéré(s)\n`
+        + `• ${somme(r.anonymises)} pièce(s) comptable(s) conservée(s) mais anonymisée(s) (obligation légale)\n`
+        + (r.resteDu > 0 ? `\n⚠️ RESTE DÛ : ${Number(r.resteDu).toFixed(2)} € — après, la famille ne sera plus joignable.\n` : "")
+        + `\nC'est irréversible. Recopiez l'adresse email pour confirmer :`;
+      const saisie = window.prompt(resume);
+      if (saisie === null) return;
+      if (saisie.trim().toLowerCase() !== email) { toast("Adresse différente : rien n'a été supprimé.", "warning"); return; }
+      const res2 = await authFetch(`/api/admin/delete-family?email=${encodeURIComponent(email)}&apply=true`, { method: "POST" });
+      const r2 = await res2.json().catch(() => ({}));
+      if (!res2.ok) { toast(r2.error || "Erreur lors de la suppression", "error"); return; }
       onRefresh();
-      toast("Famille supprimée", "success");
+      toast("Compte supprimé (demande RGPD traitée)", "success", 6000);
     } catch { toast("Erreur lors de la suppression", "error"); }
   };
 
