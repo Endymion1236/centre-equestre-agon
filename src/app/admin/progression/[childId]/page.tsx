@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import ProgressionEditor from "@/components/ProgressionEditor";
+import { ageFromBirth } from "@/lib/eligibilite";
 import { decoderSuite, positionDans, urlEvaluation } from "@/lib/evaluation-suite";
 
 // Page dédiée progression d'un cavalier.
@@ -33,7 +34,7 @@ export default function ProgressionCavalierPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [resolvedFamilyId, setResolvedFamilyId] = useState<string | null>(null);
-  const [child, setChild] = useState<{ firstName: string; lastName?: string; galopLevel?: string } | null>(null);
+  const [child, setChild] = useState<{ firstName: string; lastName?: string; galopLevel?: string; age?: number | null } | null>(null);
   const [familyName, setFamilyName] = useState<string>("");
 
   useEffect(() => {
@@ -109,7 +110,7 @@ export default function ProgressionCavalierPage() {
           return;
         }
         setResolvedFamilyId(familyId);
-        setChild({ firstName: c.firstName, lastName: c.lastName, galopLevel: c.galopLevel });
+        setChild({ firstName: c.firstName, lastName: c.lastName, galopLevel: c.galopLevel, age: ageFromBirth(c.birthDate) });
         setFamilyName(family.parentName || "");
         setLoading(false);
       } catch (e: any) {
@@ -217,6 +218,7 @@ export default function ProgressionCavalierPage() {
       <div className="bg-white rounded-2xl border border-gray-100 p-4 md:p-6 flex flex-col gap-2">
         <h1 className="font-display text-xl font-bold text-blue-800">
           📊 Progression — {child.firstName}{child.lastName ? ` ${child.lastName}` : ""}
+          {typeof child.age === "number" && <span className="ml-2 font-body text-sm font-semibold text-slate-500">{child.age} ans</span>}
         </h1>
         {familyName && (
           <p className="font-body text-xs text-slate-500">Famille {familyName}</p>
