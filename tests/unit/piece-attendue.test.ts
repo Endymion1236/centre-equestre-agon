@@ -5,7 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { etatPiece, justifiableSansFacture, resteAFaire, sansFactureParNature, sansTvaParNature, LIBELLE_ETAT_PIECE } from "../../src/lib/piece-attendue";
+import { estAClasser, etatPiece, justifiableSansFacture, resteAFaire, sansFactureParNature, sansTvaParNature, LIBELLE_ETAT_PIECE } from "../../src/lib/piece-attendue";
 import type { LigneMois } from "../../src/lib/bilan-justificatifs";
 
 const ligne = (extra: Partial<LigneMois> = {}): LigneMois => ({
@@ -101,4 +101,12 @@ test("restent visibles : achats, immobilisations, débits encore à classer, mê
   assert.ok(!sansFactureParNature(ligne({ poste: "Immobilisation — à amortir", suivie: false, immobilisation: true })));
   assert.ok(!sansFactureParNature(ligne({ poste: "", suivie: false })));
   assert.ok(!sansFactureParNature(ligne({ fournisseur: "CARTE 12/09 GAMM VERT" })));
+});
+
+test("débit « à classer » : signalé, jamais caché comme « n'attend aucune facture »", () => {
+  const aClasser = ligne({ poste: "hors-depenses", suivie: false, fournisseur: "PRLV SEPA INCONNU" });
+  assert.ok(estAClasser(aClasser));
+  assert.ok(!sansFactureParNature(aClasser));
+  assert.ok(!estAClasser(ligne({ poste: "hors-depenses", suivie: false, rapprochementExclu: true })));
+  assert.ok(!estAClasser(ligne({ poste: "Salaires", suivie: false })));
 });

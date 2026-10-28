@@ -23,7 +23,7 @@
 
 import { estDeclareePerdue, estJustifiee, type LigneMois } from "./bilan-justificatifs";
 import { CATEGORIE_COMPTE_FFE, CATEGORIE_EMPRUNTS, CATEGORIE_PERSONNELLE, justifiableParReleve } from "./tableau-depenses";
-import { estFraisBancaire, posteCommissionCarte } from "./postes-depenses";
+import { estFraisBancaire, posteCommissionCarte, POSTE_HORS_DEPENSES } from "./postes-depenses";
 
 export type EtatPiece = "facture-a-obtenir" | "releve-suffit" | "rien-a-fournir";
 
@@ -89,6 +89,8 @@ export function sansTvaParNature(l: LigneMois): boolean {
  */
 export function sansFactureParNature(l: LigneMois): boolean {
   if (l.immobilisation) return false;
+  // Un débit encore « à classer » n'est pas réglé : il reste visible.
+  if (estAClasser(l)) return false;
   return justifiableSansFacture(l)
     || estFraisBancaire(l)
     || !!l.justifieeVia
@@ -122,4 +124,22 @@ export function resteAFaire(lignes: LigneMois[]) {
     releves: releves.length,
     montantReleves: c(releves.reduce((s, l) => s + (l.montant || 0), 0)),
   };
+}
+
+/**
+ * Débit encore « à classer » (catégorie « Autre débit — à classer »).
+ *
+ * Octobre 2026 : ces lignes n'entraient ni dans « Factures à obtenir » (rien
+ * à réclamer tant qu'elles ne sont pas rangées dans une charge) ni dans la
+ * vue « Masquer ce qui n'attend aucune facture », qui les cachait. Personne
+ * ne les voyait, et une vraie dépense pouvait y rester sans justificatif.
+ * Le tableau des opérations les signale désormais à part.
+ */
+export function estAClasser(l: LigneMois): boolean {
+  return l.poste === POSTE_HORS_DEPENSES
+    && !l.rapprochementExclu
+    && !l.depensePersonnelle
+    && !l.justifieeVia
+    && !estJustifiee(l)
+    && !estDeclareePerdue(l);
 }
