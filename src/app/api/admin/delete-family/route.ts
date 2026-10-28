@@ -41,6 +41,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { verifyAuth } from "@/lib/api-auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { isProdEnvironment } from "@/lib/reset-guard";
 import {
@@ -88,6 +89,8 @@ interface DeletionReport {
   /** Pièces comptables conservées mais dépersonnalisées (production). */
   anonymises: Record<string, number>;
   creneauxCleaned: number;
+  /** Reste dû sur les commandes en cours : à régler ou à abandonner AVANT d'effacer. */
+  resteDu: number;
   firebaseAuthDeleted: boolean;
   familyDocDeleted: boolean;
   totalDocsAffected: number;
@@ -95,14 +98,19 @@ interface DeletionReport {
 }
 
 async function handleDelete(req: NextRequest): Promise<NextResponse> {
-  const cronSecret = process.env.CRON_SECRET;
-  if (!cronSecret) {
-    return NextResponse.json({ error: "Route non configurée" }, { status: 500 });
-  }
-
+  // Deux portes : le secret (opérations techniques), ou un administrateur
+  // connecté — le bouton « Demande RGPD » de la fiche famille (octobre 2026 :
+  // Nicolas n'avait aucun moyen de traiter une demande sans le secret).
   const secret = req.nextUrl.searchParams.get("secret");
-  if (!secret || secret !== cronSecret) {
-    return NextResponse.json({ error: "Secret invalide" }, { status: 401 });
+  let auteur = "secret";
+  if (secret) {
+    const cronSecret = process.env.CRON_SECRET;
+    if (!cronSecret) return NextResponse.json({ error: "Route non configurée" }, { status: 500 });
+    if (secret !== cronSecret) return NextResponse.json({ error: "Secret invalide" }, { status: 401 });
+  } else {
+    const auth = await verifyAuth(req, { adminOnly: true });
+    if (auth instanceof NextResponse) return auth;
+    auteur = (auth as any)?.email || (auth as any)?.uid || "admin";
   }
 
   const email = req.nextUrl.searchParams.get("email")?.toLowerCase().trim();
@@ -130,6 +138,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
     counts: {},
     anonymises: {},
     creneauxCleaned: 0,
+    resteDu: 0,
     firebaseAuthDeleted: false,
     familyDocDeleted: false,
     totalDocsAffected: 0,
@@ -202,6 +211,19 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
         "Aucun compte Firebase Auth ni doc families trouvé pour cet email. Rien à supprimer.",
     });
   }
+
+  // ── 2 bis. Reste dû (dit avant d'effacer, pas après) ─────────────────
+  try {
+    for (const fid of possibleFamilyIds) {
+      const snap = await adminDb.collection("payments").where("familyId", "==", fid).get();
+      for (const d of snap.docs) {
+        const p = d.data() as any;
+        if (p.status === "cancelled" || p.status === "paid") continue;
+        report.resteDu += Math.max(0, (Number(p.totalTTC) || 0) - (Number(p.paidAmount) || 0));
+      }
+    }
+    report.resteDu = Math.round(report.resteDu * 100) / 100;
+  } catch { report.errors.push({ step: "reste-du", error: "Erreur interne" }); }
 
   // ── 3. Compter (et supprimer si apply) les docs liés ────────────────
   for (const collName of FAMILY_ID_COLLECTIONS) {
@@ -344,6 +366,7 @@ async function handleDelete(req: NextRequest): Promise<NextResponse> {
       await adminDb.collection("audit_log").add({
         type: "family-deletion",
         email,
+        auteur,
         uid,
         familyName: report.familyName,
         familyDocId,

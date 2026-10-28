@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui";
 import { Wallet, UserPlus, X, Trash2, CalendarDays, Plus, Save, Loader2, ChevronDown, Camera, Eye } from "lucide-react";
 import { downloadInvoicePdf } from "@/lib/download-invoice";
 import ThemesVusModal from "./components/ThemesVusModal";
+import SuppressionRgpd from "./components/SuppressionRgpd";
 import { normalizeSearch } from "@/lib/search-normalize";
 import {
   emailLayout, emailPanneau, emailLigne, emailTitre,
@@ -879,6 +880,7 @@ export default function FamilyDetailTabs({ family, children, allReservations, al
               </div>
             </div>
           )}
+          <SuppressionRgpd email={family.parentEmail || ""} onFait={() => { void fetchFamilies?.(); }} />
         </div>
       )}
 
