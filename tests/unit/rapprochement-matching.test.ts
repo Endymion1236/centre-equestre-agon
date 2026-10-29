@@ -12,7 +12,7 @@
  */
 
 import { rapprocherReleve } from "../../src/app/admin/comptabilite/rapprochement-matching";
-import { bordereauxChequesCandidats, encaissementsCouvertsParLigne, estLigneRemiseCheques, jourDuLibelleRemise, virementsAttendus } from "../../src/app/admin/comptabilite/rapprochement-utils";
+import { bordereauxChequesCandidats, chequeARemettre, encaissementsCouvertsParLigne, estLigneRemiseCheques, jourDuLibelleRemise, virementsAttendus } from "../../src/app/admin/comptabilite/rapprochement-utils";
 
 let passed = 0, failed = 0;
 const failures: string[] = [];
@@ -466,6 +466,8 @@ console.log("\n✓ Bordereaux de chèques proposés au pointage manuel (remise d
   assert("l'écart en jours est calculé (banque 2 jours après le bordereau)", c[0]?.ecartJours === 2);
   assert("le filtre par montant garde le bon bordereau", bordereauxChequesCandidats(remises, { amount: 3588 }, le21, "410").map(x => x.remise.id).join() === "r-05-10");
   assert("sans date bancaire, tout est proposé", bordereauxChequesCandidats(remises, { amount: 1 }, null).length === 4);
+  assert("chèque encaissé hors bordereau : proposé à la ligne de remise", chequeARemettre({ mode: "cheque", montant: 120 }));
+  assert("déjà dans un bordereau, déjà en banque, ou pas un chèque : non", !chequeARemettre({ mode: "cheque", montant: 120, remiseId: "r" }) && !chequeARemettre({ mode: "cheque", montant: 120, reconciledByBank: true }) && !chequeARemettre({ mode: "especes", montant: 120 }) && !chequeARemettre({ mode: "cheque", montant: -20 }));
   assert("« REMISE CHEQUES » et « REMISE CHQ » sont des lignes de chèques", estLigneRemiseCheques("REMISE CHEQUES 1234") && estLigneRemiseCheques("Remise chq") && !estLigneRemiseCheques("VIR SEPA DUPONT"));
 }
 

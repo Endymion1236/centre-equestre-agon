@@ -598,6 +598,18 @@ export function estLigneRemiseCheques(label: string) {
   return /CHQ|CH[EÈ]QUE/i.test(label || "");
 }
 
+/**
+ * Chèque encaissé dans l'application mais jamais mis dans un bordereau.
+ *
+ * Octobre 2026 : une remise de chèques de 3 588 € au relevé, aucun
+ * bordereau à lui proposer — les chèques avaient été déposés à la banque
+ * sans passer par l'onglet Remise. Ils se cochent désormais directement
+ * depuis la ligne du relevé, qui crée le bordereau au passage.
+ */
+export function chequeARemettre(e: { mode?: string; remiseId?: string | null; montant?: number; reconciledByBank?: boolean }): boolean {
+  return e.mode === "cheque" && !e.remiseId && (Number(e.montant) || 0) > 0 && !e.reconciledByBank;
+}
+
 export interface BordereauChequesCandidat<T> {
   remise: T;
   /** Le total du bordereau est exactement le montant de la ligne. */

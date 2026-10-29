@@ -13,13 +13,13 @@
  */
 
 import { useEffect, useState } from "react";
-import { doc, updateDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { doc, updateDoc, getDoc, serverTimestamp, addDoc, collection, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Upload, Search, Sparkles, AlertTriangle, EyeOff, RefreshCw } from "lucide-react";
 import { modeLabels } from "./libelles-modes";
 import {
-  apparierRemiseCarte, bordereauxChequesCandidats, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
+  apparierRemiseCarte, bordereauxChequesCandidats, chequeARemettre, candidatsRemiseCarte, CANAUX_REMISE_CARTE,
   encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
   estEncaissementCarte, estLibellePrelevement, estLigneRemiseCheques, jourDuLibelleRemise, virementsAttendus,
@@ -847,12 +847,15 @@ export default function OngletRapprochement({
                 // Un remboursement de l'ANCV (viré par la DRFIP) : chèques-vacances
                 // Connect ou papier, net de la commission ANCV — cf. lib/ancv-rapprochement.
                 const ligneAncv = estLigneAncv(ligne.label);
+                // Remise de chèques au relevé : les chèques encaissés qui ne sont
+                // dans aucun bordereau (déposés sans passer par l'onglet Remise).
+                const ligneChequesSeule = !ligneAncv && !remiseCarte && estLigneRemiseCheques(ligne.label || "");
                 const encsVirement = (encaissementsCompta || [])
-                  .filter((e: any) => (ligneAncv ? estModeAncv(e.mode) : remiseCarte ? estEncaissementCarte(e.mode) && !e.remiseId : (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa")) && !e.reconciledByBank)
+                  .filter((e: any) => (ligneAncv ? estModeAncv(e.mode) : remiseCarte ? estEncaissementCarte(e.mode) && !e.remiseId : ligneChequesSeule ? chequeARemettre(e) : (e.mode === "virement" || e.mode === "sepa" || e.mode === "prelevement_sepa")) && !e.reconciledByBank)
                   .filter((e: any) => {
                     if (!dateLigne || !e.date?.seconds) return true;
                     const ecart = Math.abs(dateLigne.getTime() - e.date.seconds * 1000) / 86_400_000;
-                    return ecart <= (remiseCarte ? 7 : ligneAncv ? 120 : 45);
+                    return ecart <= (remiseCarte ? 7 : ligneAncv ? 120 : ligneChequesSeule ? 90 : 45);
                   })
                   .filter((e: any) => {
                     if (!q) return true;
@@ -979,6 +982,39 @@ export default function OngletRapprochement({
                     if (!ok) return;
                   }
                   const familles = [...new Set(encsCoches.map((e: any) => e.familyName || "—"))].join(", ");
+                  if (ligneChequesSeule) {
+                    // Les chèques déposés sans bordereau : on crée le bordereau
+                    // maintenant, déjà pointé à la date du relevé, pour que
+                    // l'onglet Remise ne les présente plus « à remettre ».
+                    const dateBanque = dateLigne ? new Date(Date.UTC(dateLigne.getFullYear(), dateLigne.getMonth(), dateLigne.getDate(), 12)) : new Date();
+                    const remiseRef = await addDoc(collection(db, "remises"), {
+                      date: Timestamp.fromDate(dateBanque),
+                      encaissementIds: encsCoches.map((e: any) => e.id),
+                      paymentIds: [...new Set(encsCoches.map((e: any) => e.paymentId).filter(Boolean))],
+                      paymentMode: "cheque",
+                      total: totalCoche,
+                      nbPaiements: encsCoches.length,
+                      status: "created",
+                      pointee: true,
+                      pointeeDate: dateBanque.toISOString(),
+                      pointeeNote: `Bordereau créé au rapprochement — ligne du ${ligne.date} « ${ligne.label} »`,
+                      createdAt: serverTimestamp(),
+                    });
+                    for (const e of encsCoches) await updateDoc(doc(db, "encaissements", e.id), { remiseId: remiseRef.id });
+                    const updatedC = [...bankLines];
+                    updatedC[showManualMatch!] = {
+                      ...updatedC[showManualMatch!],
+                      matched: true,
+                      matchType: "Chèques",
+                      matchDetail: `Chèques remis sans bordereau — ${encsCoches.length} chèque${encsCoches.length > 1 ? "s" : ""} = ${totalCoche.toFixed(2)}€ (bordereau créé au rapprochement)`,
+                      matchedEncs: encsCoches.map(encaissementEnDetail),
+                      manualPaymentId: undefined, remiseSepaId: undefined, compteContrepartie: undefined, uncertain: false,
+                    };
+                    await updateAndSaveBankLines(updatedC);
+                    fetchData();
+                    setShowManualMatch(null);
+                    return;
+                  }
                   const updated = [...bankLines];
                   updated[showManualMatch!] = {
                     ...updated[showManualMatch!],
@@ -1038,10 +1074,12 @@ export default function OngletRapprochement({
                   <div className="flex flex-col gap-1.5">
                     {lignePrelevement && blocRemisesSepa}
                     {ligneCheques && blocBordereauxCheques}
-                    {encsVirement.length > 0 && titre(ligneAncv ? `Chèques-vacances encaissés, à relier (${encsVirement.length})` : remiseCarte ? `Encaissements CB de la semaine, à relier (${encsVirement.length})` : `Virements déjà encaissés, à relier (${encsVirement.length})`)}
+                    {encsVirement.length > 0 && titre(ligneAncv ? `Chèques-vacances encaissés, à relier (${encsVirement.length})` : ligneChequesSeule ? `Chèques encaissés, dans aucun bordereau (${encsVirement.length})` : remiseCarte ? `Encaissements CB de la semaine, à relier (${encsVirement.length})` : `Virements déjà encaissés, à relier (${encsVirement.length})`)}
                     {encsVirement.length > 0 && (
                       <p className="font-body text-[11px] text-slate-400 -mt-1 mb-1">
-                        {ligneAncv
+                        {ligneChequesSeule
+                          ? "Pas de bordereau pour cette remise : cochez les chèques déposés ce jour-là. Le bordereau est créé et pointé en même temps ; rien n'est ré-encaissé."
+                          : ligneAncv
                           ? "Cochez les chèques-vacances que l'ANCV rembourse par ce virement. L'ANCV retient sa commission (2,5 % sur Connect) : un total coché un peu supérieur au virement est normal, l'écart est noté comme commission. Rien n'est ré-encaissé."
                           : remiseCarte
                           ? "Cochez les écritures CB contenues dans cette remise (plusieurs factures payées en un seul passage de carte comprises). Rien n'est ré-encaissé."
