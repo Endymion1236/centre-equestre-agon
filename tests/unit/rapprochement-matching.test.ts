@@ -474,6 +474,12 @@ console.log("\n✓ Bordereaux de chèques proposés au pointage manuel (remise d
     assert("bordereau de chèques différés (forfaits) proposé au pointage", cd[0]?.remise.id === "r-differe" && cd[0].montantExact);
     assert("chèque différé hors bordereau : proposé aussi", chequeARemettre({ mode: "cheque_differe", montant: 300 }));
   }
+  {
+    const deduit = bordereau("r-deduit", 3588, "2026-10-19", { pointee: true, pointeeNote: "Pointée automatiquement : encaissements déjà rapprochés avec la banque" });
+    const parLigne = bordereau("r-ligne", 3588, "2026-10-19", { pointee: true, pointeeNote: "Pointée depuis le rapprochement bancaire — ligne du 19/10/2026" });
+    const cd = bordereauxChequesCandidats([deduit, parLigne, { ...deduit, id: "r-deduit-autre", total: 100 }], { amount: 3588 }, le21);
+    assert("bordereau pointé par déduction, au montant exact : proposé ; pointé par une ligne ou d'un autre montant : non", cd.map(x => x.remise.id).join() === "r-deduit", cd.map(x => x.remise.id).join());
+  }
   assert("« REMISE CHEQUES » et « REMISE CHQ » sont des lignes de chèques", estLigneRemiseCheques("REMISE CHEQUES 1234") && estLigneRemiseCheques("Remise chq") && !estLigneRemiseCheques("VIR SEPA DUPONT"));
 }
 

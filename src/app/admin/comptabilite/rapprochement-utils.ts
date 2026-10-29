@@ -645,18 +645,30 @@ export interface BordereauChequesCandidat<T> {
  * les 60 jours autour de la ligne, montant exact d'abord, puis le plus proche
  * dans le temps.
  */
+/**
+ * Bordereau marqué « pointé » par simple déduction (l'onglet Remise le pointe
+ * quand tous ses encaissements sont notés en banque), sans qu'une ligne du
+ * relevé le porte. Octobre 2026 : le bordereau de 3 588 € du 19/10 était
+ * dans ce cas — jamais proposé à sa ligne, et re-pointé aussitôt dépointé.
+ */
+export function pointageDeduit(r: { pointee?: boolean; pointeeNote?: string }): boolean {
+  return !!r.pointee && /^Pointée automatiquement : encaissements déjà rapprochés/.test(r.pointeeNote || "");
+}
+
 export function bordereauxChequesCandidats<T extends {
-  paymentMode?: string; pointee?: boolean; total?: number; date?: { seconds?: number } | null;
+  paymentMode?: string; pointee?: boolean; pointeeNote?: string; total?: number; date?: { seconds?: number } | null;
 }>(remises: T[], ligne: { amount: number }, dateLigne: Date | null, filtre = ""): BordereauChequesCandidat<T>[] {
   const q = filtre.trim().toLowerCase();
   return (remises || [])
-    .filter((r) => estBordereauCheques(r) && !r.pointee)
+    .filter((r) => estBordereauCheques(r))
     .map((r) => {
       const ecartJours = dateLigne && r.date?.seconds
         ? Math.round((dateLigne.getTime() - r.date.seconds * 1000) / 86_400_000)
         : null;
       return { remise: r, montantExact: Math.abs((r.total || 0) - ligne.amount) < 0.02, ecartJours };
     })
+    // Non pointé ; ou pointé par déduction, au montant exact de la ligne.
+    .filter((c) => !c.remise.pointee || (pointageDeduit(c.remise) && c.montantExact))
     .filter((c) => c.ecartJours === null || Math.abs(c.ecartJours) <= 60)
     .filter((c) => {
       if (!q) return true;
