@@ -599,6 +599,21 @@ export function estLigneRemiseCheques(label: string) {
 }
 
 /**
+ * Chèques bancaires, différés compris. Octobre 2026 : le bordereau de
+ * 3 588 € (chèques de forfait, mode « Chèques différés ») restait « à
+ * pointer » dans l'onglet Remise sans jamais être proposé au rapprochement,
+ * qui ne connaissait que « cheque » et « mixte ».
+ */
+export const MODES_CHEQUE_BANCAIRE = ["cheque", "cheque_differe"] as const;
+export function estModeChequeBancaire(mode: unknown): boolean {
+  return (MODES_CHEQUE_BANCAIRE as readonly string[]).includes(String(mode ?? ""));
+}
+/** Bordereau qu'une ligne « remise de chèques » peut solder. */
+export function estBordereauCheques(r: { paymentMode?: string }): boolean {
+  return estModeChequeBancaire(r.paymentMode) || r.paymentMode === "mixte";
+}
+
+/**
  * Chèque encaissé dans l'application mais jamais mis dans un bordereau.
  *
  * Octobre 2026 : une remise de chèques de 3 588 € au relevé, aucun
@@ -607,7 +622,7 @@ export function estLigneRemiseCheques(label: string) {
  * depuis la ligne du relevé, qui crée le bordereau au passage.
  */
 export function chequeARemettre(e: { mode?: string; remiseId?: string | null; montant?: number; reconciledByBank?: boolean }): boolean {
-  return e.mode === "cheque" && !e.remiseId && (Number(e.montant) || 0) > 0 && !e.reconciledByBank;
+  return estModeChequeBancaire(e.mode) && !e.remiseId && (Number(e.montant) || 0) > 0 && !e.reconciledByBank;
 }
 
 export interface BordereauChequesCandidat<T> {
@@ -635,7 +650,7 @@ export function bordereauxChequesCandidats<T extends {
 }>(remises: T[], ligne: { amount: number }, dateLigne: Date | null, filtre = ""): BordereauChequesCandidat<T>[] {
   const q = filtre.trim().toLowerCase();
   return (remises || [])
-    .filter((r) => (r.paymentMode === "cheque" || r.paymentMode === "mixte") && !r.pointee)
+    .filter((r) => estBordereauCheques(r) && !r.pointee)
     .map((r) => {
       const ecartJours = dateLigne && r.date?.seconds
         ? Math.round((dateLigne.getTime() - r.date.seconds * 1000) / 86_400_000)

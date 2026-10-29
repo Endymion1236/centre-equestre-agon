@@ -41,6 +41,8 @@ import {
   remiseSepaDansFenetre,
   jourDuLibelleRemise,
   trouverSousEnsembleMontant,
+  estBordereauCheques,
+  estModeChequeBancaire,
 } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 import { toParisDateString } from "@/lib/date-local";
@@ -509,7 +511,7 @@ export function rapprocherReleve(
       //     contiennent la liste exacte des chèques remis à la banque.
       const remiseMatch = (remises || []).find((r: any) => {
         if (usedRemiseIds.has(r.id)) return false;
-        if (r.paymentMode !== "cheque" && r.paymentMode !== "mixte") return false;
+        if (!estBordereauCheques(r)) return false;
         if (Math.abs((r.total || 0) - bl.amount) >= 0.02) return false;
         // Fenêtre : la remise bancaire arrive dans les 10 jours après la création du bordereau
         if (bankDate && r.date?.seconds) {
@@ -537,7 +539,7 @@ export function rapprocherReleve(
       }
 
       // Pool élargi : une remise chèque peut contenir des chèques du mois d'avant
-      const allChqEncs = periodEncExtended.filter(e => e.mode === "cheque");
+      const allChqEncs = periodEncExtended.filter(e => estModeChequeBancaire(e.mode));
 
       // a) Chèque unitaire (montant exact)
       const match = allChqEncs.filter(inWindow).find(e =>
