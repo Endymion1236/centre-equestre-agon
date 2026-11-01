@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Audio trop long (max 25 MB)" }, { status: 400 });
     }
 
-    // Modèle de transcription : gpt-4o-transcribe (meilleur taux d'erreur,
+    // Modèle de transcription : gpt-transcribe (meilleur taux d'erreur,
     // plus robuste aux accents et au bruit — utile en écurie). Surchargeable
     // via la variable d'env WHISPER_MODEL pour revenir à whisper-1 sans
     // redéploiement. Fallback automatique vers whisper-1 si le modèle récent
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       contexte: "Dictée d'un moniteur dans un centre équestre : bilan pédagogique ou commande vocale.",
       motsCles: ["galop", "foulées", "équilibre", "cavalier", "poney", "montoir", "reprise", "pony games"],
     };
-    const primaryModel = process.env.WHISPER_MODEL || "gpt-4o-transcribe";
+    const primaryModel = process.env.WHISPER_MODEL || "gpt-transcribe";
 
     let transcription;
     try {

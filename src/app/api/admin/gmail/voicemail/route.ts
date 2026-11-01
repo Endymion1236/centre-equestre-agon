@@ -4,7 +4,7 @@
  * Transforme un mail du répondeur StandardFacile en texte exploitable par
  * l'assistant boîte de réception :
  *   1. télécharge le MP3 joint au mail (API Gmail)
- *   2. le transcrit (gpt-4o-transcribe, fallback whisper-1)
+ *   2. le transcrit (gpt-transcribe, fallback whisper-1)
  *   3. rapproche le numéro appelant d'une famille existante
  *
  * Sortie = un "faux mail" (from / subject / body) que la page peut envoyer tel
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
 
     const file = new File([new Uint8Array(audio)], "message.mp3", { type: "audio/mpeg" });
     const openai = new OpenAI({ apiKey });
-    const primaryModel = process.env.WHISPER_MODEL || "gpt-4o-transcribe";
+    const primaryModel = process.env.WHISPER_MODEL || "gpt-transcribe";
 
     let transcription;
     try {
