@@ -169,6 +169,26 @@ export const DEFAULT_TEMPLATES: Record<string, { subject: string; body: string }
       emailSignature("Bonne balade !"),
     ].join("\n"),
   },
+  // Prélèvement rejeté par la banque (demande de Nicolas, 01/11/2026) :
+  // prévenir la famille sans l'accabler, et lui demander quand on peut
+  // représenter. Envoyé à la main depuis l'écran SEPA.
+  rejetPrelevement: {
+    subject: "Prélèvement rejeté — {montant} € du {dateEcheance}",
+    body: [
+      emailTitre("Votre prélèvement n'a pas pu aboutir"),
+      P("Bonjour <strong>{parentName}</strong>,"),
+      P("Votre banque nous informe que le prélèvement de <strong>{montant}&nbsp;€</strong> du <strong>{dateEcheance}</strong>{prestation} a été rejeté. Cela arrive, souvent pour une question de plafond ou de solde au mauvais moment, et ne pose aucun problème de notre côté."),
+      emailPanneau("Prélèvement concerné", [
+        emailLigne("Montant", "{montant}&nbsp;€"),
+        emailLigne("Date du prélèvement", "{dateEcheance}"),
+      ].join("")),
+      P("<strong>Pouvez-vous nous dire à quelle date nous pouvons le représenter ?</strong> Répondez simplement à ce message avec la date qui vous arrange : nous reprogrammerons le prélèvement ce jour-là. {representation}"),
+      P("Si vous préférez régler autrement, vous pouvez aussi le faire en ligne :", 14),
+      emailButton("Régler en ligne", SITE_URL + "/espace-cavalier/factures"),
+      P("Les éventuels frais prélevés par votre banque à l'occasion de ce rejet ne dépendent pas de nous, et nous n'en ajoutons aucun.", 13),
+      emailSignature("Merci de votre compréhension, à bientôt au club."),
+    ].join("\n"),
+  },
   confirmationAbonnement: {
     subject: "Inscription confirmée — Paiement en {nbEcheances} fois",
     body: [

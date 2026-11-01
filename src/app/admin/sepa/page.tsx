@@ -51,6 +51,8 @@ interface EcheanceSepa {
   orderId?: string | null;  // Lien vers le paiement de référence
   echeance?: number;
   echeancesTotal?: number;
+  /** Date d'envoi de l'email « prélèvement rejeté » à la famille. */
+  famillePrevenueLe?: string | null;
   createdAt: any;
 }
 
@@ -764,9 +766,43 @@ export default function SepaPage() {
         "success",
       );
       fetchAll();
+      // Et la famille ? Elle découvre souvent le rejet par les frais de sa
+      // banque : on lui écrit tout de suite, en lui demandant quand représenter.
+      if (confirm(`Prévenir ${ech.familyName} par email et lui demander quand représenter le prélèvement ?`)) {
+        await handlePrevenirRejet({ ...ech, status: "rejete" });
+      }
     } catch (e: any) {
       console.error("[sepa] rejet:", e);
       toast(`Échec de l'enregistrement du rejet : ${e?.message || e}`, "error");
+    }
+  };
+
+  // ─── Prévenir la famille d'un rejet, et lui demander quand représenter ───
+  // Gabarit `rejetPrelevement` (modifiable dans Emails), envoi côté serveur.
+  const handlePrevenirRejet = async (ech: EcheanceSepa) => {
+    try {
+      const ap = await authFetch("/api/admin/sepa-rejet-email", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ echeanceId: ech.id, mode: "apercu" }),
+      });
+      const apercu = await ap.json().catch(() => ({}));
+      if (!ap.ok) { toast(apercu?.error || "Aperçu impossible", "error"); return; }
+      if (!confirm(
+        `Envoyer l'email « prélèvement rejeté » à ${ech.familyName} ?\n\n`
+        + `À : ${apercu.to}\nObjet : ${apercu.subject}\n\n`
+        + `La famille est invitée à répondre avec la date à laquelle représenter le prélèvement.`
+        + (apercu.dejaPrevenueLe ? `\n\n⚠️ Déjà prévenue le ${new Date(apercu.dejaPrevenueLe).toLocaleDateString("fr-FR")}.` : ""),
+      )) return;
+      const res = await authFetch("/api/admin/sepa-rejet-email", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ echeanceId: ech.id }),
+      });
+      const r = await res.json().catch(() => ({}));
+      if (!res.ok || !r.sent) { toast(r?.error || r?.reason || "Envoi impossible", "error"); return; }
+      toast(`Email envoyé à ${r.to}`, "success");
+      fetchAll();
+    } catch (e: any) {
+      toast(`Envoi impossible : ${e?.message || e}`, "error");
     }
   };
 
@@ -1527,6 +1563,15 @@ export default function SepaPage() {
                         {/* La banque crédite la remise entière puis rejette
                             quelques jours plus tard : le rejet se constate au
                             rapprochement, il s'enregistre ici. */}
+                        {ech.status === "rejete" && (
+                          <button type="button" onClick={() => handlePrevenirRejet(ech)}
+                            title={ech.famillePrevenueLe
+                              ? `Email « prélèvement rejeté » envoyé le ${new Date(ech.famillePrevenueLe).toLocaleDateString("fr-FR")} — renvoyer`
+                              : "Envoyer à la famille l'email « prélèvement rejeté » et lui demander quand représenter"}
+                            className={`font-body text-[11px] font-semibold px-2 py-1 rounded-md border-none cursor-pointer whitespace-nowrap ${ech.famillePrevenueLe ? "text-gray-500 bg-gray-100 hover:bg-gray-200" : "text-blue-600 bg-blue-50 hover:bg-blue-100"}`}>
+                            {ech.famillePrevenueLe ? `✉️ Prévenue le ${new Date(ech.famillePrevenueLe).toLocaleDateString("fr-FR")}` : "✉️ Prévenir la famille"}
+                          </button>
+                        )}
                         {(ech.status === "preleve" || ech.status === "remis") && (
                           <button type="button" onClick={() => handleRejet(ech)}
                             title="La banque a rejeté ce prélèvement : contre-passation au journal, échéance en rejet, commande redevenue due"

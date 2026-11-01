@@ -68,6 +68,10 @@ const META: Record<string, { variables: string[]; description: string }> = {
     variables: ["parentName", "montant", "prestations"],
     description: "Envoyé manuellement depuis les Impayés (bouton Relancer)",
   },
+  rejetPrelevement: {
+    variables: ["parentName", "montant", "dateEcheance", "prestation", "representation"],
+    description: "Envoyé manuellement depuis SEPA, sur une échéance rejetée (bouton « Prévenir la famille »)",
+  },
   bienvenue: {
     variables: ["parentName"],
     description: "Envoyé à la création d'un compte famille",
@@ -92,6 +96,7 @@ const TEMPLATE_LABELS: Record<string, string> = {
   confirmationAbonnement: "Paiement en plusieurs fois",
   rappelJ1: "Rappel J-1",
   rappelImpaye: "Relance impayé",
+  rejetPrelevement: "Prélèvement rejeté",
   bienvenue: "Bienvenue nouvelle famille",
 };
 
@@ -116,6 +121,9 @@ function previewReplace(html: string) {
     totalTTC: "605.00",
     prestations: "Forfait Galop d'or, Licence FFE -18ans",
     participants: "Lucas, Emma",
+    dateEcheance: "30 octobre 2026",
+    prestation: " (Forfait annuel 3/10)",
+    representation: "Sans réponse de votre part, nous le représenterons le <strong>30 novembre 2026</strong>.",
   };
   let result = html;
   for (const [key, val] of Object.entries(samples)) {
@@ -235,6 +243,7 @@ export default function EmailTemplatesPage() {
     confirmationStage: "📤 Envoyé automatiquement quand une inscription à un stage est enregistrée",
     confirmationCours: "📤 Envoyé automatiquement quand une inscription à un cours est enregistrée",
     rappelImpaye: "📤 Envoyé manuellement depuis la fiche famille (bouton 'Rappel impayé')",
+    rejetPrelevement: "📤 Envoyé manuellement depuis SEPA → Échéances traitées, sur une échéance rejetée (bouton « Prévenir la famille »)",
     rappelStage: "📤 Envoyé automatiquement J-3 avant le début d'un stage",
     bienvenueNouvelleFamille: "📤 Envoyé automatiquement lors de la création d'une nouvelle famille",
     relanceImpaye: "📤 Envoyé par le cron nocturne aux familles avec impayés > 30 jours",
