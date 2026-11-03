@@ -68,6 +68,9 @@ responsabilité personnelle de Nicolas — inexacte.
    seules les commandes qui ont reçu de l'argent (proforma en attente, brouillon : jamais ;
    annulée : jamais, l'avoir contrepasse). La veille signale les factures numérotées absentes
    ou déplacées dans un FEC déjà transmis (`moisTransmis` = documents `envois-comptable`).
+   Un FEC **incomplet ou mal formé ne part jamais au cabinet** (`bloquants` de `fecDuMois` : erreur de
+   structure, ou achats/banque absents faute de tableau des opérations lisible et complet) : l'envoi
+   est refusé (`code: "bloquant"`), le cron prévient Nicolas par email, le téléchargement l'affiche en rouge.
 
 5. **Jamais `|| 5.5` sur un taux de TVA.** 0 est « falsy » en JavaScript : ce repli transforme
    une activité exonérée en activité à 5,5 %. Utiliser `??`, ou `tauxTva()` de

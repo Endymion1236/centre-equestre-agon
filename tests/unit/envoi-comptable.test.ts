@@ -79,6 +79,7 @@ test("une facture numérotée puis annulée n'entre pas (l'avoir la contrepasse)
 
 const colis = construireColisComptable({ mois: "2026-09", payments, encaissements, depenses, maintenant: new Date("2026-10-02T08:00:00Z") });
 
+const SANS_TABLEAU = "Achats (HA) et banque (BQ) absents : le tableau des opérations du mois n'a pas pu être lu en entier. Ce fichier ne contient que les ventes et les règlements, il ne doit pas être transmis comme complet.";
 test("le résumé compte ce qui part", () => {
   assert.deepEqual(colis.resume, {
     nbFactures: 1, totalTTC: 300, totalHT: 250,
@@ -86,9 +87,11 @@ test("le résumé compte ce qui part", () => {
     nbDepenses: 1, totalDepenses: 420.5,
     // Le FEC : la facture Enaux (VE) et ses deux règlements du mois (RG),
     // virement et contre-passation, tous deux au compte bancaire du cabinet.
-    fec: { fichier: "FEC_202609.txt", source: "application", ecrituresVentes: 1, ecrituresReglements: 2, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [], nbAnomalies: 0,
+    // Sans tableau des opérations, le FEC n'a ni achats ni banque : il est
+    // marqué incomplet et l'envoi au cabinet serait refusé.
+    fec: { fichier: "FEC_202609.txt", source: "application", ecrituresVentes: 1, ecrituresReglements: 2, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [SANS_TABLEAU], nbAnomalies: 1,
       // TVA sur les encaissements : le compte de TVA en attente est soumis au cabinet.
-      comptesAConfirmer: [{ compte: "44574000", libelle: "TVA collectée en attente d'encaissement" }] },
+      comptesAConfirmer: [{ compte: "44574000", libelle: "TVA collectée en attente d'encaissement" }], bloquants: [SANS_TABLEAU] },
   });
 });
 
@@ -156,6 +159,16 @@ test("mois Céleris : les saisies de l'application ce mois-là ne sont pas repri
   assert.equal(r.source, "celeris");
   assert.doesNotMatch(r.contenu, /Durand/);
   assert.ok(r.anomalies.some((a) => /1 facture\(s\) et 1 encaissement\(s\)/.test(a)));
+});
+
+test("FEC incomplet ou mal formé : bloquant, jamais transmis comme complet (audit du 03/11/2026)", () => {
+  const sans = fecDuMois({ mois: "2026-09", factures: [], encaissements: [], payments, achatsBanque: null });
+  assert.ok(sans.bloquants.some((b) => /Achats \(HA\) et banque \(BQ\) absents/.test(b)));
+  assert.ok(sans.anomalies[0].startsWith("Achats (HA) et banque (BQ) absents"), "en tête de la liste");
+  const avec = fecDuMois({ mois: "2026-09", factures: [], encaissements: [], payments, achatsBanque: { debits: [], credits: [] } });
+  assert.deepEqual(avec.bloquants, []);
+  const colis = construireColisComptable({ mois: "2026-09", payments, encaissements, depenses: [], lignesJustificatifs: undefined, siret: "", regles: {}, moisCeleris: [] } as any);
+  assert.ok((colis.resume.fec?.bloquants || []).length > 0, "le colis porte le blocage");
 });
 
 console.log("\n── Destinataires ──");

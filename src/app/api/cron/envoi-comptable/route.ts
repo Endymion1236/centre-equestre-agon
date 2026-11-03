@@ -13,6 +13,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
 import { envoyerEcrituresComptable, etatEnvoiComptable, reglagesEnvoiComptable } from "@/lib/envoi-comptable";
+import { Resend } from "resend";
+import { ADMIN_EMAILS } from "@/lib/admin-emails";
+import { isRecipientAllowed, refreshEmailMode } from "@/lib/email-guard";
+import { URL_APP } from "@/lib/url-app";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,6 +39,25 @@ export async function GET(req: NextRequest) {
     const r = await envoyerEcrituresComptable({ mois, declenche: "auto" });
     if (!r.ok) {
       console.warn(`[cron envoi-comptable] ${mois} non envoyé : ${r.error}`);
+      // Refus sur le fond (FEC incomplet ou mal formé, données illisibles) :
+      // Nicolas est prévenu, sans quoi le cabinet attendait un envoi qui ne
+      // partait pas, sans que personne le sache (audit du 03/11/2026).
+      if (r.code === "bloquant" || r.code === "donnees") {
+        try {
+          await refreshEmailMode();
+          const to = [ADMIN_EMAILS[0]].filter((e) => isRecipientAllowed(e));
+          const cle = process.env.RESEND_API_KEY;
+          if (cle && to.length) {
+            const echap = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+            await new Resend(cle).emails.send({
+              from: process.env.RESEND_FROM_EMAIL || "Centre Equestre <onboarding@resend.dev>",
+              to,
+              subject: `Envoi comptable de ${mois} non parti : à vérifier`,
+              html: `<p>L'envoi automatique des écritures de <strong>${mois}</strong> au cabinet n'est pas parti.</p><p>${echap(r.error)}</p><p><a href="${URL_APP}/admin/comptabilite">Ouvrir la comptabilité</a> pour corriger, puis relancer l'envoi.</p>`,
+            });
+          }
+        } catch (e) { console.error("[cron envoi-comptable] alerte non envoyée:", e); }
+      }
       return NextResponse.json({ ok: false, mois, envoye: false, raison: r.error });
     }
     return NextResponse.json({ ok: true, mois, envoye: true, to: r.to, pieces: r.pieces });

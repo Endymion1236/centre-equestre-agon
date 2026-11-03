@@ -117,7 +117,9 @@ export async function chargerFecMois(mois: string) {
     celeris: celerisDoc && Array.isArray(celerisDoc.lignes) ? { lignes: celerisDoc.lignes } : null,
     siret: club.siret,
     regles,
-    achatsBanque: tableau ? { debits: tableau.lignes, credits } : null,
+    // Tableau illisible ou tronqué (limite atteinte) : pas d'achats ni de
+    // banque à moitié — le FEC le signale comme incomplet (bloquants).
+    achatsBanque: tableau && !tableau.limite ? { debits: tableau.lignes, credits } : null,
   });
 }
 
@@ -129,7 +131,7 @@ export async function envoyerEcrituresComptable(params: {
   message?: string;
   /** Qui déclenche (journal des emails) et reçoit une copie : l'admin qui clique. */
   declenchePar?: { uid?: string; email?: string };
-}): Promise<{ ok: true; to: string; copie: string[]; pieces: string[]; resume: any } | { ok: false; error: string; code: "adresse" | "restreint" | "resend" | "vide" | "donnees" }> {
+}): Promise<{ ok: true; to: string; copie: string[]; pieces: string[]; resume: any } | { ok: false; error: string; code: "adresse" | "restreint" | "resend" | "vide" | "donnees" | "bloquant" }> {
   const { mois, declenche } = params;
   const reglages = await reglagesEnvoiComptable();
   // Une ou plusieurs adresses (la collaboratrice du cabinet, l'expert en copie).
@@ -173,6 +175,13 @@ export async function envoyerEcrituresComptable(params: {
   const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles, moisCeleris, creditsReleve });
   if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0 && !colis.resume.ventilationAchats?.total && !colis.resume.celeris) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
+  }
+
+  // Un FEC mal formé ou incomplet ne part pas au cabinet (audit du 03/11/2026) :
+  // il serait rejeté à l'import, ou pris pour complet alors qu'il ne l'est pas.
+  const bloquants = colis.resume.fec?.bloquants || [];
+  if (bloquants.length) {
+    return { ok: false, code: "bloquant", error: `FEC de ${nomMoisLong(mois)} non transmis : ${bloquants.join(" ; ")}` };
   }
 
   const pdf = await genererPdfSyntheseCompta({ period: mois, payments: colis.factures, encaissements: colis.encaissements });

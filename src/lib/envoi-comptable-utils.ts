@@ -54,7 +54,7 @@ export interface ResumeColis {
    */
   celeris?: { nombre: number; ht: number; tva: number; ttc: number };
   /** Le FEC joint : ventes (VE) et règlements clients (RG). */
-  fec?: { fichier: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; ecrituresAchats?: number; ecrituresBanque?: number; anomalies: string[]; nbAnomalies: number; comptesAConfirmer: { compte: string; libelle: string }[] };
+  fec?: { fichier: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; ecrituresAchats?: number; ecrituresBanque?: number; anomalies: string[]; nbAnomalies: number; comptesAConfirmer: { compte: string; libelle: string }[]; bloquants: string[] };
 }
 
 /** Une écriture importée de Céleris, montants en centimes (lib/import-comptable-celeris). */
@@ -198,6 +198,7 @@ export function construireColisComptable(params: {
     anomalies: fec.anomalies,
     nbAnomalies: fec.anomalies.length,
     comptesAConfirmer: fec.comptesAConfirmer,
+    bloquants: fec.bloquants,
   };
 
   const csv = "text/csv; charset=utf-8";
@@ -253,8 +254,19 @@ export function fecDuMois(params: {
   fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; ecrituresAchats: number; ecrituresBanque: number; anomalies: string[]; comptesAConfirmer: CompteFec[];
   /** Total au 47100000, et sa répartition : ventes/règlements (à ventiler par le club), débits et crédits du relevé (à classer, ou par la comptable). */
   compteAttente: number; attente: { ventes: number; debits: number; credits: number };
+  /**
+   * Ce qui interdit de transmettre ce fichier comme complet (audit du
+   * 03/11/2026) : une erreur de structure (le cabinet le rejetterait), ou
+   * l'absence des achats et de la banque faute d'avoir pu lire le tableau des
+   * opérations. L'envoi au cabinet est alors refusé ; le téléchargement le dit.
+   */
+  bloquants: string[];
 } {
   const fichier = nomFichierFec(params.siret, params.mois);
+  const sourceAbsente = params.achatsBanque
+    ? []
+    : ["Achats (HA) et banque (BQ) absents : le tableau des opérations du mois n'a pas pu être lu en entier. Ce fichier ne contient que les ventes et les règlements, il ne doit pas être transmis comme complet."];
+  const bloquantsDe = (contenu: string) => [...controlerStructureFec(contenu).map((e) => `Structure du FEC : ${e}`), ...sourceAbsente];
   // Achats et banque, ajoutés à la suite des écritures de ventes et de règlements.
   const ajouterAchatsBanque = (contenu: string, numeroDepart: number, options: { sansAchats?: boolean; sansCredits?: boolean } = {}) => {
     if (!params.achatsBanque) return { contenu, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [] as string[], compteAttente: 0, debits: 0, credits: 0 };
@@ -270,11 +282,12 @@ export function fecDuMois(params: {
     const celerisBanque = params.celeris.lignes.some((l) => /^512/.test(String(l.compte)));
     const ab = ajouterAchatsBanque(c.contenu, c.ecritures + 1, { sansAchats: celerisAchats, sansCredits: celerisBanque });
     return {
+      bloquants: bloquantsDe(ab.contenu),
       fichier, contenu: ab.contenu, source: "celeris",
       ecrituresVentes: c.ecritures, ecrituresReglements: 0, ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque, comptesAConfirmer: [], compteAttente: ab.compteAttente,
       attente: { ventes: 0, debits: ab.debits, credits: ab.credits },
       anomalies: [
-        ...controlerStructureFec(ab.contenu).map((e) => `Structure du FEC : ${e}`),
+        ...bloquantsDe(ab.contenu),
         ...c.anomalies,
         ...(doublons ? [`Mois tenu dans Céleris : ${params.factures.length} facture(s) et ${params.encaissements.length} encaissement(s) saisis aussi dans l'application ne sont pas repris, pour ne pas les compter deux fois.`] : []),
         ...(params.achatsBanque && celerisAchats ? ["Achats déjà présents dans les écritures Céleris : le journal HA de l'application n'est pas ajouté."] : []),
@@ -292,11 +305,12 @@ export function fecDuMois(params: {
   });
   const ab = ajouterAchatsBanque(f.contenu, f.resume.ventes.ecritures + f.resume.reglements.ecritures + 1);
   return {
+    bloquants: bloquantsDe(ab.contenu),
     fichier, contenu: ab.contenu, source: "application",
     ecrituresVentes: f.resume.ventes.ecritures, ecrituresReglements: f.resume.reglements.ecritures,
     ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque,
     // Le contrôle de Test Compta Démat, refait ici : une anomalie de structure passe en tête.
-    anomalies: [...controlerStructureFec(ab.contenu).map((e) => `Structure du FEC : ${e}`), ...f.anomalies, ...ab.anomalies],
+    anomalies: [...bloquantsDe(ab.contenu), ...f.anomalies, ...ab.anomalies],
     comptesAConfirmer: f.resume.comptesAConfirmer, compteAttente: Math.round((f.resume.compteAttente + ab.compteAttente) * 100) / 100,
     attente: { ventes: f.resume.compteAttente, debits: ab.debits, credits: ab.credits },
   };

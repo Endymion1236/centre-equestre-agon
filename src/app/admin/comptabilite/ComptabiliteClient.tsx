@@ -328,7 +328,7 @@ export default function ComptabilitePage() {
 
   // Les points à regarder dans le FEC, en entier : la fenêtre du navigateur
   // n'en montrait que 8, coupés au milieu (11/2026).
-  const [pointsFec, setPointsFec] = useState<{ mois: string; points: string[] } | null>(null);
+  const [pointsFec, setPointsFec] = useState<{ mois: string; points: string[]; bloquants: string[] } | null>(null);
 
   const generateFEC = async () => {
     try {
@@ -337,7 +337,7 @@ export default function ComptabilitePage() {
       if (!res.ok || !data?.contenu) { alert(`FEC indisponible : ${data?.error || `erreur ${res.status}`}`); return; }
       const anomalies: string[] = data.anomalies || [];
       // Le fichier reste équilibré ; ce qui mérite un regard est dit avant l'envoi.
-      if (anomalies.length > 0) setPointsFec({ mois: period, points: anomalies });
+      if (anomalies.length > 0) setPointsFec({ mois: period, points: anomalies, bloquants: data.bloquants || [] });
       const blob = new Blob([data.contenu], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -899,7 +899,13 @@ export default function ComptabilitePage() {
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="p-5 border-b border-gray-100">
               <div className="font-display text-lg font-bold text-blue-800">{pointsFec.points.length} point{pointsFec.points.length > 1 ? "s" : ""} à regarder dans le FEC de {pointsFec.mois}</div>
-              <div className="font-body text-xs text-slate-500 mt-1">Le fichier est équilibré et téléchargé. La même liste, complète, part avec l'envoi mensuel à la comptable.</div>
+              {pointsFec.bloquants.length > 0 ? (
+                <div className="font-body text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg p-3 mt-2">
+                  <strong>Ce fichier ne doit pas être transmis tel quel.</strong> {pointsFec.bloquants.join(" ")} L'envoi au cabinet est bloqué tant que ce n'est pas réglé.
+                </div>
+              ) : (
+                <div className="font-body text-xs text-slate-500 mt-1">Le fichier est équilibré et téléchargé. La même liste, complète, part avec l'envoi mensuel à la comptable.</div>
+              )}
             </div>
             <ol className="p-5 overflow-y-auto flex flex-col gap-2 list-decimal pl-10">
               {pointsFec.points.map((p, i) => <li key={i} className="font-body text-sm text-slate-700 leading-snug">{p}</li>)}
