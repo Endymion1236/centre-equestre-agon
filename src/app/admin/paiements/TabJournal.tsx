@@ -1,6 +1,6 @@
 "use client";
 import { authFetch } from "@/lib/auth-fetch";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { collection, getDoc, getDocs, updateDoc, doc, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
@@ -8,7 +8,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Search } from "lucide-react";
 import { paymentModes } from "./types";
-import { preparerJournal, libelleReglementGroupe } from "./journal-utils";
+import { preparerJournal, libelleReglementGroupe, etatsCorrection, peutRetablir } from "./journal-utils";
 
 interface TabJournalProps {
   loading: boolean;
@@ -32,6 +32,62 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
   const [correctionRef, setCorrectionRef] = useState("");
   const [correctionRaison, setCorrectionRaison] = useState("");
   const inputCls = "w-full px-3 py-2.5 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none";
+
+  // Écritures déjà annulées et contre-passations déjà rattrapées : le bouton
+  // « Corriger » restait proposé sur une écriture annulée (GAGNARD, 11/2026).
+  const { annulees, retablies } = useMemo(() => etatsCorrection(encaissements), [encaissements]);
+  const [retablissement, setRetablissement] = useState<string | null>(null);
+
+  // Le payé d'une commande, recalculé depuis le journal (jamais de tête).
+  const recalculerCommande = async (paymentId: string) => {
+    const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", paymentId)));
+    const totalEnc = encSnap.docs.reduce((total, snapshot) => total + (snapshot.data().montant || 0), 0);
+    const paymentRef = doc(db, "payments", paymentId);
+    const paymentSnapshot = await getDoc(paymentRef);
+    if (paymentSnapshot.exists()) {
+      const totalTTC = paymentSnapshot.data().totalTTC || 0;
+      await updateDoc(paymentRef, {
+        paidAmount: Math.max(0, totalEnc),
+        status: totalEnc >= totalTTC ? "paid" : totalEnc > 0 ? "partial" : "pending",
+      });
+    }
+  };
+
+  // Rattraper une contre-passation faite par erreur : l'écriture d'origine est
+  // réenregistrée à sa date (nouvelle écriture chaînée, rien n'est effacé).
+  const retablir = async (cp: any) => {
+    const commande = cp.paymentId ? payments.find((p: any) => p.id === cp.paymentId) : null;
+    const verdict = peutRetablir(cp, encaissements, commande);
+    if (!verdict.ok) { toast(verdict.raison, "warning", 7000); return; }
+    const o = verdict.original;
+    const dateOrigine = o.date?.seconds ? new Date(o.date.seconds * 1000) : null;
+    if (!confirm(
+      `Rétablir l'écriture annulée par erreur ?\n\n`
+      + `${o.familyName || ""} · ${(Number(o.montant) || 0).toFixed(2)} € · ${o.modeLabel || o.mode}${dateOrigine ? ` du ${dateOrigine.toLocaleDateString("fr-FR")}` : ""}${commande?.invoiceNumber ? ` · facture ${commande.invoiceNumber}` : ""}\n`
+      + `${o.ref ? `Réf. ${o.ref}\n` : ""}\n`
+      + `Une nouvelle écriture identique est enregistrée à la même date ; l'originale et sa contre-passation restent visibles.`,
+    )) return;
+    setRetablissement(cp.id);
+    try {
+      await createEncaissement({
+        paymentId: o.paymentId, familyId: o.familyId, familyName: o.familyName,
+        montant: Number(o.montant) || 0, mode: o.mode, modeLabel: o.modeLabel || o.mode,
+        ref: o.ref || "", activityTitle: o.activityTitle,
+        raison: "Rétablissement : contre-passation faite par erreur",
+        retablitDe: cp.id,
+        ...(dateOrigine ? { explicitDate: dateOrigine } : {}),
+        // Une écriture née d'une ligne du relevé la garde : la ligne reste « encaissée ».
+        ...(o.bankLineKey ? { bankLineKey: o.bankLineKey, bankLineLabel: o.bankLineLabel || "" } : {}),
+      });
+      if (o.paymentId) await recalculerCommande(o.paymentId);
+      toast("Écriture rétablie", "success");
+      await refreshAll();
+    } catch (e: any) {
+      toast(`Rétablissement impossible : ${e?.message || e}`, "error", 7000);
+    } finally {
+      setRetablissement(null);
+    }
+  };
 
   const { filtered, totalsByMode, grandTotal } = preparerJournal(payments, encaissements, {
     dateFrom: journalDateFrom,
@@ -147,7 +203,19 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
                       <td className="px-2 py-2.5 whitespace-nowrap"><Badge color={(encaissement.montant || 0) < 0 ? "red" : "blue"}>{encaissement.modeLabel || encaissement.mode || "—"}</Badge></td>
                       <td className="px-2 py-2.5 font-body text-xs text-slate-600 max-w-[120px] truncate" title={encaissement.ref || ""}>{encaissement.ref || "—"}</td>
                       <td className="px-2 py-2.5 whitespace-nowrap">
-                        {!encaissement.id?.startsWith("fallback_") && (encaissement.montant || 0) > 0 && !encaissement.correctionDe && (
+                        {annulees.has(encaissement.id) && (
+                          <span className="font-body text-[10px] text-slate-400" title="Une contre-passation annule déjà cette écriture">annulée</span>
+                        )}
+                        {encaissement.correctionDe && (encaissement.montant || 0) < 0 && (
+                          retablies.has(encaissement.id)
+                            ? <span className="font-body text-[10px] text-slate-400">rattrapée</span>
+                            : <button type="button" disabled={retablissement === encaissement.id} onClick={() => retablir(encaissement)}
+                                title="Contre-passation faite par erreur : réenregistrer l'écriture d'origine à sa date"
+                                className="font-body text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100 disabled:opacity-50">
+                                {retablissement === encaissement.id ? "…" : "Rétablir"}
+                              </button>
+                        )}
+                        {!encaissement.id?.startsWith("fallback_") && (encaissement.montant || 0) > 0 && !encaissement.correctionDe && !annulees.has(encaissement.id) && (
                           <button type="button" onClick={() => {
                             setCorrectionEnc(encaissement);
                             setCorrectionMontant(encaissement.montant?.toString() || "");
@@ -180,6 +248,13 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
                 <div className="font-body text-xs text-red-500 font-semibold mb-1">Encaissement à corriger</div>
                 <div className="font-body text-sm text-blue-800">{correctionEnc.familyName} — {correctionEnc.activityTitle}</div>
                 <div className="font-body text-sm font-bold text-red-500">{(correctionEnc.montant || 0).toFixed(2)}€ ({correctionEnc.modeLabel || correctionEnc.mode})</div>
+                {/* De quoi reconnaître la bonne ligne : trois écritures identiques
+                    ne se distinguaient pas (GAGNARD, 11/2026). */}
+                <div className="font-body text-xs text-slate-600 mt-1">
+                  Écriture du {correctionEnc.date?.seconds ? new Date(correctionEnc.date.seconds * 1000).toLocaleDateString("fr-FR") : "?"}
+                  {(() => { const c = correctionEnc.paymentId ? payments.find((p: any) => p.id === correctionEnc.paymentId) : null; return c ? ` · ${c.invoiceNumber ? `facture ${c.invoiceNumber}` : "commande sans facture"}${c.echeance && c.echeancesTotal > 1 ? ` · échéance ${c.echeance}/${c.echeancesTotal}` : ""}` : ""; })()}
+                </div>
+                {correctionEnc.ref && <div className="font-body text-[11px] text-slate-500 mt-0.5 break-words">Réf. {correctionEnc.ref}</div>}
               </div>
 
               <div className="font-body text-xs font-semibold text-blue-800 mb-2">Raison de la correction *</div>
@@ -237,19 +312,7 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
                   });
                 }
 
-                if (correctionEnc.paymentId) {
-                  const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", correctionEnc.paymentId)));
-                  const totalEnc = encSnap.docs.reduce((total, snapshot) => total + (snapshot.data().montant || 0), 0);
-                  const paymentRef = doc(db, "payments", correctionEnc.paymentId);
-                  const paymentSnapshot = await getDoc(paymentRef);
-                  if (paymentSnapshot.exists()) {
-                    const totalTTC = paymentSnapshot.data().totalTTC || 0;
-                    await updateDoc(paymentRef, {
-                      paidAmount: Math.max(0, totalEnc),
-                      status: totalEnc >= totalTTC ? "paid" : totalEnc > 0 ? "partial" : "pending",
-                    });
-                  }
-                }
+                if (correctionEnc.paymentId) await recalculerCommande(correctionEnc.paymentId);
 
                 setCorrectionEnc(null);
                 await refreshAll();

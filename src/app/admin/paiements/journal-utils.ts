@@ -132,3 +132,46 @@ export function libelleReglementGroupe(enc: { reglementGroupe?: Partial<Reglemen
   if (!g || !Number(g.total) || Number(g.nbFactures) < 2) return "";
   return `Réglé en une fois : ${Number(g.total).toFixed(2).replace(".", ",")} € pour ${g.nbFactures} factures`;
 }
+
+// ── Corrections du journal ──────────────────────────────────────────────
+// Novembre 2026, GAGNARD : en annulant les écritures en trop, Nicolas a
+// contre-passé par erreur un vrai virement. Le bouton « Corriger » restait
+// proposé sur une écriture déjà annulée, et rien ne permettait de revenir
+// sur une contre-passation. On ne supprime jamais une écriture : on
+// réenregistre l'originale (`retablitDe` = la contre-passation rattrapée).
+
+/** Écritures déjà annulées (citées en `correctionDe`) et contre-passations déjà rattrapées. */
+export function etatsCorrection(encaissements: any[]): { annulees: Set<string>; retablies: Set<string> } {
+  const annulees = new Set<string>();
+  const retablies = new Set<string>();
+  for (const e of encaissements || []) {
+    if (e?.correctionDe && (Number(e.montant) || 0) < 0) annulees.add(String(e.correctionDe));
+    if (e?.retablitDe) retablies.add(String(e.retablitDe));
+  }
+  return { annulees, retablies };
+}
+
+/**
+ * Peut-on rattraper cette contre-passation en réenregistrant l'écriture
+ * d'origine ? Pas si elle l'a déjà été, ni si la commande serait alors payée
+ * au-delà de son montant (la correction a sans doute été remplacée par la
+ * bonne écriture).
+ */
+export function peutRetablir(
+  contrePassation: any,
+  encaissements: any[],
+  commande?: { totalTTC?: number; paidAmount?: number } | null,
+): { ok: true; original: any } | { ok: false; raison: string } {
+  if (!contrePassation?.correctionDe || !((Number(contrePassation.montant) || 0) < 0)) return { ok: false, raison: "Ce n'est pas une contre-passation." };
+  const { retablies } = etatsCorrection(encaissements);
+  if (retablies.has(String(contrePassation.id))) return { ok: false, raison: "Cette contre-passation a déjà été rattrapée." };
+  const original = (encaissements || []).find((e) => e?.id === contrePassation.correctionDe);
+  if (!original || !((Number(original.montant) || 0) > 0)) return { ok: false, raison: "Écriture d'origine introuvable dans le journal chargé." };
+  if (commande) {
+    const apres = Math.round(((Number(commande.paidAmount) || 0) + Number(original.montant)) * 100);
+    if (apres > Math.round((Number(commande.totalTTC) || 0) * 100) + 1) {
+      return { ok: false, raison: "La commande serait payée au-delà de son montant : la correction a sans doute déjà été remplacée par une autre écriture." };
+    }
+  }
+  return { ok: true, original };
+}

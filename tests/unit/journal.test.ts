@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  etatsCorrection, peutRetablir,
   libelleReglementGroupe,
   nouveauReglementGroupe,
   calculerTotauxJournal,
@@ -87,6 +88,19 @@ test("carte 247 € + adhésion 60 € passées en une fois au TPE : les deux li
   assert.equal(nouveauReglementGroupe([247], "x"), null, "une seule facture : pas de groupe");
   assert.equal(nouveauReglementGroupe([247, 0], "x"), null);
   assert.equal(libelleReglementGroupe({}), "");
+});
+
+test("corrections : écriture annulée, contre-passation rattrapable une seule fois (GAGNARD, 11/2026)", () => {
+  const vrai = { id: "v", montant: 69.9, mode: "virement" };
+  const cp = { id: "cp", montant: -69.9, correctionDe: "v" };
+  const { annulees, retablies } = etatsCorrection([vrai, cp]);
+  assert.ok(annulees.has("v"));
+  assert.equal(retablies.size, 0);
+  const ok = peutRetablir(cp, [vrai, cp], { totalTTC: 69.9, paidAmount: 0 });
+  assert.equal(ok.ok, true);
+  assert.equal(peutRetablir(cp, [vrai, cp, { id: "r", montant: 69.9, retablitDe: "cp" }], { totalTTC: 69.9, paidAmount: 69.9 }).ok, false);
+  assert.equal(peutRetablir(cp, [vrai, cp], { totalTTC: 69.9, paidAmount: 69.9 }).ok, false, "déjà remplacée : la commande serait payée deux fois");
+  assert.equal(peutRetablir(vrai, [vrai, cp], null).ok, false);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);
