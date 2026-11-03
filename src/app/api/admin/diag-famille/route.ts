@@ -24,6 +24,8 @@ import { verifyAuth } from "@/lib/api-auth";
 import { getActiveProjectId } from "@/lib/reset-guard";
 import { ficheCorrespondA } from "@/lib/famille-existante";
 import { toParisDateString } from "@/lib/date-local";
+import { cleLigneBancaire, dateBancaireIso } from "@/app/admin/comptabilite/rapprochement-utils";
+import { comparerVirements, libelleDeLaFamille, motsDuNom, type EcritureJournal, type LigneReleve } from "@/lib/virements-releve-famille";
 
 export const dynamic = "force-dynamic";
 
@@ -159,6 +161,41 @@ export async function GET(req: NextRequest) {
       fiche.totalRegle = Math.round((fiche.totalRegle + (Number(p.paidAmount) || 0)) * 100) / 100;
     }
 
+    // ── 2 bis. Virements : relevés importés contre journal ───────────────
+    // « Je ne suis même pas sûr qu'il y ait eu trois virements » (GAGNARD,
+    // 11/2026) : la réponse est dans les relevés enregistrés au rapprochement
+    // (rapprochements/{mois}, lignes au crédit). Chaque virement au nom de la
+    // famille, les écritures qu'il a réglées, et les écritures de virement
+    // sans virement reçu. lib/virements-releve-famille.
+    const commandesFamille = new Map(paySnap.docs.filter((d) => ids.includes((d.data() as any).familyId)).map((d) => [d.id, d.data() as any]));
+    const ecrituresFamille: EcritureJournal[] = encTousSnap.docs
+      .map((d) => ({ id: d.id, x: d.data() as any }))
+      .filter(({ x }) => (x.paymentId && commandesFamille.has(x.paymentId)) || ids.includes(x.familyId))
+      .map(({ id, x }) => ({
+        id, paymentId: x.paymentId || null,
+        invoiceNumber: x.paymentId ? (commandesFamille.get(x.paymentId)?.invoiceNumber || null) : null,
+        mode: x.mode || null, montant: Number(x.montant) || 0,
+        dateIso: x.date?.seconds ? toParisDateString(new Date(x.date.seconds * 1000)) : (x.dateIso || null),
+        bankLineKey: x.bankLineKey || null, correctionDe: x.correctionDe || null, ref: x.ref || null,
+      }));
+    const rapprochementsSnap = await adminDb.collection("rapprochements").get();
+    const moisImportes = rapprochementsSnap.docs.map((d) => d.id).filter((m) => /^\d{4}-\d{2}$/.test(m)).sort();
+    const mots = motsDuNom(fiches.map((f) => f.parentName), fiches.flatMap((f) => f.enfants));
+    const vues = new Set<string>();
+    const lignesFamille: LigneReleve[] = [];
+    for (const d of rapprochementsSnap.docs) {
+      for (const bl of ((d.data() as any).bankLines || []) as any[]) {
+        const amount = Number(bl?.amount) || 0;
+        if (amount <= 0 || !bl?.label || !bl?.date || !libelleDeLaFamille(String(bl.label), mots)) continue;
+        const cle = cleLigneBancaire({ date: String(bl.date), label: String(bl.label), amount });
+        const dateIso = dateBancaireIso(String(bl.date));
+        if (vues.has(cle) || !dateIso) continue;
+        vues.add(cle);
+        lignesFamille.push({ cle, date: String(bl.date), dateIso, label: String(bl.label), amount });
+      }
+    }
+    const virementsReleve = { motsCherches: mots, moisImportes, ...comparerVirements(lignesFamille, ecrituresFamille, moisImportes) };
+
     // ── 3. Inscriptions réellement posées dans le planning ────────────────
     // Et surtout : les réservations qui pointent vers un créneau DISPARU.
     // C'est la signature de l'incident — /api/enroll répondait « ok » quand le
@@ -217,6 +254,7 @@ export async function GET(req: NextRequest) {
       inscriptionsPlanning: inscriptions,
       detailCommandes: detailCommandes.sort((x, y) => String(y.date || "").localeCompare(String(x.date || ""))),
       detailAvoirs,
+      virementsReleve,
       // Non vide = des réservations pointent vers des créneaux supprimés.
       reservationsOrphelines,
       lecture: {

@@ -30,8 +30,17 @@ interface Diagnostic {
   inscriptionsPlanning: { creneauId: string; date: string; activite: string; enfant: string; familyId: string; enAttente: boolean }[];
   detailCommandes?: Commande[];
   detailAvoirs?: Avoir[];
+  virementsReleve?: VirementsReleve;
   lecture: Record<string, string | null>;
 }
+interface EcritureVir { id: string; paymentId: string | null; invoiceNumber: string | null; montant: number; dateIso: string | null; ref: string | null }
+interface VirementsReleve {
+  motsCherches: string[];
+  moisImportes: string[];
+  virements: { ligne: { date: string; label: string; amount: number }; ecritures: EcritureVir[]; enTrop: number }[];
+  sansVirement: (EcritureVir & { moisImporte: boolean })[];
+}
+const moisLisible = (m: string) => new Date(`${m}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 const dateHeure = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : "—");
 const STATUT: Record<string, string> = { paid: "réglée", partial: "partielle", pending: "en attente", cancelled: "annulée", draft: "brouillon" };
 
@@ -207,6 +216,49 @@ export default function DiagFamillePage() {
               </div>
             </div>
           )}
+
+          {/* Relevés importés contre journal : combien de virements la famille a
+              réellement faits, et ce que chacun a réglé (GAGNARD, 11/2026). */}
+          {diag.virementsReleve && (diag.virementsReleve.virements.length > 0 || diag.virementsReleve.sansVirement.length > 0) && (() => {
+            const v = diag.virementsReleve!;
+            const nbEnTrop = v.virements.reduce((s, x) => s + x.enTrop, 0);
+            const piece = (e: EcritureVir) => e.invoiceNumber || (e.paymentId ? `commande ${e.paymentId.slice(-6)}` : "sans commande");
+            return (
+              <div className={`rounded-2xl border p-4 ${nbEnTrop || v.sansVirement.some(e => e.moisImporte) ? "border-red-200 bg-red-50/40" : "border-slate-200 bg-white"}`}>
+                <div className="font-body text-xs font-semibold text-slate-600 uppercase tracking-wider mb-1">Virements : relevés bancaires et journal</div>
+                <div className="font-body text-xs text-slate-500 mb-3">
+                  Relevés importés : {v.moisImportes.length ? `${moisLisible(v.moisImportes[0])} à ${moisLisible(v.moisImportes[v.moisImportes.length - 1])}` : "aucun"} · nom cherché dans les libellés : {v.motsCherches.join(", ") || "—"}
+                </div>
+                <div className="font-body text-sm text-slate-800 mb-3">
+                  <strong>{v.virements.length} virement{v.virements.length > 1 ? "s" : ""} reçu{v.virements.length > 1 ? "s" : ""}</strong> au nom de la famille dans les relevés
+                  {nbEnTrop > 0 && <span className="text-red-700 font-semibold"> · {nbEnTrop} écriture{nbEnTrop > 1 ? "s" : ""} en trop au journal</span>}
+                  {v.sansVirement.length > 0 && <span className="text-red-700 font-semibold"> · {v.sansVirement.length} écriture{v.sansVirement.length > 1 ? "s" : ""} de virement sans virement reçu</span>}
+                </div>
+                <div className="flex flex-col gap-2">
+                  {v.virements.map((x, i) => (
+                    <div key={i} className={`rounded-xl border p-3 font-body text-xs ${x.enTrop ? "border-red-200 bg-white" : x.ecritures.length === 0 ? "border-amber-200 bg-white" : "border-slate-100 bg-slate-50/60"}`}>
+                      <div className="text-sm text-slate-800"><strong>{x.ligne.date} · {eur(x.ligne.amount)}</strong></div>
+                      <div className="text-slate-500 truncate">{x.ligne.label}</div>
+                      <div className={`mt-1 ${x.enTrop ? "text-red-700 font-semibold" : x.ecritures.length === 0 ? "text-amber-700" : "text-green-700"}`}>
+                        {x.ecritures.length === 0
+                          ? "Pas encore encaissé au journal."
+                          : `Encaissé ${x.ecritures.length} fois : ${x.ecritures.map(piece).join(", ")}${x.enTrop ? ` · ${x.enTrop} en trop : Paiements → Journal → « Corriger », montant 0, sur ${x.ecritures.slice(x.ecritures.length - x.enTrop).map(piece).join(" et ")}` : " ✓"}`}
+                      </div>
+                    </div>
+                  ))}
+                  {v.sansVirement.map(e => (
+                    <div key={e.id} className="rounded-xl border border-red-200 bg-white p-3 font-body text-xs text-red-700">
+                      <strong>{piece(e)}</strong> · écriture de virement du {e.dateIso ? dateFr(e.dateIso.slice(0, 10)) : "?"} · {eur(e.montant)}
+                      {e.moisImporte
+                        ? " : aucun virement de ce montant dans le relevé de ce mois-là. À vérifier sur le relevé, puis à contre-passer s'il n'a jamais été reçu."
+                        : " : le relevé de ce mois n'est pas encore importé, impossible de vérifier."}
+                      {e.ref ? <div className="text-slate-500 mt-0.5 truncate">Réf. {e.ref}</div> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {(diag.detailAvoirs || []).length > 0 && (
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
