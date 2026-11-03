@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/fec-achats-banque.test.ts
  */
 import assert from "node:assert/strict";
-import { codeLettrage, codeModeRapproche, construireAchatsBanque, dateReleveFec, estAchat, transitDuCredit } from "../../src/lib/fec-achats-banque";
+import { codeLettrage, codeModeRapproche, construireAchatsBanque, dateReleveFec, estAchat, tiersFournisseur, transitDuCredit } from "../../src/lib/fec-achats-banque";
 import { ENTETE_FEC } from "../../src/app/admin/comptabilite/fec-utils";
 import { controlerStructureFec } from "../../src/lib/controle-fec";
 import { fecDuMois } from "../../src/lib/envoi-comptable-utils";
@@ -25,8 +25,8 @@ test("achat avec facture et TVA justifiée : HA à la date de facture, compte du
   });
   assert.equal(r.ecrituresAchats, 1);
   const ha = ecriture(r.lignes, "HA", 10), bq = ecriture(r.lignes, "BQ", 11);
-  assert.deepEqual(resume(ha), ["60141000 D100,00", "44566000 D20,00", "401AGRIAL C120,00"]);
-  assert.deepEqual(resume(bq), ["401AGRIAL D120,00", "51200000 C120,00"]);
+  assert.deepEqual(resume(ha), ["60141000 D100,00", "44566000 D20,00", "401AGRIAL/401AGRIAL C120,00"]);
+  assert.deepEqual(resume(bq), ["401AGRIAL/401AGRIAL D120,00", "51200000 C120,00"]);
   assert.equal(ha[0][8], "FA-77"); // PieceRef = n° de facture
   assert.equal(ha[0][3], "20260902"); // date de la facture
   assert.equal(bq[0][3], "20260910"); // date du débit
@@ -44,7 +44,7 @@ test("facture antérieure à août 2026 : déjà saisie par le cabinet, seul le 
     debits: [debit({ mois: "2026-08", dateOperation: "2026-08-05", fournisseur: "PADD", poste: "Fournitures & petit équipement (dont sellerie)", montant: 80, piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", numero: "P-9", date: "2026-07-28", ttc: 80 } } })],
   });
   assert.equal(r.ecrituresAchats, 0);
-  assert.deepEqual(resume(ecriture(r.lignes, "BQ", 1)), ["401PADD D80,00", "51200000 C80,00"]);
+  assert.deepEqual(resume(ecriture(r.lignes, "BQ", 1)), ["401PADD/401PADD D80,00", "51200000 C80,00"]);
   assert.ok(r.anomalies.some((a) => a.includes("déjà saisie par le cabinet")));
 });
 
@@ -59,6 +59,23 @@ test("date de facture mal lue (1996) : pas « déjà saisie par le cabinet », a
   assert.equal(ecriture(r.lignes, "HA", 1)[0][3], "20261030");
 });
 
+test("chaque ligne fournisseur porte son tiers (FEC-Expert, 11/2026), le compte du cabinet ne change pas", () => {
+  const r = construireAchatsBanque({
+    mois: "2026-09", numeroDepart: 1, credits: [],
+    debits: [
+      debit({ id: "a", fournisseur: "AGRIAL GRANULES", poste: "Aliments, litières, paille", montant: 50 }),
+      debit({ id: "b", fournisseur: "Quincaillerie Dupont", poste: "Fournitures & petit équipement (dont sellerie)", montant: 12 }),
+    ],
+  });
+  const lignes401 = r.lignes.map(champs).filter((c) => c[4].startsWith("401"));
+  assert.ok(lignes401.length >= 4);
+  assert.ok(lignes401.every((c) => c[6] && c[7]), "CompAuxNum et CompAuxLib remplis");
+  assert.ok(lignes401.some((c) => c[4] === "401AGRIAL" && c[6] === "401AGRIAL" && c[7] === "Agrial"));
+  assert.ok(lignes401.some((c) => c[4] === "40100000" && c[6] === "FQUINCAILLERIEDUPO" && c[7] === "Quincaillerie Dupont"));
+  assert.deepEqual(tiersFournisseur("", { compte: "40100000", libelle: "x", collectif: true }), { auxNum: "FFOURNISSEUROCCASI", auxLib: "Fournisseur occasionnel" });
+  assert.deepEqual(controlerStructureFec([ENTETE_FEC, ...r.lignes].join("\n") + "\n"), []);
+});
+
 test("facture postérieure au débit (acompte) : datée du débit", () => {
   const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [], debits: [debit({ fournisseur: "Orange", poste: "Informatique, logiciels & abonnements", montant: 30, piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", date: "2026-09-20" } } })] });
   assert.equal(ecriture(r.lignes, "HA", 1)[0][3], "20260910");
@@ -66,7 +83,7 @@ test("facture postérieure au débit (acompte) : datée du débit", () => {
 
 test("achat sans justificatif : le TTC en charge, aucune TVA inventée", () => {
   const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [], debits: [debit({ fournisseur: "Quincaillerie Dupont", poste: "Fournitures & petit équipement (dont sellerie)", montant: 36.5 })] });
-  assert.deepEqual(resume(ecriture(r.lignes, "HA", 1)), ["60660000 D36,50", "40100000 C36,50"]);
+  assert.deepEqual(resume(ecriture(r.lignes, "HA", 1)), ["60660000 D36,50", "40100000/FQUINCAILLERIEDUPO C36,50"]);
 });
 
 test("salaire, frais bancaires, catégorie inconnue : directement en banque", () => {
@@ -173,8 +190,8 @@ test("avoir d'un fournisseur au relevé : au compte du fournisseur, jamais en re
   ] });
   const bq = r.lignes.map(champs);
   const parNum = (num: number) => resume(bq.filter((c) => c[2] === String(num)));
-  assert.deepEqual(parNum(1), ["51200000 D57,21", "40100000 C57,21"]);
-  assert.deepEqual(parNum(2), ["51200000 D10,00", "401AGRIAL C10,00"]);
+  assert.deepEqual(parNum(1), ["51200000 D57,21", "40100000/FAVOIRCARTEX4673PR C57,21"]);
+  assert.deepEqual(parNum(2), ["51200000 D10,00", "401AGRIAL/401AGRIAL C10,00"]);
   assert.equal(r.compteAttenteCredits, 0);
   assert.ok(r.anomalies.some((a) => a.includes("remboursement fournisseur")));
 });

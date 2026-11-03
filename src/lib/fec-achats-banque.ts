@@ -67,6 +67,22 @@ export function codeLettrage(id: string): string {
   return code;
 }
 
+/**
+ * Le tiers d'une ligne fournisseur, dans les colonnes CompAuxNum/CompAuxLib
+ * (comme les familles sur les lignes clients). Le compte reste celui du
+ * cabinet (401AGRIAL nominatif, 40100000 pour l'occasionnel) ; sans ces
+ * colonnes, un outil d'analyse ne voit aucun fournisseur (FEC-Expert, 11/2026 :
+ * « enregistrements fournisseurs sans référence de compte auxiliaire »,
+ * « aucun achat avec TVA auprès d'un fournisseur »). Nominatif : son code ;
+ * occasionnel : son nom tel que le relevé le donne.
+ */
+export function tiersFournisseur(fournisseurTexte: string, f: { compte: string; libelle: string; collectif?: boolean }): { auxNum: string; auxLib: string } {
+  if (!f.collectif) return { auxNum: f.compte, auxLib: f.libelle };
+  const nom = String(fournisseurTexte || "").trim() || "Fournisseur occasionnel";
+  const code = nom.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, "").slice(0, 17) || "OCCASIONNEL";
+  return { auxNum: `F${code}`, auxLib: nom.slice(0, 60) };
+}
+
 const dateIsoValide = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s;
 
 import { CONTREPARTIES_CREDIT } from "./contreparties-credit";
@@ -213,6 +229,7 @@ export function construireAchatsBanque(params: {
       // Un compte par fournisseur (401AGRIAL…), le collectif pour l'occasionnel.
       const f = compteFournisseur(l.fournisseur);
       const fournisseur: CompteFec = f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle };
+      const tiers = tiersFournisseur(fournisseurTexte, f);
       // Date lue sur la pièce. Plus d'un an avant le débit, elle est mal lue
       // (JIMMY LACOLLEY, 11/2026 : « facture du 09/09/1996 ») : l'achat passait
       // pour « déjà saisi par le cabinet » et sortait du journal des achats.
@@ -226,7 +243,7 @@ export function construireAchatsBanque(params: {
       // Facture d'avant la reprise par l'application : saisie par le cabinet.
       if (dateIsoValide(dateFactureIso) && dateFactureIso < debutAchats) {
         anomalies.push(`${fournisseurTexte} (${euros(montant)} €) : facture du ${dateFactureIso.split("-").reverse().join("/")}, déjà saisie par le cabinet ; seul le règlement est repris (BQ, compte ${fournisseur.compte}, à lettrer avec votre écriture).`);
-        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Règlement ${libelle}`, debit: montant }));
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Règlement ${libelle}`, debit: montant, ...tiers }));
         lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banque, piece, libelle: `Règlement ${libelle}`, credit: montant }));
         numero++; nbBq++;
         continue;
@@ -238,10 +255,10 @@ export function construireAchatsBanque(params: {
       const tva = Math.min(cents(tvaJustifiee(l) ?? 0), montant - 1);
       lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: imputation, piece, libelle, debit: montant - Math.max(tva, 0) }));
       if (tva > 0) lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: { compte: /^2/.test(imputation.compte) ? "44562000" : "44566000", libelle: COMPTES[/^2/.test(imputation.compte) ? "44562000" : "44566000"] }, piece, libelle, debit: tva }));
-      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: fournisseur, piece, libelle, credit: montant, ...lettrage }));
+      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: fournisseur, piece, libelle, credit: montant, ...lettrage, ...tiers }));
       enAttente(imputation, montant);
       numero++; nbHa++;
-      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Règlement ${libelle}`, debit: montant, ...lettrage }));
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Règlement ${libelle}`, debit: montant, ...lettrage, ...tiers }));
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banque, piece, libelle: `Règlement ${libelle}`, credit: montant }));
       numero++; nbBq++;
     } else {
@@ -278,7 +295,7 @@ export function construireAchatsBanque(params: {
       else if (cp.id === "remboursement-fournisseur") {
         // Au compte du fournisseur, à lettrer avec l'achat et l'avoir.
         const f = compteFournisseur(c.label);
-        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle }, piece, libelle: `Remboursement ${libelle}`, credit: net }));
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle }, piece, libelle: `Remboursement ${libelle}`, credit: net, ...tiersFournisseur(libelle, f) }));
         anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : remboursement fournisseur, au compte ${f.collectif ? COMPTE_FOURNISSEURS.compte : f.compte} ; l'avoir du fournisseur est à transmettre pour annuler l'achat (charge et TVA).`);
       }
       else lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: { compte: cp.compte, libelle: CONTREPARTIES_CREDIT.find((x) => x.compte === cp.compte)?.compteLib || cp.libelle }, piece, libelle, credit: net }));
