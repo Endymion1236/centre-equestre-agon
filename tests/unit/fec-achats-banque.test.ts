@@ -48,6 +48,17 @@ test("facture antérieure à août 2026 : déjà saisie par le cabinet, seul le 
   assert.ok(r.anomalies.some((a) => a.includes("déjà saisie par le cabinet")));
 });
 
+test("date de facture mal lue (1996) : pas « déjà saisie par le cabinet », achat à la date du débit (JIMMY LACOLLEY, 11/2026)", () => {
+  const r = construireAchatsBanque({
+    mois: "2026-10", numeroDepart: 1, credits: [],
+    debits: [debit({ mois: "2026-10", dateOperation: "2026-10-30", fournisseur: "JIMMY LACOLLEY", poste: "Aliments, litières, paille", montant: 375, piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", numero: "F12", date: "1996-09-09", ttc: 375 } } })],
+  });
+  assert.equal(r.anomalies.some((a) => a.includes("déjà saisie par le cabinet")), false);
+  assert.ok(r.anomalies.some((a) => a.includes("sans doute mal lue")));
+  assert.equal(r.ecrituresAchats, 1);
+  assert.equal(ecriture(r.lignes, "HA", 1)[0][3], "20261030");
+});
+
 test("facture postérieure au débit (acompte) : datée du débit", () => {
   const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [], debits: [debit({ fournisseur: "Orange", poste: "Informatique, logiciels & abonnements", montant: 30, piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", date: "2026-09-20" } } })] });
   assert.equal(ecriture(r.lignes, "HA", 1)[0][3], "20260910");

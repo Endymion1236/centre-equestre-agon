@@ -326,6 +326,10 @@ export default function ComptabilitePage() {
     return () => { actif = false; };
   }, [tab, period]);
 
+  // Les points à regarder dans le FEC, en entier : la fenêtre du navigateur
+  // n'en montrait que 8, coupés au milieu (11/2026).
+  const [pointsFec, setPointsFec] = useState<{ mois: string; points: string[] } | null>(null);
+
   const generateFEC = async () => {
     try {
       const res = await authFetch(`/api/admin/fec?mois=${period}`);
@@ -333,11 +337,7 @@ export default function ComptabilitePage() {
       if (!res.ok || !data?.contenu) { alert(`FEC indisponible : ${data?.error || `erreur ${res.status}`}`); return; }
       const anomalies: string[] = data.anomalies || [];
       // Le fichier reste équilibré ; ce qui mérite un regard est dit avant l'envoi.
-      if (anomalies.length > 0) {
-        const detail = anomalies.slice(0, 8).map((a) => `• ${a}`).join("\n");
-        const reste = anomalies.length > 8 ? `\n… et ${anomalies.length - 8} autre(s).` : "";
-        alert(`${anomalies.length} point(s) à regarder dans le FEC :\n\n${detail}${reste}\n\nLe fichier est quand même équilibré et téléchargé.`);
-      }
+      if (anomalies.length > 0) setPointsFec({ mois: period, points: anomalies });
       const blob = new Blob([data.contenu], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -894,6 +894,25 @@ export default function ComptabilitePage() {
       {/* Panneaux de maintenance (?debug=…) — voir PanneauxDebug.tsx */}
       <PanneauxDebug debug={debugParam} period={period} remises={remises}
         encaissementsCompta={encaissementsCompta} loading={loading} />
+      {pointsFec && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setPointsFec(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100">
+              <div className="font-display text-lg font-bold text-blue-800">{pointsFec.points.length} point{pointsFec.points.length > 1 ? "s" : ""} à regarder dans le FEC de {pointsFec.mois}</div>
+              <div className="font-body text-xs text-slate-500 mt-1">Le fichier est équilibré et téléchargé. La même liste, complète, part avec l'envoi mensuel à la comptable.</div>
+            </div>
+            <ol className="p-5 overflow-y-auto flex flex-col gap-2 list-decimal pl-10">
+              {pointsFec.points.map((p, i) => <li key={i} className="font-body text-sm text-slate-700 leading-snug">{p}</li>)}
+            </ol>
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-2">
+              <button type="button" onClick={() => { navigator.clipboard?.writeText(pointsFec.points.map((p, i) => `${i + 1}. ${p}`).join("\n")).catch(() => {}); }}
+                className="font-body text-sm text-blue-700 bg-blue-50 px-4 py-2 rounded-lg border-none cursor-pointer hover:bg-blue-100">Copier la liste</button>
+              <button type="button" onClick={() => setPointsFec(null)}
+                className="font-body text-sm font-semibold text-white bg-blue-800 px-4 py-2 rounded-lg border-none cursor-pointer">Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

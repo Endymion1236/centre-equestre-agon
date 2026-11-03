@@ -213,7 +213,15 @@ export function construireAchatsBanque(params: {
       // Un compte par fournisseur (401AGRIAL…), le collectif pour l'occasionnel.
       const f = compteFournisseur(l.fournisseur);
       const fournisseur: CompteFec = f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle };
-      const dateFactureIso = l.piece?.extraction?.date;
+      // Date lue sur la pièce. Plus d'un an avant le débit, elle est mal lue
+      // (JIMMY LACOLLEY, 11/2026 : « facture du 09/09/1996 ») : l'achat passait
+      // pour « déjà saisi par le cabinet » et sortait du journal des achats.
+      // On la tient pour inconnue : l'achat prend la date du débit.
+      const dateLue = l.piece?.extraction?.date;
+      const debitIso = dateIsoValide(l.dateOperation) ? l.dateOperation : `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`;
+      const invraisemblable = dateIsoValide(dateLue) && (Date.parse(`${debitIso}T00:00:00Z`) - Date.parse(`${dateLue}T00:00:00Z`)) / 86_400_000 > 365;
+      if (invraisemblable) anomalies.push(`${fournisseurTexte} (${euros(montant)} €) : la date lue sur la facture (${dateLue!.split("-").reverse().join("/")}) précède le paiement de plus d'un an, sans doute mal lue : achat passé à la date du débit, à corriger sur le justificatif dans Dépenses.`);
+      const dateFactureIso = invraisemblable ? undefined : dateLue;
       const libelle = `${fournisseurTexte}${facture ? ` — facture ${facture}` : ""}${dateIsoValide(dateFactureIso) ? ` du ${dateFactureIso.split("-").reverse().join("/")}` : ""}`;
       // Facture d'avant la reprise par l'application : saisie par le cabinet.
       if (dateIsoValide(dateFactureIso) && dateFactureIso < debutAchats) {

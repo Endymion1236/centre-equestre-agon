@@ -194,7 +194,8 @@ export function construireColisComptable(params: {
     ecrituresReglements: fec.ecrituresReglements,
     ecrituresAchats: fec.ecrituresAchats,
     ecrituresBanque: fec.ecrituresBanque,
-    anomalies: fec.anomalies.slice(0, 10),
+    // Toute la liste : coupée à 10, la comptable ne voyait pas le reste (11/2026).
+    anomalies: fec.anomalies,
     nbAnomalies: fec.anomalies.length,
     comptesAConfirmer: fec.comptesAConfirmer,
   };
