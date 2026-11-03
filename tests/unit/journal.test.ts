@@ -101,6 +101,12 @@ test("corrections : écriture annulée, contre-passation rattrapable une seule f
   assert.equal(peutRetablir(cp, [vrai, cp, { id: "r", montant: 69.9, retablitDe: "cp" }], { totalTTC: 69.9, paidAmount: 69.9 }).ok, false);
   assert.equal(peutRetablir(cp, [vrai, cp], { totalTTC: 69.9, paidAmount: 69.9 }).ok, false, "déjà remplacée : la commande serait payée deux fois");
   assert.equal(peutRetablir(vrai, [vrai, cp], null).ok, false);
+  // Écriture née d'une ligne du relevé que une autre écriture encaisse déjà : pas de rétablissement.
+  const a = { id: "a", montant: 69.9, bankLineKey: "L" }, b = { id: "b", montant: 69.9, bankLineKey: "L" };
+  const cpa = { id: "cpa", montant: -69.9, correctionDe: "a" };
+  assert.equal(peutRetablir(cpa, [a, b, cpa], { totalTTC: 69.9, paidAmount: 0 }).ok, false);
+  const cpb = { id: "cpb", montant: -69.9, correctionDe: "b" };
+  assert.equal(peutRetablir(cpa, [a, b, cpa, cpb], { totalTTC: 69.9, paidAmount: 0 }).ok, true, "les deux annulées : on peut en rétablir une");
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

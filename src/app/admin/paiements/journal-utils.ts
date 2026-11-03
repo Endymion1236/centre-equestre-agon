@@ -1,5 +1,6 @@
 import { safeNumber } from "@/lib/utils";
 import { paymentModes } from "./types";
+import { ecrituresDeLaLigne } from "@/lib/ligne-bancaire-unique";
 
 export interface JournalFilters {
   dateFrom?: string;
@@ -167,6 +168,12 @@ export function peutRetablir(
   if (retablies.has(String(contrePassation.id))) return { ok: false, raison: "Cette contre-passation a déjà été rattrapée." };
   const original = (encaissements || []).find((e) => e?.id === contrePassation.correctionDe);
   if (!original || !((Number(original.montant) || 0) > 0)) return { ok: false, raison: "Écriture d'origine introuvable dans le journal chargé." };
+  // Née d'une ligne du relevé déjà encaissée par une autre écriture : la
+  // rétablir encaisserait deux fois le même virement (GAGNARD, 11/2026).
+  if (original.bankLineKey) {
+    const autre = ecrituresDeLaLigne(String(original.bankLineKey), encaissements || []).find((e: any) => e.id !== original.id);
+    if (autre) return { ok: false, raison: "Ce virement est déjà encaissé par une autre écriture du journal : le rétablir l'encaisserait deux fois." };
+  }
   if (commande) {
     const apres = Math.round(((Number(commande.paidAmount) || 0) + Number(original.montant)) * 100);
     if (apres > Math.round((Number(commande.totalTTC) || 0) * 100) + 1) {

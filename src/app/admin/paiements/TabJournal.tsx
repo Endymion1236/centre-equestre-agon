@@ -209,7 +209,10 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
                         {encaissement.correctionDe && (encaissement.montant || 0) < 0 && (
                           retablies.has(encaissement.id)
                             ? <span className="font-body text-[10px] text-slate-400">rattrapée</span>
-                            : <button type="button" disabled={retablissement === encaissement.id} onClick={() => retablir(encaissement)}
+                            : (() => {
+                                const v = peutRetablir(encaissement, encaissements, encaissement.paymentId ? payments.find((p: any) => p.id === encaissement.paymentId) : null);
+                                return !v.ok ? <span className="font-body text-[10px] text-slate-400" title={v.raison}>annulation justifiée</span> : null;
+                              })() || <button type="button" disabled={retablissement === encaissement.id} onClick={() => retablir(encaissement)}
                                 title="Contre-passation faite par erreur : réenregistrer l'écriture d'origine à sa date"
                                 className="font-body text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100 disabled:opacity-50">
                                 {retablissement === encaissement.id ? "…" : "Rétablir"}
