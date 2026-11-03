@@ -483,6 +483,24 @@ console.log("\n✓ Bordereaux de chèques proposés au pointage manuel (remise d
   assert("« REMISE CHEQUES » et « REMISE CHQ » sont des lignes de chèques", estLigneRemiseCheques("REMISE CHEQUES 1234") && estLigneRemiseCheques("Remise chq") && !estLigneRemiseCheques("VIR SEPA DUPONT"));
 }
 
+console.log("\n✓ Relevé réimporté le mois suivant : un virement déjà encaissé ne s'encaisse pas une 2e fois (GAGNARD, 11/2026) :");
+{
+  // Le virement du 30/09 a été pointé sur l'échéance 3/10 (écriture du
+  // 30/09, clé de la ligne). Le relevé d'octobre le contient encore : vu
+  // depuis octobre, l'écriture de septembre était hors du mois, et la ligne
+  // se rattachait à l'échéance GAGNARD suivante, encaissée de nouveau.
+  const l = ligne("30/09/2026", "Virement en votre faveur M OU MME TUDAL GAGNARD C08V26273 - Reglement GAGNARD Ly", 69.9);
+  const cle = `${l.date}|${l.label}|${l.amount.toFixed(2)}`;
+  const dejaFaite = { ...enc("v3", 69.9, "virement", "2026-09-30", "GAGNARD Emilie"), paymentId: "ech3", bankLineKey: cle };
+  const echeance = (id: string, n: number) => ({ id, familyName: "GAGNARD Emilie", totalTTC: 69.9, paidAmount: 0, status: "pending", paymentMode: "virement", echeance: n, echeancesTotal: 10, date: { seconds: Math.floor(Date.parse("2026-09-24T10:00:00Z") / 1000) } });
+  const r = rapprocherReleve([l], { ...etatVide, period: "2026-10", encaissementsCompta: [dejaFaite], payments: [echeance("ech2", 2), echeance("ech10", 10)] });
+  const bl: any = r.finalMatched[0];
+  assert("la ligne retrouve l'écriture déjà faite", bl.matched && r.usedEncIds.has("v3"), bl.matchDetail);
+  assert("aucune autre échéance n'est visée", !bl.manualPaymentId, bl.manualPaymentId);
+  const annulee = rapprocherReleve([l], { ...etatVide, period: "2026-10", encaissementsCompta: [dejaFaite, { ...enc("x", -69.9, "virement", "2026-11-03", "GAGNARD Emilie"), correctionDe: "v3" }], payments: [echeance("ech2", 2)] });
+  assert("écriture contre-passée : la ligne peut de nouveau régler une échéance", (annulee.finalMatched[0] as any).manualPaymentId === "ech2", (annulee.finalMatched[0] as any).manualPaymentId);
+}
+
 console.log("\n══════════════════════════════════════════════════════════════");
 console.log(`  RESUME : ${passed} passes, ${failed} echoues`);
 console.log("══════════════════════════════════════════════════════════════\n");

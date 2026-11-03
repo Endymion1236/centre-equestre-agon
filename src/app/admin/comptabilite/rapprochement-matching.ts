@@ -28,6 +28,7 @@
  *   4. remise de chèques ou d'espèces, par bordereau puis par sous-ensemble.
  */
 
+import { ecrituresDeLaLigne } from "@/lib/ligne-bancaire-unique";
 import {
   CANAUX_REMISE_CARTE,
   cleLigneBancaire,
@@ -135,6 +136,21 @@ export function rapprocherReleve(
     // Virement reçu / prélèvement émis : lus sans accents (cf. rapprochement-utils).
     const libelleVirement = estLibelleVirement(bl.label);
     const libellePrelevement = estLibellePrelevement(bl.label);
+
+    // Ligne déjà encaissée par un pointage (l'écriture porte sa clé) : elle
+    // retrouve CETTE écriture, quel que soit le mois affiché. Sans quoi un
+    // relevé réimporté le mois suivant ne la voyait plus et l'encaissait de
+    // nouveau sur une autre commande de la famille (GAGNARD, 11/2026 : un
+    // virement encaissé sur trois échéances). lib/ligne-bancaire-unique.
+    const dejaEncaissee = ecrituresDeLaLigne(cleLigneBancaire(bl), encaissementsCompta).find(e => !usedEncIds.has(e.id));
+    if (dejaEncaissee) {
+      usedEncIds.add(dejaEncaissee.id);
+      return {
+        ...bl, matched: true, matchType: "Virement",
+        matchDetail: `Virement ${dejaEncaissee.familyName || ""} (déjà encaissé)`.replace("  ", " "),
+        matchedEncs: [encaissementEnDetail(dejaEncaissee)],
+      };
+    }
 
     // Calcul de la période précédente pour élargir le pool
     // (les chèques / CB terminal peuvent être datés du mois d'avant)

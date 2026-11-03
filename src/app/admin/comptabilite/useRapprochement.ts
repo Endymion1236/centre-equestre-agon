@@ -34,6 +34,7 @@ import {
 import { fusionnerLignesBancaires } from "./rapprochement-utils";
 import { rapprocherReleve } from "./rapprochement-matching";
 import { createEncaissement } from "@/lib/compta-encaissement";
+import { ligneDejaEncaissee } from "@/lib/ligne-bancaire-unique";
 
 /** Une ligne du relevé bancaire, telle qu'affichée et telle qu'enregistrée. */
 export interface LigneBancaire {
@@ -109,10 +110,25 @@ export function useRapprochement({
           continue;
         }
         const cle = cleLigneBancaire(bl);
-        const encSnap = await getDocs(query(collection(db, "encaissements"), where("paymentId", "==", pid)));
-        if (encSnap.docs.some(d => (d.data() as any).bankLineKey === cle)) {
-          // Déjà encaissée par cette ligne (synchronisation relancée).
-          if (!p.reconciledByBank) await updateDoc(doc(db, "payments", pid), { reconciledByBank: true });
+        // La LIGNE a-t-elle déjà encaissé quelque chose, sur n'importe quelle
+        // commande ? L'anti-doublon ne regardait que cette facture : un relevé
+        // réimporté rattachait la ligne à l'échéance suivante et l'encaissait
+        // encore (GAGNARD, 11/2026 : un virement sur trois échéances).
+        const parLigne = await getDocs(query(collection(db, "encaissements"), where("bankLineKey", "==", cle)));
+        const ecritures: any[] = parLigne.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
+        const ids = ecritures.map(e => e.id).slice(0, 30);
+        if (ids.length) {
+          const annulations = await getDocs(query(collection(db, "encaissements"), where("correctionDe", "in", ids)));
+          ecritures.push(...annulations.docs.map(d => ({ id: d.id, ...(d.data() as any) })));
+        }
+        const deja = ligneDejaEncaissee(cle, ecritures);
+        if (deja) {
+          if (deja.paymentId === pid) {
+            // Déjà encaissée par cette ligne (synchronisation relancée).
+            if (!p.reconciledByBank) await updateDoc(doc(db, "payments", pid), { reconciledByBank: true });
+          } else {
+            console.warn(`[encaisser-pointes] ligne du ${bl.date} déjà encaissée sur la commande ${deja.paymentId} : rien d'encaissé sur ${pid}`);
+          }
           continue;
         }
         await enregistrerEncaissement(

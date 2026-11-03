@@ -18,6 +18,7 @@
  */
 
 import { doublonsInscriptions } from "./conflit-horaire";
+import { lignesEncaisseesPlusieursFois } from "./ligne-bancaire-unique";
 import { dateFactureSecondes, estFactureNumerotee, moisParisDeSecondes } from "./envoi-comptable-utils";
 import { analyserCoherence } from "@/lib/coherence";
 import { listerImpayes, duMaintenant } from "@/app/admin/paiements/impayes-utils";
@@ -369,6 +370,19 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
       horsFec,
       "/admin/comptabilite"));
   }
+
+  // ── 🔴 19. Un même virement du relevé encaissé sur plusieurs commandes ──
+  // Défaut du rapprochement corrigé le 03/11/2026 (GAGNARD : un virement de
+  // 69,90 € encaissé sur trois échéances). Les écritures en trop se
+  // contre-passent dans Paiements → Journal → « Corriger », montant 0.
+  points.push(point(19, "virement-encaisse-plusieurs-fois", "rouge",
+    "Un même virement du relevé encaissé sur plusieurs commandes",
+    lignesEncaisseesPlusieursFois(d.encaissements || []).map(({ ecritures }) => {
+      const premier = ecritures[0];
+      const enTrop = ecritures.length - 1;
+      return `${premier.familyName || "Famille"} — virement de ${eur(premier.montant)} du ${dateFr(jourParis(premier.date))} encaissé ${ecritures.length} fois : ${enTrop} écriture${enTrop > 1 ? "s" : ""} à contre-passer (Journal → « Corriger », montant 0)`;
+    }),
+    "/admin/paiements?tab=journal"));
 
   return points.filter(p => p.nb > 0);
 }
