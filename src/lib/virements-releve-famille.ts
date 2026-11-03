@@ -46,7 +46,20 @@ export interface VirementCompare {
 export interface ComparaisonVirements {
   virements: VirementCompare[];
   /** Écritures de virement sans virement correspondant dans les relevés importés. */
-  sansVirement: (EcritureJournal & { moisImporte: boolean })[];
+  sansVirement: EcritureSansVirement[];
+}
+
+/**
+ * Une écriture de virement qu'aucun virement reçu n'explique, avec ce qui
+ * aide à trancher (BARBEY, 11/2026 : deux écritures de 80 € au 12/10 pour un
+ * seul virement ce jour-là, et un virement du 03/11 encaissé nulle part).
+ */
+export interface EcritureSansVirement extends EcritureJournal {
+  moisImporte: boolean;
+  /** Un virement du même montant, à 15 jours près, déjà rattaché à une autre écriture : doublon probable. */
+  virementDejaPris: { date: string; ecritures: EcritureJournal[] } | null;
+  /** Un virement du même montant, à 60 jours près, rattaché à rien : peut-être celui-ci, saisi à une autre date. */
+  virementLibre: { date: string } | null;
 }
 
 const sansAccents = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
@@ -103,14 +116,27 @@ export function comparerVirements(
     if (e.bankLineKey && parLigne.has(e.bankLineKey)) parLigne.get(e.bankLineKey)!.push(e);
     else restantes.push(e);
   }
-  const sansVirement: ComparaisonVirements["sansVirement"] = [];
+  const orphelines: EcritureJournal[] = [];
   for (const e of restantes) {
     const ligne = triees.find((l) => parLigne.get(l.cle)!.length === 0
       && Math.abs(l.amount - e.montant) < 0.01
       && !!e.dateIso && jours(l.dateIso, e.dateIso.slice(0, 10)) <= 15);
     if (ligne) parLigne.get(ligne.cle)!.push(e);
-    else sansVirement.push({ ...e, moisImporte: !!e.dateIso && moisImportes.includes(e.dateIso.slice(0, 7)) });
+    else orphelines.push(e);
   }
+  // Ce qui aide à trancher, une fois toutes les écritures placées.
+  const memeMontant = (l: LigneReleve, e: EcritureJournal, max: number) =>
+    Math.abs(l.amount - e.montant) < 0.01 && !!e.dateIso && jours(l.dateIso, e.dateIso.slice(0, 10)) <= max;
+  const sansVirement: EcritureSansVirement[] = orphelines.map((e) => {
+    const prise = triees.find((l) => memeMontant(l, e, 15) && parLigne.get(l.cle)!.length > 0);
+    const libre = triees.find((l) => memeMontant(l, e, 60) && parLigne.get(l.cle)!.length === 0);
+    return {
+      ...e,
+      moisImporte: !!e.dateIso && moisImportes.includes(e.dateIso.slice(0, 7)),
+      virementDejaPris: prise ? { date: prise.date, ecritures: parLigne.get(prise.cle)! } : null,
+      virementLibre: libre ? { date: libre.date } : null,
+    };
+  });
 
   return {
     virements: triees.map((ligne) => {

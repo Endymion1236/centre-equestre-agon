@@ -54,4 +54,18 @@ test("saisie à la main (bouton Vir) : rattachée par montant et date, sinon sig
   assert.deepEqual(r.sansVirement.map((e) => [e.id, e.moisImporte]), [["m2", true], ["m3", false]]);
 });
 
+test("BARBEY : deux écritures au 12/10 pour un seul virement, et un virement du 03/11 rattaché à rien", () => {
+  const l1 = ligne("2026-10-12", 80, "Virement en votre faveur Equitation Manon barbey M.");
+  const l2 = ligne("2026-11-03", 80, "Virement en votre faveur Barbey Manon M. BARBEY PAS");
+  const r = comparerVirements([l1, l2], [
+    ecr("rappro", 80, "2026-10-12", { bankLineKey: l1.cle, paymentId: "GjvYSY" }),
+    ecr("main", 80, "2026-10-12", { paymentId: "GjvYSY" }),
+  ], ["2026-09", "2026-10", "2026-11"]);
+  assert.equal(r.virements[0].ecritures.length, 1);
+  assert.equal(r.virements[1].ecritures.length, 0);
+  assert.equal(r.sansVirement.length, 1);
+  assert.equal(r.sansVirement[0].virementDejaPris?.date, "12/10/2026");
+  assert.equal(r.sansVirement[0].virementLibre?.date, "03/11/2026");
+});
+
 if (process.exitCode) { console.error("❌ échec"); } else console.log(`✅ ${passes} tests passés`);

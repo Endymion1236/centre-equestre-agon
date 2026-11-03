@@ -38,7 +38,7 @@ interface VirementsReleve {
   motsCherches: string[];
   moisImportes: string[];
   virements: { ligne: { date: string; label: string; amount: number }; ecritures: EcritureVir[]; enTrop: number }[];
-  sansVirement: (EcritureVir & { moisImporte: boolean })[];
+  sansVirement: (EcritureVir & { moisImporte: boolean; virementDejaPris: { date: string; ecritures: EcritureVir[] } | null; virementLibre: { date: string } | null })[];
 }
 const moisLisible = (m: string) => new Date(`${m}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 const dateHeure = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : "—");
@@ -246,15 +246,33 @@ export default function DiagFamillePage() {
                       </div>
                     </div>
                   ))}
-                  {v.sansVirement.map(e => (
-                    <div key={e.id} className="rounded-xl border border-red-200 bg-white p-3 font-body text-xs text-red-700">
-                      <strong>{piece(e)}</strong> · écriture de virement du {e.dateIso ? dateFr(e.dateIso.slice(0, 10)) : "?"} · {eur(e.montant)}
-                      {e.moisImporte
-                        ? " : aucun virement de ce montant dans le relevé de ce mois-là. À vérifier sur le relevé, puis à contre-passer s'il n'a jamais été reçu."
-                        : " : le relevé de ce mois n'est pas encore importé, impossible de vérifier."}
-                      {e.ref ? <div className="text-slate-500 mt-0.5 truncate">Réf. {e.ref}</div> : null}
-                    </div>
-                  ))}
+                  {v.sansVirement.map(e => {
+                    // Ce que dit la commande : payée au-delà de son montant, c'est un doublon.
+                    const cmd = e.paymentId ? diag.detailCommandes?.find(c => c.id === e.paymentId) : undefined;
+                    const surpaye = !!cmd && cmd.paidAmount > cmd.totalTTC + 0.01;
+                    const etatCmd = cmd ? ` La commande fait ${eur(cmd.totalTTC)} et a reçu ${eur(cmd.paidAmount)}.` : "";
+                    const contrePasser = " Si c'est un doublon : Paiements → Journal → « Corriger », montant 0, sur cette écriture-là (la fenêtre affiche la facture et la référence).";
+                    let texte: string;
+                    if (surpaye) {
+                      texte = `Doublon : la commande a reçu plus que son montant.${etatCmd} À contre-passer.${contrePasser}`;
+                    } else if (e.virementDejaPris && e.virementLibre) {
+                      texte = `Même montant, même période que le virement du ${e.virementDejaPris.date}, déjà rattaché à ${e.virementDejaPris.ecritures.map(piece).join(", ")}. Et le virement du ${e.virementLibre.date}, du même montant, n'est rattaché à rien. Deux possibilités : un doublon du ${e.virementDejaPris.date} (à contre-passer), ou le virement du ${e.virementLibre.date} enregistré à une autre date (à garder).${etatCmd} Si la commande attendait les deux versements, gardez-la.${contrePasser}`;
+                    } else if (e.virementDejaPris) {
+                      texte = `Doublon probable : le virement du ${e.virementDejaPris.date}, du même montant, est déjà rattaché à ${e.virementDejaPris.ecritures.map(piece).join(", ")}.${etatCmd}${contrePasser}`;
+                    } else if (e.virementLibre) {
+                      texte = `Probablement le virement du ${e.virementLibre.date}, du même montant, enregistré à une autre date : à garder.${etatCmd}`;
+                    } else if (e.moisImporte) {
+                      texte = `Aucun virement de ce montant dans les relevés importés autour de cette date. À vérifier sur le relevé, puis à contre-passer s'il n'a jamais été reçu.${etatCmd}`;
+                    } else {
+                      texte = "Le relevé de ce mois n'est pas encore importé : impossible de vérifier.";
+                    }
+                    return (
+                      <div key={e.id} className={`rounded-xl border bg-white p-3 font-body text-xs ${surpaye || (e.virementDejaPris && !e.virementLibre) ? "border-red-200 text-red-700" : "border-amber-200 text-amber-800"}`}>
+                        <strong>{piece(e)}</strong> · écriture de virement du {e.dateIso ? dateFr(e.dateIso.slice(0, 10)) : "?"} · {eur(e.montant)} : {texte}
+                        {e.ref ? <div className="text-slate-500 mt-0.5 truncate">Réf. {e.ref}</div> : null}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
