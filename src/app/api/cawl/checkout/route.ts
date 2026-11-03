@@ -5,6 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { verifyAuth, isAdminToken } from "@/lib/api-auth";
 import { auditPaymentPricing, logPricingAudit, evaluatePaymentEnforcement } from "@/lib/server-pricing";
 import { bloquerSiReservationsFermees } from "@/lib/reservations-ouvertes";
+import { echeancesAnterieuresDues, estEcheanceDeSerie, messageReglerDabord } from "@/lib/echeances-ordre";
 
 export async function POST(req: NextRequest) {
   // 🔒 Auth obligatoire
@@ -90,6 +91,27 @@ export async function POST(req: NextRequest) {
         }
       } catch (e) {
         console.error("[checkout] lecture de la commande impossible, montant demandé conservé", paymentId, e);
+      }
+    }
+
+    // ── Échéancier : l'échéance la plus ancienne d'abord ─────────────────
+    // GAGNARD (11/2026) : la famille réglait depuis son espace la première
+    // carte affichée, la 10/10, et la 1/10 restait due. L'espace famille trie
+    // et bloque désormais ; ici, le même refus côté serveur, quel que soit
+    // l'écran qui demande le paiement. L'admin (lien de paiement) garde la main.
+    if (paymentId && !isAdminToken(auth)) {
+      try {
+        const pSnap = await adminDb.collection("payments").doc(String(paymentId)).get();
+        const cmd = pSnap.exists ? { id: pSnap.id, ...(pSnap.data() as any) } : null;
+        if (cmd && estEcheanceDeSerie(cmd) && cmd.familyId) {
+          const famille = await adminDb.collection("payments").where("familyId", "==", cmd.familyId).get();
+          const avant = echeancesAnterieuresDues(cmd, famille.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+          if (avant.length > 0) {
+            return NextResponse.json({ error: messageReglerDabord(avant) }, { status: 409 });
+          }
+        }
+      } catch (e) {
+        console.error("[checkout] contrôle de l'ordre des échéances impossible, paiement laissé passer", paymentId, e);
       }
     }
 

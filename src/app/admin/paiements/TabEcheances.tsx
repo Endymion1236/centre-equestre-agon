@@ -19,6 +19,7 @@ import {
 import RefaireEcheancier from "./RefaireEcheancier";
 import { SectionPrelevementsSepa } from "./SectionPrelevementsSepa";
 import { useConfirm } from "@/components/ui/Confirm";
+import { echeancesAnterieuresDues, messageReglerDabord } from "@/lib/echeances-ordre";
 
 interface TabEcheancesProps {
   loading: boolean;
@@ -299,12 +300,15 @@ export function TabEcheances({
                 <div className={`h-full rounded-full ${nbPayes === nbTotal ? "bg-green-500" : "bg-blue-400"}`} style={{ width: `${(nbPayes / nbTotal) * 100}%` }} />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Deux colonnes seulement sur grand écran : sur tablette, les boutons
+                  CB/Chq/Esp/Vir/Lien sortaient de la carte et se confondaient
+                  avec ceux de la carte voisine (11/2026). */}
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
                 {echs.map((e: any) => {
                   const isPaid = e.status === "paid";
                   const isOverdue = !isPaid && e.echeanceDate && e.echeanceDate < today;
                   return (
-                    <div key={e.id} className={`flex items-center justify-between px-3 py-2 rounded-lg ${isPaid ? "bg-green-50" : isOverdue ? "bg-red-50" : "bg-sand"}`}>
+                    <div key={e.id} className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 rounded-lg ${isPaid ? "bg-green-50" : isOverdue ? "bg-red-50" : "bg-sand"}`}>
                       <div className="flex items-center gap-2">
                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isPaid ? "bg-green-500 text-white" : isOverdue ? "bg-red-500 text-white" : "bg-gray-200 text-slate-600"}`}>
                           {isPaid ? <Check size={12} /> : e.echeance}
@@ -337,7 +341,7 @@ export function TabEcheances({
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
                         <span className={`font-body text-sm font-bold ${isPaid ? "text-green-600" : isOverdue ? "text-red-500" : "text-blue-500"}`}>{(e.totalTTC || 0).toFixed(2)}€</span>
                         {isPaid && <Badge color="green">Payé</Badge>}
                         {isOverdue && <Badge color="red">En retard</Badge>}
@@ -396,14 +400,27 @@ export function TabEcheances({
                                     title={email
                                       ? `Envoyer à ${email} un lien de paiement de ${reste.toFixed(2)}€ pour cette échéance`
                                       : "Cette famille n'a pas d'adresse email — à compléter sur sa fiche"}
-                                    onClick={() => {
+                                    onClick={async () => {
+                                      // Le lien crédite CETTE échéance : si une plus
+                                      // ancienne reste due, c'est sans doute elle que
+                                      // la famille croit régler (GAGNARD, 11/2026).
+                                      const avant = echeancesAnterieuresDues(e, echs);
+                                      if (avant.length > 0 && !(await confirmer({
+                                        titre: `Lien pour l'échéance ${e.echeance}/${e.echeancesTotal} ?`,
+                                        details: [
+                                          `${messageReglerDabord(avant).replace("Réglez d'abord", "D'abord à régler :")}`,
+                                          `Le paiement de ce lien sera enregistré sur l'échéance ${e.echeance}/${e.echeancesTotal}, pas sur la ${avant[0].echeance}/${avant[0].echeancesTotal}. Pour encaisser l'échéance en retard, utilisez le bouton « 💳 Lien » de sa propre ligne.`,
+                                        ],
+                                        libelleConfirmer: `Lien pour la ${e.echeance}/${e.echeancesTotal} quand même`,
+                                        danger: true,
+                                      }))) return;
                                       setPayLinkModal(e);
                                       setPayLinkEmail(email);
                                       setPayLinkAmount(reste.toFixed(2));
                                       setPayLinkMessage(messageLienEcheance(e));
                                     }}
                                     className="font-body text-[9px] font-semibold text-white bg-indigo-500 px-2 py-1 rounded border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
-                                    💳 Lien
+                                    💳 Lien {e.echeance}/{e.echeancesTotal}
                                   </button>
                                 );
                               })()}
