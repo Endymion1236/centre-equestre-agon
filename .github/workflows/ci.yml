@@ -49,9 +49,13 @@ jobs:
       - name: Règles Firestore
         run: npm run validate:rules
 
+      # Le site a dépassé la mémoire que Node donne par défaut au build
+      # (≈ 2 Go) : « JavaScript heap out of memory » le 03/11/2026, alors que
+      # Vercel déployait sans peine. Le runner a largement de quoi.
       - name: Build check
         run: npx next build
         env:
+          NODE_OPTIONS: --max-old-space-size=6144
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
           NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
