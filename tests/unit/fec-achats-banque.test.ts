@@ -228,6 +228,9 @@ test("transit d'un crédit et règles de classement", () => {
   assert.equal(estAchat("42100000"), false);
   assert.equal(estAchat("21540000"), true);
   assert.equal(dateReleveFec("2/9/2026"), "20260902");
+  // Solde de stage débité sur la carte enregistrée (CAWL) : une carte, pas un prélèvement SEPA.
+  assert.equal(codeModeRapproche("Prélèvement automatique du solde (CAWL)"), "cb_online");
+  assert.equal(codeModeRapproche("Prélèvement SEPA"), "prelevement_sepa");
 });
 
 test("FEC complet : VE + RG + HA + BQ, structure conforme et écritures équilibrées", () => {

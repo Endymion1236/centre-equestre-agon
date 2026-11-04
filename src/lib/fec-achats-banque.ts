@@ -118,6 +118,10 @@ export function codeModeRapproche(mode: unknown): string {
   if (!brut) return "";
   if (COMPTES_REGLEMENT[brut]) return brut;
   const t = brut.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  // Carte en ligne d'abord : « Prélèvement automatique du solde (CAWL) » est un
+  // débit de la carte enregistrée, pas un prélèvement SEPA (remise carte du
+  // 13/10/2026, CAULLET 150 €, prise pour un prélèvement et passée au 47100000).
+  if (/cawl|en ligne|online/.test(t)) return "cb_online";
   if (/virement/.test(t)) return "virement";
   if (/prelevement|sepa/.test(t)) return "prelevement_sepa";
   if (/espece/.test(t)) return "especes";
