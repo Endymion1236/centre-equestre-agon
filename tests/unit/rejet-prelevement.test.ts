@@ -41,14 +41,14 @@ test("SAMSON : la ligne « impayé » retrouve son rejet ; un 2e impayé du mêm
   assert.equal(apparierRejets([{ id: "l", montant: 55, dateOperation: "2026-06-01" }], rejets).get("l"), null, "plus de 60 jours : pas lié");
 });
 
-test("l'annulation d'un rejet (journal RG) solde la liaison 58000000, jamais la banque", () => {
+test("l'annulation d'un rejet (journal OD depuis le 04/11/2026) solde la liaison 58000000, jamais la banque", () => {
   const cp = { id: "cp", paymentId: "p1", familyName: "SAMSON", montant: -55, mode: "prelevement_sepa", modeLabel: "ANNUL. Prélèvement SEPA",
     correctionDe: "e1", raison: "Rejet bancaire du prélèvement du 28/10/2026", date: { seconds: Date.parse("2026-11-01T10:00:00Z") / 1000 } };
   const f = fecDuMois({ mois: "2026-11", factures: [], encaissements: [cp], payments: [], achatsBanque: { debits: [], credits: [] } });
-  const rg = f.contenu.split("\n").map((l) => l.split("\t")).filter((c) => c[0] === "RG");
+  const rg = f.contenu.split("\n").map((l) => l.split("\t")).filter((c) => c[0] === "OD");
   assert.ok(rg.some((c) => c[4] === "58000000" && c[12] === "55,00"), "liaison au crédit");
   assert.ok(rg.some((c) => c[4] === "41100000" && c[11] === "55,00"), "client au débit");
-  assert.ok(!rg.some((c) => c[4] === "51200000"), "la banque n'est pas touchée en RG");
+  assert.ok(!rg.some((c) => c[4] === "51200000"), "la banque n'est pas touchée par l'annulation");
 });
 
 if (process.exitCode) { console.error("❌ échec"); } else console.log(`✅ ${passes} tests passés`);
