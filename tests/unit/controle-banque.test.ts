@@ -84,7 +84,10 @@ test("octobre 2026 : remise SEPA incomplète, remise carte d'un autre montant, c
 test("août 2026 : pas de crédits au rapprochement, mois Céleris — dit avant les chiffres, et dans le texte copié", () => {
   const a = avertissementsControle({ debits: 88, credits: 0, tableauIncomplet: false, moisCeleris: true });
   assert.equal(a.length, 2);
-  assert.match(a[0], /ne voit que les débits/);
+  // Mois Céleris : rien à importer pour le FEC, l'écart vient des recettes de Céleris (remarque de Nicolas, 04/11/2026).
+  assert.match(a[0], /FEC est complet sans rien importer/);
+  assert.match(a[0], /N'encaissez rien/);
+  assert.match(avertissementsControle({ debits: 88, credits: 0, tableauIncomplet: false, moisCeleris: false })[0], /ne voit que les débits/);
   const c = comparerBanque([], []);
   assert.match(texteControleBanque("2026-08", c, a), /À savoir avant de lire/);
   assert.deepEqual(avertissementsControle({ debits: 10, credits: 10, tableauIncomplet: false, moisCeleris: false }), []);
