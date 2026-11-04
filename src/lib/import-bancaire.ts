@@ -14,7 +14,20 @@ export type ExistanteImport = { id: string; collection: "depenses" | "mouvements
 export type DecisionImport = { mode?: "lier" | "nouveau" | "ignorer"; cible?: string; motif?: string; poste?: string };
 export type DecisionsImport = Record<string, DecisionImport>;
 export type LienImport = { cible: string; date: string; centimes: number; libelle: string; ignore?: boolean };
-export type LignePlanImport = { operation: OperationImport; etat: "nouveau" | "rapproche" | "deja" | "ambigu" | "ignore" | "archive"; cible: string | null; motif: string; candidats: ExistanteImport[]; manuel: boolean; corrigerDate?: boolean };
+export type LignePlanImport = { operation: OperationImport; etat: "nouveau" | "rapproche" | "deja" | "ambigu" | "ignore" | "archive"; cible: string | null; motif: string; candidats: ExistanteImport[]; manuel: boolean; corrigerDate?: boolean;
+  /** Une trace de l'import précédent couvre déjà cette ligne : rien à réécrire. */
+  lienConnu?: boolean;
+  /** La place de la ligne (`ref`) porte la trace d'une AUTRE ligne : la sienne s'enregistre sous `cleLienSecondaire`. */
+  refOccupee?: boolean };
+/**
+ * Un PDF est relu à chaque import, et la lecture varie : « Virement Perrine
+ * Duchatel » puis « Perrine Duchatel », ou une ligne de plus qui décale les
+ * suivantes. La trace d'un import (`imports-bancaires-liens`) est rangée sous
+ * la place de la ligne (page:rang) ; quand la place ne correspond plus, la
+ * ligne est retrouvée par son contenu. Clé de secours, déterministe, quand
+ * la place est prise par une autre ligne.
+ */
+export const cleLienSecondaire = (o: Pick<OperationImport, "ref" | "date" | "centimes">) => `${o.ref}|${o.date}|${o.centimes}`;
 export const dateImportValide = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString().slice(0, 10) === s;
 const normal = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
 function dateCsv(s: string) {
@@ -203,8 +216,25 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
   const memoire = memoirePostes(existantes);
   const counts = new Map<string, number>();
   for (const o of source.operations) { const k = cle(o.date, o.centimes, o.libelle); counts.set(k, (counts.get(k) || 0) + 1); }
+  // Traces des imports précédents attribuées par contenu : d'abord à sa
+  // place, puis n'importe laquelle des traces de ce fichier encore libre.
+  const memeLecture = (l: LienImport, o: OperationImport) => l.centimes === o.centimes && l.date === o.date
+    && (l.libelle === o.libelle || fournisseurNormalise(l.libelle) === fournisseurNormalise(o.libelle) || libellesCompatibles(l.libelle, o.libelle));
+  const attribues = new Map<string, LienImport>(), prises = new Set<string>();
+  for (const o of source.operations) for (const k of [o.ref, cleLienSecondaire(o)]) {
+    if (liens[k] && !prises.has(k) && memeLecture(liens[k], o)) { attribues.set(o.ref, liens[k]); prises.add(k); break; }
+  }
+  for (const o of source.operations) {
+    if (attribues.has(o.ref)) continue;
+    const k = Object.keys(liens).find(k => !prises.has(k) && memeLecture(liens[k], o));
+    if (k) { attribues.set(o.ref, liens[k]); prises.add(k); }
+  }
   const lignes: LignePlanImport[] = source.operations.map(operation => {
-    const o = operation, d = decisions[o.ref] || {}, lien = liens[o.ref];
+    const o = operation, d = decisions[o.ref] || {};
+    // La trace rangée à la place de cette ligne mais qui ne lui correspond pas.
+    const tracePlace = liens[o.ref] && !prises.has(o.ref) ? liens[o.ref] : undefined;
+    const refOccupee = !!liens[o.ref] && !attribues.has(o.ref);
+    let lien = attribues.get(o.ref);
     const libelleNormalise = fournisseurNormalise(o.libelle), dateMs = Date.parse(o.date);
     // Priorité : le choix explicite de cet import, puis ce que le gérant a
     // déjà décidé pour ce fournisseur, puis la règle sur le libellé.
@@ -219,13 +249,25 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
       // la période => écart à contrôler, jamais recréation silencieuse.
       || (source.format === "pdf" && sameLabel(e) && e.dateOperation >= source.debut && e.dateOperation <= source.fin)));
     r.candidats = proche;
-    if (lien && (lien.date !== o.date || lien.centimes !== o.centimes || lien.libelle !== o.libelle)) return { ...r, etat: "ambigu", motif: "Cette source a déjà été traitée avec d’autres informations. Vérifiez la lecture." };
+    if (lien) r.lienConnu = true;
+    else if (refOccupee) r.refOccupee = true;
+    // Trace à sa place, lecture différente : si la dépense qu'elle désigne a
+    // le montant, le compte, la date (3 jours) et un mot du libellé de cette
+    // ligne, c'est la même opération relue. Sinon le gérant tranche, et son
+    // choix compte (avant, la ligne restait « à vérifier » quoi qu'il choisisse).
+    if (tracePlace && !lien) {
+      const cible = existantes.find(e => e.id === tracePlace.cible);
+      const relue = cible && !d.mode && sameAmount(cible) && inAccount(cible) && index.get(cible.id)!.date !== null
+        && Math.abs(index.get(cible.id)!.date! - dateMs) <= 3 * 86400000 && (sameLabel(cible) || libellesCompatibles(cible.fournisseur, o.libelle));
+      if (relue) { r.lienConnu = true; r.refOccupee = false; lien = { ...tracePlace, date: o.date, centimes: o.centimes, libelle: o.libelle }; }
+      else if (!d.mode) return { ...r, etat: "ambigu", motif: "Cette source a déjà été traitée avec d’autres informations. Vérifiez la lecture, puis choisissez l’action." };
+    }
     if (lien?.ignore) return { ...r, etat: "deja", motif: "Ignoré lors d’un précédent import de cette source." };
     const directe = lien ? existantes.find(e => e.id === lien.cible) : existantes.find(e => e.sourceOperation === o.ref && banque(e) === source.compte);
     if (lien || directe) {
       if (!directe) return { ...r, etat: "ambigu", motif: "Mouvement lié introuvable ou déplacé. Aucune recréation automatique." };
       if (directe.archive || directe.rapprochementExclu) return { ...r, etat: "archive", cible: directe.id, motif: "Opération archivée ou exclue : elle reste exclue." };
-      if (!sameAmount(directe) || !inAccount(directe) || (lien ? (lien.date !== o.date || lien.centimes !== o.centimes || lien.libelle !== o.libelle) : (directe.dateOperation !== o.date || !sameLabel(directe)))) return { ...r, etat: "ambigu", cible: directe.id, motif: "Les informations diffèrent de la source déjà importée. Contrôler l’écart." };
+      if (!sameAmount(directe) || !inAccount(directe) || (lien ? !memeLecture(lien, o) : (directe.dateOperation !== o.date || !sameLabel(directe)))) return { ...r, etat: "ambigu", cible: directe.id, motif: "Les informations diffèrent de la source déjà importée. Contrôler l’écart." };
       return { ...r, candidats: [directe], etat: "deja", cible: directe.id, motif: "Déjà importé ; catégorie et justificatifs conservés." };
     }
     // Un crédit (remise de cartes ou de chèques, prélèvements émis, virement
@@ -279,6 +321,6 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
   const nonRetrouves = source.format === "pdf" ? existantes.filter(e => e.origineBancaire === "csv" && banque(e) === source.compte && !e.archive && !e.rapprochementExclu && e.dateOperation >= source.debut && e.dateOperation <= source.fin && !retrouves.has(e.id)) : [];
   return { lignes, nonRetrouves, nouveaux: lignes.filter(r => r.etat === "nouveau").length, rapproches: lignes.filter(r => r.etat === "rapproche").length,
     deja: lignes.filter(r => r.etat === "deja").length, ambigus: lignes.filter(r => r.etat === "ambigu").length,
-    aEnregistrer: lignes.filter(r => ["nouveau", "rapproche", "ignore", "archive", "deja"].includes(r.etat) && !liens[r.operation.ref]).map(r => r.operation.ref) };
+    aEnregistrer: lignes.filter(r => ["nouveau", "rapproche", "ignore", "archive", "deja"].includes(r.etat) && !r.lienConnu && !(r.refOccupee && liens[cleLienSecondaire(r.operation)])).map(r => r.operation.ref) };
 }
 export type PlanImportBancaire = ReturnType<typeof rapprocherImportBancaire>;

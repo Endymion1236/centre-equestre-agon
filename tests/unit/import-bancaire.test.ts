@@ -247,3 +247,29 @@ test("Dépense sans vraie date (fin de mois estimée, ou aucune) : le CSV la ret
   const certaine = rapprocherImportBancaire(s, [{ ...base, dateOperation: "2026-08-31" }], {});
   assert.notEqual(certaine.lignes[0].corrigerDate, true);
 });
+
+test("Relevé relu (août 2026, DUCHATEL) : libellé lu autrement ou lignes décalées, la ligne déjà traitée est reconnue", () => {
+  const s = pdf(csv("01/09/2026;Perrine Duchatel;836,27;\n01/09/2026;Aubance Planche;535,95;"));
+  const [a, b] = s.operations;
+  const ea: ExistanteImport = { id: "dep-a", collection: "depenses", source: "releve-bancaire", origineBancaire: "pdf", mois: "2026-09", dateOperation: a.date, fournisseur: "Perrine Duchatel", montant: 836.27, poste: "Salaires", compte: s.compte };
+  const eb: ExistanteImport = { ...ea, id: "dep-b", fournisseur: "Aubance Planche", montant: 535.95 };
+  // Même place, libellé relu « Virement Perrine Duchatel ».
+  const relu = { ...s, operations: [{ ...a, libelle: "Virement Perrine Duchatel" }, b] };
+  const liens = { [a.ref]: { cible: "dep-a", date: a.date, centimes: a.centimes, libelle: a.libelle }, [b.ref]: { cible: "dep-b", date: b.date, centimes: b.centimes, libelle: b.libelle } };
+  const p1 = rapprocherImportBancaire(relu, [ea, eb], liens);
+  assert.equal(p1.ambigus, 0); assert.equal(p1.deja, 2); assert.deepEqual(p1.aEnregistrer, []);
+  // Lignes lues dans l'autre ordre : chaque trace retrouve sa ligne par son contenu.
+  const inverse = { ...s, operations: [{ ...b, ref: a.ref }, { ...a, ref: b.ref }] };
+  const p2 = rapprocherImportBancaire(inverse, [ea, eb], liens);
+  assert.equal(p2.ambigus, 0); assert.equal(p2.deja, 2);
+  // Trace à sa place qui ne correspond plus : à vérifier, puis le choix du gérant compte, enregistré sous la clé de secours.
+  const autre = { ...s, operations: [{ ...a, centimes: 12345, libelle: "Autre débit" }, b] };
+  assert.equal(rapprocherImportBancaire(autre, [ea, eb], liens).ambigus, 1);
+  const choix = rapprocherImportBancaire(autre, [ea, eb], liens, { [a.ref]: { mode: "nouveau", motif: "débit distinct" } });
+  assert.equal(choix.ambigus, 0);
+  const ligne = choix.lignes.find(l => l.operation.ref === a.ref)!;
+  assert.equal(ligne.etat, "nouveau"); assert.equal(ligne.refOccupee, true);
+  const ecr = ecrituresImport(autre, choix, [ea, eb], choix.aEnregistrer, "uid", "2026-11-04");
+  const lien = ecr.find(e => e.collection === "imports-bancaires-liens")!;
+  assert.notEqual(lien.id, idLienImport(autre, a.ref));
+});

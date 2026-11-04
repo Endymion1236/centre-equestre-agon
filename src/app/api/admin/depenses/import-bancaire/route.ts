@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldValue, type Transaction, type DocumentData } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
-import { ErreurImportBancaire, type SourceImport, type ExistanteImport, type LienImport, verifierDecisionsImport } from "@/lib/import-bancaire";
+import { ErreurImportBancaire, cleLienSecondaire, type SourceImport, type ExistanteImport, type LienImport, verifierDecisionsImport } from "@/lib/import-bancaire";
 import { apercuImport, ecrituresImport, idLienImport, preparerSourceImport } from "@/lib/import-bancaire-ecritures";
 
 export const dynamic = "force-dynamic";
@@ -41,10 +41,13 @@ async function lireEtat(source: SourceImport, tx?: Transaction) {
     }
   }
   if (existantes.size > 15000) throw new ErreurImportBancaire("Trop de mouvements à comparer : réduisez la période du CSV.");
-  for (let i = 0; i < source.operations.length; i += 200) {
-    const ops = source.operations.slice(i, i + 200), refs = ops.map(o => adminDb.collection("imports-bancaires-liens").doc(idLienImport(source, o.ref)));
+  for (let i = 0; i < source.operations.length; i += 100) {
+    // Deux places par ligne : la sienne (page:rang) et la clé de secours, prise
+    // quand une lecture décalée avait mis la trace d'une autre ligne à sa place.
+    const ops = source.operations.slice(i, i + 100), cles = ops.flatMap(o => [o.ref, cleLienSecondaire(o)]);
+    const refs = cles.map(k => adminDb.collection("imports-bancaires-liens").doc(idLienImport(source, k)));
     const docs = tx ? await tx.getAll(...refs) : await adminDb.getAll(...refs);
-    docs.forEach((d, j) => { if (d.exists) { const x = d.data()!; liens[ops[j].ref] = { cible: String(x.cible || ""), date: String(x.date || ""), centimes: Number(x.centimes), libelle: String(x.libelle || ""), ignore: x.ignore === true }; } });
+    docs.forEach((d, j) => { if (d.exists) { const x = d.data()!; liens[cles[j]] = { cible: String(x.cible || ""), date: String(x.date || ""), centimes: Number(x.centimes), libelle: String(x.libelle || ""), ignore: x.ignore === true }; } });
   }
   // Une dépense déplacée depuis l’import reste liée ; elle ne doit jamais réapparaître comme nouvelle.
   const absentes = [...new Set(Object.values(liens).map(l => l.cible).filter(id => id && !existantes.has(id)))];

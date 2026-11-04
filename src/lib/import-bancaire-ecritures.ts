@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { COMPTES_BANQUE_DEPENSE } from "./banque-depense";
 import { POSTES_DEPENSES } from "./postes-depenses";
 import { CATEGORIE_IMMOBILISATION, CATEGORIE_PERSONNELLE, CATEGORIE_COMPTE_FFE } from "./tableau-depenses";
-import { CATEGORIES_IMPORT, ErreurImportBancaire, dateImportValide, lireCsvDepenses, rapprocherImportBancaire, type SourceImport, type ExistanteImport, type LienImport, type DecisionsImport, type PlanImportBancaire } from "./import-bancaire";
+import { CATEGORIES_IMPORT, cleLienSecondaire, ErreurImportBancaire, dateImportValide, lireCsvDepenses, rapprocherImportBancaire, type SourceImport, type ExistanteImport, type LienImport, type DecisionsImport, type PlanImportBancaire } from "./import-bancaire";
 
 export const hashImport = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export const idLienImport = (s: SourceImport, ref: string) => hashImport([s.compte, s.format, ref]);
@@ -74,7 +74,8 @@ export function ecrituresImport(s: SourceImport, plan: PlanImportBancaire, exist
         ...(ligne.corrigerDate ? { dateOperation: o.date, dateEstimee: false, dateCorrigeeDepuis: existante.dateOperation || null } : {}),
         ...(ligne.manuel && !existante.compteBanqueConfirme ? { compteBanqueConfirme: s.compte, compteBanqueConfirmePar: uid, compteBanqueConfirmeLe: date } : {}) } });
     }
-    ecritures.push({ collection: "imports-bancaires-liens", id: idLienImport(s, ref), mode: "create", data: {
+    // Place prise par la trace d'une autre ligne (lecture décalée) : clé de secours.
+    ecritures.push({ collection: "imports-bancaires-liens", id: idLienImport(s, ligne.refOccupee ? cleLienSecondaire(o) : ref), mode: "create", data: {
       cible, date: o.date, centimes: o.centimes, libelle: o.libelle, ignore: ligne.etat === "ignore", format: s.format, compte: s.compte,
       ref, nom: s.nom, action: ligne.etat, motif: ligne.motif, uid, at: date,
     } });
