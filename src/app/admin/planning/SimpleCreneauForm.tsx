@@ -9,6 +9,7 @@ import { Creneau, fmtDate, moniteursUniques } from "./types";
 import ActivityPicker from "./ActivityPicker";
 import EditeurFormulesSurDemande from "./EditeurFormulesSurDemande";
 import { FORMULES_SUR_DEMANDE_DEFAUT, nettoyerFormules, placesSurDemande, type FormuleSurDemande } from "@/lib/creneau-sur-demande";
+import { champsPrixStage, joursDesCopies, prixJourneeProrata } from "./creation-stage-utils";
 
 function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   activities: Activity[];
@@ -35,6 +36,12 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [extraDates, setExtraDates] = useState<string[]>([]);
   const [nbDays, setNbDays] = useState(5);
+  // Stage : prix de la semaine, inscription à la journée et copies sur les
+  // semaines suivantes, dès la création (creation-stage-utils).
+  const [prixSemaine, setPrixSemaine] = useState("");
+  const [ouvertJournee, setOuvertJournee] = useState(false);
+  const [prixJournee, setPrixJournee] = useState("");
+  const [nbSemaines, setNbSemaines] = useState(1);
   const [skipWeekend, setSkipWeekend] = useState(true);
   // Clé = index du jour (pas la date) pour gérer 2 demi-journées le même jour
   const [customHours, setCustomHours] = useState<Record<number, { st: string; et: string }>>({});
@@ -129,16 +136,20 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
     let dates = multiDay
       ? getEffectiveDates()
       : Array.from(new Set([date, ...extraDates])).sort();
+    const estStage = multiDay || act.type === "stage" || act.type === "stage_journee";
+    const prixStage = estStage ? champsPrixStage({ prixSemaine, ouvertJournee, prixJournee }, ttc, act.tvaTaux ?? 5.5) : null;
+    // Copies sur les semaines suivantes : chacune est un stage à part (son lot).
+    const copies = multiDay ? joursDesCopies(dates, nbSemaines) : [dates];
     // Identifiant unique du lot : tous les créneaux créés ensemble (stage
     // multi-jours ou stage journée) partagent le même stageGroupId. C'est ce
     // qui permet de distinguer deux stages homonymes créés depuis la même
     // activité (édition, suppression, inscription, affichage client).
     const isStageBatch = multiDay || act.type === "stage" || act.type === "stage_journee";
-    const stageGroupId = isStageBatch
+    const nouveauLot = () => isStageBatch
       ? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `sg_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`)
       : null;
 
-    const creneaux = dates.map((d, idx) => {
+    const creneaux = copies.flatMap((joursCopie) => { const stageGroupId = nouveauLot(); return joursCopie.map((d, idx) => {
       const hours = (multiDay && customHours[idx]) ? customHours[idx] : { st, et };
       return {
         activityId: actId, activityTitle: act.title, activityType: act.type, date: d,
@@ -156,8 +167,10 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         ...((act as any).price2days ? { price2days: (act as any).price2days } : {}),
         ...((act as any).price3days ? { price3days: (act as any).price3days } : {}),
         ...((act as any).price4days ? { price4days: (act as any).price4days } : {}),
+        // Prix saisis dans ce formulaire (stage) : semaine, journée.
+        ...(prixStage || {}),
       };
-    });
+    }); });
     await onSave(creneaux);
     setSaving(false);
   };
@@ -295,6 +308,57 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
           </div>
         )}
 
+        {act && (multiDay || act.type === "stage" || act.type === "stage_journee") && (() => {
+          const prixActivite = (act as any).priceTTC || (act.priceHT || 0) * (1 + (act.tvaTaux ?? 5.5) / 100);
+          const semaine = Number(String(prixSemaine).replace(",", ".")) || prixActivite;
+          const nbJoursStage = multiDay ? previewDates.length : 1;
+          return (
+            <div className="bg-green-50 rounded-xl p-3 flex flex-col gap-3">
+              <div>
+                <label className="font-body text-xs font-semibold text-green-800 block mb-1">{multiDay ? "Prix TTC de la semaine (€)" : "Prix TTC du stage (€)"}</label>
+                <input type="number" min="0" step="0.5" value={prixSemaine} onChange={e => setPrixSemaine(e.target.value)}
+                  placeholder={`Prix de l'activité : ${prixActivite.toFixed(2)}`}
+                  className="w-full px-3 py-2 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none"/>
+                <div className="font-body text-[10px] text-slate-500 mt-1">Vide : le prix de l&apos;activité ({prixActivite.toFixed(2)} €).</div>
+              </div>
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={ouvertJournee} onChange={e => setOuvertJournee(e.target.checked)} className="accent-green-600 w-4 h-4"/>
+                <div>
+                  <div className="font-body text-sm font-semibold text-green-800">Autoriser l&apos;inscription à la journée</div>
+                  <div className="font-body text-xs text-slate-500 mt-0.5">Les cavaliers pourront choisir des jours au lieu de la semaine complète</div>
+                </div>
+              </label>
+              {ouvertJournee && (
+                <div>
+                  <label className="font-body text-xs font-semibold text-green-800 block mb-1">Prix TTC par journée (€)</label>
+                  <input type="number" min="0" step="0.5" value={prixJournee} onChange={e => setPrixJournee(e.target.value)}
+                    placeholder={nbJoursStage > 1 ? `Prorata : ${prixJourneeProrata(semaine, nbJoursStage).toFixed(2)}` : "Ex : 35"}
+                    className="w-full px-3 py-2 rounded-lg border border-green-200 font-body text-sm bg-white focus:border-green-500 focus:outline-none"/>
+                  <div className="font-body text-[10px] text-slate-500 mt-1">Si vide, le tarif sera calculé au prorata du prix semaine</div>
+                </div>
+              )}
+              {multiDay && (
+                <div>
+                  <label className="font-body text-xs font-semibold text-green-800 block mb-1">Dupliquer sur les semaines suivantes</label>
+                  <select value={nbSemaines} onChange={e => setNbSemaines(parseInt(e.target.value) || 1)} className={`${inp} !w-auto`}>
+                    {Array.from({ length: 10 }, (_, i) => i + 1).map(n => (
+                      <option key={n} value={n}>{n === 1 ? "Non, cette semaine seulement" : `${n} semaines de suite`}</option>
+                    ))}
+                  </select>
+                  {nbSemaines > 1 && previewDates.length > 0 && (
+                    <div className="font-body text-[11px] text-slate-600 mt-1.5">
+                      {joursDesCopies(previewDates, nbSemaines).map((j, k) => (
+                        <div key={k}>Stage {k + 1} : du {new Date(j[0] + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} au {new Date(j[j.length - 1] + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })}</div>
+                      ))}
+                      <div className="text-slate-500 mt-0.5">Chaque semaine est un stage à part, avec les mêmes horaires, moniteurs et prix.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <div>
           <label className="font-body text-[10px] text-slate-500 block mb-1.5">Couleur (optionnel)</label>
           <div className="flex items-center gap-2 flex-wrap">
@@ -412,7 +476,7 @@ function SimpleCreneauForm({ activities, onSave, onCancel, defaultDate }: {
         <button type="button" onClick={sub} disabled={!actId || saving}
           className={`flex items-center justify-center gap-2 py-2.5 rounded-lg font-body text-sm font-semibold border-none cursor-pointer ${!actId || saving ? "bg-gray-200 text-slate-400" : "bg-blue-500 text-white hover:bg-blue-400"}`}>
           {saving ? <Loader2 size={16} className="animate-spin"/> : <Check size={16}/>}
-          {multiDay ? `Créer ${previewDates.length} créneaux`
+          {multiDay ? `Créer ${previewDates.length * Math.max(1, nbSemaines)} créneaux${nbSemaines > 1 ? ` (${nbSemaines} stages)` : ""}`
             : extraDates.length > 0 ? `Créer ${extraDates.length + 1} créneaux`
             : "Créer"}
         </button>
