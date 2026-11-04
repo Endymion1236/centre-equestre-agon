@@ -514,60 +514,64 @@ export default function SepaPage() {
   };
 
   // ─── Marquer une remise comme déposée ───
-  const markDeposited = async (remiseId: string) => {
-    // Verrou : deux clics rapprochés (ou deux postes) créeraient deux
-    // encaissements pour chaque échéance. On relit le statut en base — pas
-    // celui de l'écran, qui peut dater — et on renonce s'il a déjà basculé.
-    const remiseRef = doc(db, "remises-sepa", remiseId);
-    const remiseSnap = await getDoc(remiseRef);
-    if (!remiseSnap.exists()) { toast("Remise introuvable", "error"); return; }
-    if ((remiseSnap.data() as any)?.status === "deposited") {
-      toast("Cette remise est déjà marquée déposée", "info");
-      return;
-    }
-    await updateDoc(remiseRef, { status: "deposited", depositedAt: serverTimestamp() });
-    const remiseEcheances = echeances.filter(e => e.remiseId === remiseId);
-    for (const ech of remiseEcheances) {
-      await updateDoc(doc(db, "echeances-sepa", ech.id), { status: "preleve" });
-    }
-
-    // ── Créer les encaissements (1 par échéance = 1 mouvement dans le journal) ──
+  /**
+   * Un encaissement par échéance de la remise, puis les commandes mises à
+   * jour. Les échéances sont relues en base (jamais l'état de l'écran) et une
+   * erreur sur l'une n'arrête plus les suivantes : en octobre 2026, 4
+   * échéances de la remise n° 6 (365,60 €) sont restées sans encaissement,
+   * prélevées par la banque mais absentes du journal et du FEC.
+   * Une échéance qui a déjà son encaissement (`sepaEcheanceId`) est passée :
+   * relancer ne crée jamais de double.
+   */
+  const encaisserEcheancesDeRemise = async (remiseId: string, note?: string): Promise<{ crees: number; echecs: string[] }> => {
+    const echSnap = await getDocs(query(collection(db, "echeances-sepa"), where("remiseId", "==", remiseId)));
+    const remiseEcheances = echSnap.docs.map(d => ({ id: d.id, ...d.data() })) as EcheanceSepa[];
     const remiseDoc = remises.find(r => r.id === remiseId);
+    let crees = 0;
+    const echecs: string[] = [];
+    const encaissees = new Set<string>();
     for (const ech of remiseEcheances) {
-      let linkedPaymentId = ech.paymentId || null;
-      if (!linkedPaymentId && ech.orderId) {
-        const payDoc = payments.find((p: any) => p.orderId === ech.orderId);
-        if (payDoc) linkedPaymentId = payDoc.id;
+      try {
+        if (ech.status === "rejete") continue; // rejetée : son encaissement est déjà contre-passé
+        if (ech.status !== "preleve") await updateDoc(doc(db, "echeances-sepa", ech.id), { status: "preleve" });
+        let linkedPaymentId = ech.paymentId || null;
+        if (!linkedPaymentId && ech.orderId) {
+          const payDoc = payments.find((p: any) => p.orderId === ech.orderId);
+          if (payDoc) linkedPaymentId = payDoc.id;
+        }
+        // Ceinture et bretelles : une échéance ne peut donner qu'un encaissement.
+        const dejaEncaisse = await getDocs(query(
+          collection(db, "encaissements"), where("sepaEcheanceId", "==", ech.id),
+        ));
+        if (!dejaEncaisse.empty) continue;
+        // createEncaissement plutôt qu'un addDoc direct : le journal reste
+        // horodaté et haché en chaîne, comme tout autre encaissement (NF525).
+        await createEncaissement({
+          paymentId: linkedPaymentId || undefined,
+          familyId: ech.familyId,
+          familyName: ech.familyName,
+          montant: ech.montant,
+          mode: "prelevement_sepa",
+          modeLabel: "Prélèvement SEPA",
+          ref: `Remise n°${remiseDoc?.numero || "?"} — ${ech.mandatId}`,
+          activityTitle: ech.description || `Échéance SEPA ${ech.mandatId}`,
+          sepaEcheanceId: ech.id,
+          ...(note ? { raison: note } : {}),
+        });
+        crees++;
+        encaissees.add(ech.id);
+      } catch (e) {
+        console.error("Encaissement d'échéance SEPA:", ech.id, e);
+        echecs.push(`${ech.familyName || "?"} ${Number(ech.montant || 0).toFixed(2)} €`);
       }
-      // Ceinture et bretelles : une échéance ne peut donner qu'un encaissement.
-      // `sepaEcheanceId` est la source du mouvement ; s'il en existe déjà un,
-      // on passe. Protège le cas où la remise aurait été déposée en deux fois.
-      const dejaEncaisse = await getDocs(query(
-        collection(db, "encaissements"), where("sepaEcheanceId", "==", ech.id),
-      ));
-      if (!dejaEncaisse.empty) continue;
-
-      // createEncaissement plutôt qu'un addDoc direct : le journal reste
-      // horodaté et haché en chaîne, comme tout autre encaissement (NF525).
-      await createEncaissement({
-        paymentId: linkedPaymentId || undefined,
-        familyId: ech.familyId,
-        familyName: ech.familyName,
-        montant: ech.montant,
-        mode: "prelevement_sepa",
-        modeLabel: "Prélèvement SEPA",
-        ref: `Remise n°${remiseDoc?.numero || "?"} — ${ech.mandatId}`,
-        activityTitle: ech.description || `Échéance SEPA ${ech.mandatId}`,
-        sepaEcheanceId: ech.id,
-      });
     }
-
     // ── Mettre à jour les commandes concernées ──
     // Depuis le JOURNAL des encaissements, jamais depuis les seuls
     // prélèvements : un forfait réglé moitié par chèque et moitié en SEPA
     // perdait sa moitié chèque à chaque remise (cf. lib/sepa-remise).
     const commandesTouchees = new Map<string, string>(); // paymentId → orderId éventuel
-    for (const ech of remiseEcheances) {
+    // En complément (note), seules les commandes des échéances encaissées à l'instant.
+    for (const ech of remiseEcheances.filter(e => !note || encaissees.has(e.id))) {
       if (ech.paymentId) { commandesTouchees.set(ech.paymentId, ech.orderId || ""); continue; }
       if (ech.orderId) {
         for (const p of payments.filter((x: any) => x.orderId === ech.orderId)) commandesTouchees.set(p.id, ech.orderId);
@@ -602,8 +606,56 @@ export default function SepaPage() {
       } catch (e) { console.error("Mise à jour paiement SEPA:", e); }
     }
 
+    return { crees, echecs };
+  };
+
+  const markDeposited = async (remiseId: string) => {
+    // Verrou : deux clics rapprochés (ou deux postes) créeraient deux
+    // encaissements pour chaque échéance. On relit le statut en base — pas
+    // celui de l'écran, qui peut dater — et on renonce s'il a déjà basculé.
+    const remiseRef = doc(db, "remises-sepa", remiseId);
+    const remiseSnap = await getDoc(remiseRef);
+    if (!remiseSnap.exists()) { toast("Remise introuvable", "error"); return; }
+    if ((remiseSnap.data() as any)?.status === "deposited") {
+      toast("Cette remise est déjà marquée déposée", "info");
+      return;
+    }
+    await updateDoc(remiseRef, { status: "deposited", depositedAt: serverTimestamp() });
+    const { echecs } = await encaisserEcheancesDeRemise(remiseId);
+    if (echecs.length) {
+      toast(`Remise déposée, mais ${echecs.length} échéance(s) non encaissée(s) : ${echecs.join(", ")}. Utilisez « Compléter » sur la remise.`, "error", 12000);
+      fetchAll();
+      return;
+    }
     toast("Remise marquée comme déposée — encaissements enregistrés", "success");
     fetchAll();
+  };
+
+  /**
+   * Remise déjà déposée dont des échéances n'ont pas d'encaissement (dépôt
+   * interrompu) : on les encaisse maintenant, datées du jour — un
+   * encaissement antidaté sortirait de l'ordre du journal chaîné et
+   * retoucherait un mois peut-être déjà transmis. La raison dit d'où il vient.
+   */
+  const completerRemise = async (r: RemiseSepa) => {
+    try {
+      const echSnap = await getDocs(query(collection(db, "echeances-sepa"), where("remiseId", "==", r.id)));
+      const manquantes: { familyName: string; montant: number }[] = [];
+      for (const d of echSnap.docs) {
+        const e = d.data() as any;
+        if (e.status === "rejete") continue;
+        const enc = await getDocs(query(collection(db, "encaissements"), where("sepaEcheanceId", "==", d.id)));
+        if (enc.empty) manquantes.push({ familyName: e.familyName || "?", montant: Number(e.montant) || 0 });
+      }
+      if (!manquantes.length) { toast(`Remise n°${r.numero} : chaque échéance a son encaissement.`, "info"); return; }
+      const total = manquantes.reduce((t, m) => t + m.montant, 0);
+      const datePrlv = r.datePrelevement ? new Date(r.datePrelevement).toLocaleDateString("fr-FR") : "?";
+      if (!confirm(`Remise n°${r.numero} : ${manquantes.length} échéance(s) prélevée(s) sans encaissement au journal, ${total.toFixed(2)} € :\n\n${manquantes.map(m => `• ${m.familyName} — ${m.montant.toFixed(2)} €`).join("\n")}\n\nLes encaisser maintenant ? Ils seront datés d'aujourd'hui, avec la mention « oublié au dépôt de la remise n°${r.numero} du ${datePrlv} ».`)) return;
+      const { crees, echecs } = await encaisserEcheancesDeRemise(r.id, `Encaissement oublié au dépôt de la remise n°${r.numero} (prélèvement du ${datePrlv})`);
+      if (echecs.length) toast(`${crees} encaissée(s), ${echecs.length} en échec : ${echecs.join(", ")}`, "error", 12000);
+      else toast(`${crees} échéance(s) encaissée(s), ${total.toFixed(2)} €`, "success");
+      fetchAll();
+    } catch (e: any) { toast(e?.message || String(e), "error"); }
   };
 
   // ─── Supprimer un mandat ───
@@ -1630,6 +1682,13 @@ export default function SepaPage() {
                             className="flex items-center gap-1 font-body text-xs font-semibold text-blue-500 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
                             <Download size={12} /> XML
                           </button>
+                          {r.status === "deposited" && (
+                            <button type="button" onClick={() => completerRemise(r)}
+                              title="Encaisser les échéances de la remise restées sans encaissement au journal"
+                              className="flex items-center gap-1 font-body text-xs font-semibold text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-amber-100">
+                              <CheckSquare size={12} /> Compléter
+                            </button>
+                          )}
                           {r.status === "generated" && (
                             <button type="button" onClick={() => markDeposited(r.id)}
                               className="flex items-center gap-1 font-body text-xs font-semibold text-green-600 bg-green-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-green-100">
