@@ -11,6 +11,8 @@ import { authFetch } from "@/lib/auth-fetch";
 
 const eur = (n: number) => `${(Number(n) || 0).toFixed(2).replace(".", ",")} €`;
 const dateFr = (iso: string) => String(iso || "").split("-").reverse().join("/");
+// Une remise de prélèvements SEPA sans ses lignes au FEC : souvent encaissées le mois d'avant.
+const estRemiseSepa = (l: string) => /avis de pr[ée]l[èe]vement|prel ech|remise prlv/i.test(l || "");
 
 export function BoutonControleBanque({ period }: { period: string }) {
   const [ouvert, setOuvert] = useState(false);
@@ -51,12 +53,10 @@ export function BoutonControleBanque({ period }: { period: string }) {
               {erreur && <div className="text-red-700 bg-red-50 rounded-lg p-3">{erreur}</div>}
               {res && (
                 <>
-                  {(res.releveImporte?.debits === 0 || res.releveImporte?.credits === 0 || res.tableauIncomplet) && (
-                    <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs">
-                      {res.releveImporte?.debits === 0 && "Aucun débit du relevé pour ce mois dans Dépenses. "}
-                      {res.releveImporte?.credits === 0 && "Aucun crédit du relevé pour ce mois dans le rapprochement. "}
-                      {res.tableauIncomplet && "Le tableau des opérations n'a pas pu être lu en entier. "}
-                      Importez le relevé complet du mois avant de conclure.
+                  {res.avertissements?.length > 0 && (
+                    <div className="text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs flex flex-col gap-1">
+                      <div className="font-semibold">À savoir avant de lire ce contrôle</div>
+                      {res.avertissements.map((a: string, i: number) => <div key={i}>• {a}</div>)}
                     </div>
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -78,7 +78,7 @@ export function BoutonControleBanque({ period }: { period: string }) {
                       <div className="font-semibold text-red-700 mb-1">Au relevé, absent du FEC ({res.releveSeul.length})</div>
                       {res.releveSeul.map((r: any) => (
                         <div key={r.id} className="flex justify-between gap-3 py-1 border-b border-gray-50 text-xs">
-                          <span>{dateFr(r.date)} · {r.libelle}{r.note ? <span className="text-amber-700"> — {r.note}</span> : null}</span>
+                          <span>{dateFr(r.date)} · {r.libelle}{r.note ? <span className="text-amber-700"> — {r.note}</span> : null}{!r.note && r.montant > 0 && estRemiseSepa(r.libelle) ? <span className="text-amber-700"> — remise de prélèvements : leurs écritures sont peut-être datées du mois précédent (voir Prélèvements SEPA → Remises)</span> : null}</span>
                           <span className="font-semibold whitespace-nowrap">{eur(r.montant)}</span>
                         </div>
                       ))}
@@ -95,6 +95,37 @@ export function BoutonControleBanque({ period }: { period: string }) {
                       ))}
                     </div>
                   )}
+                  {res.remisesIncompletes?.length > 0 && (
+                    <div>
+                      <div className="font-semibold text-red-700 mb-1">Remises que le FEC n&apos;a qu&apos;en partie ({res.remisesIncompletes.length})</div>
+                      {res.remisesIncompletes.map((x: any, i: number) => (
+                        <div key={i} className="py-1 border-b border-gray-50 text-xs">
+                          <div className="flex justify-between gap-3"><span>{dateFr(x.releve.date)} · {x.releve.libelle}</span><span className="font-semibold whitespace-nowrap">{eur(x.releve.montant)}</span></div>
+                          <div className="text-slate-600">{x.nb} ligne(s) du {dateFr(x.date)} au FEC pour {eur(x.total)} : <b className="text-red-700">écart {eur(x.ecart)}</b>{estRemiseSepa(x.releve.libelle) ? " — comparez à la remise dans Prélèvements SEPA : une échéance prélevée sans encaissement, ou encaissée à une autre date." : ""}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {res.montantsDifferents?.length > 0 && (
+                    <div>
+                      <div className="font-semibold text-red-700 mb-1">Même mouvement, montants différents ({res.montantsDifferents.length})</div>
+                      {res.montantsDifferents.map((x: any, i: number) => (
+                        <div key={i} className="flex justify-between gap-3 py-1 border-b border-gray-50 text-xs">
+                          <span>{dateFr(x.releve.date)} · {x.releve.libelle} : relevé {eur(x.releve.montant)}, FEC {eur(x.fec.montant)}</span>
+                          <span className="font-semibold whitespace-nowrap text-red-700">{eur(x.ecart)}</span>
+                        </div>
+                      ))}
+                      <div className="text-[11px] text-slate-500 mt-1">Les « points à regarder » du FEC disent quelles écritures expliquent l&apos;écart (mode de paiement mal saisi, rapprochement à revoir).</div>
+                    </div>
+                  )}
+                  {res.annulations?.length > 0 && (
+                    <div>
+                      <div className="font-semibold text-slate-600 mb-1">Lignes du FEC qui s&apos;annulent ({res.annulations.length}) — correction puis ressaisie, sans effet sur la banque</div>
+                      {res.annulations.map((x: any, i: number) => (
+                        <div key={i} className="py-1 border-b border-gray-50 text-xs text-slate-600">{dateFr(x.a.date)} · {x.a.libelle} {eur(x.a.montant)} / {x.b.libelle} {eur(x.b.montant)}</div>
+                      ))}
+                    </div>
+                  )}
                   {res.decales?.length > 0 && (
                     <div>
                       <div className="font-semibold text-slate-600 mb-1">Même montant, dates différentes ({res.decales.length}) — décalage, sans écart d&apos;argent</div>
@@ -106,7 +137,7 @@ export function BoutonControleBanque({ period }: { period: string }) {
                       ))}
                     </div>
                   )}
-                  {!res.releveSeul?.length && !res.fecSeul?.length && Math.abs(res.ecart) < 0.01 && (
+                  {!res.releveSeul?.length && !res.fecSeul?.length && !res.remisesIncompletes?.length && !res.montantsDifferents?.length && Math.abs(res.ecart) < 0.01 && (
                     <div className="text-green-700 bg-green-50 rounded-lg p-3">Le relevé et la banque du FEC concordent pour ce mois.</div>
                   )}
                 </>

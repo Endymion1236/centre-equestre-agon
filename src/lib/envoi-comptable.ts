@@ -23,7 +23,7 @@ import { genererPdfSyntheseCompta } from "@/lib/compta-synthese-pdf";
 import { adressesComptable, construireColisComptable, corpsEmailComptable, encaissementsDuMois, facturesDuMois, fecDuMois, nomMoisLong, dateFactureSecondes } from "@/lib/envoi-comptable-utils";
 import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 import type { CreditBancaireFec } from "@/lib/fec-achats-banque";
-import { comparerBanque, lignesBanqueDuFec, texteControleBanque, type MouvementReleve } from "@/lib/controle-banque";
+import { avertissementsControle, comparerBanque, lignesBanqueDuFec, texteControleBanque, type MouvementReleve } from "@/lib/controle-banque";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -148,12 +148,14 @@ export async function controleBanqueMois(mois: string) {
     })),
   ];
   const c = comparerBanque(releve, lignesBanqueDuFec(fec.contenu));
+  const releveImporte = { debits: debits.length, credits: releve.length - debits.length };
+  const tableauIncomplet = !tableau || !!tableau.limite;
+  const avertissements = avertissementsControle({ ...releveImporte, tableauIncomplet, moisCeleris: fec.source === "celeris" });
   return {
     mois, ...c,
-    releveImporte: { debits: debits.length, credits: releve.length - debits.length },
-    tableauIncomplet: !tableau || !!tableau.limite,
+    releveImporte, tableauIncomplet, avertissements,
     bloquants: fec.bloquants,
-    texte: texteControleBanque(mois, c),
+    texte: texteControleBanque(mois, c, avertissements),
   };
 }
 

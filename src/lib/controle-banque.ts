@@ -63,9 +63,17 @@ export interface ControleBanque {
   ecart: number;
   apparies: number;
   decales: { releve: MouvementReleve; fec: LigneBanqueFec; jours: number }[];
+  /** Même mouvement des deux côtés (même libellé, 3 jours), montants différents. */
+  montantsDifferents: { releve: MouvementReleve; fec: LigneBanqueFec; ecart: number }[];
+  /** Une remise du relevé dont le FEC n'a qu'une partie (lignes du même jour) : il manque `ecart`. */
+  remisesIncompletes: { releve: MouvementReleve; date: string; nb: number; total: number; ecart: number }[];
+  /** Lignes du FEC qui s'annulent entre elles (correction puis ressaisie) : aucun effet sur la banque. */
+  annulations: { a: LigneBanqueFec; b: LigneBanqueFec }[];
   releveSeul: MouvementReleve[];
   fecSeul: LigneBanqueFec[];
 }
+
+const libelleCle = (l: string) => String(l || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().slice(0, 40);
 
 /** Au plus `max` éléments dont la somme (centimes) vaut `cible`. */
 function sousEnsemble(cands: LigneBanqueFec[], cible: number, max = 4): LigneBanqueFec[] | null {
@@ -134,17 +142,76 @@ export function comparerBanque(releve: MouvementReleve[], fec: LigneBanqueFec[])
     if (meilleur >= 0) { decales.push({ releve: r, fec: fec[meilleur], jours: Math.round(ecartMin) }); libresFec.delete(meilleur); libresReleve.delete(i); }
   }
 
+  // 4. Lignes du FEC qui s'annulent (une correction et sa ressaisie).
+  const annulations: ControleBanque["annulations"] = [];
+  for (const a of [...libresFec]) {
+    if (!libresFec.has(a)) continue;
+    for (const b of libresFec) {
+      if (b === a || ct(fec[b].montant) !== -ct(fec[a].montant) || jours(fec[a].date, fec[b].date) > 7) continue;
+      annulations.push({ a: fec[a], b: fec[b] }); libresFec.delete(a); libresFec.delete(b); break;
+    }
+  }
+  // 5. Même mouvement, montants différents (la ligne de banque du FEC reprend le libellé du relevé).
+  const montantsDifferents: ControleBanque["montantsDifferents"] = [];
+  for (const i of ordre) {
+    if (!libresReleve.has(i)) continue;
+    const r = releve[i];
+    const j = [...libresFec].find((k) => libelleCle(fec[k].libelle) === libelleCle(r.libelle) && libelleCle(r.libelle).length >= 8
+      && Math.sign(fec[k].montant) === Math.sign(r.montant) && jours(fec[k].date, r.date) <= 3);
+    if (j === undefined) continue;
+    montantsDifferents.push({ releve: r, fec: fec[j], ecart: Math.round((fec[j].montant - r.montant) * 100) / 100 });
+    libresFec.delete(j); libresReleve.delete(i);
+  }
+  // 6. Remise du relevé dont le FEC n'a qu'une partie : les lignes d'un même jour,
+  //    au moins 3, pour 50 % à 125 % du montant.
+  const remisesIncompletes: ControleBanque["remisesIncompletes"] = [];
+  for (const i of ordre) {
+    if (!libresReleve.has(i)) continue;
+    const r = releve[i];
+    const parJour = new Map<string, number[]>();
+    for (const j of libresFec) {
+      if (Math.sign(fec[j].montant) !== Math.sign(r.montant) || jours(fec[j].date, r.date) > 7) continue;
+      parJour.set(fec[j].date, [...(parJour.get(fec[j].date) || []), j]);
+    }
+    let meilleur: { date: string; js: number[]; somme: number } | null = null;
+    for (const [date, js] of parJour) {
+      if (js.length < 3) continue;
+      const somme = js.reduce((t, j) => t + ct(fec[j].montant), 0);
+      const ratio = somme / ct(r.montant);
+      if (ratio < 0.5 || ratio > 1.25) continue;
+      if (!meilleur || Math.abs(somme - ct(r.montant)) < Math.abs(meilleur.somme - ct(r.montant))) meilleur = { date, js, somme };
+    }
+    if (!meilleur) continue;
+    remisesIncompletes.push({ releve: r, date: meilleur.date, nb: meilleur.js.length, total: meilleur.somme / 100, ecart: Math.round(meilleur.somme - ct(r.montant)) / 100 });
+    for (const j of meilleur.js) libresFec.delete(j);
+    libresReleve.delete(i);
+  }
+
   const totalReleve = total(releve), totalFec = total(fec);
   return {
     totalReleve, totalFec, ecart: Math.round((totalFec - totalReleve) * 100) / 100,
-    apparies, decales,
+    apparies, decales, montantsDifferents, remisesIncompletes, annulations,
     releveSeul: [...libresReleve].map((i) => releve[i]).sort((a, b) => a.date.localeCompare(b.date)),
     fecSeul: [...libresFec].map((j) => fec[j]).sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
 
+/**
+ * Ce qui rend le contrôle incomplet, dit avant les chiffres. Août 2026 : aucun
+ * crédit du relevé au rapprochement, et un mois tenu dans Céleris — 28 159 €
+ * de recettes « sans relevé » qui n'étaient que l'absence des crédits.
+ */
+export function avertissementsControle(p: { debits: number; credits: number; tableauIncomplet: boolean; moisCeleris: boolean }): string[] {
+  const a: string[] = [];
+  if (p.credits === 0) a.push("Aucun crédit du relevé pour ce mois dans le Rapprochement : le contrôle ne voit que les débits. Importez le relevé du mois dans l'onglet Rapprochement, puis relancez.");
+  if (p.debits === 0) a.push("Aucun débit du relevé pour ce mois dans Dépenses : le contrôle ne voit que les crédits. Importez le relevé du mois dans Dépenses, puis relancez.");
+  if (p.tableauIncomplet) a.push("Le tableau des opérations n'a pas pu être lu en entier.");
+  if (p.moisCeleris) a.push("Mois tenu dans Céleris : ses encaissements CB y sont passés un par un et en brut, alors que la banque crédite une remise par jour, nette de commission. Ils ne se rapprochent pas ligne à ligne ; les remises apparaissent « en partie », l'écart étant la commission.");
+  return a;
+}
+
 /** Le contrôle en texte, à copier pour la comptable. */
-export function texteControleBanque(mois: string, c: ControleBanque): string {
+export function texteControleBanque(mois: string, c: ControleBanque, avertissements: string[] = []): string {
   const e = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
   const d = (iso: string) => iso.split("-").reverse().join("/");
   const lignes = [
@@ -153,9 +220,13 @@ export function texteControleBanque(mois: string, c: ControleBanque): string {
     `Compte 512 du FEC : ${e(c.totalFec)}`,
     `Écart (FEC − relevé) : ${e(c.ecart)}`,
     `${c.apparies} mouvement(s) rapproché(s).`,
+    ...(avertissements.length ? ["", "À savoir avant de lire :", ...avertissements.map((x) => `  ${x}`)] : []),
   ];
   if (c.releveSeul.length) lignes.push("", "Au relevé, absent du FEC :", ...c.releveSeul.map((r) => `  ${d(r.date)}  ${r.libelle}  ${e(r.montant)}${r.note ? ` (${r.note})` : ""}`));
   if (c.fecSeul.length) lignes.push("", "Dans le FEC, absent du relevé :", ...c.fecSeul.map((f) => `  ${d(f.date)}  ${f.journal} n° ${f.numero}  ${f.libelle}  ${e(f.montant)}`));
+  if (c.remisesIncompletes.length) lignes.push("", "Remises du relevé que le FEC n'a qu'en partie :", ...c.remisesIncompletes.map((x) => `  ${d(x.releve.date)}  ${x.releve.libelle}  ${e(x.releve.montant)} : ${x.nb} ligne(s) du ${d(x.date)} au FEC pour ${e(x.total)}, écart ${e(x.ecart)}`));
+  if (c.montantsDifferents.length) lignes.push("", "Même mouvement, montants différents :", ...c.montantsDifferents.map((x) => `  ${d(x.releve.date)}  ${x.releve.libelle} : relevé ${e(x.releve.montant)}, FEC ${e(x.fec.montant)}, écart ${e(x.ecart)}`));
+  if (c.annulations.length) lignes.push("", "Lignes du FEC qui s'annulent (sans effet sur la banque) :", ...c.annulations.map((x) => `  ${d(x.a.date)}  ${x.a.libelle} ${e(x.a.montant)} / ${x.b.libelle} ${e(x.b.montant)}`));
   if (c.decales.length) lignes.push("", "Même montant, dates différentes (décalage, sans écart d'argent) :", ...c.decales.map((x) => `  relevé ${d(x.releve.date)} / FEC ${d(x.fec.date)}  ${x.releve.libelle}  ${e(x.releve.montant)}`));
   return lignes.join("\n");
 }

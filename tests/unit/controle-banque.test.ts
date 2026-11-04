@@ -2,7 +2,7 @@
  * Contrôle de banque : relevé du mois face au compte 512 du FEC.
  */
 import assert from "node:assert/strict";
-import { comparerBanque, lignesBanqueDuFec, texteControleBanque } from "../../src/lib/controle-banque";
+import { avertissementsControle, comparerBanque, lignesBanqueDuFec, texteControleBanque } from "../../src/lib/controle-banque";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -60,6 +60,34 @@ test("même montant à 20 jours d'écart : décalage de date, pas une erreur", (
   assert.equal(c.decales[0].jours, 20);
   assert.equal(c.releveSeul.length + c.fecSeul.length, 0);
   assert.match(texteControleBanque("2026-10", c), /dates différentes/);
+});
+
+test("octobre 2026 : remise SEPA incomplète, remise carte d'un autre montant, correction DUHEM qui s'annule", () => {
+  const fec = lignesBanqueDuFec([ENTETE,
+    ...[1, 2, 3, 4, 5].map((n) => l("RG", n, "20261027", "51200000", `Prélèvement SEPA ${n}`, "69,90", "")),
+    l("BQ", 10, "20261013", "51200000", "Remise carte CARTE 8067954 001 195811 13/10", "1081,20", ""),
+    l("RG", 11, "20261005", "51200000", "Contre-passation DUHEM", "", "650,00"),
+    l("RG", 12, "20261005", "51200000", "Règlement DUHEM", "650,00", ""),
+  ].join("\n"));
+  const c = comparerBanque([
+    r("sepa", "2026-10-28", "Avis de prélèvement emis PREL ECH DU. 28/10/26", 419.4),
+    r("cb", "2026-10-13", "Remise carte CARTE 8067954 001 195811 13/10", 1231.2),
+  ], fec);
+  assert.equal(c.remisesIncompletes.length, 1);
+  assert.deepEqual([c.remisesIncompletes[0].nb, c.remisesIncompletes[0].total, c.remisesIncompletes[0].ecart], [5, 349.5, -69.9]);
+  assert.deepEqual(c.montantsDifferents.map((x) => x.ecart), [-150]);
+  assert.equal(c.annulations.length, 1);
+  assert.deepEqual([c.releveSeul.length, c.fecSeul.length], [0, 0], "tout est expliqué");
+  assert.equal(c.ecart, -219.9, "l'écart total reste le même : 69,90 + 150");
+});
+
+test("août 2026 : pas de crédits au rapprochement, mois Céleris — dit avant les chiffres, et dans le texte copié", () => {
+  const a = avertissementsControle({ debits: 88, credits: 0, tableauIncomplet: false, moisCeleris: true });
+  assert.equal(a.length, 2);
+  assert.match(a[0], /ne voit que les débits/);
+  const c = comparerBanque([], []);
+  assert.match(texteControleBanque("2026-08", c, a), /À savoir avant de lire/);
+  assert.deepEqual(avertissementsControle({ debits: 10, credits: 10, tableauIncomplet: false, moisCeleris: false }), []);
 });
 
 if (process.exitCode) { console.error("❌ échec"); } else console.log(`✅ ${passes} tests passés`);
