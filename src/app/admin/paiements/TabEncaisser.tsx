@@ -95,6 +95,11 @@ export function TabEncaisser({
   const [paidAmount, setPaidAmount] = useState("");
   const [encaissementDate, setEncaissementDate] = useState(new Date().toISOString().split("T")[0]);
   const [saving, setSaving] = useState(false);
+  // « Enregistrer sans encaisser » ne prévient plus la famille d'office :
+  // une pension saisie à 420 € au lieu de 300 € partait aussitôt par email
+  // (11/2026). Par défaut rien n'est envoyé ; on vérifie dans Impayés, on
+  // corrige au besoin, puis on envoie le lien de paiement.
+  const [prevenirFamille, setPrevenirFamille] = useState(false);
   const [success, setSuccess] = useState(false);
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<{ id: string; label: string; discountMode: string; discountValue: number } | null>(null);
@@ -498,7 +503,8 @@ export function TabEncaisser({
       toast("Un bon cadeau ne peut pas être enregistré sans encaissement — retirez-le du panier ou encaissez.", "warning");
       return;
     }
-    if (!confirm(`Enregistrer la commande de ${basketTotal.toFixed(2)}€ pour ${selectedFam?.parentName} sans encaisser ?\n\nElle apparaîtra dans Impayés, et dans l'espace famille (« À régler », paiement CB en ligne possible).`)) return;
+    const envoyer = prevenirFamille && !!selectedFam?.parentEmail;
+    if (!confirm(`Enregistrer la commande de ${basketTotal.toFixed(2)}€ pour ${selectedFam?.parentName} sans encaisser ?\n\nElle apparaîtra dans Impayés, et dans l'espace famille (« À régler », paiement CB en ligne possible).\n\n${envoyer ? `Un email part tout de suite à ${selectedFam?.parentEmail}.` : "Aucun email n'est envoyé : vous pourrez la vérifier et la modifier dans Impayés, puis envoyer le lien de paiement."}`)) return;
 
     setSaving(true);
     try {
@@ -519,8 +525,9 @@ export function TabEncaisser({
       });
       await consommerPromo();
 
-      // Prévenir la famille — best effort, la commande est déjà enregistrée.
-      if (selectedFam?.parentEmail) {
+      // Prévenir la famille — seulement si la case est cochée ; best effort,
+      // la commande est déjà enregistrée.
+      if (envoyer && selectedFam?.parentEmail) {
         const lignesHtml = basket.map(i => emailLigne(
           `${i.activityTitle}${i.childName ? ` <span style="color:${CE.gris};font-size:12px;">— ${i.childName}</span>` : ""}`,
           `${i.priceTTC.toFixed(2).replace(".", ",")}&nbsp;€`,
@@ -558,11 +565,12 @@ export function TabEncaisser({
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
       toast(
-        selectedFam?.parentEmail
+        envoyer
           ? `📋 Commande de ${basketTotal.toFixed(2)}€ enregistrée sans encaissement — email envoyé à la famille.`
-          : `📋 Commande de ${basketTotal.toFixed(2)}€ enregistrée sans encaissement (pas d'email : la famille n'a pas d'adresse).`,
-        "success",
+          : `📋 Commande de ${basketTotal.toFixed(2)}€ enregistrée dans Impayés, rien n'a été envoyé à la famille. Vérifiez-la, puis « Envoyer lien de paiement ».`,
+        "success", 7000,
       );
+      setPrevenirFamille(false);
       await refreshAll();
     } catch (err) {
       console.error("[paiements] Erreur enregistrement sans encaissement:", err);
@@ -1290,9 +1298,13 @@ export function TabEncaisser({
             <CalendarClock size={16} />
             Enregistrer sans encaisser — paiement ultérieur
           </button>
+          <label className="flex items-center gap-2 mt-2 font-body text-xs text-slate-600 cursor-pointer">
+            <input type="checkbox" checked={prevenirFamille} onChange={e => setPrevenirFamille(e.target.checked)} />
+            Prévenir la famille par email maintenant
+          </label>
           <p className="font-body text-[10px] text-slate-500 mt-1.5">
-            Crée la commande en impayé et prévient la famille par email : elle pourra régler en ligne
-            depuis son espace (Paiements → « À régler ») ou au centre. Elle apparaîtra aussi dans l&apos;onglet Impayés.
+            Crée la commande dans l&apos;onglet Impayés et dans l&apos;espace famille (« À régler »). Sans la case cochée,
+            rien n&apos;est envoyé : vérifiez et modifiez au besoin dans Impayés, puis envoyez le lien de paiement.
           </p>
         </Card>
       )}
