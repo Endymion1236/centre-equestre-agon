@@ -404,7 +404,7 @@ export function construireAchatsBanque(params: {
     }
     numero++; nbBq++;
   }
-  if (!params.sansCredits && credits.length === 0) anomalies.push(`Aucun crédit du relevé de ${mois} dans le rapprochement bancaire : importez le relevé du mois (Rapprochement) pour que le journal Banque soit complet.`);
+  if (!params.sansCredits && credits.length === 0) anomalies.push(`Aucun crédit du relevé de ${mois} (l'argent reçu) : le journal Banque est incomplet. À importer dans Comptabilité → onglet Rapprochement → « Importer CSV », avec le fichier CSV du mois téléchargé sur le site de la banque. L'import du relevé PDF dans Trésorerie ne lit que les débits (les dépenses), pas l'argent reçu.`);
   if (dejaEnBanque) anomalies.push(`${dejaEnBanque} crédit(s) du relevé (virements, prélèvements SEPA, versements d'espèces) déjà passés en banque par le journal des règlements : non repris en BQ.`);
 
   return { lignes: [...lignesHa, ...lignesBq], ecrituresAchats: nbHa, ecrituresBanque: nbBq, anomalies, compteAttente: attente / 100, compteAttenteDebits: attenteDebits / 100, compteAttenteCredits: (attente - attenteDebits) / 100 };

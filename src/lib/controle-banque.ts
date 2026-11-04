@@ -228,7 +228,7 @@ export function comparerBanque(releve: MouvementReleve[], fec: LigneBanqueFec[])
 export function avertissementsControle(p: { debits: number; credits: number; tableauIncomplet: boolean; moisCeleris: boolean; autresComptes?: number }): string[] {
   const a: string[] = [];
   if (p.autresComptes) a.push(`${p.autresComptes} débit(s) du mois portent sur un autre compte que le Crédit Agricole (FFE club, FFE compétition) : ils sont passés au FEC sur ce compte-là et restent hors de ce contrôle, qui ne compare que le 512.`);
-  if (p.credits === 0) a.push("Aucun crédit du relevé pour ce mois dans le Rapprochement : le contrôle ne voit que les débits. Importez le relevé du mois dans l'onglet Rapprochement, puis relancez.");
+  if (p.credits === 0) a.push("Aucun crédit du relevé pour ce mois (l'argent reçu) : le contrôle ne voit que les débits. À importer dans Comptabilité → onglet Rapprochement → « Importer CSV », avec le fichier CSV du mois téléchargé sur le site de la banque. L'import du relevé PDF dans Trésorerie ne lit que les débits (les dépenses), pas l'argent reçu. Puis relancez le contrôle.");
   if (p.debits === 0) a.push("Aucun débit du relevé pour ce mois dans Dépenses : le contrôle ne voit que les crédits. Importez le relevé du mois dans Dépenses, puis relancez.");
   if (p.tableauIncomplet) a.push("Le tableau des opérations n'a pas pu être lu en entier.");
   if (p.moisCeleris) a.push("Mois tenu dans Céleris : ses encaissements CB y sont passés un par un et en brut, alors que la banque crédite une remise par jour, nette de commission. Ils ne se rapprochent pas ligne à ligne ; les remises apparaissent « en partie », l'écart étant la commission.");

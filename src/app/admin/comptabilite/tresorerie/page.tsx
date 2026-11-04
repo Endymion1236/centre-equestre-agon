@@ -526,7 +526,7 @@ export default function TresoreriePage() {
             </details>
             <ImportMouvementsBancaires pdf={{ empreinte: lectures.current.get(p.id)?.pdf.empreinte || "", nom: p.fichier, compte: p.compteChoisi, mois: p.mois,
               operations: p.operations.map(o => ({ ref: o.sourceOperation || "", date: o.date, libelle: o.libelle, centimes: Math.round(o.montant * 100), poste: o.poste }))
-            }} onImported={() => setInfo("Rapprochement enregistré. Les dépenses et leurs justificatifs restent accessibles dans Dépenses et justificatifs.")} />
+            }} onImported={() => setInfo("Débits enregistrés : les dépenses et leurs justificatifs restent dans Dépenses et justificatifs. Pour l'argent reçu (cartes, chèques, virements), importez aussi le fichier CSV du mois dans Comptabilité → onglet Rapprochement : le FEC et le contrôle de banque en ont besoin.")} />
           </div>}
 
         </Card>
