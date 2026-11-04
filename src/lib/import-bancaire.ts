@@ -257,8 +257,10 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
     // choix compte (avant, la ligne restait « à vérifier » quoi qu'il choisisse).
     if (tracePlace && !lien) {
       const cible = existantes.find(e => e.id === tracePlace.cible);
+      // Même jour : le libellé peut avoir été lu autrement ; à 3 jours, il doit concorder.
       const relue = cible && !d.mode && sameAmount(cible) && inAccount(cible) && index.get(cible.id)!.date !== null
-        && Math.abs(index.get(cible.id)!.date! - dateMs) <= 3 * 86400000 && (sameLabel(cible) || libellesCompatibles(cible.fournisseur, o.libelle));
+        && (cible.dateOperation === o.date
+          || (Math.abs(index.get(cible.id)!.date! - dateMs) <= 3 * 86400000 && (sameLabel(cible) || libellesCompatibles(cible.fournisseur, o.libelle))));
       if (relue) { r.lienConnu = true; r.refOccupee = false; lien = { ...tracePlace, date: o.date, centimes: o.centimes, libelle: o.libelle }; }
       else if (!d.mode) return { ...r, etat: "ambigu", motif: "Cette source a déjà été traitée avec d’autres informations. Vérifiez la lecture, puis choisissez l’action." };
     }
@@ -267,7 +269,10 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
     if (lien || directe) {
       if (!directe) return { ...r, etat: "ambigu", motif: "Mouvement lié introuvable ou déplacé. Aucune recréation automatique." };
       if (directe.archive || directe.rapprochementExclu) return { ...r, etat: "archive", cible: directe.id, motif: "Opération archivée ou exclue : elle reste exclue." };
-      if (!sameAmount(directe) || !inAccount(directe) || (lien ? !memeLecture(lien, o) : (directe.dateOperation !== o.date || !sameLabel(directe)))) return { ...r, etat: "ambigu", cible: directe.id, motif: "Les informations diffèrent de la source déjà importée. Contrôler l’écart." };
+      // Même place du même relevé, même montant, même jour : la même opération,
+      // même si la relecture abrège le libellé (« Com Carte » / « Commission
+      // carte », août 2026). Le libellé n'est plus exigé ici.
+      if (!sameAmount(directe) || !inAccount(directe) || (lien ? !memeLecture(lien, o) : directe.dateOperation !== o.date)) return { ...r, etat: "ambigu", cible: directe.id, motif: "Les informations diffèrent de la source déjà importée. Contrôler l’écart." };
       return { ...r, candidats: [directe], etat: "deja", cible: directe.id, motif: "Déjà importé ; catégorie et justificatifs conservés." };
     }
     // Un crédit (remise de cartes ou de chèques, prélèvements émis, virement

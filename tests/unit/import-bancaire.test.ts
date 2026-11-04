@@ -117,7 +117,10 @@ test("Provenance déjà liée : identifiant stable ; source changée ou cible su
   assert.equal(rapprocherImportBancaire(p, [e], liens).deja, 1);
   assert.equal(rapprocherImportBancaire(p, [], liens).ambigus, 1);
   assert.equal(rapprocherImportBancaire(p, [{ ...e, montant: 1 }], liens).ambigus, 1);
-  assert.equal(rapprocherImportBancaire({ ...p, operations: [{ ...o, libelle: "lecture différente" }] }, [e], liens).ambigus, 1);
+  // Libellé relu autrement, même place, jour et montant : la même ligne (relevé d'août 2026).
+  assert.equal(rapprocherImportBancaire({ ...p, operations: [{ ...o, libelle: "lecture différente" }] }, [e], liens).deja, 1);
+  // Lue à une autre date et sous un autre libellé : à vérifier.
+  assert.equal(rapprocherImportBancaire({ ...p, operations: [{ ...o, date: "2026-09-20", libelle: "lecture différente" }] }, [e], liens).ambigus, 1);
   assert.equal(rapprocherImportBancaire(p, [{ ...e, rapprochementExclu: true }], liens).lignes[0].etat, "archive");
 });
 test("Ignorer nécessite un motif et reste enregistré sans création de dépense", () => {
@@ -272,4 +275,18 @@ test("Relevé relu (août 2026, DUCHATEL) : libellé lu autrement ou lignes déc
   const ecr = ecrituresImport(autre, choix, [ea, eb], choix.aEnregistrer, "uid", "2026-11-04");
   const lien = ecr.find(e => e.collection === "imports-bancaires-liens")!;
   assert.notEqual(lien.id, idLienImport(autre, a.ref));
+});
+
+test("Relevé relu (août 2026, commissions) : « Com Carte » au lieu de « Commission carte », même place, jour et montant = déjà importé", () => {
+  const s = pdf(csv("04/09/2026;Com Carte;12,92;\n04/09/2026;Com Carte;4,96;"));
+  const [a, b] = s.operations;
+  const dep = (o: typeof a, id: string): ExistanteImport => ({ id, collection: "depenses", source: "releve-bancaire", sourceOperation: o.ref, origineBancaire: "pdf", mois: "2026-09",
+    dateOperation: o.date, fournisseur: "Commission carte", montant: o.centimes / 100, poste: "Frais bancaires & commissions (CB, Stripe)", compte: s.compte });
+  const plan = rapprocherImportBancaire(s, [dep(a, "c1"), dep(b, "c2")], {});
+  assert.equal(plan.ambigus, 0); assert.equal(plan.deja, 2);
+  // Un autre jour ou un autre montant reste à vérifier.
+  assert.equal(rapprocherImportBancaire(s, [{ ...dep(a, "c1"), dateOperation: "2026-09-06" }, dep(b, "c2")], {}).ambigus, 1);
+  // Trace à sa place, libellé relu : même jour suffit.
+  const liens = { [a.ref]: { cible: "c1", date: a.date, centimes: a.centimes, libelle: "Commission carte" } };
+  assert.equal(rapprocherImportBancaire(s, [dep(a, "c1"), dep(b, "c2")], liens).ambigus, 0);
 });
