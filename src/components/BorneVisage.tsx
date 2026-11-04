@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Visage de la borne — Rive avec secours SVG automatique.
+ * Visage de la borne — personnage 3D (BorneVisage3D) s'il est déposé, sinon
+ * Rive, sinon les poses illustrées, sinon le SVG : secours automatiques.
  *
  * Le composant tente de charger /calin.riv (dossier public/). Si le fichier
  * est absent ou invalide, il bascule sans erreur sur le poney SVG : on peut
@@ -26,6 +27,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRive, useStateMachineInput } from "@rive-app/react-canvas";
+import BorneVisage3D from "./BorneVisage3D";
 
 export type EtatVisage = "off" | "connecting" | "idle" | "listening" | "thinking" | "speaking";
 
@@ -474,12 +476,16 @@ const VisageSvg = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
   }
 );
 
-// ── Composant public : Rive si dispo, SVG sinon ───────────────────────────────
+// ── Composant public : 3D si dispo, puis Rive, puis poses, puis SVG ───────────
 
 const BorneVisage = forwardRef<BorneVisageHandle, { etat: EtatVisage }>(
   function BorneVisage({ etat }, ref) {
+    // Personnage 3D (/borne/calin.glb, docs/BORNE-PERSONNAGE-3D.md) d'abord :
+    // absent ou illisible, on retombe sur le visage d'aujourd'hui.
+    const [troisDKo, setTroisDKo] = useState(false);
     const [riveKo, setRiveKo] = useState(false);
     const [photoKo, setPhotoKo] = useState(false);
+    if (!troisDKo) return <BorneVisage3D ref={ref} etat={etat} onErreur={() => setTroisDKo(true)} />;
     if (!riveKo) return <VisageRive ref={ref} etat={etat} onErreur={() => setRiveKo(true)} />;
     if (!photoKo) return <VisagePhoto ref={ref} etat={etat} onErreur={() => setPhotoKo(true)} />;
     return <VisageSvg ref={ref} etat={etat} />;
