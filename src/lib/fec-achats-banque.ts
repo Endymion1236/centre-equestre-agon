@@ -44,6 +44,7 @@ import { ventilerDepense, compteFournisseur, COMPTES } from "./plan-comptable-ac
 import { banqueDepense } from "./banque-depense";
 import { tvaJustifiee, type LigneMois } from "./bilan-justificatifs";
 import { COMPTES_REGLEMENT, COMPTE_ATTENTE, euros, ligneFec, propre, type CompteFec } from "./fec-complet";
+import { apparierRejets, estRejetPrelevement, type RejetEnregistre } from "@/lib/rejet-prelevement";
 
 export const JOURNAL_ACHATS = { code: "HA", libelle: "Achats" };
 export const JOURNAL_BANQUE = { code: "BQ", libelle: "Banque" };
@@ -194,6 +195,12 @@ export function construireAchatsBanque(params: {
   sansCredits?: boolean;
   /** Factures antérieures : déjà saisies par le cabinet (défaut DEBUT_ACHATS_APPLICATION). */
   debutAchats?: string;
+  /**
+   * Rejets de prélèvement enregistrés dans l'application (écran SEPA →
+   * « Rejeté ») : leur annulation au journal RG sort déjà l'argent de la
+   * banque, la ligne « impayé » du relevé n'est pas reprise (lib/rejet-prelevement).
+   */
+  rejets?: RejetEnregistre[];
 }): ResultatAchatsBanque {
   const debutAchats = params.debutAchats || DEBUT_ACHATS_APPLICATION;
   const { mois } = params;
@@ -206,8 +213,22 @@ export function construireAchatsBanque(params: {
   const debits = [...params.debits]
     .filter((l) => (l.mois || l.dateOperation?.slice(0, 7)) === mois && Number.isFinite(l.montant) && l.montant > 0)
     .sort((a, b) => (a.dateOperation || "").localeCompare(b.dateOperation || "") || a.id.localeCompare(b.id));
+  // Prélèvements revenus impayés : rattachés au rejet enregistré, s'il existe.
+  const rejetsDuReleve = apparierRejets(debits.filter((l) => estRejetPrelevement(l.fournisseur)).map((l) => ({ id: l.id, montant: l.montant, dateOperation: l.dateOperation })), params.rejets || []);
   for (const l of debits) {
     const fournisseurTexte = propre(l.fournisseur) || "Sans libellé";
+    if (rejetsDuReleve.has(l.id) && !l.doublonProbable) {
+      const montantRejet = cents(l.montant);
+      if (rejetsDuReleve.get(l.id)) continue; // déjà sorti de la banque par l'annulation du prélèvement (RG)
+      // Rejet pas encore enregistré : la sortie de banque est passée ici, au
+      // compte d'attente, jamais en charge.
+      const dateRejet = dateReleveFec(l.dateOperation || "") || finDeMois;
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date: dateRejet, compte: COMPTE_ATTENTE, piece: `REL-${dateRejet}-${numero}`, libelle: `Prélèvement rejeté — ${fournisseurTexte}`, debit: montantRejet }));
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date: dateRejet, compte: BANQUE_PAR_DEFAUT, piece: `REL-${dateRejet}-${numero}`, libelle: `Prélèvement rejeté — ${fournisseurTexte}`, credit: montantRejet }));
+      numero++; nbBq++; attente += montantRejet; attenteDebits += montantRejet;
+      anomalies.push(`Prélèvement rejeté « ${fournisseurTexte} » (${euros(montantRejet)} €, ${l.dateOperation || "?"}) : enregistrez le rejet dans Prélèvements SEPA (bouton « Rejeté ») ; passé au 47100000 en attendant, et retiré d'ici une fois le rejet enregistré.`);
+      continue;
+    }
     const montant = cents(l.montant);
     if (l.doublonProbable) {
       anomalies.push(`Débit ${fournisseurTexte} (${euros(montant)} €, ${l.dateOperation || "?"}) : doublon probable du relevé, laissé hors FEC tant qu'il n'est pas tranché dans Dépenses.`);

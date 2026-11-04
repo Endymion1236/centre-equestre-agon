@@ -76,6 +76,16 @@ test("chaque ligne fournisseur porte son tiers (FEC-Expert, 11/2026), le compte 
   assert.deepEqual(controlerStructureFec([ENTETE_FEC, ...r.lignes].join("\n") + "\n"), []);
 });
 
+test("prélèvement rejeté (SAMSON, 11/2026) : pas repris si le rejet est enregistré, sinon au 47100000, jamais en charge", () => {
+  const impaye = debit({ id: "imp", mois: "2026-10", dateOperation: "2026-10-30", fournisseur: "Impayé Prel Mr Samson Mickael", poste: "Frais bancaires", montant: 55 });
+  const avec = construireAchatsBanque({ mois: "2026-10", numeroDepart: 1, credits: [], debits: [impaye], rejets: [{ id: "cp", montant: 55, dateIso: "2026-11-01" }] });
+  assert.equal(avec.lignes.length, 0, "l'annulation du prélèvement (RG) sort déjà l'argent de la banque");
+  const sans = construireAchatsBanque({ mois: "2026-10", numeroDepart: 1, credits: [], debits: [impaye], rejets: [] });
+  assert.deepEqual(resume(ecriture(sans.lignes, "BQ", 1)), ["47100000 D55,00", "51200000 C55,00"]);
+  assert.ok(sans.anomalies.some((a) => /bouton « Rejeté »/.test(a)));
+  assert.equal(sans.compteAttente, 55);
+});
+
 test("facture postérieure au débit (acompte) : datée du débit", () => {
   const r = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [], debits: [debit({ fournisseur: "Orange", poste: "Informatique, logiciels & abonnements", montant: 30, piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", date: "2026-09-20" } } })] });
   assert.equal(ecriture(r.lignes, "HA", 1)[0][3], "20260910");

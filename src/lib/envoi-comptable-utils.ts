@@ -28,6 +28,8 @@ import type { ReglesVentilation } from "@/lib/ventilation-comptable";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
 
 import { bilanVentilationAchats, construireExportVentilationAchats } from "@/lib/ventilation-achats";
+import { rejetsDuJournal } from "@/lib/rejet-prelevement";
+import { toParisDateString } from "@/lib/date-local";
 
 export interface PieceJointe {
   filename: string;
@@ -270,7 +272,11 @@ export function fecDuMois(params: {
   // Achats et banque, ajoutés à la suite des écritures de ventes et de règlements.
   const ajouterAchatsBanque = (contenu: string, numeroDepart: number, options: { sansAchats?: boolean; sansCredits?: boolean } = {}) => {
     if (!params.achatsBanque) return { contenu, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [] as string[], compteAttente: 0, debits: 0, credits: 0 };
-    const ab = construireAchatsBanque({ mois: params.mois, debits: params.achatsBanque.debits, credits: params.achatsBanque.credits, numeroDepart, ...options });
+    // Rejets de prélèvement enregistrés (tous mois) : leur ligne « impayé » du relevé n'est pas reprise.
+    const rejets = rejetsDuJournal(params.tousEncaissements || params.encaissements, (e) => {
+      const sec = e?.date?.seconds; return sec ? toParisDateString(new Date(sec * 1000)) : (typeof e?.dateIso === "string" ? e.dateIso.slice(0, 10) : null);
+    });
+    const ab = construireAchatsBanque({ mois: params.mois, debits: params.achatsBanque.debits, credits: params.achatsBanque.credits, numeroDepart, rejets, ...options });
     return { contenu: contenu + (ab.lignes.length ? ab.lignes.join("\n") + "\n" : ""), ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque, anomalies: ab.anomalies, compteAttente: ab.compteAttente, debits: ab.compteAttenteDebits, credits: ab.compteAttenteCredits };
   };
   if (params.celeris && params.celeris.lignes.length) {
