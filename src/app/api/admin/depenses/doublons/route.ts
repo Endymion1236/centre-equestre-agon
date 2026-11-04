@@ -13,8 +13,18 @@ export async function GET(req: NextRequest) {
   const mois = req.nextUrl.searchParams.get("mois") || "";
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) return NextResponse.json({ error: "Mois invalide" }, { status: 400 });
   try {
-    const [ds, ar] = await Promise.all([adminDb.collection("depenses").where("mois", "==", mois).limit(2001).get(), archive().where("mois", "==", mois).limit(2001).get()]);
-    const lignes = ds.docs.map(d => ({ ...d.data(), id: d.id })) as DepenseCandidate[];
+    const [ds, ar, ps] = await Promise.all([
+      adminDb.collection("depenses").where("mois", "==", mois).limit(2001).get(), archive().where("mois", "==", mois).limit(2001).get(),
+      // Numéro de facture des pièces : deux factures différentes ne font pas un doublon (même règle que le FEC, lib/lignes-mois).
+      adminDb.collection("justificatifs").select("depenseId", "paiementsAssocies", "extraction.numero").limit(2001).get().catch(() => null),
+    ]);
+    const numeros = new Map<string, unknown>();
+    for (const d of ps?.docs || []) {
+      const p = d.data(), numero = p.extraction?.numero;
+      if (!numero) continue;
+      for (const id of [p.depenseId, ...(Array.isArray(p.paiementsAssocies) ? p.paiementsAssocies.map((a: { id?: string }) => a?.id) : [])]) if (id && !numeros.has(id)) numeros.set(id, numero);
+    }
+    const lignes = ds.docs.map(d => ({ ...d.data(), id: d.id, piece: numeros.has(d.id) ? { extraction: { numero: numeros.get(d.id) } } : null })) as DepenseCandidate[];
     return NextResponse.json({ groupes: groupesDoublons(lignes), archives: ar.docs.map(d => ({ id: d.id, ...d.data().original, conserveId: d.data().conserveId, motif: d.data().motif || null })), limite: ds.size > 2000 || ar.size > 2000 }, { headers: { "Cache-Control": "private, no-store" } });
   } catch { return NextResponse.json({ error: "Lecture impossible" }, { status: 500 }); }
 }

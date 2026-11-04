@@ -101,3 +101,13 @@ test("deux troncatures du même débit forment un groupe de doublons", () => {
   assert.equal(groupes.length, 1);
   assert.deepEqual(groupes[0].map(d => d.id).sort(), ["a", "b"]);
 });
+
+test("septembre 2026 : deux commissions du même jour avec deux factures différentes ne sont pas un doublon", () => {
+  const c1 = { id: "c1", fournisseur: "Prélèvement Commission vente à distance", montant: 0.4, mois: "2026-09", dateOperation: "2026-09-29", source: "releve-bancaire", piece: { extraction: { numero: "FA-1201" } } };
+  const c2 = { ...c1, id: "c2", piece: { extraction: { numero: "FA-1202" } } };
+  assert.equal(doublonPossible(c1, c2), false);
+  assert.deepEqual(groupesDoublons([c1, c2]), []);
+  // Même numéro, ou une seule pièce : toujours signalé.
+  assert.equal(doublonPossible(c1, { ...c2, piece: { extraction: { numero: "fa-1201" } } }), true);
+  assert.equal(doublonPossible(c1, { ...c2, piece: null }), true);
+});

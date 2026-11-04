@@ -37,6 +37,8 @@ export interface DepenseCandidate {
   note?: string;
   compte?: string;
   operationsDistinctesDe?: string[];
+  /** Pièce rattachée : son numéro de facture distingue deux débits jumeaux. */
+  piece?: { extraction?: { numero?: unknown } | null } | null;
 }
 const texte = (v: unknown) => typeof v === "string" ? v.trim().slice(0, 180) : "";
 export function dateValide(v: unknown): string {

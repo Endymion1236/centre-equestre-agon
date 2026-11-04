@@ -91,3 +91,20 @@ test("août 2026 : pas de crédits au rapprochement, mois Céleris — dit avant
 });
 
 if (process.exitCode) { console.error("❌ échec"); } else console.log(`✅ ${passes} tests passés`);
+
+test("un doublon probable du relevé ne prend pas la ligne du FEC d'un autre débit", () => {
+  const releve = [
+    { id: "d1", date: "2026-09-22", libelle: "Commission vente à distance", montant: -0.2, horsFec: true, note: "doublon probable" },
+    { id: "d2", date: "2026-09-25", libelle: "Commission vente à distance", montant: -0.2 },
+  ];
+  const fec = [{ journal: "BQ", numero: "10", date: "2026-09-25", libelle: "Commission", piece: "x", montant: -0.2 }];
+  const c = comparerBanque(releve, fec);
+  assert.equal(c.apparies, 1);
+  assert.deepEqual(c.releveSeul.map((r) => r.id), ["d1"]);
+  assert.equal(c.fecSeul.length, 0);
+});
+
+test("débits des comptes FFE : signalés, hors du contrôle du 512", () => {
+  const a = avertissementsControle({ debits: 3, credits: 2, tableauIncomplet: false, moisCeleris: false, autresComptes: 2 });
+  assert.ok(a.some((x) => x.includes("2 débit(s)") && x.includes("FFE")));
+});

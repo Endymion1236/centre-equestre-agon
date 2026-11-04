@@ -24,6 +24,7 @@ import { adressesComptable, construireColisComptable, corpsEmailComptable, encai
 import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 import type { CreditBancaireFec } from "@/lib/fec-achats-banque";
 import { avertissementsControle, comparerBanque, lignesBanqueDuFec, texteControleBanque, type MouvementReleve } from "@/lib/controle-banque";
+import { banqueDepense, type SourceBanqueDepense } from "@/lib/banque-depense";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -136,11 +137,15 @@ export async function controleBanqueMois(mois: string) {
     chargerCreditsReleve(mois),
   ]);
   const iso = (d: string) => { const m = String(d || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(d || "").slice(0, 10); };
-  const debits = (tableau?.lignes || []).filter((l) => (l.mois || l.dateOperation?.slice(0, 7)) === mois && Number(l.montant) > 0 && (!l.source || l.source === "releve-bancaire"));
+  const debitsDuMois = (tableau?.lignes || []).filter((l) => (l.mois || l.dateOperation?.slice(0, 7)) === mois && Number(l.montant) > 0 && (!l.source || l.source === "releve-bancaire"));
+  // Le FEC passe chaque débit sur le compte qui l'a prélevé (banqueDepense) :
+  // ceux des comptes FFE (5173, 5174) n'ont rien à faire face au 512.
+  const sur512 = (l: (typeof debitsDuMois)[number]) => { const b = banqueDepense(l as SourceBanqueDepense).compte; return !b || b.startsWith("512"); };
+  const debits = debitsDuMois.filter(sur512);
   const releve: MouvementReleve[] = [
     ...debits.map((l) => ({
       id: `d-${l.id}`, date: l.dateOperation || `${mois}-28`, libelle: String(l.fournisseur || "Débit"), montant: -Math.abs(Number(l.montant)),
-      ...(l.doublonProbable ? { note: "doublon probable du relevé, non repris tant qu'il n'est pas tranché dans Dépenses" } : {}),
+      ...(l.doublonProbable ? { note: "doublon probable du relevé, non repris tant qu'il n'est pas tranché dans Dépenses", horsFec: true } : {}),
     })),
     ...credits.filter((c) => Number(c.amount) > 0 && iso(c.date).startsWith(mois)).map((c, i) => ({
       id: `c-${i}`, date: iso(c.date), libelle: String(c.label || "Crédit"), montant: Number(c.amount),
@@ -150,7 +155,7 @@ export async function controleBanqueMois(mois: string) {
   const c = comparerBanque(releve, lignesBanqueDuFec(fec.contenu));
   const releveImporte = { debits: debits.length, credits: releve.length - debits.length };
   const tableauIncomplet = !tableau || !!tableau.limite;
-  const avertissements = avertissementsControle({ ...releveImporte, tableauIncomplet, moisCeleris: fec.source === "celeris" });
+  const avertissements = avertissementsControle({ ...releveImporte, tableauIncomplet, moisCeleris: fec.source === "celeris", autresComptes: debitsDuMois.length - debits.length });
   return {
     mois, ...c,
     releveImporte, tableauIncomplet, avertissements,

@@ -64,8 +64,16 @@ export function memeCommercant(a: string, b: string): boolean {
   const ma = motsCles(x), mb = motsCles(y);
   return ma.filter(m => mb.includes(m)).length >= 2;
 }
+/** Numéro de facture lu sur la pièce rattachée, sans espaces ni casse. */
+const numeroPiece = (c: DepenseCandidate) => String(c.piece?.extraction?.numero ?? "").replace(/\s+/g, "").toUpperCase();
+
 export function doublonPossible(a: DepenseCandidate, b: DepenseCandidate): boolean {
   if (a.operationsDistinctesDe?.includes(b.id) || b.operationsDistinctesDe?.includes(a.id)) return false;
+  // Deux factures différentes, deux débits : les commissions de vente à
+  // distance du même jour (même libellé, même montant) étaient prises pour
+  // un doublon et sortaient du FEC (septembre 2026, 29/09).
+  const na = numeroPiece(a), nb = numeroPiece(b);
+  if (na && nb && na !== nb) return false;
   return a.id !== b.id && a.source === "releve-bancaire" && b.source === a.source && !!a.mois && a.mois === b.mois
     && Number.isFinite(a.montant) && Number.isFinite(b.montant) && Math.round(a.montant * 100) === Math.round(b.montant * 100)
     && memeCommercant(a.fournisseur || "", b.fournisseur || "")

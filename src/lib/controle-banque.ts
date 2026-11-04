@@ -27,6 +27,12 @@ export interface MouvementReleve {
   /** Signé : positif = crédit (entrée d'argent), négatif = débit. */
   montant: number;
   note?: string;
+  /**
+   * Mouvement que le FEC laisse volontairement de côté (doublon probable du
+   * relevé, pas encore tranché) : il reste « au relevé seulement » et ne prend
+   * jamais la ligne du FEC d'un autre mouvement au même montant.
+   */
+  horsFec?: boolean;
 }
 
 export interface LigneBanqueFec {
@@ -96,7 +102,7 @@ export function comparerBanque(releve: MouvementReleve[], fec: LigneBanqueFec[])
   const total = (l: { montant: number }[]) => Math.round(l.reduce((s, x) => s + ct(x.montant), 0)) / 100;
   const libresFec = new Set(fec.map((_, i) => i));
   const libresReleve = new Set(releve.map((_, i) => i));
-  const ordre = [...releve.keys()].sort((a, b) => releve[a].date.localeCompare(releve[b].date));
+  const ordre = [...releve.keys()].filter((i) => !releve[i].horsFec).sort((a, b) => releve[a].date.localeCompare(releve[b].date));
   let apparies = 0;
 
   // 1. Une pour une.
@@ -201,8 +207,9 @@ export function comparerBanque(releve: MouvementReleve[], fec: LigneBanqueFec[])
  * crédit du relevé au rapprochement, et un mois tenu dans Céleris — 28 159 €
  * de recettes « sans relevé » qui n'étaient que l'absence des crédits.
  */
-export function avertissementsControle(p: { debits: number; credits: number; tableauIncomplet: boolean; moisCeleris: boolean }): string[] {
+export function avertissementsControle(p: { debits: number; credits: number; tableauIncomplet: boolean; moisCeleris: boolean; autresComptes?: number }): string[] {
   const a: string[] = [];
+  if (p.autresComptes) a.push(`${p.autresComptes} débit(s) du mois portent sur un autre compte que le Crédit Agricole (FFE club, FFE compétition) : ils sont passés au FEC sur ce compte-là et restent hors de ce contrôle, qui ne compare que le 512.`);
   if (p.credits === 0) a.push("Aucun crédit du relevé pour ce mois dans le Rapprochement : le contrôle ne voit que les débits. Importez le relevé du mois dans l'onglet Rapprochement, puis relancez.");
   if (p.debits === 0) a.push("Aucun débit du relevé pour ce mois dans Dépenses : le contrôle ne voit que les crédits. Importez le relevé du mois dans Dépenses, puis relancez.");
   if (p.tableauIncomplet) a.push("Le tableau des opérations n'a pas pu être lu en entier.");
