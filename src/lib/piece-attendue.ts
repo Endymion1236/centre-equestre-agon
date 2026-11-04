@@ -24,6 +24,7 @@
 import { estDeclareePerdue, estJustifiee, type LigneMois } from "./bilan-justificatifs";
 import { CATEGORIE_COMPTE_FFE, CATEGORIE_EMPRUNTS, CATEGORIE_PERSONNELLE, justifiableParReleve } from "./tableau-depenses";
 import { estFraisBancaire, posteCommissionCarte, POSTE_HORS_DEPENSES } from "./postes-depenses";
+import { CATEGORIE_REMBOURSEMENT_FAMILLE } from "./remboursement-famille";
 
 export type EtatPiece = "facture-a-obtenir" | "releve-suffit" | "rien-a-fournir";
 
@@ -37,6 +38,7 @@ export function justifiableSansFacture(l: LigneMois): boolean {
   return justifiableParReleve(l.poste, l.fournisseur, posteCommissionCarte)
     || l.poste === CATEGORIE_EMPRUNTS
     || l.poste === CATEGORIE_COMPTE_FFE
+    || l.poste === CATEGORIE_REMBOURSEMENT_FAMILLE
     || l.avanceFfe === true;
 }
 

@@ -5,9 +5,10 @@ import { fournisseurNormalise } from "./doublons-depenses";
 import { compteBanque } from "./plan-comptable-achats";
 import { posteCommissionCarte, POSTE_HORS_DEPENSES, POSTES_DEPENSES, estVersementCompteFfe } from "./postes-depenses";
 import { CATEGORIE_PERSONNELLE, CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE } from "./tableau-depenses";
+import { CATEGORIE_REMBOURSEMENT_FAMILLE } from "./remboursement-famille";
 
 export class ErreurImportBancaire extends Error {}
-export const CATEGORIES_IMPORT = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
+export const CATEGORIES_IMPORT = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, "Salaires", "Cotisations sociales", "Virements internes", CATEGORIE_REMBOURSEMENT_FAMILLE, "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
 export type OperationImport = { ref: string; date: string; libelle: string; centimes: number; poste: string };
 export type SourceImport = { format: "csv" | "pdf"; empreinte: string; compte: string; nom: string; debut: string; fin: string; operations: OperationImport[]; credits: number; creditsCentimes: number };
 export type ExistanteImport = { id: string; collection: "depenses" | "mouvements-rapprochement"; dateOperation: string; mois: string; fournisseur: string; montant: number; compte?: string; compteBanqueConfirme?: string; sourceOperation?: string; source?: string; origineBancaire?: string; poste: string; rapprochementExclu?: boolean; archive?: boolean; dateEstimee?: boolean };
@@ -68,6 +69,8 @@ export function proposerPosteBancaire(libelle: string) {
   // une course. Le plus spécifique passe donc avant le plus général.
   const regles: [RegExp, string][] = [
     [/\b(salaire|paie)\b/, "Salaires"], [/\b(msa|urssaf)\b/, "Cotisations sociales"], [/\b(pret|emprunt)\b/, "Emprunts"],
+    // Argent rendu à une famille (septembre 2026 : « remboursement promenade non effectuee »).
+    [/\bremboursement (promenade|balade|stage|cours|seance|inscription|forfait|anniversaire)\b/, CATEGORIE_REMBOURSEMENT_FAMILLE],
     [/\b(agrial|nutrea|lamaison|lacolley|picotin|foin|paille|granules|copeaux|litiere|point vert)\b/, "Aliments, litières, paille"],
     [/\b(marechal|ferrure|parage|tabac)\b/, "Maréchalerie & travail des chevaux"],
     [/\b(veterinaire|veterinaires|vetodiag|pommiers|pharmacie)\b/, "Vétérinaire & santé des chevaux"],

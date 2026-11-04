@@ -45,6 +45,7 @@ import { banqueDepense } from "./banque-depense";
 import { tvaJustifiee, type LigneMois } from "./bilan-justificatifs";
 import { COMPTES_REGLEMENT, COMPTE_ATTENTE, euros, ligneFec, propre, type CompteFec } from "./fec-complet";
 import { apparierRejets, COMPTE_LIAISON_REJETS, estRejetPrelevement, type RejetEnregistre } from "@/lib/rejet-prelevement";
+import { apparierRemboursements, CATEGORIE_REMBOURSEMENT_FAMILLE, nomDuVirementEmis, type RemboursementEnregistre } from "@/lib/remboursement-famille";
 
 export const JOURNAL_ACHATS = { code: "HA", libelle: "Achats" };
 export const JOURNAL_BANQUE = { code: "BQ", libelle: "Banque" };
@@ -52,6 +53,7 @@ export const COMPTE_FOURNISSEURS: CompteFec = { compte: "40100000", libelle: "Fo
 const COMPTE_COMMISSIONS_CB: CompteFec = { compte: "62710000", libelle: COMPTES["62710000"] };
 const COMPTE_FRAIS_ANCV: CompteFec = { compte: "62840000", libelle: COMPTES["62840000"] };
 const BANQUE_PAR_DEFAUT: CompteFec = { compte: "51200000", libelle: COMPTES["51200000"] };
+const COMPTE_CLIENTS_REMB: CompteFec = { compte: "41100000", libelle: "Clients" };
 
 /** Premier jour des achats tenus par l'application : le cabinet a saisi jusqu'à juillet 2026. */
 export const DEBUT_ACHATS_APPLICATION = "2026-08-01";
@@ -201,6 +203,12 @@ export function construireAchatsBanque(params: {
    * banque, la ligne « impayé » du relevé n'est pas reprise (lib/rejet-prelevement).
    */
   rejets?: RejetEnregistre[];
+  /**
+   * Remboursements par virement ou chèque enregistrés dans l'application :
+   * le journal des règlements a déjà sorti l'argent de la banque, le débit
+   * « Remboursement à une famille » du relevé n'est pas repris (lib/remboursement-famille).
+   */
+  remboursements?: RemboursementEnregistre[];
 }): ResultatAchatsBanque {
   const debutAchats = params.debutAchats || DEBUT_ACHATS_APPLICATION;
   const { mois } = params;
@@ -214,6 +222,9 @@ export function construireAchatsBanque(params: {
     .filter((l) => (l.mois || l.dateOperation?.slice(0, 7)) === mois && Number.isFinite(l.montant) && l.montant > 0)
     .sort((a, b) => (a.dateOperation || "").localeCompare(b.dateOperation || "") || a.id.localeCompare(b.id));
   // Prélèvements revenus impayés : rattachés au rejet enregistré, s'il existe.
+  const rembDuReleve = apparierRemboursements(debits.filter((l) => l.poste === CATEGORIE_REMBOURSEMENT_FAMILLE && !l.doublonProbable)
+    .map((l) => ({ id: l.id, montant: l.montant, dateOperation: l.dateOperation, fournisseur: l.fournisseur })), params.remboursements || []);
+  let rembDejaRg = 0;
   const rejetsDuReleve = apparierRejets(debits.filter((l) => estRejetPrelevement(l.fournisseur)).map((l) => ({ id: l.id, montant: l.montant, dateOperation: l.dateOperation })), params.rejets || []);
   for (const l of debits) {
     const fournisseurTexte = propre(l.fournisseur) || "Sans libellé";
@@ -245,6 +256,20 @@ export function construireAchatsBanque(params: {
     }
     if (l.source && l.source !== "releve-bancaire") continue; // dépense saisie à la main : pas un mouvement du relevé
     const date = dateReleveFec(l.dateOperation || "") || finDeMois;
+    // Argent rendu à une famille : jamais une charge. Déjà au journal des
+    // règlements s'il y est enregistré, sinon au compte client avec son nom.
+    if (l.poste === CATEGORIE_REMBOURSEMENT_FAMILLE) {
+      if (rembDuReleve.get(l.id)) { rembDejaRg++; continue; }
+      const nom = propre(nomDuVirementEmis(l.fournisseur)) || fournisseurTexte;
+      const banqueR = banqueDepense(l).compte ? { compte: banqueDepense(l).compte, libelle: banqueDepense(l).libelle } : BANQUE_PAR_DEFAUT;
+      const piece = `REMB-${l.id.slice(0, 12)}`;
+      const lib = `Remboursement ${nom}`;
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_CLIENTS_REMB, piece, libelle: lib, debit: montant, auxNum: nom, auxLib: nom }));
+      lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banqueR, piece, libelle: lib, credit: montant }));
+      numero++; nbBq++;
+      anomalies.push(`Remboursement à ${nom} (${euros(montant)} €, ${l.dateOperation || "?"}) : passé au compte client 41100000. Il n'est pas enregistré dans l'application : rattachez-le à la commande (Paiements → annuler et rembourser) pour qu'il retrouve sa facture.`);
+      continue;
+    }
     if (!l.dateOperation) anomalies.push(`Débit ${fournisseurTexte} (${euros(montant)} €) sans date : daté du dernier jour du mois.`);
     const banqueProposee = banqueDepense(l);
     const banque: CompteFec = banqueProposee.compte ? { compte: banqueProposee.compte, libelle: banqueProposee.libelle } : BANQUE_PAR_DEFAUT;
@@ -405,6 +430,7 @@ export function construireAchatsBanque(params: {
     numero++; nbBq++;
   }
   if (!params.sansCredits && credits.length === 0) anomalies.push(`Aucun crédit du relevé de ${mois} (l'argent reçu) : le journal Banque est incomplet. À importer dans Comptabilité → onglet Rapprochement → « Importer CSV », avec le fichier CSV du mois téléchargé sur le site de la banque. L'import du relevé PDF dans Trésorerie ne lit que les débits (les dépenses), pas l'argent reçu.`);
+  if (rembDejaRg) anomalies.push(`${rembDejaRg} remboursement(s) à une famille déjà enregistré(s) dans l'application, donc déjà sorti(s) de la banque par le journal des règlements : non repris en BQ.`);
   if (dejaEnBanque) anomalies.push(`${dejaEnBanque} crédit(s) du relevé (virements, prélèvements SEPA, versements d'espèces) déjà passés en banque par le journal des règlements : non repris en BQ.`);
 
   return { lignes: [...lignesHa, ...lignesBq], ecrituresAchats: nbHa, ecrituresBanque: nbBq, anomalies, compteAttente: attente / 100, compteAttenteDebits: attenteDebits / 100, compteAttenteCredits: (attente - attenteDebits) / 100 };

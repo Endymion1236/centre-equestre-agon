@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { CATEGORIE_REMBOURSEMENT_FAMILLE } from "@/lib/remboursement-famille";
 import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
@@ -11,7 +12,7 @@ import { chargerLignesMois } from "@/lib/lignes-mois";
 export const dynamic = "force-dynamic";
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 const idValide = (s: unknown): s is string => typeof s === "string" && /^[\w-]{1,150}$/.test(s);
-const categories = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, "Salaires", "Cotisations sociales", "Virements internes", "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
+const categories = [...POSTES_DEPENSES.map(p => p.nom), CATEGORIE_IMMOBILISATION, CATEGORIE_COMPTE_FFE, "Salaires", "Cotisations sociales", "Virements internes", CATEGORIE_REMBOURSEMENT_FAMILLE, "Emprunts", CATEGORIE_PERSONNELLE, POSTE_HORS_DEPENSES];
 export async function GET(req: NextRequest) {
   const auth = await verifyAuth(req, { adminOnly: true }); if (auth instanceof NextResponse) return auth;
   const mois = req.nextUrl.searchParams.get("mois") || "";

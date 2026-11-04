@@ -59,7 +59,7 @@ export const COMPTES: Record<string, string> = {
   "42100000": "Personnel, rémunérations dues", "43100000": "Mutualité sociale agricole", "43110000": "MSA Richard", "43700000": "MSA salariés",
   "44562000": "TVA déductible sur immobilisations", "44566000": "TVA déductible sur autres biens et services",
   "45511000": "Associés, compte courant", "46720000": "Licences (attente)", "46730000": "Engagements cavaliers (attente)",
-  "51200000": "Crédit Agricole", "51220000": "Excédent Pro", "51730000": "FFE club", "51740000": "FFE compét", "58000000": "Virements internes",
+  "51200000": "Crédit Agricole", "51220000": "Excédent Pro", "51730000": "FFE club", "51740000": "FFE compét", "58000000": "Virements internes", "41100000": "Clients",
   "16420000": "Emprunts moyen et long terme", "40100000": "Fournisseurs",
 };
 
@@ -88,6 +88,7 @@ const PAR_CATEGORIE: Record<string, string> = {
   "Salaires": "42100000",
   "Cotisations sociales": "43100000",
   "Virements internes": "58000000",
+  "Remboursement à une famille": "41100000",
   "Emprunts": "16420000",
   "Personnel — hors charges": "45511000",
   "Compte FFE (avance licences & engagements)": "51730000",

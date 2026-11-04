@@ -63,6 +63,13 @@ export const COMPTES_REGLEMENT: Record<string, CompteFec & { aConfirmer?: boolea
   prelevement_sepa: { compte: "51200000", libelle: "Crédit Agricole" },
   sepa: { compte: "51200000", libelle: "Crédit Agricole" },
   avoir: { compte: "41910000", libelle: "Clients — avoirs à imputer", aConfirmer: true },
+  // Remboursements rendus à une famille (annulation d'une commande, PaiementsClient) :
+  // l'argent sort par le même chemin qu'il serait entré. Jusqu'au 04/11/2026
+  // ces modes étaient inconnus du FEC et partaient au 47100000.
+  remboursement_virement: { compte: "51200000", libelle: "Crédit Agricole" },
+  remboursement_cheque: { compte: "51200000", libelle: "Crédit Agricole" },
+  remboursement_especes: { compte: "53000000", libelle: "Caisse", aConfirmer: true },
+  remboursement_cb: { compte: "51150000", libelle: "Cartes bancaires à encaisser", aConfirmer: true },
 };
 export const COMPTE_BANQUE: CompteFec = { compte: "51200000", libelle: "Crédit Agricole" };
 export const COMPTE_VIREMENTS_INTERNES: CompteFec = { compte: "58000000", libelle: "Virements internes" };

@@ -14,6 +14,7 @@
  *   - synthese-compta-AAAA-MM.pdf (ajouté par le serveur).
  */
 
+import { remboursementsDuJournal } from "@/lib/remboursement-famille";
 import {
   construireExportComptable,
   construireExportDepenses,
@@ -276,7 +277,10 @@ export function fecDuMois(params: {
     const rejets = rejetsDuJournal(params.tousEncaissements || params.encaissements, (e) => {
       const sec = e?.date?.seconds; return sec ? toParisDateString(new Date(sec * 1000)) : (typeof e?.dateIso === "string" ? e.dateIso.slice(0, 10) : null);
     });
-    const ab = construireAchatsBanque({ mois: params.mois, debits: params.achatsBanque.debits, credits: params.achatsBanque.credits, numeroDepart, rejets, ...options });
+    const remboursements = remboursementsDuJournal(params.tousEncaissements || params.encaissements, (e) => {
+      const sec = e?.date?.seconds; return sec ? toParisDateString(new Date(sec * 1000)) : (typeof e?.dateIso === "string" ? e.dateIso.slice(0, 10) : null);
+    });
+    const ab = construireAchatsBanque({ mois: params.mois, debits: params.achatsBanque.debits, credits: params.achatsBanque.credits, numeroDepart, rejets, remboursements, ...options });
     return { contenu: contenu + (ab.lignes.length ? ab.lignes.join("\n") + "\n" : ""), ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque, anomalies: ab.anomalies, compteAttente: ab.compteAttente, debits: ab.compteAttenteDebits, credits: ab.compteAttenteCredits };
   };
   if (params.celeris && params.celeris.lignes.length) {
