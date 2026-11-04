@@ -14,6 +14,24 @@ const dateFr = (iso: string) => String(iso || "").split("-").reverse().join("/")
 // Une remise de prélèvements SEPA sans ses lignes au FEC : souvent encaissées le mois d'avant.
 const estRemiseSepa = (l: string) => /avis de pr[ée]l[èe]vement|prel ech|remise prlv/i.test(l || "");
 
+/** Une remise SEPA de l'application, échéance par échéance (lib/remise-sepa-controle). */
+function DetailRemise({ remise }: { remise: any }) {
+  if (!remise) return null;
+  const d = remise.detail;
+  if (!d.lignes.length) return <div className="text-green-700 mt-1">Remise n° {remise.numero ?? "?"} : les {d.ok} échéances sont encaissées au jour de la remise.</div>;
+  return (
+    <div className="mt-1 rounded-lg bg-amber-50 border border-amber-100 p-2">
+      <div className="text-slate-700 mb-1">Remise n° {remise.numero ?? "?"} : {d.ok} échéance(s) en ordre, <b>{eur(d.manque)}</b> absents du FEC du mois :</div>
+      {d.lignes.map((l: any) => (
+        <div key={l.echeanceId} className="flex justify-between gap-3 py-0.5">
+          <span><b>{l.famille}</b> · {l.detail}</span>
+          <span className="font-semibold whitespace-nowrap">{eur(l.montant)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function BoutonControleBanque({ period }: { period: string }) {
   const [ouvert, setOuvert] = useState(false);
   const [chargement, setChargement] = useState(false);
@@ -82,6 +100,7 @@ export function BoutonControleBanque({ period }: { period: string }) {
                           <span className="font-semibold whitespace-nowrap">{eur(r.montant)}</span>
                         </div>
                       ))}
+                      {res.remisesSepa?.filter((x: any) => res.releveSeul.some((r: any) => r.id === x.releveId)).map((x: any) => <div key={x.releveId} className="text-xs"><DetailRemise remise={x} /></div>)}
                     </div>
                   )}
                   {res.fecSeul?.length > 0 && (
@@ -101,7 +120,8 @@ export function BoutonControleBanque({ period }: { period: string }) {
                       {res.remisesIncompletes.map((x: any, i: number) => (
                         <div key={i} className="py-1 border-b border-gray-50 text-xs">
                           <div className="flex justify-between gap-3"><span>{dateFr(x.releve.date)} · {x.releve.libelle}</span><span className="font-semibold whitespace-nowrap">{eur(x.releve.montant)}</span></div>
-                          <div className="text-slate-600">{x.nb} ligne(s) du {dateFr(x.date)} au FEC pour {eur(x.total)} : <b className="text-red-700">écart {eur(x.ecart)}</b>{estRemiseSepa(x.releve.libelle) ? " — comparez à la remise dans Prélèvements SEPA : une échéance prélevée sans encaissement, ou encaissée à une autre date." : ""}</div>
+                          <div className="text-slate-600">{x.nb} ligne(s) du {dateFr(x.date)} au FEC pour {eur(x.total)} : <b className="text-red-700">écart {eur(x.ecart)}</b>{estRemiseSepa(x.releve.libelle) && !res.remisesSepa?.some((r: any) => r.releveId === x.releve.id) ? " — comparez à la remise dans Prélèvements SEPA : une échéance prélevée sans encaissement, ou encaissée à une autre date." : ""}</div>
+                          <DetailRemise remise={res.remisesSepa?.find((r: any) => r.releveId === x.releve.id)} />
                         </div>
                       ))}
                     </div>

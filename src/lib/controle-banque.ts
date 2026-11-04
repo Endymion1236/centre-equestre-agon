@@ -81,6 +81,17 @@ export interface ControleBanque {
 
 const libelleCle = (l: string) => String(l || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().slice(0, 40);
 
+// Mots qui décrivent l'opération, pas la personne.
+const MOTS_GENERIQUES = new Set(["VIREMENT", "REGLEMENT", "FAVEUR", "VOTRE", "INST", "PRELEVEMENT", "SEPA", "STAGE", "REMISE", "CARTE", "AVIS", "EMIS", "FACTURE", "ECHEANCE", "FORFAIT", "COMMISSION", "VENTE", "DISTANCE", "CONTRE", "PASSATION"]);
+// Libellé entier (libelleCle s'arrête à 40 caractères : « … VIR INST DE ODI »).
+const motsNom = (l: string) => new Set(String(l || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim().split(" ").filter((m) => m.length >= 4 && !/\d/.test(m) && !MOTS_GENERIQUES.has(m)));
+/** Les deux libellés partagent-ils un nom (« SIMON », « ODILE ») ? */
+function memeNom(a: string, b: string): boolean {
+  const ma = motsNom(a);
+  for (const m of motsNom(b)) if (ma.has(m)) return true;
+  return false;
+}
+
 /** Au plus `max` éléments dont la somme (centimes) vaut `cible`. */
 function sousEnsemble(cands: LigneBanqueFec[], cible: number, max = 4): LigneBanqueFec[] | null {
   const n = Math.min(cands.length, 14);
@@ -105,16 +116,23 @@ export function comparerBanque(releve: MouvementReleve[], fec: LigneBanqueFec[])
   const ordre = [...releve.keys()].filter((i) => !releve[i].horsFec).sort((a, b) => releve[a].date.localeCompare(releve[b].date));
   let apparies = 0;
 
-  // 1. Une pour une.
-  for (const i of ordre) {
-    const r = releve[i];
-    let meilleur = -1, ecartMin = Infinity;
-    for (const j of libresFec) {
-      if (ct(fec[j].montant) !== ct(r.montant)) continue;
-      const d = jours(fec[j].date, r.date);
-      if (d <= 7 && d < ecartMin) { meilleur = j; ecartMin = d; }
+  // 1. Une pour une : d'abord même montant ET même nom (SIMON, 10/2026 : le
+  //    virement du 17/10 prenait la ligne d'un autre 180 € plus proche en date,
+  //    et le règlement SIMON du 24/10 restait « absent du relevé »), puis même
+  //    montant seul.
+  for (const avecNom of [true, false]) {
+    for (const i of ordre) {
+      if (!libresReleve.has(i)) continue;
+      const r = releve[i];
+      let meilleur = -1, ecartMin = Infinity;
+      for (const j of libresFec) {
+        if (ct(fec[j].montant) !== ct(r.montant)) continue;
+        if (avecNom && !memeNom(fec[j].libelle, r.libelle)) continue;
+        const d = jours(fec[j].date, r.date);
+        if (d <= 7 && d < ecartMin) { meilleur = j; ecartMin = d; }
+      }
+      if (meilleur >= 0) { libresFec.delete(meilleur); libresReleve.delete(i); apparies++; }
     }
-    if (meilleur >= 0) { libresFec.delete(meilleur); libresReleve.delete(i); apparies++; }
   }
   // 2. Une ligne du relevé pour plusieurs lignes du FEC.
   for (const i of ordre) {

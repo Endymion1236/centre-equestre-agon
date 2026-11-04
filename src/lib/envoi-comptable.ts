@@ -25,6 +25,8 @@ import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 import type { CreditBancaireFec } from "@/lib/fec-achats-banque";
 import { avertissementsControle, comparerBanque, lignesBanqueDuFec, texteControleBanque, type MouvementReleve } from "@/lib/controle-banque";
 import { banqueDepense, type SourceBanqueDepense } from "@/lib/banque-depense";
+import { detailRemiseSepa, remisePourCredit, type DetailRemiseSepa, type EncaissementSepa } from "@/lib/remise-sepa-controle";
+import { toParisDateString } from "@/lib/date-local";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -156,12 +158,60 @@ export async function controleBanqueMois(mois: string) {
   const releveImporte = { debits: debits.length, credits: releve.length - debits.length };
   const tableauIncomplet = !tableau || !!tableau.limite;
   const avertissements = avertissementsControle({ ...releveImporte, tableauIncomplet, moisCeleris: fec.source === "celeris", autresComptes: debitsDuMois.length - debits.length });
+  const remisesSepa = await detaillerRemisesSepa(mois, [...c.remisesIncompletes.map((x) => x.releve), ...c.releveSeul].filter((r) => r.montant > 0))
+    .catch((e) => { console.error("[controle-banque] remises SEPA illisibles", e); return []; });
   return {
-    mois, ...c,
+    mois, ...c, remisesSepa,
     releveImporte, tableauIncomplet, avertissements,
     bloquants: fec.bloquants,
-    texte: texteControleBanque(mois, c, avertissements),
+    texte: texteControleBanque(mois, c, avertissements) + texteRemisesSepa(remisesSepa),
   };
+}
+
+/**
+ * Crédits du relevé que le FEC n'a pas en entier et qui sont une remise SEPA
+ * de l'application : le détail échéance par échéance (lib/remise-sepa-controle).
+ */
+async function detaillerRemisesSepa(mois: string, credits: MouvementReleve[]): Promise<{ releveId: string; numero: number | null; date: string; montant: number; detail: DetailRemiseSepa }[]> {
+  if (!credits.length) return [];
+  const remises = (await adminDb.collection("remises-sepa").get()).docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  const sortie = [];
+  for (const credit of credits) {
+    const remise = remisePourCredit(remises, credit);
+    if (!remise) continue;
+    const echSnap = await adminDb.collection("echeances-sepa").where("remiseId", "==", remise.id).get();
+    const echeances = echSnap.docs.map((d) => { const e = d.data(); return { id: d.id, familyName: e.familyName, montant: Number(e.montant) || 0, status: e.status }; });
+    const ids = echeances.map((e) => e.id);
+    const encaissements: EncaissementSepa[] = [];
+    const lire = (d: FirebaseFirestore.QueryDocumentSnapshot) => {
+      const e = d.data();
+      const sec = e.date?.seconds ?? e.date?._seconds;
+      return { id: d.id, sepaEcheanceId: e.sepaEcheanceId || null, montant: Number(e.montant) || 0, dateIso: sec ? toParisDateString(new Date(sec * 1000)) : "", correctionDe: e.correctionDe || null, raison: e.raison || null };
+    };
+    for (let i = 0; i < ids.length; i += 30) {
+      const s = await adminDb.collection("encaissements").where("sepaEcheanceId", "in", ids.slice(i, i + 30)).get();
+      encaissements.push(...s.docs.map(lire));
+    }
+    const encIds = encaissements.map((e) => e.id);
+    for (let i = 0; i < encIds.length; i += 30) {
+      const s = await adminDb.collection("encaissements").where("correctionDe", "in", encIds.slice(i, i + 30)).get();
+      encaissements.push(...s.docs.map(lire));
+    }
+    sortie.push({ releveId: credit.id, numero: remise.numero ?? null, date: credit.date, montant: credit.montant, detail: detailRemiseSepa({ mois, echeances, encaissements }) });
+  }
+  return sortie;
+}
+
+function texteRemisesSepa(remises: { numero: number | null; date: string; montant: number; detail: DetailRemiseSepa }[]): string {
+  const e = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
+  const d = (iso: string) => iso.split("-").reverse().join("/");
+  const lignes: string[] = [];
+  for (const r of remises) {
+    if (!r.detail.lignes.length) continue;
+    lignes.push("", `Remise SEPA n° ${r.numero ?? "?"} (relevé du ${d(r.date)}, ${e(r.montant)}) : ${r.detail.ok} échéance(s) en ordre, ${e(r.detail.manque)} absents du FEC du mois :`,
+      ...r.detail.lignes.map((l) => `  ${l.famille}  ${e(l.montant)} : ${l.detail}`));
+  }
+  return lignes.length ? "\n" + lignes.join("\n") : "";
 }
 
 export async function envoyerEcrituresComptable(params: {

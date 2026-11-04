@@ -108,3 +108,18 @@ test("débits des comptes FFE : signalés, hors du contrôle du 512", () => {
   const a = avertissementsControle({ debits: 3, credits: 2, tableauIncomplet: false, moisCeleris: false, autresComptes: 2 });
   assert.ok(a.some((x) => x.includes("2 débit(s)") && x.includes("FFE")));
 });
+
+test("octobre 2026 : le virement SIMON du 17/10 retrouve le règlement SIMON du 24/10, pas un autre 180 € plus proche", () => {
+  const releve = [
+    { id: "c1", date: "2026-10-17", libelle: "Virement en votre faveur VIR INST de ODILE SIMON - stage Bogdanas Cesar F-202610-NY8X", montant: 180 },
+  ];
+  const fec = [
+    { journal: "RG", numero: "200", date: "2026-10-18", libelle: "Règlement Virement DUPONT Marie", piece: "a", montant: 180 },
+    { journal: "RG", numero: "270", date: "2026-10-24", libelle: "Règlement Virement SIMON Odile", piece: "b", montant: 180 },
+  ];
+  const c = comparerBanque(releve, fec);
+  // C'est DUPONT, jamais reçu, qui reste « dans le FEC, absent du relevé ».
+  assert.equal(c.apparies, 1);
+  assert.deepEqual(c.fecSeul.map((f) => f.numero), ["200"]);
+  assert.equal(c.releveSeul.length, 0);
+});
