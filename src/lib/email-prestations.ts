@@ -22,6 +22,8 @@
 /** Une ligne de commande, telle qu'elle est stockée sur le document `payments`. */
 interface LigneEmail {
   activityTitle?: string;
+  /** Quantité de la ligne (panier de l'onglet Encaisser, lib/panier-caisse). */
+  quantity?: number;
   childName?: string;
   date?: string | null;
   startTime?: string | null;
@@ -69,6 +71,13 @@ export function libelleModePaiement(mode?: string | null): string {
  * que s'il n'y est pas déjà.
  */
 export function titrePrestation(ligne: LigneEmail): string {
+  // « Promenade en main × 2 » : la ligne porte une quantité depuis 11/2026.
+  const q = Number(ligne.quantity) || 1;
+  const fois = q > 1 ? ` × ${q}` : "";
+  return titreSansQuantite(ligne) + fois;
+}
+
+function titreSansQuantite(ligne: LigneEmail): string {
   const titre = String(ligne.activityTitle || "").trim();
   const enfant = String(ligne.childName || "").trim();
   if (!enfant) return titre || "Prestation";

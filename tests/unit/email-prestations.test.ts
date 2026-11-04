@@ -266,4 +266,9 @@ test("un cours à l'année affiche son créneau récurrent", () => {
   assert.ok(html.includes("mercredi · 14h00–15h00"));
 });
 
+test("une ligne en plusieurs exemplaires dit sa quantité (panier Encaisser, 11/2026)", () => {
+  assert.equal(titrePrestation({ activityTitle: "Promenade en main", childName: "Léa", quantity: 2 } as any), "Promenade en main — Léa × 2");
+  assert.equal(titrePrestation({ activityTitle: "Promenade en main", quantity: 1 } as any), "Promenade en main");
+});
+
 console.log(`\n✅ ${passes} tests passés\n`);

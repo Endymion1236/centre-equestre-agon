@@ -17,6 +17,11 @@ export interface BasketItem {
   priceTTC: number;
   category?: string;
   compteComptable?: string;
+  /** Quantité (lib/panier-caisse) : priceHT/priceTTC restent les totaux de la ligne. */
+  quantity?: number;
+  /** Prix unitaires, pour la facture (colonne « P.U. HT ») et la saisie du panier. */
+  puHT?: number;
+  puTTC?: number;
 }
 
 export interface Payment {

@@ -19,6 +19,7 @@ import { Card } from "@/components/ui";
 import { Plus, ShoppingCart, Check, Loader2, Search, X, AlertTriangle, CalendarClock } from "lucide-react";
 import type { Family, Activity } from "@/types";
 import { BasketItem, PaymentMode, paymentModes, manualPaymentModes } from "./types";
+import { ajouterAuPanier, changerPrixUnitaire, changerQuantite, ligneAjustable, prixUnitaire } from "@/lib/panier-caisse";
 import { authFetch } from "@/lib/auth-fetch";
 import { refusDateEncaissement } from "@/lib/date-encaissement";
 import { toParisDateString } from "@/lib/date-local";
@@ -164,7 +165,7 @@ export function TabEncaisser({
       const selFam = families.find(f => f.firestoreId === selectedFamily);
       const selChild = (selFam?.children || []).find((c: any) => c.id === selectedChild);
       const childNameLabel = (selChild as any)?.firstName || "—";
-      setBasket([...basket, {
+      setBasket(ajouterAuPanier(basket, {
         id: Date.now().toString(),
         activityTitle: customLabel,
         childId: selectedChild || "",
@@ -175,7 +176,7 @@ export function TabEncaisser({
         priceTTC: price,
         category: customCategory,
         compteComptable: cat?.compte || "708000",
-      }]);
+      }));
       setCustomLabel(""); setCustomPrice(""); return;
     }
     if (!selectedActivity) return;
@@ -185,7 +186,9 @@ export function TabEncaisser({
     const fam = families.find(f => f.firestoreId === selectedFamily);
     const child = (fam?.children || []).find((c: any) => c.id === selectedChild);
     const childName = (child as any)?.firstName || selectedChild || "—";
-    setBasket([...basket, {
+    // Même prestation, même cavalier, même prix : la quantité augmente au lieu
+    // d'une seconde ligne (lib/panier-caisse).
+    setBasket(ajouterAuPanier(basket, {
       id: Date.now().toString(),
       activityTitle: act.title,
       activityId: act.firestoreId,
@@ -196,7 +199,7 @@ export function TabEncaisser({
       priceHT: priceTTC / (1 + ((act as any).tvaTaux ?? 5.5) / 100),
       tva: (act as any).tvaTaux ?? 5.5,
       priceTTC,
-    }]);
+    }));
   };
 
   // Licence, adhésion : ligne avec prix, TVA et compte du produit (lib/produits-annexes).
@@ -205,7 +208,7 @@ export function TabEncaisser({
     const fam = families.find(f => f.firestoreId === selectedFamily);
     const child = (fam?.children || []).find((c: any) => c.id === selectedChild);
     const ligne = ligneProduitAnnexe(p, child ? { id: selectedChild, prenom: (child as any).firstName || "" } : null);
-    setBasket([...basket, { id: `${p.id}-${Date.now()}`, ...ligne, childName: ligne.childName || "—", description: p.label } as any]);
+    setBasket(ajouterAuPanier(basket, { id: `${p.id}-${Date.now()}`, ...ligne, childName: ligne.childName || "—", description: p.label } as any));
   };
 
   const vendreBonCadeau = () => {
@@ -256,6 +259,8 @@ export function TabEncaisser({
   };
 
   const removeFromBasket = (id: string) => setBasket(basket.filter((i) => i.id !== id));
+  // Quantité et prix d'une ligne, modifiables dans le panier (lib/panier-caisse).
+  const modifierLigne = (id: string, f: (l: BasketItem) => BasketItem) => setBasket(basket.map((i) => (i.id === id ? f(i) : i)));
 
   const handlePayment = async () => {
     if (!selectedFamily) {
@@ -529,7 +534,7 @@ export function TabEncaisser({
       // la commande est déjà enregistrée.
       if (envoyer && selectedFam?.parentEmail) {
         const lignesHtml = basket.map(i => emailLigne(
-          `${i.activityTitle}${i.childName ? ` <span style="color:${CE.gris};font-size:12px;">— ${i.childName}</span>` : ""}`,
+          `${i.activityTitle}${(i.quantity || 1) > 1 ? ` × ${i.quantity}` : ""}${i.childName ? ` <span style="color:${CE.gris};font-size:12px;">— ${i.childName}</span>` : ""}`,
           `${i.priceTTC.toFixed(2).replace(".", ",")}&nbsp;€`,
         )).join("");
         const html = emailLayout([
@@ -1336,6 +1341,31 @@ export function TabEncaisser({
                     <div className="font-body text-xs text-slate-600">{item.description}</div>
                   </div>
                   <div className="flex items-center gap-2 ml-2">
+                    {ligneAjustable(item as any) && (
+                      <div className="flex flex-col items-end gap-1">
+                        <div className="flex items-center gap-1" title="Quantité">
+                          <button type="button" aria-label="Retirer un" disabled={(item.quantity || 1) <= 1}
+                            onClick={() => modifierLigne(item.id, (l) => changerQuantite(l as any, (l.quantity || 1) - 1) as any)}
+                            className="w-6 h-6 rounded bg-white border border-gray-200 text-slate-600 cursor-pointer disabled:opacity-40">−</button>
+                          <span className="font-body text-xs font-semibold text-blue-800 w-5 text-center">{item.quantity || 1}</span>
+                          <button type="button" aria-label="Ajouter un"
+                            onClick={() => modifierLigne(item.id, (l) => changerQuantite(l as any, (l.quantity || 1) + 1) as any)}
+                            className="w-6 h-6 rounded bg-white border border-gray-200 text-slate-600 cursor-pointer">+</button>
+                        </div>
+                        <label className="flex items-center gap-1 font-body text-[10px] text-slate-500">
+                          {(item.quantity || 1) > 1 ? "prix unitaire" : "prix"}
+                          <input
+                            // La clé suit le prix : après un « + », le champ montre la valeur à jour.
+                            key={`${item.id}-${prixUnitaire(item as any)}`}
+                            type="number" step="0.01" min="0" inputMode="decimal"
+                            defaultValue={prixUnitaire(item as any).toFixed(2)}
+                            onBlur={(e) => { const v = safeNumber(e.target.value); if (Math.abs(v - prixUnitaire(item as any)) > 0.004) modifierLigne(item.id, (l) => changerPrixUnitaire(l as any, v) as any); }}
+                            onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                            className="w-16 px-1 py-0.5 rounded border border-gray-200 bg-white font-body text-xs text-right text-blue-800" />
+                          €
+                        </label>
+                      </div>
+                    )}
                     <span className="font-body text-sm font-bold text-blue-500">{item.priceTTC.toFixed(2)}€</span>
                     <button type="button" onClick={() => removeFromBasket(item.id)}
                       className="text-slate-400 hover:text-red-500 bg-transparent border-none cursor-pointer">
