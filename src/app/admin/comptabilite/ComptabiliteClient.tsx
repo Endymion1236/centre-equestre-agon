@@ -9,6 +9,7 @@ import { safeNumber } from "@/lib/utils";
 import { Card, Badge } from "@/components/ui";
 import { Loader2, Download, FileText, Building2, Receipt, Calculator, Printer, Sparkles, Bot, EyeOff } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+import { BoutonControleBanque } from "./ControleBanque";
 import { PLAN_COMPTABLE } from "@/lib/ventilation-comptable";
 import PanneauxDebug from "./PanneauxDebug";
 import OngletRemise from "./OngletRemise";
@@ -706,6 +707,8 @@ export default function ComptabilitePage() {
               className="flex items-center gap-2 px-6 py-3 rounded-xl font-body text-sm font-semibold border-none cursor-pointer transition-all bg-blue-500 text-white hover:bg-blue-400">
               <Download size={16} /> Télécharger le FEC — {period}
             </button>
+            {/* Le relevé face à la banque du FEC (demande de la comptable, 11/2026). */}
+            <BoutonControleBanque period={period} />
           </Card>
 
           <Card padding="md">

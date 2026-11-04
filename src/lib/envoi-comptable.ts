@@ -23,6 +23,7 @@ import { genererPdfSyntheseCompta } from "@/lib/compta-synthese-pdf";
 import { adressesComptable, construireColisComptable, corpsEmailComptable, encaissementsDuMois, facturesDuMois, fecDuMois, nomMoisLong, dateFactureSecondes } from "@/lib/envoi-comptable-utils";
 import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 import type { CreditBancaireFec } from "@/lib/fec-achats-banque";
+import { comparerBanque, lignesBanqueDuFec, texteControleBanque, type MouvementReleve } from "@/lib/controle-banque";
 
 export const MOIS_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -121,6 +122,39 @@ export async function chargerFecMois(mois: string) {
     // banque à moitié — le FEC le signale comme incomplet (bloquants).
     achatsBanque: tableau && !tableau.limite ? { debits: tableau.lignes, credits } : null,
   });
+}
+
+/**
+ * Contrôle de banque du mois : les mouvements du relevé (débits du tableau
+ * des opérations, crédits du rapprochement) face au compte 512 du FEC
+ * (lib/controle-banque). Lecture seule.
+ */
+export async function controleBanqueMois(mois: string) {
+  const [fec, tableau, credits] = await Promise.all([
+    chargerFecMois(mois),
+    chargerLignesMois(mois).catch((e) => { console.error("[controle-banque] lignes du mois illisibles", e); return null; }),
+    chargerCreditsReleve(mois),
+  ]);
+  const iso = (d: string) => { const m = String(d || "").match(/^(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(d || "").slice(0, 10); };
+  const debits = (tableau?.lignes || []).filter((l) => (l.mois || l.dateOperation?.slice(0, 7)) === mois && Number(l.montant) > 0 && (!l.source || l.source === "releve-bancaire"));
+  const releve: MouvementReleve[] = [
+    ...debits.map((l) => ({
+      id: `d-${l.id}`, date: l.dateOperation || `${mois}-28`, libelle: String(l.fournisseur || "Débit"), montant: -Math.abs(Number(l.montant)),
+      ...(l.doublonProbable ? { note: "doublon probable du relevé, non repris tant qu'il n'est pas tranché dans Dépenses" } : {}),
+    })),
+    ...credits.filter((c) => Number(c.amount) > 0 && iso(c.date).startsWith(mois)).map((c, i) => ({
+      id: `c-${i}`, date: iso(c.date), libelle: String(c.label || "Crédit"), montant: Number(c.amount),
+      ...(c.matchType === "Ignoré" ? { note: "ligne ignorée au rapprochement" } : !c.matched ? { note: "non rapprochée" } : {}),
+    })),
+  ];
+  const c = comparerBanque(releve, lignesBanqueDuFec(fec.contenu));
+  return {
+    mois, ...c,
+    releveImporte: { debits: debits.length, credits: releve.length - debits.length },
+    tableauIncomplet: !tableau || !!tableau.limite,
+    bloquants: fec.bloquants,
+    texte: texteControleBanque(mois, c),
+  };
 }
 
 export async function envoyerEcrituresComptable(params: {
