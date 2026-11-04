@@ -54,7 +54,7 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
   };
 
   // Rattraper une contre-passation faite par erreur : l'écriture d'origine est
-  // réenregistrée à sa date (nouvelle écriture chaînée, rien n'est effacé).
+  // réenregistrée aujourd'hui (nouvelle écriture chaînée, rien n'est effacé).
   const retablir = async (cp: any) => {
     const commande = cp.paymentId ? payments.find((p: any) => p.id === cp.paymentId) : null;
     const verdict = peutRetablir(cp, encaissements, commande);
@@ -65,7 +65,7 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
       `Rétablir l'écriture annulée par erreur ?\n\n`
       + `${o.familyName || ""} · ${(Number(o.montant) || 0).toFixed(2)} € · ${o.modeLabel || o.mode}${dateOrigine ? ` du ${dateOrigine.toLocaleDateString("fr-FR")}` : ""}${commande?.invoiceNumber ? ` · facture ${commande.invoiceNumber}` : ""}\n`
       + `${o.ref ? `Réf. ${o.ref}\n` : ""}\n`
-      + `Une nouvelle écriture identique est enregistrée à la même date ; l'originale et sa contre-passation restent visibles.`,
+      + `Une nouvelle écriture identique est enregistrée aujourd'hui (une correction ne retouche jamais un mois passé, déjà transmis au cabinet) ; l'originale et sa contre-passation restent visibles.`,
     )) return;
     setRetablissement(cp.id);
     try {
@@ -73,9 +73,11 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
         paymentId: o.paymentId, familyId: o.familyId, familyName: o.familyName,
         montant: Number(o.montant) || 0, mode: o.mode, modeLabel: o.modeLabel || o.mode,
         ref: o.ref || "", activityTitle: o.activityTitle,
-        raison: "Rétablissement : contre-passation faite par erreur",
+        raison: `Rétablissement : contre-passation faite par erreur${dateOrigine ? ` (écriture d'origine du ${dateOrigine.toLocaleDateString("fr-FR")})` : ""}`,
         retablitDe: cp.id,
-        ...(dateOrigine ? { explicitDate: dateOrigine } : {}),
+        // Datée d'aujourd'hui, comme la contre-passation qu'elle rattrape : à la
+        // date d'origine, elle modifiait un mois déjà transmis au cabinet
+        // (GAGNARD, septembre 2026).
         // Une écriture née d'une ligne du relevé la garde : la ligne reste « encaissée ».
         ...(o.bankLineKey ? { bankLineKey: o.bankLineKey, bankLineLabel: o.bankLineLabel || "" } : {}),
       });
@@ -213,7 +215,7 @@ export function TabJournal({ loading, payments, encaissements, toast, refreshAll
                                 const v = peutRetablir(encaissement, encaissements, encaissement.paymentId ? payments.find((p: any) => p.id === encaissement.paymentId) : null);
                                 return !v.ok ? <span className="font-body text-[10px] text-slate-400" title={v.raison}>annulation justifiée</span> : null;
                               })() || <button type="button" disabled={retablissement === encaissement.id} onClick={() => retablir(encaissement)}
-                                title="Contre-passation faite par erreur : réenregistrer l'écriture d'origine à sa date"
+                                title="Contre-passation faite par erreur : réenregistrer l'écriture d'origine, datée d'aujourd'hui"
                                 className="font-body text-[10px] text-blue-600 bg-blue-50 px-2 py-1 rounded border-none cursor-pointer hover:bg-blue-100 disabled:opacity-50">
                                 {retablissement === encaissement.id ? "…" : "Rétablir"}
                               </button>
