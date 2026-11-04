@@ -85,11 +85,11 @@ test("le résumé compte ce qui part", () => {
     nbFactures: 1, totalTTC: 300, totalHT: 250,
     nbEncaissements: 2, totalEncaisse: 250,
     nbDepenses: 1, totalDepenses: 420.5,
-    // Le FEC : la facture Enaux (VE) et ses deux règlements du mois (RG),
-    // virement et contre-passation, tous deux au compte bancaire du cabinet.
+    // Le FEC : la facture Enaux (VE), son virement (RG) et, au journal OD, la
+    // contre-passation et la TVA rendue exigible par le virement.
     // Sans tableau des opérations, le FEC n'a ni achats ni banque : il est
     // marqué incomplet et l'envoi au cabinet serait refusé.
-    fec: { fichier: "FEC_202609.txt", source: "application", ecrituresVentes: 1, ecrituresReglements: 2, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [SANS_TABLEAU], nbAnomalies: 1,
+    fec: { fichier: "FEC_202609.txt", source: "application", ecrituresVentes: 1, ecrituresReglements: 1, ecrituresOd: 2, ecrituresAchats: 0, ecrituresBanque: 0, anomalies: [SANS_TABLEAU], nbAnomalies: 1,
       // TVA sur les encaissements : le compte de TVA en attente est soumis au cabinet.
       comptesAConfirmer: [{ compte: "44574000", libelle: "TVA collectée en attente d'encaissement" }], bloquants: [SANS_TABLEAU] },
   });

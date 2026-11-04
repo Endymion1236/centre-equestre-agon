@@ -242,7 +242,8 @@ test("FEC complet : VE + RG + HA + BQ, structure conforme et écritures équilib
   });
   assert.deepEqual(controlerStructureFec(f.contenu), []);
   const journaux = new Set(f.contenu.trim().split("\n").slice(1).map((l) => l.split("\t")[0]));
-  assert.deepEqual([...journaux].sort(), ["BQ", "HA", "RG", "VE"]);
+  // OD : la TVA rendue exigible par le règlement (44574000 → 4457x).
+  assert.deepEqual([...journaux].sort(), ["BQ", "HA", "OD", "RG", "VE"]);
   assert.equal(f.ecrituresAchats, 1);
   assert.equal(f.ecrituresBanque, 3);
   // Numéros d'écriture uniques dans tout le fichier.

@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   try {
     const fec = await chargerFecMois(mois);
     return NextResponse.json({ fichier: fec.fichier, contenu: fec.contenu, source: fec.source,
-      ecrituresVentes: fec.ecrituresVentes, ecrituresReglements: fec.ecrituresReglements, ecrituresAchats: fec.ecrituresAchats, ecrituresBanque: fec.ecrituresBanque, anomalies: fec.anomalies, bloquants: fec.bloquants, compteAttente: fec.compteAttente, attente: fec.attente },
+      ecrituresVentes: fec.ecrituresVentes, ecrituresReglements: fec.ecrituresReglements, ecrituresOd: fec.ecrituresOd, ecrituresAchats: fec.ecrituresAchats, ecrituresBanque: fec.ecrituresBanque, anomalies: fec.anomalies, bloquants: fec.bloquants, compteAttente: fec.compteAttente, attente: fec.attente },
       { headers: { "Cache-Control": "private, no-store" } });
   } catch (e) {
     console.error("[fec]", e);

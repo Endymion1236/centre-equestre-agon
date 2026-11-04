@@ -68,6 +68,15 @@ export const COMPTE_BANQUE: CompteFec = { compte: "51200000", libelle: "Crédit 
 export const COMPTE_VIREMENTS_INTERNES: CompteFec = { compte: "58000000", libelle: "Virements internes" };
 
 const JOURNAL_REGLEMENTS = { code: "RG", libelle: "Règlements clients" };
+/**
+ * Opérations diverses (novembre 2026, à la demande de Nicolas après la
+ * question du cabinet) : ce qui corrige ou reclasse, sans être un règlement
+ * reçu. Contre-passations (rejets compris), rétablissements, avoirs imputés
+ * sur une facture, et la TVA rendue exigible par un règlement (44574000 →
+ * 4457x). Chaque écriture y garde sa pièce, sa date et son équilibre.
+ */
+export const JOURNAL_OD = { code: "OD", libelle: "Opérations diverses" };
+type LigneSansNumero = Omit<Parameters<typeof ligneFec>[0], "numero" | "journal">;
 
 const JOUR_PARIS = new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" });
 function dateFec(secondes: number | undefined, repli: Date): string {
@@ -137,6 +146,8 @@ export interface EncaissementFec {
   isVersementBanque?: boolean;
   isApportCaisse?: boolean;
   correctionDe?: string;
+  /** Rétablissement d'une contre-passation faite par erreur (Journal → « Rétablir »). */
+  retablitDe?: string;
 }
 
 export interface ResultatFecComplet {
@@ -145,6 +156,8 @@ export interface ResultatFecComplet {
   resume: {
     ventes: { ecritures: number; totalTTC: number };
     reglements: { ecritures: number; total: number };
+    /** Opérations diverses : contre-passations, rétablissements, avoirs imputés, TVA rendue exigible. */
+    od: { ecritures: number };
     /** Comptes de trésorerie employés et encore à confirmer par le cabinet. */
     comptesAConfirmer: CompteFec[];
     /** Montants passés au 47100000 « à ventiler » (euros, débits + crédits). */
@@ -212,6 +225,8 @@ export function construireFecComplet(params: {
     .filter((x) => x.paymentId === e.paymentId && (x.id && e.id ? x.id !== e.id : x !== e) && avant(x, e) < 0)
     .reduce((s, x) => s + Math.round((Number(x.montant) || 0) * 100), 0);
   const tries = [...params.encaissements].sort((a, b) => (a.date?.seconds || 0) - (b.date?.seconds || 0));
+  // Écritures OD, numérotées après les règlements : chaque journal garde des numéros qui se suivent.
+  const ecrituresOd: LigneSansNumero[][] = [];
   for (const e of tries) {
     const centimes = Math.round((Number(e.montant) || 0) * 100);
     if (centimes === 0) continue;
@@ -249,8 +264,13 @@ export function construireFecComplet(params: {
     const [compteDebit, compteCredit] = sensFixe || centimes > 0 ? [debit, credit] : [credit, debit];
     const auxDebit = compteDebit === COMPTE_CLIENTS ? aux : {};
     const auxCredit = compteCredit === COMPTE_CLIENTS ? aux : {};
-    lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: compteDebit, piece, libelle, debit: m, ...auxDebit }));
-    lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: compteCredit, piece, libelle, credit: m, ...auxCredit }));
+    const enOd = !sensFixe && (!!e.correctionDe || !!e.retablitDe || e.mode === "avoir");
+    const principale: LigneSansNumero[] = [
+      { date, compte: compteDebit, piece, libelle, debit: m, ...auxDebit },
+      { date, compte: compteCredit, piece, libelle, credit: m, ...auxCredit },
+    ];
+    // TVA exigible : dans l'écriture OD de la correction, ou dans une OD à elle pour un règlement.
+    const tvaLignes: LigneSansNumero[] = [];
 
     // TVA devenue exigible avec ce règlement : 44574000 → 4457x du taux.
     if (tvaEnc && !sensFixe && e.mode !== "avoir") {
@@ -261,31 +281,44 @@ export function construireFecComplet(params: {
       } else if (!(moisFacture && moisCeleris.has(moisFacture))) {
         for (const [taux, tva] of tvaDuReglement(facture, centimes, dejaRecu(e))) {
           const lib = `TVA ${taux}% exigible — ${propre(e.familyName)}`;
-          lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: COMPTE_TVA_EN_ATTENTE, piece, libelle: lib, ...cote(tva, "debit") }));
-          lignesRg.push(ligneFec({ journal: JOURNAL_REGLEMENTS, numero, date, compte: compteTvaCollectee(taux), piece, libelle: lib, ...cote(tva, "credit") }));
+          tvaLignes.push({ date, compte: COMPTE_TVA_EN_ATTENTE, piece, libelle: lib, ...cote(tva, "debit") });
+          tvaLignes.push({ date, compte: compteTvaCollectee(taux), piece, libelle: lib, ...cote(tva, "credit") });
         }
       }
     }
+    if (enOd) {
+      ecrituresOd.push([...principale, ...tvaLignes]);
+    } else {
+      for (const l of principale) lignesRg.push(ligneFec({ ...l, journal: JOURNAL_REGLEMENTS, numero }));
+      numero++;
+      if (tvaLignes.length) ecrituresOd.push(tvaLignes);
+    }
     if (!e.isVersementBanque && !e.isApportCaisse) totalRg += centimes;
+  }
+  const nbRg = numero - debut;
+  const lignesOd: string[] = [];
+  for (const ecriture of ecrituresOd) {
+    for (const l of ecriture) lignesOd.push(ligneFec({ ...l, journal: JOURNAL_OD, numero }));
     numero++;
   }
 
   // Compte de TVA en attente : nouveau dans le plan du cabinet, à valider.
-  if (tvaEnc && [...ventes.lignes, ...lignesRg].some((l) => l.split("\t")[4] === COMPTE_TVA_EN_ATTENTE.compte)) {
+  if (tvaEnc && [...ventes.lignes, ...lignesRg, ...lignesOd].some((l) => l.split("\t")[4] === COMPTE_TVA_EN_ATTENTE.compte)) {
     comptesUtilises.set(COMPTE_TVA_EN_ATTENTE.compte, COMPTE_TVA_EN_ATTENTE);
   }
   // Tout ce qui est parti au compte d'attente : à traiter avant de clôturer.
-  const compteAttente = [...ventes.lignes, ...lignesRg]
+  const compteAttente = [...ventes.lignes, ...lignesRg, ...lignesOd]
     .map((l) => l.split("\t"))
     .filter((c) => c[4] === COMPTE_ATTENTE.compte)
     .reduce((s, c) => s + centimesFec(c[11]) + centimesFec(c[12]), 0) / 100;
   const totalTTC = params.factures.reduce((s, f) => s + Math.round((Number(f.totalTTC) || 0) * 100), 0);
   return {
-    contenu: [ENTETE_FEC, ...ventes.lignes, ...lignesRg].join("\n") + "\n",
+    contenu: [ENTETE_FEC, ...ventes.lignes, ...lignesRg, ...lignesOd].join("\n") + "\n",
     anomalies,
     resume: {
       ventes: { ecritures: ventes.nbEcritures, totalTTC: totalTTC / 100 },
-      reglements: { ecritures: numero - debut, total: totalRg / 100 },
+      reglements: { ecritures: nbRg, total: totalRg / 100 },
+      od: { ecritures: ecrituresOd.length },
       comptesAConfirmer: [...comptesUtilises.values()],
       compteAttente,
     },

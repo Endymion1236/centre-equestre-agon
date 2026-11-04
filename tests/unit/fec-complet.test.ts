@@ -80,13 +80,26 @@ test("virement : banque au débit, client au crédit, pièce = facture", () => {
   assert.equal(cols(rg[1])[6], "Enaux", "compte auxiliaire du client");
 });
 
-test("chèque au 51120000 ; une contre-passation inverse les sens", () => {
-  const rg = lignes.filter((l) => cols(l)[0] === "RG" && cols(l)[8] === "F-2026-0102");
-  assert.deepEqual(rg.map((l) => [cols(l)[4], cols(l)[11], cols(l)[12]]), [
-    ["51120000", "107,00", ""], ["41100000", "", "107,00"],
-    ["41100000", "7,00", ""], ["51120000", "", "7,00"],
-  ]);
-  assert.match(cols(rg[2])[10], /^Contre-passation/);
+test("chèque au 51120000 ; une contre-passation inverse les sens, au journal OD", () => {
+  const piece = (j: string) => lignes.filter((l) => cols(l)[0] === j && cols(l)[8] === "F-2026-0102");
+  assert.deepEqual(piece("RG").map((l) => [cols(l)[4], cols(l)[11], cols(l)[12]]), [["51120000", "107,00", ""], ["41100000", "", "107,00"]]);
+  const od = piece("OD");
+  assert.deepEqual(od.map((l) => [cols(l)[4], cols(l)[11], cols(l)[12]]), [["41100000", "7,00", ""], ["51120000", "", "7,00"]]);
+  assert.match(cols(od[0])[10], /^Contre-passation/);
+  assert.equal(cols(od[0])[1], "Opérations diverses");
+});
+
+test("journal OD : numéros à la suite des règlements, chaque écriture équilibrée", () => {
+  const num = (j: string) => [...new Set(lignes.filter((l) => cols(l)[0] === j).map((l) => Number(cols(l)[2])))].sort((a, b) => a - b);
+  const rg = num("RG"), od = num("OD");
+  assert.ok(od.length > 0);
+  assert.ok(Math.min(...od) > Math.max(...rg));
+  od.forEach((n, i) => assert.equal(n, od[0] + i));
+  for (const n of od) {
+    const l = lignes.filter((x) => cols(x)[0] === "OD" && Number(cols(x)[2]) === n);
+    const c = (v: string) => Math.round(Number((v || "0").replace(",", ".")) * 100);
+    assert.equal(l.reduce((t, x) => t + c(cols(x)[11]) - c(cols(x)[12]), 0), 0);
+  }
 });
 
 test("versement d'espèces en banque : banque au débit, caisse au crédit, sans client", () => {
@@ -102,7 +115,9 @@ test("mode inconnu : compte d'attente, signalé ; comptes à confirmer listés",
 
 test("résumé : écritures et totaux", () => {
   assert.equal(fec.resume.ventes.ecritures, 3);
-  assert.equal(fec.resume.reglements.ecritures, 5);
+  // Les règlements reçus ; la contre-passation est au journal OD.
+  assert.equal(fec.resume.reglements.ecritures, 4);
+  assert.equal(fec.resume.od.ecritures, 1);
   assert.equal(fec.resume.reglements.total, 436.5);
 });
 

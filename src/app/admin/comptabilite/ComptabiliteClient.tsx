@@ -311,7 +311,7 @@ export default function ComptabilitePage() {
   // Ce que contiendra le FEC du mois, demandé au serveur : le compte des
   // paiements de l'écran ignorait les écritures Céleris (juillet-août 2026)
   // et affichait « 0 paiements » pour un fichier qui n'est pas vide.
-  const [apercuFec, setApercuFec] = useState<{ mois: string; source?: string; ventes?: number; reglements?: number; achats?: number; banque?: number; erreur?: string } | null>(null);
+  const [apercuFec, setApercuFec] = useState<{ mois: string; source?: string; ventes?: number; reglements?: number; od?: number; achats?: number; banque?: number; erreur?: string } | null>(null);
   useEffect(() => {
     if (tab !== "fec") return;
     let actif = true;
@@ -321,7 +321,7 @@ export default function ComptabilitePage() {
         const data = await res.json().catch(() => null);
         if (!actif) return;
         if (!res.ok || !data) { setApercuFec({ mois: period, erreur: data?.error || `erreur ${res.status}` }); return; }
-        setApercuFec({ mois: period, source: data.source, ventes: data.ecrituresVentes ?? 0, reglements: data.ecrituresReglements ?? 0, achats: data.ecrituresAchats ?? 0, banque: data.ecrituresBanque ?? 0 });
+        setApercuFec({ mois: period, source: data.source, ventes: data.ecrituresVentes ?? 0, reglements: data.ecrituresReglements ?? 0, od: data.ecrituresOd ?? 0, achats: data.ecrituresAchats ?? 0, banque: data.ecrituresBanque ?? 0 });
       })
       .catch((e) => { if (actif) setApercuFec({ mois: period, erreur: e?.message || "erreur réseau" }); });
     return () => { actif = false; };
@@ -692,8 +692,8 @@ export default function ComptabilitePage() {
                   {!apercuFec || apercuFec.mois !== period ? "calcul…"
                     : apercuFec.erreur ? `indisponible (${apercuFec.erreur})`
                     : apercuFec.source === "celeris" ? `${apercuFec.ventes} écritures reprises de Céleris + ${apercuFec.achats || 0} achats (HA) + ${apercuFec.banque || 0} mouvements de banque (BQ)`
-                    : (apercuFec.ventes || 0) + (apercuFec.reglements || 0) + (apercuFec.achats || 0) + (apercuFec.banque || 0) === 0 ? "aucune écriture ce mois-ci"
-                    : `${apercuFec.ventes} factures (VE) + ${apercuFec.reglements} règlements (RG) + ${apercuFec.achats || 0} achats (HA) + ${apercuFec.banque || 0} mouvements de banque (BQ)`}
+                    : (apercuFec.ventes || 0) + (apercuFec.reglements || 0) + (apercuFec.od || 0) + (apercuFec.achats || 0) + (apercuFec.banque || 0) === 0 ? "aucune écriture ce mois-ci"
+                    : `${apercuFec.ventes} factures (VE) + ${apercuFec.reglements} règlements (RG) + ${apercuFec.od || 0} opérations diverses (OD) + ${apercuFec.achats || 0} achats (HA) + ${apercuFec.banque || 0} mouvements de banque (BQ)`}
                 </div>
               </div>
               <div>
