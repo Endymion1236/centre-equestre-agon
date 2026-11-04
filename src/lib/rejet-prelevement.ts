@@ -32,8 +32,7 @@ export interface RejetEnregistre {
 /** Les rejets du journal : écritures négatives qui annulent un prélèvement (raison « Rejet bancaire… »). */
 export function rejetsDuJournal(encaissements: any[], dateIso: (e: any) => string | null): RejetEnregistre[] {
   return (encaissements || [])
-    .filter((e) => e?.correctionDe && Number(e.montant) < 0
-      && (/rejet bancaire/i.test(String(e.raison || "")) || /^(prelevement_sepa|sepa)$/.test(String(e.mode || ""))))
+    .filter((e) => estAnnulationRejet(e))
     .map((e) => ({ id: String(e.id || ""), montant: Math.round(Math.abs(Number(e.montant)) * 100) / 100, dateIso: dateIso(e) || "", familyName: e.familyName || "" }))
     .filter((r) => r.montant > 0 && /^\d{4}-\d{2}-\d{2}$/.test(r.dateIso));
 }
@@ -62,3 +61,20 @@ export function apparierRejets(
   }
   return res;
 }
+
+/**
+ * Compte de liaison des prélèvements rejetés (58000000). La banque sort
+ * l'argent à la DATE DU RELEVÉ (journal BQ : 580 au débit, 512 au crédit) ;
+ * l'annulation de l'encaissement, faite quand on clique « Rejeté » (parfois le
+ * mois suivant), solde la liaison (journal RG : 411 au débit, 580 au crédit).
+ * Chaque mois, la banque du FEC suit ainsi le relevé (SAMSON, octobre 2026 :
+ * rejet du 30/10 enregistré en novembre, 55 € d'écart en octobre).
+ */
+export const COMPTE_LIAISON_REJETS = { compte: "58000000", libelle: "Virements internes" };
+
+/** Écriture du journal qui annule un prélèvement rejeté (bouton « Rejeté » de l'écran SEPA). */
+// Seule l'annulation créée par le bouton « Rejeté » (raison « Rejet bancaire
+// du prélèvement… ») : une correction ordinaire d'un prélèvement au journal
+// (DUHEM, 05/10/2026 : annulée puis ressaisie le même jour) reste en banque.
+export const estAnnulationRejet = (e: any): boolean =>
+  !!e?.correctionDe && Number(e?.montant) < 0 && /rejet bancaire/i.test(String(e?.raison || ""));

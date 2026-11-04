@@ -44,7 +44,7 @@ import { ventilerDepense, compteFournisseur, COMPTES } from "./plan-comptable-ac
 import { banqueDepense } from "./banque-depense";
 import { tvaJustifiee, type LigneMois } from "./bilan-justificatifs";
 import { COMPTES_REGLEMENT, COMPTE_ATTENTE, euros, ligneFec, propre, type CompteFec } from "./fec-complet";
-import { apparierRejets, estRejetPrelevement, type RejetEnregistre } from "@/lib/rejet-prelevement";
+import { apparierRejets, COMPTE_LIAISON_REJETS, estRejetPrelevement, type RejetEnregistre } from "@/lib/rejet-prelevement";
 
 export const JOURNAL_ACHATS = { code: "HA", libelle: "Achats" };
 export const JOURNAL_BANQUE = { code: "BQ", libelle: "Banque" };
@@ -219,10 +219,19 @@ export function construireAchatsBanque(params: {
     const fournisseurTexte = propre(l.fournisseur) || "Sans libellé";
     if (rejetsDuReleve.has(l.id) && !l.doublonProbable) {
       const montantRejet = cents(l.montant);
-      if (rejetsDuReleve.get(l.id)) continue; // déjà sorti de la banque par l'annulation du prélèvement (RG)
+      const dateRejet = dateReleveFec(l.dateOperation || "") || finDeMois;
+      const rejet = rejetsDuReleve.get(l.id);
+      if (rejet) {
+        // Rejet enregistré : la banque sort l'argent ici, à la date du relevé,
+        // contre le compte de liaison que l'annulation de l'encaissement (RG) solde.
+        const lib = `Prélèvement rejeté — ${propre(rejet.familyName) || fournisseurTexte}`;
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date: dateRejet, compte: COMPTE_LIAISON_REJETS, piece: `REL-${dateRejet}-${numero}`, libelle: lib, debit: montantRejet }));
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date: dateRejet, compte: BANQUE_PAR_DEFAUT, piece: `REL-${dateRejet}-${numero}`, libelle: lib, credit: montantRejet }));
+        numero++; nbBq++;
+        continue;
+      }
       // Rejet pas encore enregistré : la sortie de banque est passée ici, au
       // compte d'attente, jamais en charge.
-      const dateRejet = dateReleveFec(l.dateOperation || "") || finDeMois;
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date: dateRejet, compte: COMPTE_ATTENTE, piece: `REL-${dateRejet}-${numero}`, libelle: `Prélèvement rejeté — ${fournisseurTexte}`, debit: montantRejet }));
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date: dateRejet, compte: BANQUE_PAR_DEFAUT, piece: `REL-${dateRejet}-${numero}`, libelle: `Prélèvement rejeté — ${fournisseurTexte}`, credit: montantRejet }));
       numero++; nbBq++; attente += montantRejet; attenteDebits += montantRejet;
@@ -348,6 +357,21 @@ export function construireAchatsBanque(params: {
       else if (t.compte) parts.set(t.compte.compte, net);
       else inconnu = net;
     }
+    // Une remise CARTE ne contient ni espèces, ni virement, ni prélèvement :
+    // de telles écritures rattachées à elle sont mal saisies (mode) ou mal
+    // rapprochées. Les tenir pour « déjà en banque » faisait passer la remise
+    // pour moins que ce que la banque a crédité (13/10/2026 : 1 231,20 € au
+    // relevé, 1 081,20 € au FEC). La remise passe en entier, l'écart au 47100000.
+    let carteSuspecte = false;
+    const seulementCarte = parts.size > 0 && [...parts.keys()].every((k) => k === COMPTES_REGLEMENT.cb_terminal.compte);
+    if (seulementCarte && dejaRg > 0) {
+      const suspectes = encs.filter((e) => { const m = codeModeRapproche(e.mode); return MODES_DEJA_EN_BANQUE.has(m) || m === "especes"; })
+        .map((e) => `${propre(e.familyName) || "?"} ${euros(cents(e.montant))} € (${propre(e.mode) || "?"})`).slice(0, 6).join(", ");
+      anomalies.push(`Remise carte du ${jj} (${euros(net)} €) rapprochée à ${euros(dejaRg)} € d'écritures en espèces, virement ou prélèvement : ${suspectes}. Mode de paiement à corriger au journal (CB) ou rapprochement à revoir ; passé au 47100000 en attendant.`);
+      inconnu += dejaRg;
+      dejaRg = 0;
+      carteSuspecte = true;
+    }
     if (parts.size === 0 && inconnu === 0) { dejaEnBanque++; continue; }
     const enBanque = net - dejaRg;
     if (enBanque <= 0) { anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : écritures rapprochées supérieures au crédit, à revoir dans le rapprochement.`); continue; }
@@ -358,7 +382,14 @@ export function construireAchatsBanque(params: {
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: { compte, libelle: def.libelle }, piece, libelle, credit: montant }));
       solde += montant;
     }
-    if (inconnu) { versAttente(inconnu, encs.length ? "rapproché à des écritures de mode inconnu" : "d'origine indéterminée"); solde += inconnu; }
+    if (inconnu) {
+      if (carteSuspecte) {
+        // Déjà expliqué plus haut : la ligne au 47100000, sans second message.
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: COMPTE_ATTENTE, piece, libelle: `Écritures à revoir — ${libelle}`, credit: inconnu }));
+        attente += inconnu;
+      } else versAttente(inconnu, encs.length ? "rapproché à des écritures de mode inconnu" : "d'origine indéterminée");
+      solde += inconnu;
+    }
     // Brut des écritures soldées ; la différence avec le net reçu est la commission.
     const ecart = solde - enBanque;
     if (ecart > 0) {

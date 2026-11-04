@@ -31,6 +31,7 @@
 import { analyserFecVentes, COMPTE_ATTENTE as ATTENTE, COMPTE_TVA_EN_ATTENTE, compteTvaCollectee, cote, ENTETE_FEC, type PaiementFec } from "@/app/admin/comptabilite/fec-utils";
 import { lignesAuTotal } from "@/lib/lignes-facture";
 import { compteDeLigne, libelleCompte, NON_VENTILE, type ReglesVentilation } from "@/lib/ventilation-comptable";
+import { COMPTE_LIAISON_REJETS, estAnnulationRejet } from "@/lib/rejet-prelevement";
 
 export interface CompteFec { compte: string; libelle: string }
 
@@ -226,7 +227,9 @@ export function construireFecComplet(params: {
       libelle = "Apport en caisse";
       anomalies.push(`Apport en caisse du ${date.slice(6)}/${date.slice(4, 6)} passé en 58000000 : origine des fonds à confirmer.`);
     } else {
-      const tresorerie = COMPTES_REGLEMENT[e.mode || ""];
+      // Prélèvement rejeté : l'annulation solde le compte de liaison, la sortie
+      // de banque est passée au journal BQ à la date du relevé (lib/rejet-prelevement).
+      const tresorerie = estAnnulationRejet(e) ? COMPTE_LIAISON_REJETS : COMPTES_REGLEMENT[e.mode || ""];
       debit = tresorerie || COMPTE_ATTENTE;
       if (!tresorerie) anomalies.push(`Règlement de ${propre(e.familyName) || "?"} (${euros(Math.abs(centimes))} €) : mode « ${e.mode || "?"} » inconnu, passé au 47100000.`);
       credit = COMPTE_CLIENTS;

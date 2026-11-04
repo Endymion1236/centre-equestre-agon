@@ -3,6 +3,7 @@
  */
 import assert from "node:assert/strict";
 import { apparierRejets, estRejetPrelevement, rejetsDuJournal } from "../../src/lib/rejet-prelevement";
+import { fecDuMois } from "../../src/lib/envoi-comptable-utils";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -25,6 +26,8 @@ test("les rejets du journal : contre-passations d'un prélèvement, en positif",
     { id: "vente", montant: 55, mode: "prelevement_sepa", dateIso: "2026-10-28" },
   ], dateDe);
   assert.deepEqual(r.map((x) => [x.id, x.montant]), [["cp", 55]]);
+  const correction = { id: "duhem", correctionDe: "z", montant: -650, mode: "prelevement_sepa", raison: "Correction : erreur de montant", dateIso: "2026-10-05" };
+  assert.equal(rejetsDuJournal([correction], dateDe).length, 0, "une correction ordinaire n'est pas un rejet bancaire");
 });
 
 test("SAMSON : la ligne « impayé » retrouve son rejet ; un 2e impayé du même montant sans rejet reste seul", () => {
@@ -36,6 +39,16 @@ test("SAMSON : la ligne « impayé » retrouve son rejet ; un 2e impayé du mêm
   assert.equal(m.get("l1")?.id, "cp");
   assert.equal(m.get("l2"), null);
   assert.equal(apparierRejets([{ id: "l", montant: 55, dateOperation: "2026-06-01" }], rejets).get("l"), null, "plus de 60 jours : pas lié");
+});
+
+test("l'annulation d'un rejet (journal RG) solde la liaison 58000000, jamais la banque", () => {
+  const cp = { id: "cp", paymentId: "p1", familyName: "SAMSON", montant: -55, mode: "prelevement_sepa", modeLabel: "ANNUL. Prélèvement SEPA",
+    correctionDe: "e1", raison: "Rejet bancaire du prélèvement du 28/10/2026", date: { seconds: Date.parse("2026-11-01T10:00:00Z") / 1000 } };
+  const f = fecDuMois({ mois: "2026-11", factures: [], encaissements: [cp], payments: [], achatsBanque: { debits: [], credits: [] } });
+  const rg = f.contenu.split("\n").map((l) => l.split("\t")).filter((c) => c[0] === "RG");
+  assert.ok(rg.some((c) => c[4] === "58000000" && c[12] === "55,00"), "liaison au crédit");
+  assert.ok(rg.some((c) => c[4] === "41100000" && c[11] === "55,00"), "client au débit");
+  assert.ok(!rg.some((c) => c[4] === "51200000"), "la banque n'est pas touchée en RG");
 });
 
 if (process.exitCode) { console.error("❌ échec"); } else console.log(`✅ ${passes} tests passés`);

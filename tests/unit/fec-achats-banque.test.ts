@@ -76,14 +76,27 @@ test("chaque ligne fournisseur porte son tiers (FEC-Expert, 11/2026), le compte 
   assert.deepEqual(controlerStructureFec([ENTETE_FEC, ...r.lignes].join("\n") + "\n"), []);
 });
 
-test("prélèvement rejeté (SAMSON, 11/2026) : pas repris si le rejet est enregistré, sinon au 47100000, jamais en charge", () => {
+test("prélèvement rejeté (SAMSON, 11/2026) : à la date du relevé, contre la liaison si le rejet est enregistré, sinon au 47100000, jamais en charge", () => {
   const impaye = debit({ id: "imp", mois: "2026-10", dateOperation: "2026-10-30", fournisseur: "Impayé Prel Mr Samson Mickael", poste: "Frais bancaires", montant: 55 });
   const avec = construireAchatsBanque({ mois: "2026-10", numeroDepart: 1, credits: [], debits: [impaye], rejets: [{ id: "cp", montant: 55, dateIso: "2026-11-01" }] });
-  assert.equal(avec.lignes.length, 0, "l'annulation du prélèvement (RG) sort déjà l'argent de la banque");
+  // Rejet enregistré : la banque sort à la date du relevé, contre le compte de liaison que l'annulation (RG) solde.
+  assert.deepEqual(resume(ecriture(avec.lignes, "BQ", 1)), ["58000000 D55,00", "51200000 C55,00"]);
+  assert.equal(ecriture(avec.lignes, "BQ", 1)[0][3], "20261030", "à la date du relevé");
   const sans = construireAchatsBanque({ mois: "2026-10", numeroDepart: 1, credits: [], debits: [impaye], rejets: [] });
   assert.deepEqual(resume(ecriture(sans.lignes, "BQ", 1)), ["47100000 D55,00", "51200000 C55,00"]);
   assert.ok(sans.anomalies.some((a) => /bouton « Rejeté »/.test(a)));
   assert.equal(sans.compteAttente, 55);
+});
+
+test("remise carte rapprochée à une écriture en espèces (13/10/2026) : la remise passe en entier, l'écart au 47100000", () => {
+  const credit = { date: "13/10/2026", label: "Remise carte CARTE 8067954 001 195811 13/10", amount: 1231.2, matched: true, matchType: "CB terminal",
+    matchedEncs: [{ familyName: "Famille A", montant: 1081.2, mode: "cb_terminal", date: "13/10/2026" }, { familyName: "Famille B", montant: 150, mode: "especes", date: "13/10/2026" }] };
+  const r = construireAchatsBanque({ mois: "2026-10", numeroDepart: 1, debits: [], credits: [credit as any] });
+  const bq = resume(ecriture(r.lignes, "BQ", 1));
+  assert.ok(bq.includes("51200000 D1231,20"), bq.join(" | "));
+  assert.ok(bq.includes("51150000 C1081,20"));
+  assert.ok(bq.includes("47100000 C150,00"));
+  assert.equal(r.anomalies.filter((a) => /Famille B/.test(a)).length, 1, "un seul message, qui nomme l'écriture");
 });
 
 test("facture postérieure au débit (acompte) : datée du débit", () => {
