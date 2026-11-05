@@ -12,9 +12,10 @@ test("les subdivisions précises priment sur les mots génériques", () => {
     ["Autres dépenses", "Edenred tickets restaurants", "64700000"],
     ["Autres dépenses", "Ticket resto", "64700000"],
     ["Autres dépenses", "Ticket restaurant", "64700000"],
-    ["Autres dépenses", "Restaurant la Cale", "62570000"],
-    ["Autres dépenses", "Orange mobile", "62630000"],
-    ["Autres dépenses", "Orange fibre", "62640000"],
+    // Règles du cabinet (05/11/2026) : repas seul en 625600 ; Orange en 626200.
+    ["Autres dépenses", "Restaurant la Cale", "62560000"],
+    ["Autres dépenses", "Orange mobile", "62620000"],
+    ["Autres dépenses", "Orange fibre", "62620000"],
     ["Frais bancaires & commissions (CB, Stripe)", "Commission vente à distance", "62710000"],
     ["Frais bancaires & commissions (CB, Stripe)", "Commission vente distance", "62710000"],
   ];
@@ -56,4 +57,28 @@ test("les comptes fournisseurs sont reconnus sans inventer un compte divers", ()
   assert.equal(compteFournisseur("Inconnu").compte, "40100000");
   assert.equal(compteFournisseur("Inconnu").collectif, true);
   assert.equal(compteFournisseur("Agrial").collectif, undefined);
+});
+
+test("comptes donnés par la comptable fournisseur par fournisseur (05/11/2026)", () => {
+  const cas: [string, string, string][] = [
+    ["Autres dépenses", "HELLOASSO", "62800000"],
+    ["Informatique, logiciels & abonnements", "AVAST SOFTWARE", "61562000"],
+    ["Informatique, logiciels & abonnements", "Prlv STANDARDFACILE", "62620000"],
+    ["Informatique, logiciels & abonnements", "GOOGLE ONE", "61562000"],
+    ["Informatique, logiciels & abonnements", "ORANGE SA", "62620000"],
+    ["Locations & loyers", "Prlv AVEM LOC-11979752", "61323000"],
+    ["Fournitures & petit équipement (dont sellerie)", "EQUICLIC", "60660100"],
+    ["Fournitures & petit équipement (dont sellerie)", "PADD", "60660100"],
+    ["Autres dépenses", "ANTHROPIC SAN FRANCISCO", "61562000"],
+    ["Locations & loyers", "REX ROTARY releve compteur", "60662000"],
+    ["Locations & loyers", "Loyer imprimante Rex Rotary", "61322000"],
+    ["Locations & loyers", "LEASECOM", "61321000"],
+    ["Repas, restauration & réceptions", "Restaurant la Cale", "62560000"],
+    ["Repas à plusieurs (invités, 2 repas et plus)", "Restaurant la Cale", "62560000"],
+  ];
+  for (const [poste, fournisseur, compte] of cas.slice(0, -1)) assert.equal(ventilerDepense({ poste, fournisseur }).compte, compte, fournisseur);
+  // Repas à plusieurs : la catégorie choisie mène au 625700, même pour un restaurant connu.
+  assert.equal(ventilerDepense({ poste: "Repas à plusieurs (invités, 2 repas et plus)", fournisseur: "Kin Saya" }).compte, "62570000");
+  // Un choix de nature reste prioritaire.
+  assert.equal(ventilerDepense({ poste: "Autres dépenses", fournisseur: "ORANGE", depensePersonnelle: true }).compte, "45511000");
 });

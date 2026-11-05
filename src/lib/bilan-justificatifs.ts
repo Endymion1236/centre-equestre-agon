@@ -14,6 +14,10 @@
  */
 
 import { comptesProposes } from "./ventilation-achats";
+import { COMPTE_REPAS_SANS_TVA, ventilerDepense } from "./plan-comptable-achats";
+
+/** Repas seul (625600) : TVA jamais déduite, règle du cabinet du 05/11/2026. */
+export const tvaExclueParNature = (l: LigneMois) => ventilerDepense(l as any).compte === COMPTE_REPAS_SANS_TVA;
 
 export interface ExtractionMin {
   typeDocument?: string | null; devise?: string | null; numero?: string | null; date?: string | null;
@@ -66,7 +70,7 @@ export function completudeJustificatifs(lignes: LigneMois[]) {
 
 /** Motif de contrôle : aucune règle fiscale d'exigibilité n'est déduite du paiement. */
 export function motifControleTva(l: LigneMois): string | null {
-  if (l.statutTVA === "sans-tva" || l.statutTVA === "non-recuperee" || l.depensePersonnelle || l.avanceFfe) return null;
+  if (l.statutTVA === "sans-tva" || l.statutTVA === "non-recuperee" || l.depensePersonnelle || l.avanceFfe || tvaExclueParNature(l)) return null;
   const p = l.piece;
   if (!p) return null;
   if (p.modeRattachement === "echeance" || (p.paiementsAssocies?.length || 0) > 0) return "Paiement fractionné ou rattachement multiple : TVA de la facture non cumulable, période et montant à vérifier.";
@@ -75,14 +79,18 @@ export function motifControleTva(l: LigneMois): string | null {
   // c'est leur SOMME qui doit y tomber, et elle est vérifiée à l'association.
   // Comparer la première pièce au débit y signalerait un écart systématique.
   if ((l.piecesGroupe?.length || 0) > 1) return null;
-  if (p.extraction?.devise === "EUR" && p.extraction.ttc != null && Math.round(l.montant * 100) !== Math.round(p.extraction.ttc * 100)) return "Le paiement diffère du TTC de la facture : TVA à vérifier.";
+  // Paiement SUPÉRIEUR à la facture : elle est réglée en entier, sa TVA vaut ;
+  // le surplus règle une dette antérieure, signalée dans le FEC (« réclamer la
+  // facture », règle du cabinet du 05/11/2026). Inférieur : acompte ou
+  // paiement partiel, la TVA de la facture entière ne se déduit pas d'un coup.
+  if (p.extraction?.devise === "EUR" && p.extraction.ttc != null && Math.round(l.montant * 100) < Math.round(p.extraction.ttc * 100)) return "Le paiement est inférieur au TTC de la facture (acompte ou paiement partiel) : TVA à vérifier.";
   return null;
 }
 
 /** TVA documentée d'un paiement unique ; ne vaut pas validation de déductibilité. */
 export function tvaJustifiee(l: LigneMois): number | null {
   const e = l.piece?.extraction;
-  if (!dansPerimetre(l) || l.avanceFfe || l.piece?.retire || motifControleTva(l)) return null;
+  if (!dansPerimetre(l) || l.avanceFfe || l.piece?.retire || tvaExclueParNature(l) || motifControleTva(l)) return null;
   // Règlement groupé : chaque facture n'est payée qu'une fois, donc chacune
   // apporte sa TVA sans risque de double compte — à la différence d'un
   // paiement fractionné, où la TVA d'une même facture serait comptée à chaque
@@ -122,7 +130,7 @@ export function bilanTvaMois(lignes: LigneMois[]) {
     if (tva !== null) { r.deductibleJustifiee += tva; r.nbJustifiees++; continue; }
     // Salaires, cotisations : justifiés par la Masse salariale, et sans TVA par nature.
     if ((l.justifieeVia || l.avanceFfe) && (l.statutTVA || "a-verifier") === "a-verifier") { r.sansTva.nb++; r.sansTva.ttc += l.montant || 0; continue; }
-    const statut = l.statutTVA || "a-verifier";
+    const statut = l.statutTVA || (tvaExclueParNature(l) ? "non-recuperee" : "a-verifier");
     const cible = statut === "sans-tva" ? r.sansTva : statut === "non-recuperee" ? r.nonRecuperee : motif ? r.aVerifier : l.piece ? r.pieceSansTva : r.aVerifier;
     cible.nb++; cible.ttc += l.montant || 0;
   }

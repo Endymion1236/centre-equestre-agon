@@ -40,7 +40,10 @@ export const POSTES_DEPENSES: { nom: string; ref: number | null }[] = [
   // Restaurant avec un client ou un fournisseur, traiteur d'un événement,
   // repas d'équipe, nourriture des stages : des réceptions (6257) ou des
   // missions (6256), pas des « Autres dépenses ».
+  // Règle du cabinet (05/11/2026) : repas seul → 625600 sans TVA ; à partir
+  // de deux repas (invités) → 625700, TVA déduite, nom des invités noté.
   { nom: "Repas, restauration & réceptions", ref: null },
+  { nom: "Repas à plusieurs (invités, 2 repas et plus)", ref: null },
   { nom: "Engagements de concours", ref: null },
   { nom: "Autres dépenses", ref: null },
 ];

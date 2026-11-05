@@ -284,3 +284,28 @@ test("mois Céleris : écritures reprises + HA et BQ, crédits omis si Céleris 
 });
 
 console.log(`✅ ${n} tests passés`);
+
+test("règle du cabinet (05/11/2026) : paiement supérieur à la facture = achat au montant de la facture, écart signalé", () => {
+  const ab = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [],
+    debits: [debit({ id: "veto", fournisseur: "FamilyVets VETERINAIRE", poste: "Vétérinaire & santé des chevaux", montant: 150, dateOperation: "2026-09-10",
+      piece: { id: "p", extraction: { typeDocument: "achat", devise: "EUR", ttc: 120, tva: 20, date: "2026-09-05", numero: "V-1" } } })] as any });
+  const l = ab.lignes.map((x) => x.split("\t"));
+  const ha = l.filter((c) => c[0] === "HA"), bq = l.filter((c) => c[0] === "BQ");
+  assert.deepEqual(ha.map((c) => [c[4], c[11], c[12]]), [["62250000", "100,00", ""], ["44566000", "20,00", ""], ["401VETERIN", "", "120,00"]]);
+  assert.deepEqual(bq.map((c) => [c[4], c[11], c[12]]), [["401VETERIN", "150,00", ""], ["51200000", "", "150,00"]]);
+  assert.equal(ha[2][13], "", "pas de lettrage tant que l'écart n'est pas expliqué");
+  assert.ok(ab.anomalies.some((a) => /150,00 € payés pour une facture de 120,00 €.*réclamez-la/.test(a)));
+});
+
+test("règle du cabinet (05/11/2026) : repas seul sans TVA en 62560000, repas à plusieurs avec TVA en 62570000", () => {
+  const piece = { id: "r", extraction: { typeDocument: "achat", devise: "EUR", ttc: 33, tva: 3, date: "2026-09-09" } };
+  const seul = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [],
+    debits: [debit({ id: "r1", fournisseur: "Restaurant la Cale", poste: "Repas, restauration & réceptions", montant: 33, piece })] as any });
+  const ha1 = seul.lignes.map((x) => x.split("\t")).filter((c) => c[0] === "HA");
+  assert.deepEqual(ha1.map((c) => [c[4], c[11], c[12]]), [["62560000", "33,00", ""], ["401RESTAUR", "", "33,00"]]);
+  const plusieurs = construireAchatsBanque({ mois: "2026-09", numeroDepart: 1, credits: [],
+    debits: [debit({ id: "r2", fournisseur: "Restaurant la Cale", poste: "Repas à plusieurs (invités, 2 repas et plus)", montant: 33, piece })] as any });
+  const ha2 = plusieurs.lignes.map((x) => x.split("\t")).filter((c) => c[0] === "HA");
+  assert.deepEqual(ha2.map((c) => [c[4], c[11], c[12]]), [["62570000", "30,00", ""], ["44566000", "3,00", ""], ["401RESTAUR", "", "33,00"]]);
+  assert.ok(plusieurs.anomalies.some((a) => /nom des invités/.test(a)));
+});

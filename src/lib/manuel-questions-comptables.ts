@@ -242,6 +242,40 @@ export const CHAPITRE_QUESTIONS_COMPTABLES: ManualChapter = {
       href: "/admin/comptabilite/depenses",
     },
     {
+      id: "restaurant",
+      title: "Un repas au restaurant : quelle catégorie ?",
+      text: `
+        <p>Règle de la comptable :</p>
+        <ul>
+          <li><strong>Un seul repas</strong> (le tien) : catégorie « Repas, restauration &amp; réceptions ». Compte 625600, <strong>TVA jamais récupérée</strong>.</li>
+          <li><strong>Deux repas ou plus</strong> (tu invites quelqu'un) : catégorie « Repas à plusieurs (invités, 2 repas et plus) ». Compte 625700, TVA récupérée — <strong>note le nom des invités sur la facture</strong>.</li>
+        </ul>
+      `,
+      href: "/admin/comptabilite/depenses",
+    },
+    {
+      id: "paiement-superieur-facture",
+      title: "J'ai payé plus que la facture (vétérinaire, ancienne dette)",
+      text: `
+        <p>Règle de la comptable : on ne passe en achat <strong>que le montant de la facture</strong>. Si le paiement couvre aussi une facture plus ancienne, le FEC le signale : <strong>réclame cette facture</strong> au fournisseur et dépose-la dans Dépenses, pour qu'elle soit comptabilisée.</p>
+        <p>En attendant, l'écart reste au compte du fournisseur ; la TVA de la facture jointe est bien récupérée.</p>
+      `,
+      href: "/admin/comptabilite/depenses",
+    },
+    {
+      id: "comptes-cabinet",
+      title: "Quel compte pour Orange, HelloAsso, Avem, Equiclic… ?",
+      text: `
+        <p>La comptable a donné ses comptes, fournisseur par fournisseur (05/11/2026). L'application les applique d'elle-même, quelle que soit la catégorie choisie :</p>
+        <ul>
+          <li>HelloAsso : 628000 · Avast, Google One, Anthropic : 615620 · Standard Facile, Orange : 626200</li>
+          <li>Avem (location du TPE) : 613230 · Leasecom (machine à café) : 613210</li>
+          <li>Equiclic, PADD (sellerie) : 606601 · Rex Rotary (relevé de compteur de l'imprimante) : 606620</li>
+        </ul>
+        <p>Un nouveau fournisseur sans règle prend le compte de sa catégorie ; si la comptable en demande un autre, dis-le pour qu'on l'ajoute.</p>
+      `,
+    },
+    {
       id: "pret-retraite",
       title: "Prêt, assurance du prêt, cotisation retraite (SwissLife)",
       text: `

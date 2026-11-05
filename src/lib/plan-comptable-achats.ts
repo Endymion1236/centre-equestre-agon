@@ -82,7 +82,10 @@ const PAR_CATEGORIE: Record<string, string> = {
   "Informatique, logiciels & abonnements": "61562000",
   "Frais bancaires & commissions (CB, Stripe)": "62700000",
   "Publicité & communication": "62300000",
-  "Repas, restauration & réceptions": "62570000",
+  // Règle du cabinet (05/11/2026) : un repas seul en 625600, sans TVA ; à
+  // partir de deux repas (invités), 625700 avec TVA, nom des invités noté.
+  "Repas, restauration & réceptions": "62560000",
+  "Repas à plusieurs (invités, 2 repas et plus)": "62570000",
   "Engagements de concours": "46730000",
   "Autres dépenses": "62880000",
   "Salaires": "42100000",
@@ -102,7 +105,7 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Eau & électricité": [[/(saur|eau\b|veolia)/, "60610000"], [/(edf|engie|electr|energie|enercoop)/, "60630000"], [/(gaz|antargaz|butane|propane)/, "60630000"]],
   "Fournitures & petit équipement (dont sellerie)": [[/(seller|padd|horze|equi ?clic|devoucoux|forestier|equithe|licol|tapis|filet|mors)/, "60660100"], [/(papet|bureau|toner|cartouche|imprim|tampon)/, "60662000"]],
   "Entretien (bâtiments, matériel, véhicules)": [[/(garage|pneu|controle technique|carross|vidange|motin|jb ?mega|vehicule|camion|skoda)/, "61553000"], [/(batiment|toiture|platrerie|peinture|macon|couverture)/, "61530000"], [/(maintenance|sage|logiciel|contrat d entretien)/, "61562000"], [/(terrain|carriere|sable|clotur)/, "61510000"]],
-  "Locations & loyers": [[/(arval|skoda|vehicule|lld)/, "61320000"], [/(rex rotary|imprimante|copieur)/, "61322000"], [/(tpe|leasing solutions|cm cic|leasecom|terminal)/, "61323000"], [/(cafe)/, "61321000"], [/(equilocation|cheval|poney|animal)/, "61340000"], [/(association|asso ce|ce d agon|loyer)/, "61310000"]],
+  "Locations & loyers": [[/(arval|skoda|vehicule|lld)/, "61320000"], [/(rex rotary|imprimante|copieur)/, "61322000"], [/(tpe|leasing solutions|cm cic|terminal)/, "61323000"], [/(cafe)/, "61321000"], [/(equilocation|cheval|poney|animal)/, "61340000"], [/(association|asso ce|ce d agon|loyer)/, "61310000"]],
   "Assurances": [[/(vehicule|auto|camion|flotte)/, "61610000"], [/(agricole|materiel|tracteur|groupama.*mat)/, "61680000"]],
   "Impôts & taxes": [[/(cfe\b|cotisation fonciere|economique territoriale)/, "63511000"], [/(fonciere|foncier)/, "63520000"], [/(apprentissage)/, "63310000"], [/(formation)/, "63330000"], [/(enregistrement|timbre)/, "63570000"]],
   // Un moniteur indépendant relève du travail des chevaux quand il monte ou
@@ -116,7 +119,7 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Publicité & communication": [[/(imprim|print|flyer|catalogue|affiche|banderole|copinew)/, "62360000"], [/(cadeau|coupe|medaille|trophee)/, "62340000"]],
   // Un repas en déplacement (concours, formation) est une mission ; le reste, une réception.
   "Repas, restauration & réceptions": [[/(hotel|mission|deplacement|airbnb|gite)/, "62560000"], [/(tickets? (resto|restaurants?)|edenred)/, "64700000"]],
-  "Autres dépenses": [[/(tickets? (resto|restaurants?)|edenred)/, "64700000"], [/(mobile|portable)/, "62630000"], [/(restaurant|resto|la cale|kin saya|equinoxe|reception|traiteur|pizza|burger|mcdo)/, "62570000"], [/(hotel|mission|airbnb|gite)/, "62560000"], [/(peage|sncf|train|parking|deplacement|chargemap|carburant)/, "62510000"], [/(la poste|colissimo|chronopost|ups\b|timbre)/, "62610000"], [/(orange|free|bouygues|sfr|internet|box|fibre)/, "62640000"], [/(openai|anthropic|google|resend|adobe|elevenlabs|midjourney|o2switch|standardfacile|hosteur|abonnement|logiciel|saas|deezer|canva|microsoft|apple)/, "61800000"], [/(formation|ocapiat|stage form)/, "63330000"], [/(ifce|sire|cotisation cheval)/, "62830000"], [/(cotisation|adhesion|filiation|licence dirigeant)/, "62810000"], [/(amende|penalite|majoration)/, "67120000"], [/(medecine du travail|mutualite|pharmacie)/, "64750000"], [/(mco nuisibles|derat|desinsect|nettoyage)/, "61550000"]],
+  "Autres dépenses": [[/(tickets? (resto|restaurants?)|edenred)/, "64700000"], [/(mobile|portable)/, "62630000"], [/(restaurant|resto|la cale|kin saya|equinoxe|reception|traiteur|pizza|burger|mcdo)/, "62560000"], [/(hotel|mission|airbnb|gite)/, "62560000"], [/(peage|sncf|train|parking|deplacement|chargemap|carburant)/, "62510000"], [/(la poste|colissimo|chronopost|ups\b|timbre)/, "62610000"], [/(orange|free|bouygues|sfr|internet|box|fibre)/, "62640000"], [/(openai|anthropic|google|resend|adobe|elevenlabs|midjourney|o2switch|standardfacile|hosteur|abonnement|logiciel|saas|deezer|canva|microsoft|apple)/, "61800000"], [/(formation|ocapiat|stage form)/, "63330000"], [/(ifce|sire|cotisation cheval)/, "62830000"], [/(cotisation|adhesion|filiation|licence dirigeant)/, "62810000"], [/(amende|penalite|majoration)/, "67120000"], [/(medecine du travail|mutualite|pharmacie)/, "64750000"], [/(mco nuisibles|derat|desinsect|nettoyage)/, "61550000"]],
   // Le Crédit Agricole prélève capital et intérêts sur deux lignes distinctes,
   // en le disant dans le libellé (« … 01/09/26 INTERETS »). Quand le relevé
   // tranche lui-même, inutile de demander à la comptable de ventiler : seule
@@ -127,6 +130,29 @@ const MOTS_CLES: Record<string, [RegExp, string][]> = {
   "Immobilisation — à amortir": [[/(?=.*(cheval|chevaux|poney|jument|hongre|pouliche))(?=.*\b(sport|competition)\b)/, "24313000"], [/(cheval|chevaux|poney|jument|hongre|pouliche|manege)/, "24314000"], [/(tracteur|remorque|van|epandeur|tondeuse|quad|materiel agri|broyeur)/, "21540000"], [/(camion|vehicule|voiture|utilitaire|fourgon)/, "21820000"], [/(ordinateur|pc\b|mac\b|tablette|imprimante|informatique|ecran|serveur)/, "21830000"], [/(carriere|cloture|barriere|box|abri|hangar|agencement|amenagement|obstacle)/, "21210000"]],
 };
 
+/**
+ * Comptes donnés par la comptable, fournisseur par fournisseur (mail du
+ * 05/11/2026) : ils priment sur la catégorie de la ligne. Jamais sur un
+ * choix de nature (dépense personnelle, compte FFE, immobilisation).
+ */
+const COMPTES_DU_CABINET: [RegExp, string][] = [
+  [/hello ?asso/, "62800000"],
+  [/\bavast\b/, "61562000"],
+  [/standard ?facile/, "62620000"],
+  [/google ?one/, "61562000"],
+  [/\borange\b/, "62620000"],
+  [/\bavem\b/, "61323000"],
+  [/equi ?clic/, "60660100"],
+  [/\bpadd\b/, "60660100"],
+  [/anthropic/, "61562000"],
+  // Le relevé de compteur de l'imprimante ; son loyer reste une location.
+  [/^(?!.*\b(loyer|location)\b).*rex ?rotary/, "60662000"],
+  [/leasecom/, "61321000"],
+];
+
+/** Repas seul (625600) : la TVA n'est pas déduite (règle du cabinet du 05/11/2026). */
+export const COMPTE_REPAS_SANS_TVA = "62560000";
+
 /** Compte de charge (ou assimilé) d'une ligne du tableau. */
 export function ventilerDepense(l: { poste?: string; fournisseur?: string; immobilisation?: boolean; depensePersonnelle?: boolean; avanceFfe?: boolean }): Ventilation {
   const poste = l.poste || "";
@@ -135,6 +161,7 @@ export function ventilerDepense(l: { poste?: string; fournisseur?: string; immob
   if (l.avanceFfe || poste === "Compte FFE (avance licences & engagements)") return { compte: "51730000", libelle: COMPTES["51730000"], source: "nature" };
   const immobilisation = l.immobilisation || poste === "Immobilisation — à amortir";
   const texte = norm(l.fournisseur);
+  if (!immobilisation) for (const [re, compte] of COMPTES_DU_CABINET) if (re.test(texte)) return { compte, libelle: COMPTES[compte] || "", source: "mot-cle" };
   const regles = MOTS_CLES[immobilisation ? "Immobilisation — à amortir" : poste] || [];
   for (const [re, compte] of regles) if (re.test(texte)) return { compte, libelle: COMPTES[compte] || "", source: "mot-cle" };
   if (immobilisation) return { compte: "", libelle: "Immobilisation (classe 2)", source: "a-ventiler", note: "Bien durable : préciser le compte 21/24 (matériel agricole, transport, informatique, cheval)." };

@@ -82,7 +82,7 @@ test("mémoire : à égalité, la décision la plus récente ; « à classer » 
 test("la chaîne complète mène au compte du cabinet", () => {
   const cas: [string, string][] = [
     ["CB RESEND SAN FRANCISCO", "61562000"],
-    ["PRLV ORANGE SA", "62640000"],
+    ["PRLV ORANGE SA", "62620000"], // consigne du cabinet du 05/11/2026 : Orange en 626200
     ["VIR MONITEUR INDEPENDANT DUPONT", "60560000"],
     ["CHQ MACON TRAVAUX BOX", "61530000"],
     ["VIR PRESTATION EXTERIEURE", "60580000"],

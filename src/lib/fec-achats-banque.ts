@@ -313,12 +313,21 @@ export function construireAchatsBanque(params: {
       // Date de la facture (préférence du cabinet), celle du débit à défaut
       // ou si la facture est postérieure au paiement (acompte).
       const dateAchat = dateIsoValide(dateFactureIso) && dateFactureIso.replace(/-/g, "") <= date ? dateFactureIso.replace(/-/g, "") : date;
-      const lettrage = { lettrage: codeLettrage(l.id), dateLettrage: date };
-      const tva = Math.min(cents(tvaJustifiee(l) ?? 0), montant - 1);
-      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: imputation, piece, libelle, debit: montant - Math.max(tva, 0) }));
+      // Règle du cabinet (05/11/2026, vétérinaire et autres) : l'achat est le
+      // montant de la FACTURE. Un paiement plus élevé règle aussi une dette
+      // antérieure : l'écart reste au débit du fournisseur, facture à réclamer.
+      const lue = l.piece?.extraction;
+      const ttcFacture = (l.piecesGroupe?.length || 0) <= 1 && lue?.devise === "EUR" && typeof lue.ttc === "number" && lue.ttc > 0 ? cents(lue.ttc) : 0;
+      const montantAchat = ttcFacture && ttcFacture < montant ? ttcFacture : montant;
+      // Lettrage seulement quand facture et règlement se soldent.
+      const lettrage = montantAchat === montant ? { lettrage: codeLettrage(l.id), dateLettrage: date } : {};
+      if (montantAchat < montant) anomalies.push(`${fournisseurTexte} : ${euros(montant)} € payés pour une facture de ${euros(montantAchat)} € ; seule la facture est passée en achat. Les ${euros(montant - montantAchat)} € de plus règlent une facture antérieure : réclamez-la au fournisseur pour la comptabiliser (en attendant, au débit du compte ${fournisseur.compte}).`);
+      if (l.poste === "Repas à plusieurs (invités, 2 repas et plus)") anomalies.push(`${fournisseurTexte} (${euros(montant)} €) : repas à plusieurs, TVA déduite ; notez le nom des invités sur le justificatif.`);
+      const tva = Math.min(cents(tvaJustifiee(l) ?? 0), montantAchat - 1);
+      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: imputation, piece, libelle, debit: montantAchat - Math.max(tva, 0) }));
       if (tva > 0) lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: { compte: /^2/.test(imputation.compte) ? "44562000" : "44566000", libelle: COMPTES[/^2/.test(imputation.compte) ? "44562000" : "44566000"] }, piece, libelle, debit: tva }));
-      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: fournisseur, piece, libelle, credit: montant, ...lettrage, ...tiers }));
-      enAttente(imputation, montant);
+      lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: fournisseur, piece, libelle, credit: montantAchat, ...lettrage, ...tiers }));
+      enAttente(imputation, montantAchat);
       numero++; nbHa++;
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Règlement ${libelle}`, debit: montant, ...lettrage, ...tiers }));
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: banque, piece, libelle: `Règlement ${libelle}`, credit: montant }));
