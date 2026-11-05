@@ -5,6 +5,7 @@
  *     cabinet n'a pas tranché. Lecture seule. Auth admin obligatoire.
  */
 
+import { avoirsDuMois, tvaAvoirsDuMois } from "@/lib/avoir-fournisseur";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
@@ -47,8 +48,13 @@ export async function GET(req: NextRequest) {
       const lignes = doc?.exists ? (doc.data() as any)?.lignes : null;
       if (Array.isArray(lignes) && lignes.length) celeris[m] = lignes;
       // Tableau tronqué (plus de 2 000 lignes) : mieux vaut dire « partiel » que sous-déduire en silence.
-      deductible[m] = tableau && !tableau.limite
-        ? { ...deductibleParNature(tableau.lignes), aVerifier: bilanTvaMois(tableau.lignes).aVerifier }
+      // TVA des avoirs fournisseurs du mois (joints dans le Rapprochement) : en moins.
+      const avoirs = tableau && !tableau.limite ? tvaAvoirsDuMois(avoirsDuMois(tableau.pieces, m)) : null;
+      const brut = tableau && !tableau.limite ? deductibleParNature(tableau.lignes) : null;
+      deductible[m] = tableau && !tableau.limite && brut && avoirs
+        ? { ...brut, immobilisations: Math.round((brut.immobilisations - avoirs.immobilisations) * 100) / 100,
+            autresBiensServices: Math.round((brut.autresBiensServices - avoirs.autresBiensServices) * 100) / 100,
+            aVerifier: bilanTvaMois(tableau.lignes).aVerifier }
         : null;
     }
     const commun = {

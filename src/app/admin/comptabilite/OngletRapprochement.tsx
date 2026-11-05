@@ -28,6 +28,7 @@ import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
 import { estLigneAncv, estModeAncv, ecartAncv, libelleEcartAncv } from "@/lib/ancv-rapprochement";
 import { toParisDateString } from "@/lib/date-local";
+import { BoutonAvoirFournisseur } from "./AvoirFournisseur";
 import { CONTREPARTIES_CREDIT } from "@/lib/contreparties-credit";
 
 export interface OngletRapprochementProps {
@@ -512,6 +513,10 @@ export default function OngletRapprochement({
                           <span>↳ {bl.matchDetail}</span>
                         )}
                       </div>
+                    )}
+                    {/* Remboursement d'un fournisseur : son avoir annule l'achat et sa TVA dans le FEC. */}
+                    {bl.matched && bl.compteContrepartie?.id === "remboursement-fournisseur" && /^\d{2}\/\d{2}\/\d{4}$/.test(bl.date) && (
+                      <BoutonAvoirFournisseur ligne={bl} mois={`${bl.date.slice(6, 10)}-${bl.date.slice(3, 5)}`} />
                     )}
                   </div>
                   <span className="w-24 text-right font-body text-sm font-semibold text-green-600">{bl.amount.toFixed(2)}€</span>

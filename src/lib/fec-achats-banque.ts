@@ -45,6 +45,7 @@ import { banqueDepense } from "./banque-depense";
 import { tvaJustifiee, type LigneMois } from "./bilan-justificatifs";
 import { COMPTES_REGLEMENT, COMPTE_ATTENTE, euros, ligneFec, propre, type CompteFec } from "./fec-complet";
 import { apparierRejets, COMPTE_LIAISON_REJETS, estRejetPrelevement, type RejetEnregistre } from "@/lib/rejet-prelevement";
+import { cleCreditReleve, type AvoirFournisseur } from "@/lib/avoir-fournisseur";
 import { apparierRemboursements, CATEGORIE_REMBOURSEMENT_FAMILLE, nomDuVirementEmis, type RemboursementEnregistre } from "@/lib/remboursement-famille";
 
 export const JOURNAL_ACHATS = { code: "HA", libelle: "Achats" };
@@ -213,6 +214,8 @@ export function construireAchatsBanque(params: {
    * « Remboursement à une famille » du relevé n'est pas repris (lib/remboursement-famille).
    */
   remboursements?: RemboursementEnregistre[];
+  /** Avoirs fournisseurs joints aux crédits « Remboursement fournisseur » du mois (lib/avoir-fournisseur). */
+  avoirs?: AvoirFournisseur[];
 }): ResultatAchatsBanque {
   const debutAchats = params.debutAchats || DEBUT_ACHATS_APPLICATION;
   const { mois } = params;
@@ -334,6 +337,7 @@ export function construireAchatsBanque(params: {
     .filter((c) => cents(c.amount) > 0 && (dateReleveFec(c.date) || "").startsWith(mois.replace("-", "")))
     .sort((a, b) => (dateReleveFec(a.date) || "").localeCompare(dateReleveFec(b.date) || ""));
   let dejaEnBanque = 0;
+  const avoirsParCle = new Map((params.avoirs || []).map((a) => [a.cle, a]));
   for (const c of credits) {
     const net = cents(c.amount);
     const date = dateReleveFec(c.date)!;
@@ -351,11 +355,35 @@ export function construireAchatsBanque(params: {
     if (cp?.compte) {
       lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: BANQUE_PAR_DEFAUT, piece, libelle, debit: net }));
       if (cp.compte === COMPTE_ATTENTE.compte) versAttente(net, "classé « autre recette » au rapprochement");
+      else if (cp.id === "remboursement-fournisseur" && avoirsParCle.has(cleCreditReleve(c))) {
+        // Avoir joint : l'achat est annulé pour sa part (HA), le remboursement le solde (BQ), lettrés ensemble.
+        const a = avoirsParCle.get(cleCreditReleve(c))!;
+        const nomF = propre(a.fournisseur) || libelle;
+        const f = compteFournisseur(a.fournisseur || c.label);
+        const fournisseur: CompteFec = f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle };
+        const tiers = tiersFournisseur(nomF, f);
+        const lettrage = { lettrage: codeLettrage(a.pieceId), dateLettrage: date };
+        lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: fournisseur, piece, libelle: `Remboursement ${libelle}`, credit: net, ...lettrage, ...tiers }));
+        numero++; // l'écriture BQ est close (comptée en fin de branche) ; l'avoir prend le numéro suivant
+        const ttc = cents(a.ttc), tva = Math.max(0, Math.min(cents(a.tva), ttc - 1));
+        const v = ventilerDepense({ poste: a.poste, fournisseur: a.fournisseur, immobilisation: a.immobilisation });
+        const imputation: CompteFec = v.compte ? { compte: v.compte, libelle: v.libelle || COMPTES[v.compte] || v.compte } : COMPTE_ATTENTE;
+        const dateAvoir = dateIsoValide(a.dateIso) && a.dateIso.replace(/-/g, "") <= date ? a.dateIso.replace(/-/g, "") : date;
+        const pieceAvoir = (propre(a.numero) || `AV-${a.pieceId.slice(0, 10)}`).slice(0, 40);
+        const libAvoir = `Avoir ${nomF}${a.numero ? ` n° ${propre(a.numero)}` : ""}`;
+        lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAvoir, compte: fournisseur, piece: pieceAvoir, libelle: libAvoir, debit: ttc, ...lettrage, ...tiers }));
+        lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAvoir, compte: imputation, piece: pieceAvoir, libelle: libAvoir, credit: ttc - tva }));
+        if (tva > 0) { const t = /^2/.test(imputation.compte) ? "44562000" : "44566000"; lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAvoir, compte: { compte: t, libelle: COMPTES[t] }, piece: pieceAvoir, libelle: libAvoir, credit: tva })); }
+        if (imputation.compte === COMPTE_ATTENTE.compte) { attente += ttc - tva; anomalies.push(`Avoir ${nomF} (${euros(ttc)} €) : catégorie « ${a.poste || "?"} » sans compte, part au 47100000 ; ${v.note || "compte à préciser"}.`); }
+        if (ttc !== net) anomalies.push(`Avoir ${nomF} : ${euros(ttc)} € sur la pièce pour ${euros(net)} € remboursés le ${jj} ; l'écart reste au compte du fournisseur, à vérifier.`);
+        nbHa++;
+        // Le numero++ de fin de branche clôt l'écriture HA.
+      }
       else if (cp.id === "remboursement-fournisseur") {
         // Au compte du fournisseur, à lettrer avec l'achat et l'avoir.
         const f = compteFournisseur(c.label);
         lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle }, piece, libelle: `Remboursement ${libelle}`, credit: net, ...tiersFournisseur(libelle, f) }));
-        anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : remboursement fournisseur, au compte ${f.collectif ? COMPTE_FOURNISSEURS.compte : f.compte} ; l'avoir du fournisseur est à transmettre pour annuler l'achat (charge et TVA).`);
+        anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : remboursement fournisseur, au compte ${f.collectif ? COMPTE_FOURNISSEURS.compte : f.compte} ; joignez son avoir dans le Rapprochement (« Joindre l'avoir ») pour annuler l'achat (charge et TVA), sinon transmettez-le à la comptable.`);
       }
       else lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: { compte: cp.compte, libelle: CONTREPARTIES_CREDIT.find((x) => x.compte === cp.compte)?.compteLib || cp.libelle }, piece, libelle, credit: net }));
       numero++; nbBq++;

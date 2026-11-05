@@ -25,6 +25,7 @@ import { archiverPiecesDuMois, chargerLignesMois } from "@/lib/lignes-mois";
 import type { CreditBancaireFec } from "@/lib/fec-achats-banque";
 import { avertissementsControle, comparerBanque, lignesBanqueDuFec, texteControleBanque, type MouvementReleve } from "@/lib/controle-banque";
 import { banqueDepense, type SourceBanqueDepense } from "@/lib/banque-depense";
+import { avoirsDuMois } from "@/lib/avoir-fournisseur";
 import { detailRemiseSepa, remisePourCredit, type DetailRemiseSepa, type EncaissementSepa } from "@/lib/remise-sepa-controle";
 import { toParisDateString } from "@/lib/date-local";
 
@@ -123,7 +124,7 @@ export async function chargerFecMois(mois: string) {
     regles,
     // Tableau illisible ou tronqué (limite atteinte) : pas d'achats ni de
     // banque à moitié — le FEC le signale comme incomplet (bloquants).
-    achatsBanque: tableau && !tableau.limite ? { debits: tableau.lignes, credits } : null,
+    achatsBanque: tableau && !tableau.limite ? { debits: tableau.lignes, credits, avoirs: avoirsDuMois(tableau.pieces, mois) } : null,
   });
 }
 
@@ -263,7 +264,7 @@ export async function envoyerEcrituresComptable(params: {
     : null;
 
   const [regles, moisCeleris] = await Promise.all([chargerReglesVentilation(), chargerMoisCeleris()]);
-  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles, moisCeleris, creditsReleve });
+  const colis = construireColisComptable({ mois, payments, encaissements, depenses, lignesJustificatifs: tableau?.lignes, celeris, siret: club.siret, regles, moisCeleris, creditsReleve, avoirsFournisseurs: tableau ? avoirsDuMois(tableau.pieces, mois) : [] });
   if (colis.resume.nbFactures === 0 && colis.resume.nbEncaissements === 0 && colis.resume.nbDepenses === 0 && !colis.resume.ventilationAchats?.total && !colis.resume.celeris) {
     return { ok: false, code: "vide", error: `Rien à envoyer pour ${nomMoisLong(mois)} : aucune facture, aucun encaissement, aucune dépense.` };
   }

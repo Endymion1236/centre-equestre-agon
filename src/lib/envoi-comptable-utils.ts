@@ -14,6 +14,7 @@
  *   - synthese-compta-AAAA-MM.pdf (ajouté par le serveur).
  */
 
+import { tvaAvoirsDuMois, type AvoirFournisseur } from "@/lib/avoir-fournisseur";
 import { remboursementsDuJournal } from "@/lib/remboursement-famille";
 import {
   construireExportComptable,
@@ -154,6 +155,8 @@ export function construireColisComptable(params: {
   moisCeleris?: string[];
   /** Crédits du relevé du mois (rapprochements/{mois}) : journal Banque du FEC. */
   creditsReleve?: CreditBancaireFec[] | null;
+  /** Avoirs fournisseurs joints aux remboursements du mois. */
+  avoirsFournisseurs?: AvoirFournisseur[];
 }): ColisComptable {
   const { mois, maintenant = new Date() } = params;
   const lignesJustificatifs = params.lignesJustificatifs?.filter(l => (l.mois || l.dateOperation?.slice(0, 7)) === mois);
@@ -176,7 +179,9 @@ export function construireColisComptable(params: {
   if (lignesJustificatifs) {
     const tva = bilanTvaMois(lignesJustificatifs);
     resume.completude = completudeJustificatifs(lignesJustificatifs);
-    resume.tvaDeductibleJustifiee = tva.deductibleJustifiee;
+    // TVA des avoirs fournisseurs du mois : en moins de la déductible.
+    const avoirsTva = tvaAvoirsDuMois(params.avoirsFournisseurs || []);
+    resume.tvaDeductibleJustifiee = Math.round((tva.deductibleJustifiee - avoirsTva.immobilisations - avoirsTva.autresBiensServices) * 100) / 100;
     resume.tvaAVerifier = tva.aVerifier;
     resume.ventilationAchats = bilanVentilationAchats(lignesJustificatifs);
   }
@@ -187,7 +192,7 @@ export function construireColisComptable(params: {
 
   const fec = fecDuMois({
     mois, factures, encaissements, payments: params.payments, tousEncaissements: params.encaissements, moisCeleris: params.moisCeleris, celeris, siret: params.siret, maintenant, regles: params.regles,
-    achatsBanque: params.lignesJustificatifs ? { debits: params.lignesJustificatifs, credits: params.creditsReleve || [] } : null,
+    achatsBanque: params.lignesJustificatifs ? { debits: params.lignesJustificatifs, credits: params.creditsReleve || [], avoirs: params.avoirsFournisseurs || [] } : null,
   });
   const fichierFec = fec.fichier;
   resume.fec = {
@@ -252,7 +257,7 @@ export function fecDuMois(params: {
    * crédits (rapprochement) — journaux HA et BQ (lib/fec-achats-banque).
    * Absent : FEC des seuls ventes et règlements.
    */
-  achatsBanque?: { debits: LigneMois[]; credits: CreditBancaireFec[] } | null;
+  achatsBanque?: { debits: LigneMois[]; credits: CreditBancaireFec[]; avoirs?: AvoirFournisseur[] } | null;
 }): {
   fichier: string; contenu: string; source: "application" | "celeris"; ecrituresVentes: number; ecrituresReglements: number; ecrituresOd: number; ecrituresAchats: number; ecrituresBanque: number; anomalies: string[]; comptesAConfirmer: CompteFec[];
   /** Total au 47100000, et sa répartition : ventes/règlements (à ventiler par le club), débits et crédits du relevé (à classer, ou par la comptable). */
@@ -280,7 +285,7 @@ export function fecDuMois(params: {
     const remboursements = remboursementsDuJournal(params.tousEncaissements || params.encaissements, (e) => {
       const sec = e?.date?.seconds; return sec ? toParisDateString(new Date(sec * 1000)) : (typeof e?.dateIso === "string" ? e.dateIso.slice(0, 10) : null);
     });
-    const ab = construireAchatsBanque({ mois: params.mois, debits: params.achatsBanque.debits, credits: params.achatsBanque.credits, numeroDepart, rejets, remboursements, ...options });
+    const ab = construireAchatsBanque({ mois: params.mois, debits: params.achatsBanque.debits, credits: params.achatsBanque.credits, numeroDepart, rejets, remboursements, avoirs: params.achatsBanque.avoirs, ...options });
     return { contenu: contenu + (ab.lignes.length ? ab.lignes.join("\n") + "\n" : ""), ecrituresAchats: ab.ecrituresAchats, ecrituresBanque: ab.ecrituresBanque, anomalies: ab.anomalies, compteAttente: ab.compteAttente, debits: ab.compteAttenteDebits, credits: ab.compteAttenteCredits };
   };
   if (params.celeris && params.celeris.lignes.length) {

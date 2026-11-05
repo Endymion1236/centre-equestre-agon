@@ -9,6 +9,9 @@ import { verifyAuth } from "@/lib/api-auth";
 import { cleAlias } from "@/lib/matching-automatique";
 import { verifierReglementGroupe, type PieceDuGroupe } from "@/lib/reglement-groupe";
 import { nettoyerPiece, proposerAssociations, validerLienDevise, type DepenseCandidate } from "@/lib/justificatifs";
+import { cleCreditReleve, controleRattachementAvoir } from "@/lib/avoir-fournisseur";
+import { CATEGORIES_IMPORT } from "@/lib/import-bancaire";
+import { fournisseurNormalise } from "@/lib/doublons-depenses";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +30,25 @@ export async function GET(req: NextRequest) {
       if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) return NextResponse.json({ error: "Mois invalide" }, { status: 400 });
       const snap = await adminDb.collection("depenses").where("mois", "==", mois).limit(2001).get();
       return NextResponse.json({ depenses: snap.docs.filter(d => d.data().source === "releve-bancaire").map(d => ({ ...d.data(), id: d.id })), limite: snap.size > 2000 }, { headers: { "Cache-Control": "private, no-store" } });
+    }
+    // Avoir fournisseur joint à un crédit du relevé (Rapprochement) : la pièce,
+    // et la catégorie du dernier achat chez ce fournisseur, proposée par défaut.
+    const avoirCle = req.nextUrl.searchParams.get("avoirCle");
+    if (avoirCle !== null) {
+      if (avoirCle.length > 400) return NextResponse.json({ error: "Ligne invalide" }, { status: 400 });
+      const [snap, deps] = await Promise.all([
+        pieces().where("avoirFournisseur.cle", "==", avoirCle).limit(5).get(),
+        adminDb.collection("depenses").where("source", "==", "releve-bancaire").limit(2001).get().catch(() => null),
+      ]);
+      const actives = snap.docs.filter(d => d.data().retire !== true);
+      const libelle = avoirCle.split("|")[1] || "";
+      const nom = fournisseurNormalise(libelle).replace(/^(avoir|virement en votre faveur)\s+/, "").split(" ").filter(m => m.length >= 4 && !/^x?\d+$/.test(m));
+      const achat = deps?.docs.map(d => d.data()).sort((a, b) => String(b.dateOperation || "").localeCompare(String(a.dateOperation || ""))).find(d => nom.some(m => fournisseurNormalise(String(d.fournisseur || "")).includes(m)) && typeof d.poste === "string" && CATEGORIES_IMPORT.includes(d.poste) && d.poste !== "hors-depenses");
+      return NextResponse.json({
+        avoir: actives[0] ? { id: actives[0].id, nom: actives[0].data().nom, extraction: actives[0].data().extraction || null, poste: actives[0].data().avoirFournisseur?.poste || "" } : null,
+        posteSuggere: achat?.poste || null,
+        categories: CATEGORIES_IMPORT,
+      }, { headers: { "Cache-Control": "private, no-store" } });
     }
     const id = req.nextUrl.searchParams.get("id");
     if (id) {
@@ -178,6 +200,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
     if (doc.data()?.retire) return NextResponse.json({ error: "Restaurez le document avant de le traiter." }, { status: 409 });
+    if (body.action === "avoir-fournisseur") {
+      const { mois, cle, poste } = body;
+      // Le crédit doit exister au rapprochement du mois et être classé « Remboursement fournisseur ».
+      const rap = typeof mois === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(mois) ? await adminDb.collection("rapprochements").doc(mois).get() : null;
+      const ligne = ((rap?.data()?.bankLines || []) as any[]).find(bl => bl && cleCreditReleve(bl) === cle);
+      if (!ligne) return NextResponse.json({ error: "Ce remboursement n'est plus au rapprochement du mois : actualisez la page." }, { status: 409 });
+      if (ligne.compteContrepartie?.id !== "remboursement-fournisseur") return NextResponse.json({ error: "Classez d'abord ce crédit en « Remboursement fournisseur »." }, { status: 409 });
+      const p = nettoyerPiece(doc.data()?.extraction || {});
+      const erreur = controleRattachementAvoir({ mois, cle, poste, postesPermis: CATEGORIES_IMPORT.filter(c => c !== "hors-depenses"), ttcLu: p.ttc, montantCredit: Number(ligne.amount) || 0 });
+      if (erreur) return NextResponse.json({ error: erreur }, { status: 400 });
+      await adminDb.runTransaction(async tx => {
+        const current = await tx.get(ref);
+        const autres = await tx.get(pieces().where("avoirFournisseur.cle", "==", cle).limit(5));
+        if (current.data()?.retire) throw new Error("Pièce archivée : restaurez-la d'abord.");
+        if (current.data()?.depenseId || current.data()?.paiementsAssocies?.length) throw new Error("Cette pièce est déjà la facture d'un paiement : ce n'est pas un avoir.");
+        if (current.data()?.avoirFournisseur && current.data()!.avoirFournisseur.cle !== cle) throw new Error("Cette pièce est déjà l'avoir d'un autre remboursement.");
+        if (autres.docs.some(d => d.id !== body.id && d.data().retire !== true)) throw new Error("Un avoir est déjà joint à ce remboursement : détachez-le d'abord.");
+        // Hors du rapprochement automatique des factures : c'est une décision du gérant.
+        tx.update(ref, { avoirFournisseur: { mois, cle, poste, montantCredit: Number(ligne.amount) || 0 }, controleManuel: true, autoBloque: true, decisionHumaine: true, updatedAt: FieldValue.serverTimestamp() });
+        tx.create(ref.collection("historique").doc(), { action: "avoir-fournisseur", mois, cle, poste, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      });
+      return NextResponse.json({ ok: true });
+    }
+    if (body.action === "detacher-avoir") {
+      await adminDb.runTransaction(async tx => {
+        const current = await tx.get(ref);
+        if (!current.data()?.avoirFournisseur) throw new Error("Cette pièce n'est pas jointe à un remboursement.");
+        tx.update(ref, { avoirFournisseur: null, updatedAt: FieldValue.serverTimestamp() });
+        tx.create(ref.collection("historique").doc(), { action: "detacher-avoir", avant: current.data()!.avoirFournisseur, uid: auth.uid, at: FieldValue.serverTimestamp() });
+      });
+      return NextResponse.json({ ok: true });
+    }
     if (body.action === "classer-paie") {
       await adminDb.runTransaction(async tx => {
         const current = await tx.get(ref);
@@ -328,6 +382,10 @@ export async function POST(req: NextRequest) {
       "Cette dépense ne provient pas d’un relevé bancaire.",
       "Ce paiement est déjà associé à un autre justificatif. Vérifiez les pièces associées avant de le réutiliser.",
       "Le montant de la facture diffère du débit bancaire. Les devises, paiements fractionnés et paiements groupés ne sont pas encore pris en charge. Ne modifiez pas le montant pour forcer l’association.",
+      // Avoirs fournisseurs
+      "Pièce archivée : restaurez-la d'abord.", "Cette pièce est déjà la facture d'un paiement : ce n'est pas un avoir.",
+      "Cette pièce est déjà l'avoir d'un autre remboursement.", "Un avoir est déjà joint à ce remboursement : détachez-le d'abord.",
+      "Cette pièce n'est pas jointe à un remboursement.",
     ]);
     if (e instanceof Error && motifs.has(e.message)) return NextResponse.json({ error: e.message }, { status: 409 });
     console.error("[justificatifs] échec", (e as Error)?.name, String((e as Error)?.message || "").slice(0, 200));

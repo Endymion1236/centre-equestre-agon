@@ -13,6 +13,7 @@ import { justifierParMasseSalariale, justifierCommissionsBancaires, moisMoins, t
 import { posteCommissionCarte } from "@/lib/postes-depenses";
 import { groupesDoublons } from "@/lib/doublons-depenses";
 import type { DepenseCandidate } from "@/lib/justificatifs";
+import type { RattachementAvoir } from "@/lib/avoir-fournisseur";
 
 const mouvements = () => adminDb.collection("mouvements-rapprochement");
 
@@ -22,6 +23,8 @@ export interface PieceMois {
   associationDevise?: { deviseFacture: string; montantFacture: number; montantDebiteEUR: number } | null;
   associationEcart?: { type: string; taux: number; montant: number } | null;
   mime?: string;
+  /** Avoir fournisseur joint à un crédit du relevé (lib/avoir-fournisseur). */
+  avoirFournisseur?: RattachementAvoir | null;
 }
 
 export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneMois & Record<string, unknown>)[]; pieces: PieceMois[]; limite: boolean }> {
@@ -38,7 +41,7 @@ export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneM
     const p = d.data();
     return { id: d.id, nom: p.nom, retire: !!p.retire, extraction: p.extraction || null, depenseId: p.depenseId || null, paieValidee: !!p.paieValidee,
       modeRattachement: p.modeRattachement || null, paiementsAssocies: p.paiementsAssocies || [], associationDevise: p.associationDevise || null,
-      associationEcart: p.associationEcart || null, mime: p.mime };
+      associationEcart: p.associationEcart || null, mime: p.mime, avoirFournisseur: p.avoirFournisseur || null };
   });
   const archives = new Set(ars.docs.map(d => d.id));
   const lignes = new Map<string, Record<string, unknown>>();

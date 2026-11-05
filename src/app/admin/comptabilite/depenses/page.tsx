@@ -21,7 +21,9 @@ import { LIBELLE_JUSTIFICATION } from "@/lib/justification-paie";
 import VueParPoste from "./VueParPoste";
 import PiecesSansLigne from "./PiecesSansLigne";
 import ImportMouvementsBancaires from "./ImportMouvementsBancaires";
-type Piece = { id: string; nom: string; retire: boolean; depenseId: string | null; extraction: PieceExtraite | null; depenseAssociee?: { fournisseur?: string; montant?: number; dateOperation?: string }; modeRattachement?: string; paiementsAssocies?: { id: string; montant: number }[] };
+type Piece = { id: string; nom: string; retire: boolean; depenseId: string | null; extraction: PieceExtraite | null; depenseAssociee?: { fournisseur?: string; montant?: number; dateOperation?: string }; modeRattachement?: string; paiementsAssocies?: { id: string; montant: number }[];
+  /** Avoir fournisseur joint à un remboursement (Rapprochement) : jamais proposé comme facture d'un débit. */
+  avoirFournisseur?: { mois: string; cle: string; poste: string } | null };
 type Ligne = { origineBancaire?: string; dernierReleveBancaire?: { nom: string }; id: string; dateOperation?: string; fournisseur: string; montant: number; poste: string; compte?: string; compteBanqueConfirme?: string | null; note?: string; source: string; suivie: boolean; rapprochementExclu?: boolean; statutTVA?: string; justificatifReleve?: boolean; referenceJustificatifReleve?: string | null; piecePerdue?: { motif: string; declareeLe?: string } | null; depensePersonnelle?: boolean; immobilisation?: boolean; avanceFfe?: boolean; justifieeVia?: { type: string; detail: string } | null; doublonProbable?: boolean; piece: Piece | null; piecesGroupe?: Piece[] };
 /** Catégories de services : jamais un bien durable, l'alerte immobilisation n'y a pas de sens. */
 const POSTES_SANS_IMMOBILISATION = new Set(["Assurances", "Locations & loyers", "Eau & électricité", "Carburants", "Aliments, litières, paille", "Maréchalerie & travail des chevaux", "Vétérinaire & santé des chevaux", "Honoraires & gestion (compta, juridique, GHN)", "Frais bancaires & commissions (CB, Stripe)", "Publicité & communication", "Engagements de concours", "Retraite / PER — à vérifier"]);
@@ -253,7 +255,7 @@ export default function DepensesPage() {
           // total s'affiche en direct. Le bouton ne s'active que lorsque la
           // somme tombe exactement sur le débit — c'est ce contrôle qui évite
           // qu'une facture oubliée fausse la TVA du mois.
-          const dispo = pieces.filter(p => !p.retire && (!p.depenseId || p.depenseId === ligne.id));
+          const dispo = pieces.filter(p => !p.retire && !p.avoirFournisseur && (!p.depenseId || p.depenseId === ligne.id));
           const q = rechercheePiece.trim().toLowerCase().replace(",", ".");
           const listees = q ? dispo.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.ttcEscompte ?? ""} ${p.extraction?.fournisseur ?? ""}`.toLowerCase().replace(/,/g, ".").includes(q)) : dispo;
           const retenues = dispo.filter(p => groupe.includes(p.id));
@@ -283,7 +285,7 @@ export default function DepensesPage() {
         {mode === "ffe" && <p>Choisissez d’abord la catégorie « {CATEGORIE_COMPTE_FFE} » sur la ligne. Joignez le relevé du compte FFE (ffe.com) couvrant la période : il justifie le versement. Le versement n’est pas une charge ; les engagements de concours se saisissent à part d’après ce relevé, les licences refacturées aux cavaliers ne sont pas des charges.</p>}
         {mode === "per" && <p>Choisissez d’abord la catégorie Retraite / PER — à vérifier sur la ligne. Joignez l’attestation correspondant au contrat et à la période. Ce lien documentaire ne valide aucune déduction fiscale et ne calcule aucun plafond.</p>}
         {mode !== "groupe" && (() => {
-          const disponibles = pieces.filter(p => !p.retire && (!p.depenseId || p.depenseId === ligne.id || p.modeRattachement === mode && !!p.paiementsAssocies?.length));
+          const disponibles = pieces.filter(p => !p.retire && !p.avoirFournisseur && (!p.depenseId || p.depenseId === ligne.id || p.modeRattachement === mode && !!p.paiementsAssocies?.length));
           // La recherche porte sur le nom du fichier ET sur le montant lu :
           // « 199,98 » comme « 199.98 » doivent tomber sur la même pièce.
           const q = rechercheePiece.trim().toLowerCase().replace(",", ".");
