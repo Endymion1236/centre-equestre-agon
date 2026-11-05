@@ -27,6 +27,8 @@ export interface ManualChapter {
   sections: ManualSection[];
 }
 
+import { CHAPITRE_QUESTIONS_COMPTABLES } from "./manuel-questions-comptables";
+
 export const MANUAL: ManualChapter[] = [
   {
     id: "demarrage",
@@ -388,14 +390,14 @@ export const MANUAL: ManualChapter[] = [
     id: "comptabilite",
     title: "Comptabilité",
     icon: "BookOpen",
-    summary: "Journal des ventes, TVA, bordereaux de remise en banque.",
+    summary: "Journal, TVA, remises en banque, rapprochement, FEC du mois. Les cas pratiques sont dans « Questions comptables ».",
     sections: [
       {
         id: "journal",
         title: "Journal des ventes",
         text: `
           <p>Liste chronologique de tous les encaissements avec filtres par période et par mode.</p>
-          <p>Utilisé pour le rapprochement avec ton expert-comptable.</p>
+          <p>Une écriture ne s'efface jamais : <strong>« Corriger »</strong> l'annule par une contre-passation (et la remplace si tu indiques un nouveau montant) ; <strong>« Rétablir »</strong> défait une annulation faite par erreur, datée du jour. Voir « Questions comptables ».</p>
         `,
         href: "/admin/comptabilite",
       },
@@ -403,8 +405,8 @@ export const MANUAL: ManualChapter[] = [
         id: "tva",
         title: "TVA",
         text: `
-          <p>Affiche le montant de TVA collecté sur la période (déclarations trimestrielles/annuelles).</p>
-          <p>Répartition par taux (5.5% pour activités équestres, 20% pour prestations annexes).</p>
+          <p>La TVA est déclarée <strong>sur les encaissements</strong> : elle est due quand l'argent arrive. L'onglet prépare la déclaration case par case (CA3) pour le trimestre, avec en comparaison le calcul « sur factures ».</p>
+          <p>Collectée : d'après les encaissements du mois, répartis entre les taux de chaque facture. Déductible : d'après les factures fournisseurs jointes aux dépenses, moins les avoirs fournisseurs. Les mois tenus dans Céleris reprennent la TVA de Céleris.</p>
         `,
       },
       {
@@ -425,12 +427,13 @@ export const MANUAL: ManualChapter[] = [
         id: "rapprochement",
         title: "Rapprochement bancaire",
         text: `
-          <p>Importe le CSV de ton relevé Crédit Agricole, le système matche automatiquement :</p>
+          <p>Importe le <strong>CSV</strong> du relevé Crédit Agricole (l'argent qui entre) ; le système rapproche automatiquement :</p>
           <ul>
             <li>Les remises CB / chèques / espèces pointées</li>
             <li>Les virements et prélèvements SEPA</li>
           </ul>
-          <p>Les lignes non matchées restent à pointer manuellement.</p>
+          <p>Les lignes non rapprochées restent à pointer à la main (« Pointer »), à classer (remboursement d'un fournisseur, subvention…) ou à ignorer avec un motif. Un crédit classé « Remboursement fournisseur » propose « Joindre l'avoir ».</p>
+          <p>Le relevé PDF de Trésorerie ne lit que les débits : pour le FEC et le contrôle de banque, il faut aussi ce CSV.</p>
         `,
       },
       {
@@ -582,6 +585,8 @@ export const MANUAL: ManualChapter[] = [
       },
     ],
   },
+
+  CHAPITRE_QUESTIONS_COMPTABLES,
 
   {
     id: "communication",
