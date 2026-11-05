@@ -63,6 +63,8 @@ test("le même débit déjà présent dans les dépenses n'est pas compté deux 
 test("une dépense déjà en charges ne sort du périmètre que vers Personnel", () => {
   assert.equal(decider({ estDepense: true, poste: "Virements internes" }).decision, "refuser");
   assert.deepEqual(decider({ estDepense: true, poste: CATEGORIE_PERSONNELLE }), { decision: "mettre-a-jour" });
+  // Un virement rendu à une famille rangé par erreur en dépense (LECLERC, 11/2026).
+  assert.deepEqual(decider({ estDepense: true, poste: "Remboursement à une famille", categories: [...categories, "Remboursement à une famille"] }), { decision: "mettre-a-jour" });
   assert.deepEqual(decider({ estDepense: true, poste: "Frais bancaires" }), { decision: "mettre-a-jour" });
   assert.equal(decider({ poste: "Inconnue" }).decision, "refuser");
 });

@@ -1,6 +1,7 @@
 import { nettoyerPiece, proposerAssociations, validerLienDevise, deviseEtrangere, type DepenseCandidate } from "./justificatifs";
 import { doublonPossible } from "./doublons-depenses";
 import { POSTES_JUSTIFIES_PAR_LE_DEBIT } from "./postes-depenses";
+import { CATEGORIE_REMBOURSEMENT_FAMILLE } from "./remboursement-famille";
 
 export const CATEGORIE_PERSONNELLE = "Personnel — hors charges";
 /**
@@ -54,9 +55,11 @@ export function decisionCategorie(params: {
   const charge = postesCharges.includes(poste);
   const immobilisation = poste === CATEGORIE_IMMOBILISATION;
   if (estDepense) {
-    // Sortir des charges vers Personnel, Immobilisation ou Compte FFE est une
-    // requalification légitime ; vers salaires ou virements internes, non.
-    if (poste !== CATEGORIE_PERSONNELLE && poste !== CATEGORIE_COMPTE_FFE && !charge && !immobilisation) return { decision: "refuser", motif: "Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable." };
+    // Sortir des charges vers Personnel, Immobilisation, Compte FFE ou
+    // Remboursement à une famille est une requalification légitime (un
+    // virement rendu à une famille rangé par erreur en « Autres dépenses »,
+    // LECLERC 11/2026) ; vers salaires ou virements internes, non.
+    if (poste !== CATEGORIE_PERSONNELLE && poste !== CATEGORIE_COMPTE_FFE && poste !== CATEGORIE_REMBOURSEMENT_FAMILLE && !charge && !immobilisation) return { decision: "refuser", motif: "Cette ligne participe déjà aux charges. Son changement de périmètre nécessite un contrôle comptable." };
     return { decision: "mettre-a-jour" };
   }
   // Une immobilisation est une vraie dépense à exporter, même hors charges.
