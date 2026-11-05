@@ -22,7 +22,7 @@ export interface PeriodeCsv {
 
 const JOUR_MS = 86_400_000;
 
-export function analyserPeriodeCsv(raw: string, maintenant: Date = new Date()): PeriodeCsv | null {
+export function analyserPeriodeCsv(raw: string, maintenant: Date = new Date(), moisAffiche?: string): PeriodeCsv | null {
   const match = raw.match(
     /entre le (\d{2})\/(\d{2})\/(\d{4})\s+et le (\d{2})\/(\d{2})\/(\d{4})/i,
   );
@@ -38,7 +38,11 @@ export function analyserPeriodeCsv(raw: string, maintenant: Date = new Date()): 
 
   const alertes: string[] = [];
   if (nbJours < 3) alertes.push(`• Periode tres courte : seulement ${nbJours} jour(s)`);
-  if (joursDepuisFin > 30) alertes.push(`• Derniere operation il y a ${joursDepuisFin} jours`);
+  // Un relevé ancien est normal quand on rapproche un mois passé (août importé
+  // en novembre, 2026) : l'alerte ne vaut que si le fichier ne couvre pas le
+  // mois affiché.
+  const couvreLeMois = !!moisAffiche && `${y1}-${m1}` <= moisAffiche && `${y2}-${m2}` >= moisAffiche;
+  if (joursDepuisFin > 30 && !couvreLeMois) alertes.push(`• Derniere operation il y a ${joursDepuisFin} jours`);
   if (nbJours <= 0) {
     alertes.push(`• Periode invalide : fin (${endStr}) anterieure au debut (${startStr})`);
   }

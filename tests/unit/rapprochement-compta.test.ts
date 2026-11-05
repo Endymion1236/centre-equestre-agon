@@ -355,4 +355,12 @@ test("deux familles possibles pour la même somme : on ne devine pas, le montant
   assert.deepEqual(apparierRemiseCarte([150], encs).manquants, [150]);
 });
 
+test("relevé d'un mois passé importé plus tard : pas d'alerte s'il couvre le mois affiché (août importé en novembre 2026)", () => {
+  const raw = "Liste des opérations du compte entre le 01/08/2026 et le 31/08/2026\n";
+  const nov = new Date("2026-11-05T12:00:00");
+  assert.deepEqual(analyserPeriodeCsv(raw, nov, "2026-08")?.alertes, []);
+  assert.match(analyserPeriodeCsv(raw, nov, "2026-10")!.alertes.join(" "), /il y a 66 jours/);
+  assert.match(analyserPeriodeCsv(raw, nov)!.alertes.join(" "), /il y a/);
+});
+
 console.log(`\n✅ ${passes} tests passés\n`);

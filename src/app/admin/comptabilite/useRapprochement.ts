@@ -522,7 +522,7 @@ export function useRapprochement({
       //   - periode tres courte (< 3 jours)
       //   - date de fin tres ancienne (> 30 jours avant aujourd'hui)
       // Confirmation requise avant de poursuivre l'import dans ces cas-la.
-      const periodeCsv = analyserPeriodeCsv(raw);
+      const periodeCsv = analyserPeriodeCsv(raw, new Date(), period);
       if (periodeCsv) {
         const { startStr, endStr, nbJours, alertes } = periodeCsv;
         if (alertes.length > 0) {
