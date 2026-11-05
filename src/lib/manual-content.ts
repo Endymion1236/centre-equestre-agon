@@ -151,7 +151,8 @@ export const MANUAL: ManualChapter[] = [
             <li>Cherche la famille dans la barre de recherche</li>
             <li>Sélectionne le ou les enfants</li>
             <li>Choisis le mode : <strong>Ponctuel</strong> (un seul cours) ou <strong>Forfait annuel</strong></li>
-            <li>Valide → l'enfant est inscrit, un email de confirmation part à la famille</li>
+            <li>Coche <strong>« 📧 Prévenir la famille par email »</strong> si tu veux qu'elle reçoive la confirmation et le montant à régler (pour un stage : la lettre et, le cas échéant, le lien de paiement de l'acompte). Décochée par défaut : aucun email ne part.</li>
+            <li>Valide → l'enfant est inscrit</li>
           </ol>
           <p>Pour les stages, tu peux choisir entre <strong>semaine entière</strong> ou <strong>jour par jour</strong>.</p>
         `,

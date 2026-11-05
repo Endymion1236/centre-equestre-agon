@@ -10,6 +10,7 @@ import {
   rangEnfantFamille,
   seasonOf,
   nomActuelInscrit,
+  optionsSelonPrevenir,
 } from "../../src/app/admin/planning/enroll-panel-utils";
 
 let passes = 0;
@@ -117,6 +118,14 @@ test("lot réduit à un jour (renommé seul) : le prix journée s'applique d'off
   assert.equal(lotUnJourAuPrixJournee({ allowDayBooking: true, priceTTCDay: 27 }, 5), false);
   assert.equal(lotUnJourAuPrixJournee({ allowDayBooking: false, priceTTCDay: 27 }, 1), false);
   assert.equal(lotUnJourAuPrixJournee({ allowDayBooking: true, priceTTCDay: "" }, 1), false);
+});
+
+
+test("inscription au planning : aucun email sans la case « Prévenir la famille » (05/11/2026)", () => {
+  assert.deepEqual(optionsSelonPrevenir(false, undefined), { skipEmail: true });
+  assert.deepEqual(optionsSelonPrevenir(false, { freeReason: "Rattrapage", skipEmail: false }), { freeReason: "Rattrapage", skipEmail: true });
+  assert.equal(optionsSelonPrevenir(true, undefined), undefined);
+  assert.deepEqual(optionsSelonPrevenir(true, { rattrapageId: "r1", skipEmail: false }), { rattrapageId: "r1", skipEmail: false });
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

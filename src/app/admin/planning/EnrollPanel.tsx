@@ -101,6 +101,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [showPay, setShowPay] = useState(false); const [payMode, setPayMode] = useState("cb_terminal"); const [unenrolling, setUnenrolling] = useState("");
   const [avoirSolde, setAvoirSolde] = useState<Record<string, number>>({});
   const [freeEnroll, setFreeEnroll] = useState(false);
+  // Email à la famille à l'inscription : un choix, jamais automatique (05/11/2026).
+  const [prevenirFamille, setPrevenirFamille] = useState(false);
   // PRE-INSCRIPTION : poser un cavalier sur un creneau sans rien declencher —
   // ni paiement, ni facture, ni email. Sert a remplir les cours avant que les
   // mandats de prelevement soient signes. Se supprime comme une inscription
@@ -810,7 +812,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
       familyDiscountPercent, freeEnroll, freeReason, freqCumuleeAdmin, frequenceCours,
       frequenceDejaInscrite, inscParams, inscriptionMode, isCompetition, isStage,
       licence, licenceType, onEnroll, onRefresh, payMode,
-      payPlan, payments, preinscription, priceTTC, prixAdhesionDegressif,
+      payPlan, payments, preinscription, prevenirFamille, priceTTC, prixAdhesionDegressif,
       prixForfait, prixForfaitAnnuel, prixForfaitBrut, prixLicence, prorata, quinzaine,
       rangEnfantFamille, remiseBaremePercent, remiseHorsBareme, remiseMotif, selChild,
       selectedChildren, semainePaire, sessionsRestantes, showAcompte, showPay,
@@ -2213,12 +2215,23 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     </button>
                   </div>
                 )}
+                {!preinscription && (
+                  <CasePrevenirFamille coche={prevenirFamille} onChange={setPrevenirFamille}
+                    detail={showAcompte && acompteReglement === "lien"
+                      ? "la lettre de stage et le lien de paiement de l'acompte"
+                      : "la lettre de stage avec le montant à régler"}
+                    sinon={showAcompte && acompteReglement === "lien" ? "Aucun lien de paiement ne partira : envoyez-le plus tard depuis Paiements." : undefined} />
+                )}
                 <button onClick={handleEnroll} disabled={enrolling || sepaBloque} className={`w-full py-3 rounded-xl font-body text-sm font-semibold border-none ${enrolling || sepaBloque ? "bg-gray-200 text-slate-500 cursor-not-allowed" : "bg-green-600 text-white hover:bg-green-500 cursor-pointer"}`}>
                   {enrolling ? "..." : `Inscrire ${selectedChildren.length} enfant${selectedChildren.length > 1 ? "s" : ""} — ${(stageTotalTTC + (assuranceOccasionnelle ? inscParams.assuranceOccasionnelle * selectedChildren.length : 0)).toFixed(2)}€`}
                 </button>
               </div>
             )}
 
+            {/* Email de confirmation : un choix, décoché par défaut. */}
+            {!isStage && selChild && inscriptionMode !== "annuel" && !preinscription && (
+              <CasePrevenirFamille coche={prevenirFamille} onChange={setPrevenirFamille} detail="la confirmation de la réservation avec le montant" />
+            )}
             {/* Bouton Cours / Activité ponctuelle */}
             {!isStage && selChild && (() => {
               const nbSel = Math.max(1, selectedChildren.length);
@@ -2393,3 +2406,20 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 }
 
 export default EnrollPanel;
+
+/**
+ * « Prévenir la famille par email » : rien ne part à l'inscription sans cette
+ * case (demande de Nicolas du 05/11/2026 — la facture ne doit pas partir
+ * systématiquement). Déclarée au niveau du module : jamais dans un composant.
+ */
+function CasePrevenirFamille({ coche, onChange, detail, sinon }: { coche: boolean; onChange: (v: boolean) => void; detail: string; sinon?: string }) {
+  return (
+    <label className="flex items-start gap-2 font-body text-xs text-slate-700 cursor-pointer mb-2">
+      <input type="checkbox" checked={coche} onChange={(e) => onChange(e.target.checked)} className="mt-0.5" />
+      <span>
+        📧 Prévenir la famille par email ({detail})
+        {!coche && <span className="block text-[11px] text-slate-500">Aucun email ne partira.{sinon ? ` ${sinon}` : ""}</span>}
+      </span>
+    </label>
+  );
+}

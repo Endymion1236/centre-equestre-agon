@@ -218,3 +218,13 @@ export function frequenceDejaInscrite(fam: any, allForfaits: any[], selChild: st
     });
   return total;
 }
+
+/**
+ * Options d'inscription selon la case « Prévenir la famille par email » :
+ * décochée, l'inscription ne déclenche aucun email (skipEmail), quelles que
+ * soient les autres options (offert, rattrapage, concours). Demande de
+ * Nicolas du 05/11/2026 : la facture ne part pas systématiquement.
+ */
+export function optionsSelonPrevenir<T extends Record<string, unknown> | undefined>(prevenirFamille: boolean, options: T): T | (NonNullable<T> & { skipEmail: true }) {
+  return prevenirFamille ? options : { ...((options || {}) as NonNullable<T>), skipEmail: true as const };
+}

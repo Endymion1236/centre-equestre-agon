@@ -22,6 +22,7 @@
  * Tout ce que l'inscription lit du formulaire et de l'écran, et tout ce
  * qu'elle remet à zéro une fois l'inscription faite.
  */
+import { optionsSelonPrevenir } from "./enroll-panel-utils";
 import { estSurDemande, formuleDuCreneau } from "@/lib/creneau-sur-demande";
 import {
   collection, addDoc, updateDoc, doc, getDoc, getDocs, query, where, serverTimestamp,
@@ -78,6 +79,13 @@ export interface ContexteInscriptionPanneau {
   payPlan: any;
   payments: any[];
   preinscription: any;
+  /**
+   * Case « Prévenir la famille par email » du panneau (décochée par défaut,
+   * demande de Nicolas du 05/11/2026) : sans elle, aucune confirmation ni
+   * montant à régler ne part à l'inscription — ni l'email du cours, ni la
+   * lettre de stage et son lien d'acompte.
+   */
+  prevenirFamille: boolean;
   priceTTC: any;
   prixAdhesionDegressif: any;
   prixForfait: any;
@@ -223,6 +231,8 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
     setShowPay,
     setUseRattrapage,
   } = ctx;
+  // Aucun email à l'inscription sauf case cochée : l'option skipEmail suit le choix.
+  const selonChoix = <T extends Record<string, unknown> | undefined>(o: T) => optionsSelonPrevenir(ctx.prevenirFamille, o);
 
   // Créneau sur demande sans formule : le prix n'est pas connu. La formule se
   // choisit d'abord en haut du panneau (ChoixFormuleSurDemande), puis on inscrit.
@@ -274,7 +284,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
               ...(preinscription ? { preinscription: true } : {}),
             } as any,
             preinscription ? undefined : payModeToUse,
-            preinscription ? { skipPayment: true, skipEmail: true } : freeEnrollOptions,
+            preinscription ? { skipPayment: true, skipEmail: true } : selonChoix(freeEnrollOptions),
           );
           if (typeof resultat === "string" && resultat) commandeIds.add(resultat);
           enrolledNames.push(firstName);
@@ -655,7 +665,7 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
       // panneau annonce les deux, et « Ne pas envoyer » retient les deux.
       const acompteEncaisseAuComptoir = showAcompte && acompteReglement === "sur_place";
       const lienAcompteAvecLaLettre = showAcompte && acompteReglement === "lien";
-      if (fam.parentEmail && !acompteEncaisseAuComptoir) {
+      if (fam.parentEmail && !acompteEncaisseAuComptoir && ctx.prevenirFamille) {
         try {
           const dates = stageMode === "jour"
             ? new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })
@@ -712,7 +722,8 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
       // Notification push — hors du bloc email : elle doit partir aussi quand
       // l'acompte a été encaissé au comptoir, cas où l'email de confirmation
       // est volontairement omis. Son titre suit l'état réel de la place.
-      {
+      // Comme l'email, seulement si « Prévenir la famille » est cochée.
+      if (ctx.prevenirFamille) {
         // « Confirmée » est réservé à ce qui est payé : tant que rien n'est
         // encaissé — le cas courant depuis l'administration, où le lien de
         // paiement part après l'inscription — la place est seulement retenue.
@@ -1148,11 +1159,11 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
         priceHT: coachingTTC / 1.055, tva: 5.5, priceTTC: coachingTTC,
       });
       const compOptions = compItems.length > 0 ? { competitionItems: compItems, skipEmail: false } : undefined;
-      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, showPay ? payMode : undefined, compOptions);
+      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, showPay ? payMode : undefined, selonChoix(compOptions));
     } else {
       const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
       const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;
-      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), ...(preinscription ? { preinscription: true } : {}) } as any, preinscription ? undefined : (inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined), enrollOptions || freeEnrollOptions || rattrapageOptions);
+      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), ...(preinscription ? { preinscription: true } : {}) } as any, preinscription ? undefined : (inscriptionMode === "ponctuel" && showPay && !freeEnroll && !useRattrapage ? payMode : undefined), selonChoix(enrollOptions || freeEnrollOptions || rattrapageOptions));
     }
     // Alerter si le creneau (cours collectif ou competition) passe complet
     await checkAndAlertIfFull([creneau.id!]);
