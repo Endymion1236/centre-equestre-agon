@@ -33,6 +33,8 @@ export interface CreneauCible {
   activityType?: string | null;
   /** Créneau sur demande : formule choisie (« cours-particulier »…). */
   formuleChoisie?: string | null;
+  /** Titre du créneau : « Cours particulier… » le désigne comme tel (voir estCoursParticulier). */
+  activityTitle?: string | null;
   /** AAAA-MM-JJ du créneau. */
   date?: string | null;
 }
@@ -45,9 +47,18 @@ export function typeCarteDuCreneau(activityType?: string | null): "cours" | "bal
   return null;
 }
 
-/** Le créneau est-il un cours particulier (type d'activité, ou formule « sur demande ») ? */
-export function estCoursParticulier(c: { activityType?: string | null; formuleChoisie?: string | null } | null | undefined): boolean {
-  return !!c && (c.activityType === "cours_particulier" || c.formuleChoisie === "cours-particulier");
+/**
+ * Le créneau est-il un cours particulier ? Type « cours_particulier », formule
+ * « sur demande » choisie, ou un COURS dont le titre le dit : le catalogue
+ * des activités n'a pas de type « cours particulier », une activité « Cours
+ * particulier » y est un « cours ». Sans le titre, une carte « Cours
+ * particuliers » ne couvrait aucun créneau ordinaire (DUHEM, 11/2026).
+ */
+export function estCoursParticulier(c: { activityType?: string | null; formuleChoisie?: string | null; activityTitle?: string | null } | null | undefined): boolean {
+  if (!c) return false;
+  if (c.activityType === "cours_particulier" || c.formuleChoisie === "cours-particulier") return true;
+  const titre = String(c.activityTitle || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return typeCarteDuCreneau(c.activityType) === "cours" && /\b(cours|lecon|seance)s? particuliers?\b|\bparticuliers?\b/.test(titre);
 }
 
 /**
@@ -58,7 +69,7 @@ export function estCoursParticulier(c: { activityType?: string | null; formuleCh
  *   - « particulier » → cours particuliers seulement ;
  *   - « cours »       → tout cours (collectif ou particulier).
  */
-export function typeCarteCouvre(typeCarte: string | null | undefined, c: { activityType?: string | null; formuleChoisie?: string | null }): boolean {
+export function typeCarteCouvre(typeCarte: string | null | undefined, c: { activityType?: string | null; formuleChoisie?: string | null; activityTitle?: string | null }): boolean {
   const t = typeCarte || "cours";
   if (t === "particulier") return estCoursParticulier(c);
   if (t === "balade") return typeCarteDuCreneau(c.activityType) === "balade";

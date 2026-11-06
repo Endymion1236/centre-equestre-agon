@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
             if (list.length >= maxP) return { status: "full" as const, cid: creneauIds[i] };
             if (surDemande.fixer) formulesAFixer.set(i, surDemande.fixer);
             // La carte doit couvrir CE créneau (type cours/balade, cavalier, validité).
-            if (carteValide && !carteCouvreCreneau(carteValide, { childId: item.childId, activityType: cr.activityType, date: cr.date })) {
+            if (carteValide && !carteCouvreCreneau(carteValide, { childId: item.childId, activityType: cr.activityType, date: cr.date, formuleChoisie: cr.formuleChoisie, activityTitle: cr.activityTitle })) {
               return { status: "carte_inapte" as const, cid: creneauIds[i] };
             }
             // Promenade au niveau fixé par la première inscription : le

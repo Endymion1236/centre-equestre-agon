@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   carteCouvreCreneau,
+  estCoursParticulier,
   choisirCarte,
   compterReservationsParCarte,
   libelleCarte,
@@ -108,6 +109,18 @@ test("carte « cours particuliers » : seulement les cours particuliers, y compr
   assert.equal(typeCarteCouvre("cours", { activityType: "cours_particulier" }), true);
   assert.equal(typeCarteCouvre(undefined, { activityType: "cours_collectif" }), true);
   assert.equal(typeCarteCouvre("balade", { activityType: "cours_particulier" }), false);
+});
+
+test("DUHEM 11/2026 : un cours du catalogue intitulé « Cours particulier » est couvert par une carte « Cours particuliers »", () => {
+  assert.equal(estCoursParticulier({ activityType: "cours", activityTitle: "Cours particulier 1h" }), true);
+  assert.equal(estCoursParticulier({ activityType: "cours", activityTitle: "Cours particuliers" }), true);
+  assert.equal(estCoursParticulier({ activityType: "cours", activityTitle: "Pony games Ados / Adultes" }), false);
+  // Une balade « particulière » n'est pas un cours.
+  assert.equal(estCoursParticulier({ activityType: "balade", activityTitle: "Balade particulière" }), false);
+  assert.equal(typeCarteCouvre("particulier", { activityType: "cours", activityTitle: "Cours particulier" }), true);
+  assert.equal(typeCarteCouvre("particulier", { activityType: "cours", activityTitle: "Galop 3" }), false);
+  assert.equal(carteCouvreCreneau({ id: "c", familiale: true, familyId: "f", activityType: "particulier", remainingSessions: 5, status: "active" },
+    { childId: "x", activityType: "cours", activityTitle: "Cours particulier", date: "2026-11-10" }), true);
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

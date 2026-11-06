@@ -353,7 +353,7 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
     for (const i of prev) if (i.cardId) reservees[i.cardId] = (reservees[i.cardId] || 0) + 1;
     // Une formule sur demande (cours particulier…) a son propre prix : pas de carte.
     const carte = !(creneau as any).tarifForfaitaire && !formuleSurDemande && prix > 0
-      ? choisirCarte(familyCartes, { childId, activityType: creneau.activityType, date: creneau.date }, reservees)
+      ? choisirCarte(familyCartes, { childId, activityType: creneau.activityType, date: creneau.date, formuleChoisie: (creneau as any).formuleChoisie, activityTitle: creneau.activityTitle }, reservees)
       : null;
     return [...prev, {
       creneauIds: [creneau.id],
