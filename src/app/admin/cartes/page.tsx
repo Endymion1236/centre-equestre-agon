@@ -1,4 +1,5 @@
 "use client";
+import { toParisDateString } from "@/lib/date-local";
 import { useAgentContext } from "@/hooks/useAgentContext";
 
 import { useState, useEffect } from "react";
@@ -13,7 +14,7 @@ import { createEncaissement } from "@/lib/compta-encaissement";
 import { authFetch } from "@/lib/auth-fetch";
 import { Plus, Minus, Search, Loader2, Ticket, X, Check, History } from "lucide-react";
 import type { Family } from "@/types";
-import { libelleTypeCarte } from "@/lib/cartes-seances";
+import { dateLigneCarte, libelleTypeCarte } from "@/lib/cartes-seances";
 import { RattacherSeances } from "./RattacherSeances";
 
 interface Card10 {
@@ -84,6 +85,8 @@ export default function CartesPage() {
   // Debit
   const [debitCardId, setDebitCardId] = useState<string | null>(null);
   const [debitActivity, setDebitActivity] = useState("");
+  // Date de la séance débitée à la main : aujourd'hui par défaut, modifiable (séance passée).
+  const [debitDate, setDebitDate] = useState("");
   const [debiting, setDebiting] = useState(false);
 
   const fetchData = async () => {
@@ -221,8 +224,9 @@ export default function CartesPage() {
     if (!card || card.remainingSessions <= 0) return;
     setDebiting(true);
 
+    const aujourdhui = toParisDateString(new Date());
     const newHistory = [...(card.history || []), {
-      date: new Date().toISOString().split("T")[0],
+      date: /^\d{4}-\d{2}-\d{2}$/.test(debitDate) && debitDate <= aujourdhui ? debitDate : aujourdhui,
       activityTitle: debitActivity || "Séance",
       deductedAt: new Date().toISOString(),
     }];
@@ -234,7 +238,7 @@ export default function CartesPage() {
       status: card.remainingSessions - 1 <= 0 ? "used" : "active",
     });
 
-    setDebitCardId(null); setDebitActivity(""); setDebiting(false);
+    setDebitCardId(null); setDebitActivity(""); setDebitDate(""); setDebiting(false);
     fetchData();
   };
 
@@ -375,6 +379,9 @@ export default function CartesPage() {
                         <div className="flex gap-2">
                           <input value={debitActivity} onChange={e => setDebitActivity(e.target.value)}
                             placeholder="Activité (optionnel)" className={`${inp} flex-1 !text-xs`} />
+                          <input type="date" value={debitDate || toParisDateString(new Date())} max={toParisDateString(new Date())}
+                            onChange={e => setDebitDate(e.target.value)} title="Date de la séance"
+                            className={`${inp} !w-auto !text-xs`} />
                           <button type="button" onClick={() => handleDebit(card.id)} disabled={debiting}
                             className="px-4 py-2 rounded-lg font-body text-xs font-semibold text-white bg-gold-400 border-none cursor-pointer hover:bg-gold-300">
                             {debiting ? "..." : "−1"}
@@ -412,7 +419,7 @@ export default function CartesPage() {
                               <div className="min-w-0">
                                 <div className={`text-blue-800 font-semibold truncate ${h.annule ? "line-through" : ""}`}>{h.activityTitle || "Séance"}</div>
                                 <div className="text-slate-500 text-[10px]">
-                                  {h.date ? new Date(h.date).toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" }) : ""}
+                                  {dateLigneCarte(h)}
                                   {h.horseName ? ` · ${h.horseName}` : ""}
                                   {h.credit ? " · Recrédit" : ""}
                                 </div>

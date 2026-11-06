@@ -1,5 +1,6 @@
 "use client";
 
+import { dateLigneCarte } from "@/lib/cartes-seances";
 import { useEffect, useMemo, useState } from "react";
 import { libelleTypeCarte } from "@/lib/cartes-seances";
 import { echeancesAnterieuresDues, estEcheanceDeSerie, messageReglerDabord, trierARegler } from "@/lib/echeances-ordre";
@@ -988,7 +989,7 @@ export default function FacturesPage() {
                                 <div className="flex flex-col gap-1 mt-2">
                                   {[...(card.history || [])].reverse().slice(0, 10).map((entry: any, index: number) => (
                                     <div key={index} className="flex items-center justify-between bg-white rounded-lg px-2.5 py-1.5">
-                                      <div className="font-body text-xs text-gray-700">{entry.activityTitle || "Séance"} · {entry.date ? new Date(entry.date).toLocaleDateString("fr-FR") : ""}</div>
+                                      <div className="font-body text-xs text-gray-700">{entry.activityTitle || "Séance"} · {dateLigneCarte(entry)}</div>
                                       <div className={`font-body text-xs font-bold ${entry.credit ? "text-green-600" : "text-gold-600"}`}>{entry.credit ? "+1" : "✓"}</div>
                                     </div>
                                   ))}

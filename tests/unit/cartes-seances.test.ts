@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   carteCouvreCreneau,
+  dateLigneCarte,
   estCoursParticulier,
   choisirCarte,
   compterReservationsParCarte,
@@ -121,6 +122,16 @@ test("DUHEM 11/2026 : un cours du catalogue intitulé « Cours particulier » es
   assert.equal(typeCarteCouvre("particulier", { activityType: "cours", activityTitle: "Galop 3" }), false);
   assert.equal(carteCouvreCreneau({ id: "c", familiale: true, familyId: "f", activityType: "particulier", remainingSessions: 5, status: "active" },
     { childId: "x", activityType: "cours", activityTitle: "Cours particulier", date: "2026-11-10" }), true);
+});
+
+test("DUHEM 11/2026 : une séance rattachée après coup montre la date du cours, pas celle du rattachement", () => {
+  const l = dateLigneCarte({ date: "2026-11-06", creneauDate: "2026-10-01", startTime: "17:00", rattachement: true });
+  assert.match(l, /1 oct/);
+  assert.match(l, /17:00/);
+  assert.match(l, /rattachée le .*6 nov/);
+  // Débit au montoir ou à la main : sa date est celle de la séance.
+  assert.match(dateLigneCarte({ date: "2026-11-05" }), /5 nov/);
+  assert.equal(dateLigneCarte({}), "");
 });
 
 console.log(`\n✅ ${passes} tests passés\n`);

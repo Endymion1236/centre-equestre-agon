@@ -143,3 +143,26 @@ export function libelleCarte(carte: CarteLike): string {
   const base = total > 0 ? `Carte ${total} séances` : "Carte de séances";
   return carte.familiale ? `${base} (famille)` : base;
 }
+
+const jourCourt = (iso: string) => {
+  const d = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+};
+
+/**
+ * La date à montrer pour une ligne de l'historique d'une carte : celle de la
+ * SÉANCE. Une séance rattachée après coup porte la date du rattachement dans
+ * `date` et celle du cours dans `creneauDate` : la carte DUHEM affichait trois
+ * « ven. 6 nov. » pour des cours du 1er octobre, du 16 octobre et du 5
+ * novembre (11/2026).
+ */
+export function dateLigneCarte(h: { date?: string | null; creneauDate?: string | null; startTime?: string | null; rattachement?: boolean } | null | undefined): string {
+  if (!h) return "";
+  const seance = /^\d{4}-\d{2}-\d{2}/.test(String(h.creneauDate || "")) ? String(h.creneauDate).slice(0, 10) : "";
+  const jour = String(h.date || "").slice(0, 10);
+  const principal = jourCourt(seance || jour);
+  if (!principal) return "";
+  const heure = seance && h.startTime ? ` ${h.startTime}` : "";
+  const rattache = h.rattachement && seance && jour && jour !== seance && jourCourt(jour) ? ` · rattachée le ${jourCourt(jour)}` : "";
+  return `${principal}${heure}${rattache}`;
+}
