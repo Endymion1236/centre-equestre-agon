@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mentionsPaiementTexte } from "@/lib/mentions-facture";
 import { getClubInfo } from "@/lib/club-info";
 import { renderToBuffer, Document, Page, Text, View, StyleSheet, Image } from "@react-pdf/renderer";
 import { readFileSync } from "fs";
@@ -461,6 +462,9 @@ export async function POST(request: NextRequest) {
               )
             : null,
         ),
+
+        // ── Mentions obligatoires de paiement (lib/mentions-facture) ─────
+        estDevis ? null : React.createElement(Text, { style: s.mentionTVA }, mentionsPaiementTexte()),
 
         // ── Tampon PAYÉ (uniquement si la facture est réglée) ────────────
         isPaid

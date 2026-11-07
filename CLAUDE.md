@@ -89,7 +89,7 @@ responsabilité personnelle de Nicolas — inexacte.
 - [`AUDIT-2026-09-17.md`](AUDIT-2026-09-17.md) — comptabilité et exigences 2026. **Reste ouvert :**
   unicité des clôtures journalières (C5, à faire dès la clôture de septembre terminée), chaînage
   transactionnel (C3), archive annuelle scellée puis attestation au modèle `BOI-LETTRE-000242`
-  (C4), mentions obligatoires de facture (C8, attend les taux de Nicolas), TVA à l'encaissement
+  (C4), mentions obligatoires de facture (C8 : mentions de paiement posées le 07/11/2026, `lib/mentions-facture.ts` ; Factur-X valide au contrôle Super PDP — EN 16931 + BR-FR, factures S1 et S2, ligne à 0 % en catégorie E), TVA à l'encaissement
   (C9 : encaissements retenus le 30/09/2026, à faire confirmer par Keobiz), Factur-X conforme EN 16931 (C10, échéance 01/09/2027), test de
   restauration (C12).
 - Audit externe du 05/11/2026 (FEC, banque, avoirs, SEPA) : point 1 de son plan (tests sur le commit audité `27a6c6b`) consigné dans [`docs/VALIDATION-2026-11-05.md`](docs/VALIDATION-2026-11-05.md). Restent : factures fournisseurs non réglées hors FEC (P0), FEC annuel produit par le cabinet à confirmer (P0), rapprochement du 512 sur données réelles (en cours, mois par mois).

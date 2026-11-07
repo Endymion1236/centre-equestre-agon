@@ -9,6 +9,7 @@
  * Références de champs (Business Terms EN 16931) en commentaire.
  */
 
+import { MENTIONS_PAIEMENT } from "@/lib/mentions-facture";
 import type { ClubInfo } from "@/lib/club-info";
 
 /**
@@ -66,6 +67,18 @@ function toDate102(d: any): string {
   return dt.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
+/**
+ * Catégorie de TVA d'une ligne (BT-151 / BT-118). Une ligne à 0 % (licence
+ * refacturée, activité exonérée) était déclarée « S » (taux normal) à 0 % :
+ * refusée par la norme (BR-S-05, contrôle Super PDP du 07/11/2026). Elle est
+ * « E », exonérée, avec un motif (BT-120, exigé par BR-E-10).
+ */
+export function categorieTva(rate: number): "S" | "E" {
+  return rate === 0 ? "E" : "S";
+}
+/** Motif d'exonération porté par la ventilation à 0 % — référence légale à confirmer par le cabinet. */
+export const MOTIF_EXONERATION_TVA = "Exonération de TVA";
+
 export interface FacturXInput {
   invoiceNumber: string; // BT-1
   invoiceDate: any; // BT-2 (Timestamp/Date/string)
@@ -79,6 +92,8 @@ export interface FacturXInput {
   totalTTC: number;
   paidAmount: number; // acomptes déjà réglés (BT-113)
   dueDate?: any; // BT-9 (échéance — début du stage par ex.)
+  /** Date du paiement (BT-9 d'une facture déjà payée, cadre B2/S2/M2). Défaut : date d'émission. */
+  paymentDate?: any;
   /** BT-23 cadre de facturation France (XP Z12-012, BR-FR-08).
    *  Prestations du centre = Services → "S1" (à régler) / "S2" (déjà payée). */
   businessProcess?: string;
@@ -117,7 +132,11 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
       e.tax = Math.round((totalTax - allocated) * 100) / 100;
     }
   });
-  const due = Math.round((inv.totalTTC - (inv.paidAmount || 0)) * 100) / 100;
+  // Facture déjà payée (cadre B2/S2/M2) : BT-113 = total, BT-115 = 0
+  // (BR-FR-CO-09). Les écrans transmettaient 0 payé avec S2 : refus de la PA.
+  const dejaPayee = /^[BSM]2$/.test(inv.businessProcess || "");
+  const paye = dejaPayee ? inv.totalTTC : (inv.paidAmount || 0);
+  const due = Math.round((inv.totalTTC - paye) * 100) / 100;
 
   const lineXml = lines
     .map((it, i) => {
@@ -142,7 +161,7 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
       <ram:SpecifiedLineTradeSettlement>
         <ram:ApplicableTradeTax>
           <ram:TypeCode>VAT</ram:TypeCode>
-          <ram:CategoryCode>S</ram:CategoryCode>
+          <ram:CategoryCode>${categorieTva(rate)}</ram:CategoryCode>
           <ram:RateApplicablePercent>${money(rate)}</ram:RateApplicablePercent>
         </ram:ApplicableTradeTax>
         <ram:SpecifiedTradeSettlementLineMonetarySummation>
@@ -158,13 +177,20 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
       ([rate, e]) => `
       <ram:ApplicableTradeTax>
         <ram:CalculatedAmount>${money(e.tax)}</ram:CalculatedAmount>
-        <ram:TypeCode>VAT</ram:TypeCode>
+        <ram:TypeCode>VAT</ram:TypeCode>${categorieTva(rate) === "E" ? `
+        <ram:ExemptionReason>${esc(MOTIF_EXONERATION_TVA)}</ram:ExemptionReason><!-- BT-120 -->` : ""}
         <ram:BasisAmount>${money(e.basis)}</ram:BasisAmount>
-        <ram:CategoryCode>S</ram:CategoryCode>
+        <ram:CategoryCode>${categorieTva(rate)}</ram:CategoryCode>
         <ram:RateApplicablePercent>${money(rate)}</ram:RateApplicablePercent>
       </ram:ApplicableTradeTax>`
     )
     .join("");
+
+  // BT-9 : facture déjà payée (cadre B2/S2/M2), l'échéance est la date du
+  // paiement (BR-FR-CO-09, refus constaté au contrôle Super PDP le
+  // 07/11/2026). Une facture est numérotée quand elle est soldée : sa date
+  // d'émission tient lieu de date de paiement à défaut d'autre.
+  const echeance = dejaPayee ? (inv.paymentDate ?? inv.invoiceDate) : inv.dueDate;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
@@ -179,7 +205,8 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
   <rsm:ExchangedDocument>
     <ram:ID>${esc(inv.invoiceNumber)}</ram:ID><!-- BT-1 -->
     <ram:TypeCode>380</ram:TypeCode><!-- 380 = facture commerciale -->
-    <ram:IssueDateTime><udt:DateTimeString format="102">${toDate102(inv.invoiceDate)}</udt:DateTimeString></ram:IssueDateTime><!-- BT-2 -->
+    <ram:IssueDateTime><udt:DateTimeString format="102">${toDate102(inv.invoiceDate)}</udt:DateTimeString></ram:IssueDateTime><!-- BT-2 -->${MENTIONS_PAIEMENT.map((m) => `
+    <ram:IncludedNote><ram:Content>${esc(m.texte)}</ram:Content><ram:SubjectCode>${m.code}</ram:SubjectCode></ram:IncludedNote>`).join("")}<!-- BG-1 mentions obligatoires (BR-FR-05) -->
   </rsm:ExchangedDocument>
   <rsm:SupplyChainTradeTransaction>${lineXml}
     <ram:ApplicableHeaderTradeAgreement>
@@ -237,14 +264,14 @@ export function buildFacturXXml(inv: FacturXInput, club: ClubInfo): string {
         </ram:PayeePartyCreditorFinancialAccount>
       </ram:SpecifiedTradeSettlementPaymentMeans>${taxXml}
       <ram:SpecifiedTradePaymentTerms>
-        ${inv.dueDate ? `<ram:DueDateDateTime><udt:DateTimeString format="102">${toDate102(inv.dueDate)}</udt:DateTimeString></ram:DueDateDateTime><!-- BT-9 -->` : `<ram:Description>Payable à réception</ram:Description>`}
+        ${echeance ? `<ram:DueDateDateTime><udt:DateTimeString format="102">${toDate102(echeance)}</udt:DateTimeString></ram:DueDateDateTime><!-- BT-9 -->` : `<ram:Description>Payable à réception</ram:Description>`}
       </ram:SpecifiedTradePaymentTerms>
       <ram:SpecifiedTradeSettlementHeaderMonetarySummation>
         <ram:LineTotalAmount>${money(sumHT)}</ram:LineTotalAmount><!-- BT-106 -->
         <ram:TaxBasisTotalAmount>${money(sumHT)}</ram:TaxBasisTotalAmount><!-- BT-109 -->
         <ram:TaxTotalAmount currencyID="EUR">${money(totalTax)}</ram:TaxTotalAmount><!-- BT-110 -->
         <ram:GrandTotalAmount>${money(inv.totalTTC)}</ram:GrandTotalAmount><!-- BT-112 -->
-        <ram:TotalPrepaidAmount>${money(inv.paidAmount || 0)}</ram:TotalPrepaidAmount><!-- BT-113 acomptes -->
+        <ram:TotalPrepaidAmount>${money(paye)}</ram:TotalPrepaidAmount><!-- BT-113 acomptes -->
         <ram:DuePayableAmount>${money(due)}</ram:DuePayableAmount><!-- BT-115 -->
       </ram:SpecifiedTradeSettlementHeaderMonetarySummation>
     </ram:ApplicableHeaderTradeSettlement>
