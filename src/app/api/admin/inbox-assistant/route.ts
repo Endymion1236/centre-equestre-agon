@@ -1,4 +1,5 @@
 import { LIMITE_REPONSE, MODELE_LEGER, MODELE_REDACTION } from "@/lib/ia-modeles";
+import { nettoyerDevisPropose } from "@/lib/devis-depuis-mail";
 import { marquerSuivi } from "@/lib/boite-suivi-serveur";
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
@@ -141,7 +142,10 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const { from, subject, body, threadId } = await req.json();
+    const { from, subject, body, threadId, consigne: consigneBrute } = await req.json();
+    // Consigne du gérant pour CETTE réponse (« propose plutôt le samedi »,
+    // « refuse poliment », « fais un devis pour 12 enfants »…).
+    const consigne = typeof consigneBrute === "string" ? consigneBrute.trim().slice(0, 1500) : "";
     // Un collègue qui ouvre ce fil voit qu'une réponse est en préparation (lib/boite-suivi).
     if (typeof threadId === "string" && threadId.trim()) await marquerSuivi(threadId.trim(), "enCours", auth);
 
@@ -336,6 +340,8 @@ Règles:
 - Si rien ne correspond ou si le mail n'est pas une demande de prestation, laisse "suggestions" vide.
 - NOUVELLE FAMILLE : si l'expéditeur est INCONNU de la base ET que le mail est une demande d'inscription/prestation, remplis "nouvelleFamille" pour pré-remplir la fiche : parentName = nom du parent tel que signé ou déduit du mail (sinon null), enfants = ceux mentionnés dans le mail avec UNIQUEMENT les infos réellement présentes (prénom obligatoire ; nom, âge, galop seulement s'ils sont écrits — n'invente JAMAIS un âge ou un niveau). Sinon laisse "nouvelleFamille" à null.
 - Le brouillon est une PROPOSITION que le gérant relira et enverra lui-même. Ne promets jamais une inscription faite.
+- DEVIS : si le mail demande un prix ou un devis pour une prestation de groupe ou sur mesure (anniversaire, classe ou école, centre de loisirs, comité d'entreprise, groupe d'adultes, cours particuliers en série…), ou si la consigne du gérant le demande, remplis "devis" : "objet" (une ligne : qui, quoi, pour combien, quand), et "lignes" (libellé, quantité, prix TTC UNITAIRE). Le prix ne vient QUE des données fournies (activités, cartes) ; s'il n'y figure pas, mets "priceTTC": null — le gérant le complétera. Dans le brouillon, annonce qu'un devis détaillé suit, sans écrire de total inventé. Sinon "devis" vaut null.
+- CONSIGNE DU GÉRANT : si une consigne est fournie, elle oriente le contenu et le ton de la réponse et prime sur tes choix de rédaction ; elle ne lève JAMAIS les règles de prix, de places et de sécurité ci-dessus.
 
 Format JSON attendu:
 {
@@ -343,7 +349,8 @@ Format JSON attendu:
   "resume": "1-2 phrases",
   "brouillon": "corps du mail de réponse en français",
   "suggestions": [ { "groupId": "..." | null, "creneauId": "..." | null, "mode": "semaine" | "jours" | null, "jours": ["YYYY-MM-DD", ...] | null, "childId": "..." | null, "pourquoi": "raison courte" } ],
-  "nouvelleFamille": null | { "parentName": "..." | null, "enfants": [ { "prenom": "...", "nom": "..." | null, "age": 9 | null, "galop": "..." | null } ] }
+  "nouvelleFamille": null | { "parentName": "..." | null, "enfants": [ { "prenom": "...", "nom": "..." | null, "age": 9 | null, "galop": "..." | null } ] },
+  "devis": null | { "objet": "...", "lignes": [ { "label": "...", "qty": 1, "priceTTC": 180 | null } ] }
 }`;
 
     const we = prochainWeekend(today);
@@ -352,7 +359,10 @@ CE WEEK-END = samedi ${we.samedi} et dimanche ${we.dimanche}.
 ACTIVITÉS FOURNIES CI-DESSOUS : elles couvrent la période du ${periode.start} au ${periode.end} (extraite de la demande${periodeNommee ? ` — ${periodeNommee.name}` : ""}). ${periode.borne ? "La famille a demandé CETTE période : ne propose rien en dehors, même si tu connais d'autres dates." : ""} Si la famille évoque une AUTRE période que celle-ci, invite-la poliment à préciser ses dates, que tu vérifieras — ne dis pas "rien de disponible".
 IMPORTANT : n'essaie JAMAIS de recalculer un jour de semaine toi-même. Chaque activité fournie contient déjà son champ "jour" (le vrai jour de la semaine) — utilise-le tel quel.
 
-MAIL REÇU (LE PLUS RÉCENT — c'est à CELUI-CI que tu réponds)
+${consigne ? `CONSIGNE DU GÉRANT POUR CETTE RÉPONSE (à suivre) :
+« ${consigne} »
+
+` : ""}MAIL REÇU (LE PLUS RÉCENT — c'est à CELUI-CI que tu réponds)
 De: ${from || "(inconnu)"}
 Objet: ${subject || "(sans objet)"}
 Corps:
@@ -545,6 +555,18 @@ ${JSON.stringify(activitesFiltrees)}`;
       };
     });
 
+    let devisExistants: { id: string; numero: string; status: string; totalTTC: number; date: string | null }[] = [];
+    if (familyId) {
+      try {
+        const ds = await adminDb.collection("devis").where("familyId", "==", familyId).get();
+        devisExistants = ds.docs.map((d) => {
+          const x = d.data() as any;
+          const sec = x.createdAt?.seconds ?? x.createdAt?._seconds;
+          return { id: d.id, numero: String(x.numero || ""), status: String(x.status || ""), totalTTC: Number(x.totalTTC) || 0, date: sec ? new Date(sec * 1000).toISOString().slice(0, 10) : null };
+        }).sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 5);
+      } catch (e) { console.warn("[inbox-assistant] devis de la famille :", e); }
+    }
+
     return NextResponse.json({
       ok: true,
       classification: parsed.classification || "autre",
@@ -557,6 +579,10 @@ ${JSON.stringify(activitesFiltrees)}`;
       // Pré-remplissage fiche nouvelle famille (expéditeur inconnu uniquement).
       // C'est une PROPOSITION que l'admin relit et corrige avant création.
       nouvelleFamille: !familleContexte && parsed.nouvelleFamille ? parsed.nouvelleFamille : null,
+      // Devis proposé (lignes à prix connus ou « à compléter ») et devis déjà
+      // établis pour cette famille : la boîte les relie au module devis.
+      devisPropose: nettoyerDevisPropose(parsed.devis),
+      devisExistants,
       // Catalogue COMPLET des prestations disponibles (mêmes données
       // autoritaires que les suggestions) pour l'ajout MANUEL par l'admin :
       // stages en semaines + autres activités, sans enfant ciblé.

@@ -6,6 +6,7 @@ import { contientUnRib } from "@/lib/rib-texte";
 import { Loader2, Mail, Sparkles, Calendar, Copy, Check, Inbox, RefreshCw, Send, Trash2, Forward, UserPlus, Phone, Paperclip, Landmark, AlertTriangle, Upload
 } from "lucide-react";
 import { formatIban } from "@/lib/sepa-validation";
+import BlocDevis from "./BlocDevis";
 
 const CLASSIF: Record<string, { label: string; cls: string }> = {
   inscription: { label: "Demande d'inscription", cls: "bg-green-50 text-green-700" },
@@ -125,6 +126,8 @@ export default function BoiteAssistantPage() {
   const [res, setRes] = useState<any>(null);
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState("");
+  // Consigne du gérant pour la réponse (« propose le samedi », « fais un devis »…).
+  const [consigne, setConsigne] = useState("");
   const [copied, setCopied] = useState(false);
   // Suivi de l'inscription 1-clic par suggestion (index → état)
   const [enrollState, setEnrollState] = useState<Record<number, { busy?: boolean; done?: boolean; error?: string; orderMsg?: string; orderWarn?: string }>>({});
@@ -413,6 +416,7 @@ export default function BoiteAssistantPage() {
     setSelectedId(m.id || "");
     setMailboxMsg(null);
     setRes(null);
+    setConsigne("");
     setErr("");
     setSendMsg(null);
     setVocal(null);
@@ -461,7 +465,7 @@ export default function BoiteAssistantPage() {
       const r = await authFetch("/api/admin/inbox-assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, subject, body, threadId: replyMeta.threadId || undefined }),
+        body: JSON.stringify({ from, subject, body, threadId: replyMeta.threadId || undefined, consigne: consigne.trim() || undefined }),
       });
       const d = await r.json();
       if (!r.ok) {
@@ -599,7 +603,7 @@ export default function BoiteAssistantPage() {
       setReplyMeta({ threadId: "", messageId: "" }); setSuiviSel(null);
       setSelectedId("");
       setRes(null);
-      setDraft("");
+      setDraft(""); setConsigne("");
       setErr("");
       analyseAuto.current = true;
     } catch { /* rien à pré-remplir */ }
@@ -1008,13 +1012,21 @@ export default function BoiteAssistantPage() {
             rows={9}
             className="w-full resize-y rounded-lg border border-gray-200 px-3 py-2 font-body text-sm focus:border-blue-400 focus:outline-none"
           />
+          <label className="mt-3 block font-body text-[13px] sm:text-[11px] font-bold uppercase tracking-wide text-purple-500">Consigne pour la réponse (facultatif)</label>
+          <textarea
+            value={consigne}
+            onChange={(e) => setConsigne(e.target.value)}
+            placeholder="Ex. : propose plutôt le samedi matin ; refuse poliment, c'est complet ; fais un devis pour 12 enfants le 14 mars"
+            rows={2}
+            className="mt-1 w-full resize-y rounded-lg border border-purple-100 bg-purple-50/30 px-3 py-2 font-body text-sm focus:border-purple-400 focus:outline-none"
+          />
           <button type="button"
             onClick={analyser}
             disabled={loading || (!body.trim() && !subject.trim())}
-            className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-body text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 font-body text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-            Analyser
+            {res && consigne.trim() ? "Réécrire avec cette consigne" : "Analyser"}
           </button>
           {err && <p className="mt-2 font-body text-xs text-red-500">{err}</p>}
         </div>
@@ -1050,6 +1062,13 @@ export default function BoiteAssistantPage() {
                   <p className="break-words font-body text-sm text-slate-700">{res.resume}</p>
                 </div>
               )}
+
+              <BlocDevis
+                familyId={res.familyId || newFam?.familyId || null}
+                devisPropose={res.devisPropose || null}
+                devisExistants={Array.isArray(res.devisExistants) ? res.devisExistants : []}
+                sujet={subject}
+              />
 
               {/* ── Étape 4 : nouvelle famille détectée (expéditeur inconnu) ── */}
               {famForm && (

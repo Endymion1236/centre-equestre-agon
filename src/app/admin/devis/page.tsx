@@ -1,5 +1,6 @@
 "use client";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { lirePrefillDevis, noteDevisDepuisMail } from "@/lib/devis-depuis-mail";
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, getDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, Badge } from "@/components/ui";
@@ -148,6 +149,25 @@ export default function DevisPage() {
     });
   };
   useEffect(() => { fetchData(); }, []);
+
+  // Ouvert depuis la boîte mail (lib/devis-depuis-mail) : formulaire
+  // pré-rempli sur la fiche de l'expéditeur, après le premier chargement
+  // (fetchData remet le formulaire à zéro).
+  const prefillFait = useRef(false);
+  useEffect(() => {
+    if (loading || prefillFait.current || typeof window === "undefined") return;
+    prefillFait.current = true;
+    const p = lirePrefillDevis(new URLSearchParams(window.location.search).get("prefill"));
+    if (!p) return;
+    const fam = families.find(f => f.firestoreId === p.familyId);
+    setEnEdition(null);
+    setSelFamily(p.familyId); setSelChild(""); setServiceFacture("");
+    setFamilySearch(fam?.parentName || "");
+    setItems(p.lignes.length ? p.lignes.map(l => ({ label: l.label, qty: l.qty, priceTTC: l.priceTTC, tva: 5.5 })) : [{ label: "", qty: 1, priceTTC: 0, tva: 5.5 }]);
+    setNote(noteDevisDepuisMail(p));
+    setShowForm(true);
+    window.history.replaceState(null, "", "/admin/devis");
+  }, [loading, families]);
 
   // Charge tarifs (settings/inscription) + dégressivité famille (settings/degressivite)
   useEffect(() => {
