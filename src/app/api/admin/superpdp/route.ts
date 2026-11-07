@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     if (action === "factures") {
       const role = req.nextUrl.searchParams.get("role");
       if (!estRole(role)) return NextResponse.json({ error: "role : club ou fournisseur" }, { status: 400 });
-      const d = await (await appelSuperPdp(role, "/v1.beta/invoices?order=desc&limit=50&expand[]=en_invoice")).json();
+      const d = await (await appelSuperPdp(role, "/v1.beta/invoices?order=desc&limit=50&expand[]=en_invoice&expand[]=en_invoice.seller&expand[]=en_invoice.buyer&expand[]=events")).json();
       return NextResponse.json({ factures: (d.data || []).map(resumerFacture) });
     }
     return NextResponse.json({ error: `Action inconnue : ${action}` }, { status: 400 });
