@@ -9,6 +9,16 @@ import { Loader2, RefreshCw, Send } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import type { FactureResumee, RoleSuperPdp } from "@/lib/superpdp-regles";
 
+interface Apercu {
+  id: number;
+  piece: { fournisseur: string; numero: string; date: string; ht: number | null; tva: number | null; ttc: number | null; devise?: string };
+  alertes: string[];
+  compteFournisseur: { compte: string; libelle: string; collectif: boolean };
+  compteCharge: { compte: string; libelle: string; note?: string };
+  debits: { id: string; fournisseur: string; montant: number; dateOperation?: string; raisons: string[] }[];
+  dejaLa: boolean;
+}
+
 interface EtatRole { role: RoleSuperPdp; configure: boolean; ok?: boolean; entreprise?: string; mode?: string; erreur?: string }
 
 const LIBELLE: Record<RoleSuperPdp, string> = { club: "Le club (Burger Queen)", fournisseur: "Le fournisseur (Tricatel)" };
@@ -19,6 +29,16 @@ export default function SuperPdpPage() {
   const [factures, setFactures] = useState<FactureResumee[] | null>(null);
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [apercus, setApercus] = useState<Apercu[] | null>(null);
+
+  const voirApercu = async () => {
+    setBusy("apercu"); setMessage("");
+    try {
+      const r = await (await authFetch("/api/admin/superpdp?action=apercu-depenses")).json();
+      if (r.error) setMessage(`❌ ${r.error}`); else setApercus(r.apercus || []);
+    } catch (err: any) { setMessage(`❌ ${err?.message || "Erreur"}`); }
+    setBusy("");
+  };
 
   const charger = async () => {
     setBusy("charger"); setMessage("");
@@ -85,6 +105,27 @@ export default function SuperPdpPage() {
           </button>
         </div>
         {message && <p className="font-body text-sm">{message}</p>}
+      </section>
+
+      <section className="bg-white rounded-xl border border-gray-100 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="font-body text-sm font-bold text-slate-700 uppercase tracking-wide">Factures reçues → Dépenses (aperçu)</h2>
+          <button type="button" onClick={() => void voirApercu()} disabled={!!busy || !pret("club")} className="flex items-center gap-1.5 font-body text-sm font-semibold text-white bg-emerald-600 px-4 py-2 rounded-lg border-none cursor-pointer disabled:opacity-40">
+            {busy === "apercu" ? <Loader2 size={14} className="animate-spin" /> : null} Voir comment elles arriveraient dans Dépenses
+          </button>
+        </div>
+        <p className="font-body text-xs text-slate-500">Lecture seule : rien n&apos;est enregistré dans vos dépenses. Mêmes règles que pour vos factures réelles (contrôles, compte du fournisseur, compte de charge, débit du relevé).</p>
+        {apercus && apercus.length === 0 && <p className="font-body text-sm text-slate-500">Aucune facture reçue pour l&apos;instant.</p>}
+        {apercus?.map(a => (
+          <div key={a.id} className="rounded-lg border border-gray-200 p-3 font-body text-sm space-y-1">
+            <p><b>{a.piece.fournisseur || "Fournisseur ?"}</b> · facture {a.piece.numero || "?"} du {a.piece.date || "?"}</p>
+            <p>HT {eur(a.piece.ht)} · TVA {eur(a.piece.tva)} · <b>TTC {eur(a.piece.ttc)}</b> {a.piece.devise && a.piece.devise !== "EUR" ? `(${a.piece.devise})` : ""} — <span className="text-green-700">lus dans la facture électronique, sans IA</span></p>
+            <p>Compte fournisseur : <b>{a.compteFournisseur.compte}</b> {a.compteFournisseur.libelle}{a.compteFournisseur.collectif ? " (fournisseur occasionnel)" : ""}</p>
+            <p>Compte de charge : {a.compteCharge.compte ? <><b>{a.compteCharge.compte}</b> {a.compteCharge.libelle}</> : <span className="text-amber-700">à choisir à l&apos;arrivée (catégorie de la dépense){a.compteCharge.note ? ` — ${a.compteCharge.note}` : ""}</span>}</p>
+            <p>Débit du relevé : {a.dejaLa ? <span className="text-slate-600">déjà rattachée à un débit</span> : a.debits.length ? a.debits.map(d => `${d.fournisseur} · ${eur(d.montant)} · ${d.dateOperation || "?"} (${d.raisons.join(", ")})`).join(" ; ") : <span className="text-slate-600">aucun débit correspondant trouvé (normal pour une facture fictive)</span>}</p>
+            {a.alertes.length > 0 && <p className="text-amber-800">⚠️ {a.alertes.join(" ")}</p>}
+          </div>
+        ))}
       </section>
 
       <section className="bg-white rounded-xl border border-gray-100 p-4">
