@@ -275,7 +275,9 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh, m
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-4">
             {JOURS.map(jour => {
-              const jourTaches = form.taches.filter(t => t.jour === jour);
+              // Par horaire (puis salarié), comme une journée se lit — plus dans l'ordre d'ajout.
+              const jourTaches = form.taches.filter(t => t.jour === jour)
+                .sort((a, b) => String(a.heureDebut || "").localeCompare(String(b.heureDebut || "")) || String(a.salarieName || "").localeCompare(String(b.salarieName || ""), "fr"));
               return (
                 <div key={jour} className="bg-slate-50 rounded-lg p-3">
                   <div className="flex items-center justify-between mb-2">
@@ -292,11 +294,11 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh, m
                     <p className="font-body text-[10px] text-gray-400 italic">Aucune tâche</p>
                   )}
 
-                  {jourTaches.map((t, idx) => {
+                  {jourTaches.map((t) => {
                     const realIdx = form.taches.indexOf(t);
                     const cat = CATEGORIES.find(c => c.id === t.categorie);
                     return (
-                      <div key={idx} className="flex items-center gap-1 bg-white rounded px-2 py-1.5 mb-1 text-[11px]">
+                      <div key={realIdx} className="flex items-center gap-1 bg-white rounded px-2 py-1.5 mb-1 text-[11px]">
                         <span>{cat?.emoji}</span>
                         <div className="flex-1 min-w-0">
                           <div className="font-body font-medium text-gray-800 truncate">{t.tacheLabel}</div>
