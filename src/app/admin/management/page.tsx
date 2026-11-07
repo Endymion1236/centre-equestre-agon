@@ -20,6 +20,8 @@ type TabId = "journee" | "planning" | "resume" | "horaires" | "bibliotheque" | "
 export default function ManagementPage() {
   const { user, isMoniteur, isAdmin } = useAuth();
   const [tab, setTab] = useState<TabId>("journee");
+  // « Modifier » sur un modèle du Planning : on ouvre l'onglet Modèles sur lui.
+  const [modeleAModifier, setModeleAModifier] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [tachesType, setTachesType] = useState<TacheType[]>([]);
   const [salaries, setSalaries] = useState<Salarie[]>([]);
@@ -224,7 +226,8 @@ export default function ManagementPage() {
               taches={visibleTaches} tachesType={tachesType}
               salaries={visibleSalaries} creneaux={creneaux}
               modeles={modeles}
-              onRefresh={refresh}/>
+              onRefresh={refresh}
+              onModifierModele={(id) => { setModeleAModifier(id); setTab("modeles"); }}/>
           )}
           {tab==="resume" && (
             <TabResume
@@ -239,7 +242,8 @@ export default function ManagementPage() {
           {tab==="modeles" && (
             <TabModeles
               modeles={modeles} tachesType={tachesType}
-              salaries={salaries} onRefresh={refresh}/>
+              salaries={salaries} onRefresh={refresh}
+              modeleAModifier={modeleAModifier} onModeleOuvert={() => setModeleAModifier(null)}/>
           )}
           {tab==="bibliotheque" && <TabBibliotheque taches={tachesType} onRefresh={refresh}/>}
           {tab==="equipe" && <TabEquipe salaries={salaries} onRefresh={refresh}/>}

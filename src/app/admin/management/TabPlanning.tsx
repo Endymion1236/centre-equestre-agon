@@ -34,9 +34,11 @@ interface Props {
   creneaux: any[];
   modeles: ModelePlanning[];
   onRefresh: () => void;
+  /** « Modifier » sur un modèle : ouvre l'onglet Modèles sur ce modèle. */
+  onModifierModele?: (id: string) => void;
 }
 
-export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh }: Props) {
+export default function TabPlanning({ semaine, setSemaine, taches, tachesType, salaries, creneaux, modeles, onRefresh, onModifierModele }: Props) {
   const { isAdmin } = useAuth();
   const { toast } = useToast();
   const [addCell, setAddCell] = useState<{ salarieId: string; jour: JourSemaine } | null>(null);
@@ -642,6 +644,16 @@ export default function TabPlanning({ semaine, setSemaine, taches, tachesType, s
   // Étape 1 : on détecte les doublons (même salarié + jour + heure + tâche)
   //   - 0 doublon → on applique direct (avec confirm classique)
   //   - 1+ doublons → on ouvre la modale de conflits (3 choix possibles)
+  // Supprimer un modèle depuis la liste du Planning (les semaines déjà remplies gardent leurs tâches).
+  const supprimerModele = async (m: ModelePlanning) => {
+    if (!confirm(`Supprimer le modèle « ${m.nom} » ?\n\nLes semaines où il a déjà été appliqué gardent leurs tâches.`)) return;
+    try {
+      await deleteDoc(doc(db, "modeles-planning", m.id));
+      toast(`Modèle « ${m.nom} » supprimé`, "success");
+      onRefresh();
+    } catch { toast("Suppression impossible", "error"); }
+  };
+
   const handleApplyModele = async (modele: ModelePlanning) => {
     // Détection des doublons
     const duplicates: { existante: TachePlanifiee; nouvelle: TacheModele }[] = [];
@@ -1527,14 +1539,22 @@ Réponds de façon concise et pratique, en français.`,
                 ) : (
                   <div className="flex flex-col gap-1 max-h-[140px] overflow-y-auto">
                     {modeles.map(m => (
-                      <button type="button" key={m.id} onClick={() => { handleApplyModele(m); }}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-green-50 cursor-pointer border border-green-200 hover:border-green-400 text-left transition-colors">
-                        <span className="text-sm">{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
-                        <div className="flex-1 min-w-0">
-                          <div className="font-body text-xs font-semibold text-green-800 truncate">{m.nom}</div>
-                          <div className="font-body text-[9px] text-gray-400">{m.taches.length} tâches</div>
-                        </div>
-                      </button>
+                      <div key={m.id} className="flex items-center gap-1">
+                        <button type="button" onClick={() => { handleApplyModele(m); }} title="Appliquer ce modèle à la semaine"
+                          className="flex-1 min-w-0 flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white hover:bg-green-50 cursor-pointer border border-green-200 hover:border-green-400 text-left transition-colors">
+                          <span className="text-sm">{m.type === "scolaire" ? "📚" : m.type === "vacances" ? "☀️" : "📌"}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-body text-xs font-semibold text-green-800 truncate">{m.nom}</div>
+                            <div className="font-body text-[9px] text-gray-400">{m.taches.length} tâches</div>
+                          </div>
+                        </button>
+                        {onModifierModele && (
+                          <button type="button" onClick={() => onModifierModele(m.id)} title={`Modifier « ${m.nom} »`}
+                            className="px-2 py-1.5 rounded-lg bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 cursor-pointer text-xs">✏️</button>
+                        )}
+                        <button type="button" onClick={() => void supprimerModele(m)} title={`Supprimer « ${m.nom} »`}
+                          className="px-2 py-1.5 rounded-lg bg-white border border-red-200 text-red-600 hover:bg-red-50 cursor-pointer text-xs">🗑</button>
+                      </div>
                     ))}
                   </div>
                 )}

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Plus, Trash2, Save, Copy, Edit2, ChevronDown, ChevronUp, Clock, User, X } from "lucide-react";
@@ -15,6 +15,9 @@ interface Props {
   tachesType: TacheType[];
   salaries: Salarie[];
   onRefresh: () => void;
+  /** Modèle à ouvrir en modification dès l'arrivée (depuis « Modifier » du Planning). */
+  modeleAModifier?: string | null;
+  onModeleOuvert?: () => void;
 }
 
 const TYPE_OPTIONS = [
@@ -30,7 +33,7 @@ const TIME_SLOTS = Array.from({ length: (20 - 7) * 4 + 1 }, (_, i) => {
   return `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`;
 });
 
-export default function TabModeles({ modeles, tachesType, salaries, onRefresh }: Props) {
+export default function TabModeles({ modeles, tachesType, salaries, onRefresh, modeleAModifier, onModeleOuvert }: Props) {
   const { toast } = useToast();
   const [editId, setEditId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -77,7 +80,17 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
     setEditId(m.id);
     setShowCreate(true);
     setAddJour(null);
+    if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  // Arrivée depuis « Modifier » dans le Planning : le formulaire s'ouvre sur ce modèle.
+  useEffect(() => {
+    if (!modeleAModifier) return;
+    const m = modeles.find(x => x.id === modeleAModifier);
+    if (m) openEdit(m);
+    onModeleOuvert?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modeleAModifier, modeles]);
 
   const addTacheToForm = () => {
     if (!addJour || !addForm.tacheTypeId || !addForm.salarieId) return;
@@ -135,7 +148,8 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Supprimer ce modèle ?")) return;
+    const m = modeles.find(x => x.id === id);
+    if (!confirm(`Supprimer le modèle « ${m?.nom || ""} » ?\n\nLes semaines où il a déjà été appliqué gardent leurs tâches.`)) return;
     try {
       await deleteDoc(doc(db, "modeles-planning", id));
       toast("Modèle supprimé", "success");
@@ -426,24 +440,24 @@ export default function TabModeles({ modeles, tachesType, salaries, onRefresh }:
                 <div className="flex items-center gap-1">
                   <button type="button"
                     onClick={e => { e.stopPropagation(); openEdit(m); }}
-                    className="p-2 text-gray-400 hover:text-blue-500 bg-transparent border-none cursor-pointer"
-                    title="Modifier"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-body text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border-none cursor-pointer"
+                    title="Modifier le nom, le type et les tâches"
                   >
-                    <Edit2 size={15} />
+                    <Edit2 size={13} /> <span className="hidden sm:inline">Modifier</span>
                   </button>
                   <button type="button"
                     onClick={e => { e.stopPropagation(); handleDuplicate(m); }}
-                    className="p-2 text-gray-400 hover:text-green-500 bg-transparent border-none cursor-pointer"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-body text-xs font-semibold text-green-700 bg-green-50 hover:bg-green-100 border-none cursor-pointer"
                     title="Dupliquer"
                   >
-                    <Copy size={15} />
+                    <Copy size={13} /> <span className="hidden sm:inline">Dupliquer</span>
                   </button>
                   <button type="button"
                     onClick={e => { e.stopPropagation(); handleDelete(m.id); }}
-                    className="p-2 text-gray-400 hover:text-red-500 bg-transparent border-none cursor-pointer"
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg font-body text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border-none cursor-pointer"
                     title="Supprimer"
                   >
-                    <Trash2 size={15} />
+                    <Trash2 size={13} /> <span className="hidden sm:inline">Supprimer</span>
                   </button>
                   {isExpanded ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
                 </div>
