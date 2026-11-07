@@ -40,4 +40,8 @@ test("facture incomplète : alertes des dépenses", () => {
   const a = apercuDepense({ seller: { name: "X" }, totals: {} }, []);
   assert.ok(a.alertes.length > 0);
 });
+test("TVA totale envoyée comme objet { value, currency_code } (factures de Tricatel)", () => {
+  const p = pieceDepuisPlateforme({ ...agrial, totals: { total_without_vat: "1560.46", total_vat_amount: { value: "303.33", currency_code: "EUR" }, total_with_vat: "1863.79" } });
+  assert.deepEqual([p.ht, p.tva, p.ttc], [1560.46, 303.33, 1863.79]);
+});
 console.log(`✅ ${n} tests passés`);

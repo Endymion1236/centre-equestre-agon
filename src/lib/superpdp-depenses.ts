@@ -15,7 +15,10 @@
 import { alertesPiece, proposerAssociations, type DepenseCandidate, type PieceExtraite } from "./justificatifs";
 import { compteFournisseur, ventilerDepense } from "./plan-comptable-achats";
 
+// Un montant de l'API : chaîne décimale (« 1560.46 »), ou objet { value,
+// currency_code } pour la TVA totale (BT-110) — lue « — » jusqu'au 07/11/2026.
 const montant = (v: unknown): number | null => {
+  if (v && typeof v === "object" && "value" in (v as any)) v = (v as any).value;
   const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 };
