@@ -16,11 +16,20 @@
  *
  * Refus : une échéance non payée déjà facturée ou déjà en partie réglée — la
  * redécouper changerait une pièce émise ou un encaissement au journal.
- * Le prélèvement SEPA passe par son propre écran (mandat, pré-notification).
+ *
+ * Prélèvement SEPA (novembre 2026, L'ÉVÊQUE-LEPASTEUR : 10 échéances CB
+ * impayées à passer en prélèvement, « ça ne le propose pas ») : chaque
+ * échéance non payée devient une commande « sepa_scheduled » et un
+ * prélèvement du module SEPA sur le mandat choisi (identifiant fixe
+ * `sepa-<commande>` : relancer ne double rien). La pré-notification reste à
+ * vérifier avant envoi, comme pour toute inscription en SEPA.
  */
 
 import { construireEcheancier, type ItemEcheance } from "@/lib/echeancier-paiement";
 import { CHAMP_LIEN_CB } from "./echeances-utils";
+
+/** Prélèvement SEPA : proposé à part, il exige un mandat actif. */
+export const MODE_SEPA_ECHEANCIER = { id: "prelevement_sepa", label: "Prélèvement SEPA" };
 
 export const MODES_ECHEANCIER: { id: string; label: string }[] = [
   { id: "virement", label: "Virement" },
@@ -35,6 +44,8 @@ export interface OptionsRefaireEcheancier {
   mode: string;
   /** « AAAA-MM-JJ » : première nouvelle échéance, les suivantes de mois en mois. */
   dateDepart: string;
+  /** Prélèvement SEPA : le mandat (mandatId) sur lequel prélever. */
+  mandatId?: string;
 }
 
 export interface EcritureEcheancier { id: string; data: Record<string, any> }
@@ -51,6 +62,8 @@ export interface PlanRefaireEcheancier {
   annulations: EcritureEcheancier[];
   /** Un lien de paiement CB a déjà été ouvert sur une échéance redécoupée. */
   lienCbDejaOuvert: boolean;
+  /** Prélèvement SEPA : un prélèvement par échéance (collection echeances-sepa). */
+  prelevements: EcritureEcheancier[];
   apercu: { echeance: number; date: string; montant: number }[];
 }
 
@@ -97,11 +110,13 @@ export function lignesDuResteDu(restantes: any[], resteDuCentimes: number): Item
  * leur total moins ce qui est déjà payé.
  */
 export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier, surcharge?: { lignes: ItemEcheance[]; totalTTC: number }): PlanRefaireEcheancier {
-  const vide = { conservees: 0, resteDu: 0, miseAJour: [], creations: [], annulations: [], lienCbDejaOuvert: false, apercu: [] };
+  const vide = { conservees: 0, resteDu: 0, miseAJour: [], creations: [], annulations: [], lienCbDejaOuvert: false, prelevements: [], apercu: [] };
   const refus = (raison: string): PlanRefaireEcheancier => ({ possible: false, raison, ...vide });
   const nombre = Math.floor(Number(options.nombre) || 0);
   if (nombre < 1 || nombre > 12) return refus("Choisissez entre 1 et 12 échéances.");
-  if (!MODES_ECHEANCIER.some((m) => m.id === options.mode)) return refus("Moyen de paiement non pris en charge ici (le prélèvement SEPA se prépare dans Prélèvements SEPA).");
+  const sepa = options.mode === MODE_SEPA_ECHEANCIER.id;
+  if (sepa && !options.mandatId) return refus("Aucun mandat SEPA choisi : la famille doit avoir un mandat actif (Prélèvements SEPA → Nouveau mandat).");
+  if (!sepa && !MODES_ECHEANCIER.some((m) => m.id === options.mode)) return refus("Moyen de paiement non pris en charge ici.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(options.dateDepart || "")) return refus("Date de la première échéance invalide.");
 
   const actives = [...echs].filter((e) => e?.status !== "cancelled").sort((a, b) => Number(a.echeance || 0) - Number(b.echeance || 0));
@@ -137,8 +152,10 @@ export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier
     echeancesTotal: total,
     paymentMode: options.mode,
     paymentPlan: `${nombre}x`,
-    paymentRef: "",
-    status: "pending",
+    paymentRef: sepa ? `${nombre}× SEPA · ${options.mandatId}` : "",
+    status: sepa ? "sepa_scheduled" : "pending",
+    // SEPA : ni réglée ni dans les impayés ; la pré-notification est à relire avant envoi.
+    ...(sepa ? { prenotificationSepa: "a_verifier" } : {}),
     paidAmount: 0,
     forfaitRef: premiere.forfaitRef || "",
     // Nouvel échéancier : la trace d'un SEPA annulé ne vaut plus.
@@ -151,7 +168,7 @@ export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier
   const creations: EcritureEcheancier[] = [];
   nouvelles.forEach((n, k) => {
     const rang = payees.length + k + 1;
-    const data = { echeanceDate: n.echeanceDate, totalTTC: n.totalTTC, items: n.items, ...commun(rang) };
+    const data = { echeanceDate: n.echeanceDate, totalTTC: n.totalTTC, items: n.items, ...commun(rang), ...(sepa ? { sepaRestant: n.totalTTC } : {}) };
     if (k < restantes.length) { miseAJour.push({ id: String(restantes[k].id), data }); return; }
     let id = `${premiere.id}-echeance-${String(rang).padStart(2, "0")}`;
     while (idsPris.has(id)) id += "b";
@@ -172,8 +189,30 @@ export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier
     data: { status: "cancelled", annulationMotif: `Échéancier refait en ${nombre} fois (${libelleMode(options.mode)})` },
   }));
 
+  // Un prélèvement par échéance, rattaché à sa commande (le dépôt de la remise
+  // encaisse la commande et numérote sa facture).
+  const prelevements: EcritureEcheancier[] = !sepa ? [] : [...miseAJour, ...creations].map((e) => ({
+    id: `sepa-${e.id}`,
+    data: {
+      familyId: premiere.familyId || "",
+      familyName: premiere.familyName || "",
+      mandatId: options.mandatId,
+      montant: e.data.totalTTC,
+      dateEcheance: e.data.echeanceDate,
+      status: "pending",
+      reference: `Paiement ${e.id}`,
+      description: `${premiere.forfaitRef || "Échéancier"} — ${e.data.echeance}/${total}`,
+      remiseId: null,
+      paymentId: e.id,
+      echeance: e.data.echeance,
+      echeancesTotal: total,
+      forfaitRef: premiere.forfaitRef || "",
+    },
+  }));
+
   return {
     possible: true,
+    prelevements,
     conservees: payees.length,
     resteDu: resteDuCentimes / 100,
     miseAJour,
@@ -185,5 +224,5 @@ export function refaireEcheancier(echs: any[], options: OptionsRefaireEcheancier
 }
 
 export function libelleMode(mode: string): string {
-  return MODES_ECHEANCIER.find((m) => m.id === mode)?.label.toLowerCase() || mode;
+  return [...MODES_ECHEANCIER, MODE_SEPA_ECHEANCIER].find((m) => m.id === mode)?.label.toLowerCase() || mode;
 }

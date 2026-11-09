@@ -1,9 +1,10 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Loader2 } from "lucide-react";
-import { MODES_ECHEANCIER, libelleMode, refaireEcheancier } from "./refaire-echeancier-utils";
+import { MODES_ECHEANCIER, MODE_SEPA_ECHEANCIER, libelleMode, refaireEcheancier } from "./refaire-echeancier-utils";
+import { mandatLePlusRecent } from "@/lib/sepa-unique";
 import { todayIso } from "./echeances-utils";
 
 /**
@@ -23,7 +24,21 @@ export default function RefaireEcheancier({ echs, toast, refreshAll, onClose }: 
   const [mode, setMode] = useState("virement");
   const [dateDepart, setDateDepart] = useState(prochaine && prochaine > aujourdHui ? prochaine : aujourdHui);
   const [enCours, setEnCours] = useState(false);
-  const plan = useMemo(() => refaireEcheancier(echs, { nombre, mode, dateDepart }), [echs, nombre, mode, dateDepart]);
+  // Prélèvement SEPA : mandats actifs de la famille, le plus récent par défaut.
+  const familyId = echs.find((e) => e.familyId)?.familyId || "";
+  const [mandats, setMandats] = useState<any[] | null>(null);
+  const [mandatId, setMandatId] = useState("");
+  useEffect(() => {
+    if (mode !== MODE_SEPA_ECHEANCIER.id || mandats !== null || !familyId) return;
+    getDocs(query(collection(db, "mandats-sepa"), where("familyId", "==", familyId), where("status", "==", "active")))
+      .then((snap) => {
+        const liste = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+        setMandats(liste);
+        setMandatId(mandatLePlusRecent(liste)?.mandatId || "");
+      })
+      .catch(() => setMandats([]));
+  }, [mode, mandats, familyId]);
+  const plan = useMemo(() => refaireEcheancier(echs, { nombre, mode, dateDepart, mandatId: mode === MODE_SEPA_ECHEANCIER.id ? mandatId : undefined }), [echs, nombre, mode, dateDepart, mandatId]);
   const eur = (n: number) => `${n.toFixed(2).replace(".", ",")} €`;
   const jour = (iso: string) => iso.split("-").reverse().join("/");
 
@@ -39,6 +54,8 @@ export default function RefaireEcheancier({ echs, toast, refreshAll, onClose }: 
       }
       for (const m of plan.miseAJour) await updateDoc(doc(db, "payments", m.id), { ...m.data, updatedAt: serverTimestamp() });
       for (const a of plan.annulations) await updateDoc(doc(db, "payments", a.id), { ...a.data, cancelledAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      // Prélèvement SEPA : un prélèvement par échéance, identifiant fixe (relancer ne double rien).
+      for (const pr of plan.prelevements) await setDoc(doc(db, "echeances-sepa", pr.id), { ...pr.data, createdAt: serverTimestamp() });
       // La fiche du forfait affiche son rythme de paiement.
       if (premiere?.familyId && premiere?.forfaitRef) {
         const forfaits = await getDocs(query(collection(db, "forfaits"), where("familyId", "==", premiere.familyId), where("slotKey", "==", premiere.forfaitRef)));
@@ -65,9 +82,18 @@ export default function RefaireEcheancier({ echs, toast, refreshAll, onClose }: 
         </label>
         <label className="font-body text-xs text-slate-600 flex items-center gap-1">par
           <select value={mode} onChange={(e) => setMode(e.target.value)} className={champ}>
-            {MODES_ECHEANCIER.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            {[...MODES_ECHEANCIER, MODE_SEPA_ECHEANCIER].map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
           </select>
         </label>
+        {mode === MODE_SEPA_ECHEANCIER.id && (
+          <label className="font-body text-xs text-slate-600 flex items-center gap-1">sur le mandat
+            {mandats === null ? <span className="text-slate-400">…</span> : mandats.length === 0 ? <span className="text-red-600">aucun mandat actif</span> : (
+              <select value={mandatId} onChange={(e) => setMandatId(e.target.value)} className={champ}>
+                {mandats.map((m) => <option key={m.id} value={m.mandatId}>{m.mandatId}{m.titulaire ? ` — ${m.titulaire}` : ""}</option>)}
+              </select>
+            )}
+          </label>
+        )}
         <label className="font-body text-xs text-slate-600 flex items-center gap-1">1re échéance le
           <input type="date" value={dateDepart} onChange={(e) => e.target.value && setDateDepart(e.target.value)} className={champ} />
         </label>
@@ -82,6 +108,7 @@ export default function RefaireEcheancier({ echs, toast, refreshAll, onClose }: 
           </p>
           {plan.annulations.length > 0 && <p className="text-slate-500">{plan.annulations.length} échéance{plan.annulations.length > 1 ? "s" : ""} en trop sera annulée{plan.annulations.length > 1 ? "s" : ""} (gardée{plan.annulations.length > 1 ? "s" : ""} dans l'historique).</p>}
           {plan.lienCbDejaOuvert && <p className="text-amber-800">⚠️ Un lien de paiement CB a déjà été ouvert pour cet échéancier : prévenez la famille de ne plus l'utiliser.</p>}
+          {mode === MODE_SEPA_ECHEANCIER.id && <p className="text-amber-800">Prélèvements créés dans Prélèvements SEPA, une commande par échéance. La pré-notification (montants et dates) est à vérifier et envoyer à la famille avant le premier prélèvement : laissez-lui le délai prévu au mandat (14 jours par défaut).</p>}
         </div>
       ) : (
         <p className="font-body text-xs text-red-600 mt-2">{plan.raison}</p>

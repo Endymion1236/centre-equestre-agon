@@ -103,4 +103,24 @@ test("lignesDuResteDu additionne les parts quand aucune échéance ne porte tout
   assert.equal(l[0].priceTTC, 200);
 });
 
+test("échéances CB impayées → prélèvement SEPA : commandes programmées, un prélèvement par échéance", () => {
+  const plan = refaireEcheancier(troisCb, { nombre: 10, mode: "prelevement_sepa", dateDepart: "2026-12-05", mandatId: "MANDAT-42" });
+  assert.equal(plan.possible, true, plan.raison);
+  const ecritures = [...plan.miseAJour, ...plan.creations];
+  assert.equal(ecritures.length, 10);
+  assert.ok(ecritures.every((e) => e.data.status === "sepa_scheduled" && e.data.paymentMode === "prelevement_sepa" && e.data.prenotificationSepa === "a_verifier"));
+  assert.ok(ecritures.every((e) => e.data.sepaRestant === e.data.totalTTC));
+  assert.equal(plan.prelevements.length, 10);
+  assert.deepEqual(plan.prelevements.map((p) => p.data.paymentId), ecritures.map((e) => e.id));
+  assert.ok(plan.prelevements.every((p) => p.id === `sepa-${p.data.paymentId}` && p.data.mandatId === "MANDAT-42" && p.data.status === "pending"));
+  assert.equal(somme(plan.prelevements.map((p) => p.data.montant)), 636);
+  assert.equal(plan.prelevements[0].data.dateEcheance, "2026-12-05");
+});
+test("SEPA sans mandat : refusé, rien n'est écrit ; les autres modes ne créent aucun prélèvement", () => {
+  const sans = refaireEcheancier(troisCb, { nombre: 10, mode: "prelevement_sepa", dateDepart: "2026-12-05" });
+  assert.equal(sans.possible, false);
+  assert.match(sans.raison || "", /mandat/);
+  assert.equal(refaireEcheancier(troisCb, dix).prelevements.length, 0);
+});
+
 console.log(`\n${process.exitCode ? "❌" : "✅"} ${passes} tests passés`);
