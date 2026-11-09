@@ -761,6 +761,8 @@ export default function MontoirPage() {
     // 4c. Créer des crédits rattrapage pour les absents ayant un forfait actif
     let rattrapagesCreated = 0;
     for (const child of absents) {
+      // Arrêt médical déduit du forfait (forfaits → 🩺) : séance déjà remboursée, pas de rattrapage.
+      if ((child as any).arretMedical) continue;
       try {
         // Vérifier si l'enfant a un forfait actif
         const forfaitSnap = await getDocs(query(

@@ -15,6 +15,7 @@ import { compareCreneauxByDow } from "@/lib/creneau-sort";
 import { isForfaitActif, montantRegleForfait, prixForfaitDepuisCommandes, refsOrphelinesDuCavalier, FORFAIT_STATUT_ACTIF } from "@/lib/forfaits";
 import { estSemaineAttendue } from "@/lib/rythme";
 import { demanderNumeroAvoir } from "@/lib/numero-avoir-client";
+import ArretMedical from "./ArretMedical";
 
 interface Forfait {
   id: string;
@@ -38,6 +39,9 @@ interface Forfait {
   status: "active" | "actif" | "suspended" | "completed" | "cancelled";
   /** Statut au moment de la résiliation, rétabli par « Réactiver ». */
   statutAvantResiliation?: "active" | "actif" | "suspended";
+  /** Arrêts médicaux déduits (ArretMedical.tsx). */
+  arretsMedicaux?: { debut: string; fin: string; seances: number; reduction: number; certificat?: string }[];
+  slotKeysAnterieurs?: string[];
   createdAt: any;
 }
 
@@ -116,6 +120,7 @@ export default function ForfaitsPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [unenrolling, setUnenrolling] = useState<string | null>(null);
+  const [arretMedical, setArretMedical] = useState<Forfait | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
   // ── Create form state ──
@@ -1445,6 +1450,18 @@ export default function ForfaitsPage() {
                           </div>
                         );
                       })()}
+                      {(f.arretsMedicaux || []).map((a, k) => (
+                        <p key={k} className="w-full font-body text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-1.5">
+                          🩺 Arrêt médical du {a.debut.split("-").reverse().join("/")} au {a.fin.split("-").reverse().join("/")} : {a.seances} séance{a.seances > 1 ? "s" : ""} retirée{a.seances > 1 ? "s" : ""}, −{Number(a.reduction).toFixed(2)} €{a.certificat ? ` (${a.certificat})` : ""}
+                        </p>
+                      ))}
+                      {(f.status === "active" || f.status === "actif") && (
+                        <button type="button" onClick={() => setArretMedical(f)} disabled={saving}
+                          title="Arrêt médical de 3 semaines ou plus : séances manquées retirées des échéances à venir"
+                          className="flex items-center gap-1.5 font-body text-xs text-blue-600 bg-blue-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-blue-100">
+                          🩺 Arrêt médical
+                        </button>
+                      )}
                       {(f.status === "active" || f.status === "actif") && (
                         <button type="button" onClick={() => handleStatusChange(f.id, "suspended")} disabled={saving}
                           className="flex items-center gap-1.5 font-body text-xs text-orange-500 bg-orange-50 px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-orange-100">
@@ -1593,6 +1610,10 @@ export default function ForfaitsPage() {
           </div>
         );
       })()}
+      {arretMedical && (
+        <ArretMedical forfait={arretMedical} payments={payments}
+          onClose={() => setArretMedical(null)} onDone={() => { fetchData(); }} />
+      )}
     </>
   );
 }

@@ -289,6 +289,16 @@ export const CHAPITRE_QUESTIONS_COMPTABLES: ManualChapter = {
         <p>De l'argent a été ajouté dans la caisse sans venir d'une vente (fonds de caisse, argent personnel…). Dis à la comptable d'où il vient : c'est elle qui choisit le compte (apport de l'exploitant, retrait de la banque…).</p>
       `,
     },
+    {
+      id: "arret-medical-forfait",
+      title: "Un cavalier au forfait est en arrêt médical : que rembourse-t-on ?",
+      text: `
+        <p>À partir de <strong>3 semaines</strong> d'arrêt avec certificat, les séances manquées sont retirées du forfait <strong>au prix de la séance</strong> (part « cours » du forfait, hors adhésion et licence, divisée par le nombre de séances). En dessous de 3 semaines, les séances se rattrapent.</p>
+        <p><strong>Forfaits → fiche du cavalier → 🩺 Arrêt médical</strong> : dates de l'arrêt, l'application compte les séances au planning et baisse les échéances <strong>à venir</strong> (commandes et prélèvements SEPA encore en attente). Ce qui est déjà payé, facturé ou remis à la banque ne bouge pas : s'il ne reste pas assez d'échéances, le reste se rend par un <strong>avoir</strong>.</p>
+        <p>Les séances de l'arrêt sont notées absentes « arrêt médical » et ne donnent pas de rattrapage : elles sont déjà déduites. En SEPA, envoyer ensuite le nouvel échéancier (pré-notification à vérifier).</p>
+      `,
+      href: "/admin/forfaits",
+    },
     // ── Factures et TVA ────────────────────────────────────────────────
     {
       id: "detail-total-facture",
