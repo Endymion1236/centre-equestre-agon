@@ -1,4 +1,5 @@
 "use client";
+import PanneauPedagogie from "../planning/PanneauPedagogie";
 import { useState, useEffect, useRef } from "react";
 import { collection, getDocs, query, where, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
@@ -356,6 +357,12 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
                 <Eye size={13} /> Plan
               </button>
         )}
+        {!planUrl && !open && (
+          <button type="button" onClick={() => setOpen(true)} title="Ajouter la photo ou le PDF du plan de séance, voir les séances précédentes"
+            className="flex items-center gap-1 font-body text-xs font-semibold text-purple-600 bg-purple-50 px-2.5 py-1.5 rounded-lg border-none cursor-pointer hover:bg-purple-100 flex-shrink-0">
+            📷 Plan
+          </button>
+        )}
         <button type="button" onClick={() => setOpen(o => !o)} className="bg-transparent border-none cursor-pointer flex-shrink-0 p-0">
           {open ? <ChevronUp size={16} className="text-blue-500" /> : <ChevronDown size={16} className="text-blue-500" />}
         </button>
@@ -363,24 +370,10 @@ export default function SeanceNotes({ creneau, onChanged }: Props) {
 
       {open && (
         <div className="mt-2 space-y-4 bg-white border border-blue-100 rounded-xl p-3 print:hidden">
-          {/* PLAN DE SÉANCE (aperçu mobile) */}
-          {planUrl && (
-            <div>
-              <div className="font-body text-xs font-semibold text-purple-600 mb-1">📄 Plan de séance</div>
-              {planIsPdf ? (
-                <a href={planUrl} target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 font-body text-sm font-semibold text-purple-700 bg-purple-50 px-3 py-2 rounded-lg no-underline hover:bg-purple-100">
-                  <FileText size={15} /> Ouvrir le plan (PDF)
-                </a>
-              ) : (
-                <button type="button" onClick={() => setLightbox(true)} className="block w-full bg-transparent border border-purple-100 rounded-lg p-0 cursor-pointer overflow-hidden">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={planUrl} alt="Plan de séance" className="w-full max-h-64 object-contain bg-slate-50" />
-                  <div className="font-body text-[10px] text-purple-500 py-1">Toucher pour agrandir</div>
-                </button>
-              )}
-            </div>
-          )}
+          {/* PLAN DE SÉANCE et SÉANCES PRÉCÉDENTES : le même volet que le
+              planning (ajout de la photo ou du PDF, notes des semaines
+              d'avant), allégé de ce que ce bloc fait déjà. 09/11/2026. */}
+          <PanneauPedagogie creneau={creneau} allege onChange={onChanged} />
 
           {/* PRÉPARATION */}
           <div>

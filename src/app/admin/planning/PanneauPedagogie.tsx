@@ -31,9 +31,17 @@ import type { Creneau } from "./types";
 
 export interface PanneauPedagogieProps {
   creneau: Creneau & { id: string };
+  /**
+   * Montoir (09/11/2026) : seulement le plan de séance (photo, PDF) et les
+   * notes des séances précédentes du même cours. Préparation et notes de la
+   * séance du jour restent dans le bloc de notes du montoir (SeanceNotes).
+   */
+  allege?: boolean;
+  /** Appelé après l'ajout ou le retrait du plan (le montoir se recharge). */
+  onChange?: () => void;
 }
 
-export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
+export default function PanneauPedagogie({ creneau, allege = false, onChange }: PanneauPedagogieProps) {
   const { toast: panelToast } = useToast();
   const { user } = useAuth();
 
@@ -97,7 +105,7 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
   // courante (qui restent dans `notes`).
   const [notesPrecedentes, setNotesPrecedentes] = useState<NoteSeance[]>([]);
   const [notesPrecLoading, setNotesPrecLoading] = useState(false);
-  const [showPrecedentes, setShowPrecedentes] = useState(false);
+  const [showPrecedentes, setShowPrecedentes] = useState(allege);
 
   // Note de PREPARATION : attachee au creneau (pas a l'historique), reste
   // affichee et modifiable en permanence. Permet au moniteur de noter a
@@ -208,6 +216,7 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
       });
       setPlanUrl(url);
       setPlanType(file.type);
+      onChange?.();
     } catch (e: any) {
       alert(`Erreur upload : ${e.message}`);
     }
@@ -225,6 +234,7 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
     });
     setPlanUrl(null);
     setPlanType(null);
+    onChange?.();
   };
 
   // ── Enregistrer une note pédagogique ────────────────────────────────
@@ -380,14 +390,14 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
       <div className="mt-3 pt-3 border-t border-blue-500/8">
         <div className="flex items-center justify-between mb-2">
           <span className="font-body text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
-            <StickyNote size={12} /> Notes de séance
-            {notes.length > 0 && (
+            <StickyNote size={12} /> {allege ? "Séances précédentes" : "Notes de séance"}
+            {!allege && notes.length > 0 && (
               <span className="font-body text-[10px] text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full normal-case tracking-normal">
                 {notes.length}
               </span>
             )}
           </span>
-          {notes.length > 0 && (
+          {!allege && notes.length > 0 && (
             <button type="button"
               onClick={() => setShowHistorique(v => !v)}
               className="flex items-center gap-1 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline"
@@ -407,6 +417,7 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
           )}
         </div>
 
+        {!allege && (<>
         {/* Note de PREPARATION (persistante, attachee au creneau) */}
         <div className="mb-3 p-2.5 rounded-xl bg-amber-50/60 border border-amber-200/60">
           <div className="flex items-center justify-between mb-1.5">
@@ -549,6 +560,8 @@ export default function PanneauPedagogie({ creneau }: PanneauPedagogieProps) {
             })}
           </div>
         )}
+
+        </>)}
 
         {/* Notes des seances PRECEDENTES du meme cours */}
         {showPrecedentes && (
