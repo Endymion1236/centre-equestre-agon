@@ -19,6 +19,7 @@ import { Loader2, X, ShoppingCart, CreditCard } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/components/ui/Toast";
 import { useState } from "react";
+import { libellePassages, titreAvecPassages } from "@/lib/tarifs-passages";
 
 export interface ModalePanierProps {
   cart: any[];
@@ -103,6 +104,17 @@ export default function ModalePanier({
                         <div className="font-body text-xs text-gray-600">{item.childName} · {item.dates}</div>
                         {item.remiseEuros > 0 && <div className="font-body text-xs text-green-600">Reduction : -{item.remiseEuros}€</div>}
                         {item.cardId && <div className="font-body text-xs text-emerald-700">🎫 {item.carteLabel || "Carte de séances"} — séance incluse</div>}
+                        {(item.offrePassages?.length || 0) > 1 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {item.offrePassages!.map((o: { n: number; prix: number }) => (
+                              <button type="button" key={o.n}
+                                onClick={() => setCart(cart.map((x: any, i: number) => i !== idx ? x : { ...x, passages: o.n, prixBase: o.prix, prixFinal: o.prix, remiseEuros: 0, activityTitle: titreAvecPassages(x.activityTitle, o.n) }))}
+                                className={`font-body text-[11px] font-semibold px-2 py-1 rounded-md border cursor-pointer ${item.passages === o.n ? "bg-blue-500 text-white border-blue-500" : "bg-white text-blue-700 border-blue-200"}`}>
+                                {libellePassages(o.n)} · {o.prix.toFixed(2).replace(".", ",")} €
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <div className="text-right">

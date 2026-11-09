@@ -15,6 +15,7 @@ import { prixInscriptionCavalier } from "@/lib/tarif-forfaitaire";
 import { creneauAvecFormule, estSurDemande, formuleDuCreneau, formulesProposees, privatisePourAutreFamille, type IdFormule } from "@/lib/creneau-sur-demande";
 import { todayLocalString } from "@/lib/date-local";
 import type { CartItem, Creneau } from "./types";
+import { offrePassages, titreAvecPassages } from "@/lib/tarifs-passages";
 
 /** Ce que la page sait, et que l'ajout au panier doit lire. */
 export interface ContexteAjout {
@@ -343,7 +344,10 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
     const dejaFamille =
       prev.filter(i => i.creneauIds.includes(creneau.id)).length
       + ((creneau as any).enrolled || []).filter((e: any) => e?.familyId === user?.uid).length;
-    const prix = prixInscriptionCavalier(creneau as any, dejaFamille);
+    // Compétition au tarif par passages : la plus petite formule d'abord,
+    // la famille en change dans le panier (lib/tarifs-passages).
+    const offre = offrePassages(creneau as any);
+    const prix = offre.length ? offre[0].prix : prixInscriptionCavalier(creneau as any, dejaFamille);
     // ── Carte de séances ──────────────────────────────────────────────
     // Si une carte active couvre ce créneau pour ce cavalier, la séance est
     // prise dessus : 0 € au panier, inscription ferme sans paiement. Les
@@ -352,17 +356,18 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setBookingCreneau, toa
     const reservees = compterReservationsParCarte(creneaux as any[], todayLocalString());
     for (const i of prev) if (i.cardId) reservees[i.cardId] = (reservees[i.cardId] || 0) + 1;
     // Une formule sur demande (cours particulier…) a son propre prix : pas de carte.
-    const carte = !(creneau as any).tarifForfaitaire && !formuleSurDemande && prix > 0
+    const carte = !(creneau as any).tarifForfaitaire && !formuleSurDemande && !offre.length && prix > 0
       ? choisirCarte(familyCartes, { childId, activityType: creneau.activityType, date: creneau.date, formuleChoisie: (creneau as any).formuleChoisie, activityTitle: creneau.activityTitle }, reservees)
       : null;
     return [...prev, {
       creneauIds: [creneau.id],
       // Le niveau de la promenade fait partie du libellé : réservation,
       // commande, facture et emails le reprennent.
-      activityTitle: (niveauPromenade && estPromenadeADefinir(creneau as any)
+      activityTitle: offre.length ? titreAvecPassages(creneau.activityTitle, offre[0].n) : (niveauPromenade && estPromenadeADefinir(creneau as any)
           ? `${creneau.activityTitle} — ${LIBELLE_NIVEAU[niveauPromenade]}`
           : creneau.activityTitle)
         + ((creneau as any).tarifForfaitaire && prix <= 0 ? " — inclus au forfait" : ""),
+      ...(offre.length ? { passages: offre[0].n, offrePassages: offre } : {}),
       ...(niveauPromenade ? { niveauPromenade } : {}),
       ...(formuleSurDemande ? { formuleSurDemande } : {}),
       dates: new Date(creneau.date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }),

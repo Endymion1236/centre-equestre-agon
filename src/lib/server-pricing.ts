@@ -33,6 +33,7 @@ import { adminDb } from "@/lib/firebase-admin";
 
 const TVA_STAGE_DEFAUT = 5.5;
 import { STAGE_ACOMPTE_EUROS } from "./cgv-clauses";
+import { offrePassages } from "@/lib/tarifs-passages";
 const ACOMPTE_PAR_ENFANT = STAGE_ACOMPTE_EUROS;
 const EPSILON = 0.02; // tolérance d'arrondi (2 centimes)
 
@@ -261,6 +262,14 @@ export async function auditPaymentPricing(opts: {
         }
         minLegit += floor > 0 ? floor : 0;
         maxLegit += refWeek;
+      } else if (offrePassages(cr).length > 0) {
+        // COMPÉTITION au tarif par passages : le prix payé est l'une des formules.
+        const offre = offrePassages(cr);
+        if (!offre.some((o) => Math.abs(claimedFinal - o.prix) <= EPSILON)) {
+          issues.push(`compétition : prix payé ${claimedFinal}€ ≠ formules ${offre.map((o) => `${o.n} passage(s) ${o.prix}€`).join(", ")}`);
+        }
+        minLegit += Math.min(...offre.map((o) => o.prix));
+        maxLegit += Math.max(...offre.map((o) => o.prix));
       } else {
         // COURS : aucune remise autorisée → prix == tarif créneau
         if (Math.abs(claimedFinal - refWeek) > EPSILON) {

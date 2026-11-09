@@ -47,6 +47,7 @@ import { ChoixNiveauPromenade } from "./ChoixNiveauPromenade";
 import { estPromenadeADefinir, titreAvecNiveau } from "@/lib/promenade-niveau";
 import { estSurDemande } from "@/lib/creneau-sur-demande";
 import { estCoursParticulier, libelleTypeCarte, typeCarteCouvre, typeCarteDuCreneau } from "@/lib/cartes-seances";
+import { libellePassages, offrePassages, titreAvecPassages } from "@/lib/tarifs-passages";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
   libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche, prixJourStage, lotUnJourAuPrixJournee,
@@ -135,7 +136,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
   const [weekCreneaux, setWeekCreneaux] = useState<(Creneau & { id: string })[]>([]);
   const [licenceType, setLicenceType] = useState<"moins18" | "plus18">("moins18");
   // ── Mode compétition ──
-  const isCompetition = creneau.activityType === "competition";
+  // Compétition, ou créneau au tarif par passages (challenge interne saisi sous un autre type).
+  const isCompetition = creneau.activityType === "competition" || offrePassages(creneau as any).length > 0;
   const [compEpreuves, setCompEpreuves] = useState<{ epreuve: string; montant: string }[]>([{ epreuve: "", montant: "" }]);
   const [compCoaching, setCompCoaching] = useState("");
   const [adhesion, setAdhesion] = useState(true);
@@ -1507,6 +1509,17 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
 
                 <div className="flex flex-col gap-2">
                   <label className="font-body text-xs font-semibold text-slate-600">Épreuves / passages</label>
+                  {offrePassages(creneau as any).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {offrePassages(creneau as any).map(o => (
+                        <button key={o.n} type="button"
+                          onClick={() => setCompEpreuves([{ epreuve: titreAvecPassages(creneau.activityTitle, o.n), montant: String(o.prix) }])}
+                          className={`font-body text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-pointer ${compEpreuves.length === 1 && compEpreuves[0].epreuve === titreAvecPassages(creneau.activityTitle, o.n) ? "bg-orange-500 text-white border-orange-500" : "bg-white text-orange-700 border-orange-200 hover:bg-orange-100"}`}>
+                          {libellePassages(o.n)} · {o.prix.toFixed(2).replace(".", ",")} €
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {compEpreuves.map((ep, i) => (
                     <div key={i} className="flex gap-2 items-center">
                       <input value={ep.epreuve}

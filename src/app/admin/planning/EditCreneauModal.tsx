@@ -3,6 +3,7 @@ import EditeurFormulesSurDemande from "./EditeurFormulesSurDemande";
 import { FORMULES_SUR_DEMANDE_DEFAUT, type FormuleSurDemande, type IdFormule } from "@/lib/creneau-sur-demande";
 import { X, Loader2, Copy } from "lucide-react";
 import { useState, useEffect } from "react";
+import { proposerPrixPassages } from "@/lib/tarifs-passages";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Creneau } from "./types";
@@ -43,6 +44,8 @@ export interface EditForm {
   formules?: FormuleSurDemande[];
   /** Formule fixée par le club ("" = choisie par la première famille). */
   formuleForcee?: IdFormule | "";
+  /** Compétition : prix pour 1, 2 et 3 passages (lib/tarifs-passages). */
+  prixPassages?: (number | string)[];
 }
 
 interface Props {
@@ -304,6 +307,27 @@ export default function EditCreneauModal({
                 className="w-full px-3 py-2 rounded-lg border border-blue-500/8 font-body text-sm bg-cream focus:border-blue-500 focus:outline-none"/>
             </div>
           </div>
+
+          {/* Compétition : tarif selon le nombre de passages */}
+          {proposerPrixPassages({ activityType: form.activityType ?? creneau.activityType, activityTitle: form.activityTitle, prixPassages: form.prixPassages }) && (
+            <div className="bg-orange-50 rounded-xl p-3 flex flex-col gap-2">
+              <div className="font-body text-xs font-semibold text-orange-800">🏆 Tarif selon le nombre de passages</div>
+              <div className="grid grid-cols-3 gap-2">
+                {[0, 1, 2].map(k => (
+                  <div key={k}>
+                    <label className="font-body text-[11px] text-orange-800 block mb-1">{k + 1} passage{k > 0 ? "s" : ""} (€)</label>
+                    <input type="number" min="0" step="0.5" inputMode="decimal" value={form.prixPassages?.[k] ?? ""}
+                      onChange={e => { const pp = [...(form.prixPassages || ["", "", ""])]; while (pp.length < 3) pp.push(""); pp[k] = e.target.value; onFormChange({ ...form, prixPassages: pp }); }}
+                      placeholder="—"
+                      className="w-full px-2 py-2 rounded-lg border border-orange-200 font-body text-sm bg-white focus:border-orange-400 focus:outline-none"/>
+                  </div>
+                ))}
+              </div>
+              <div className="font-body text-[10px] text-orange-700">
+                Vide = formule non proposée. La famille choisit son nombre de passages en réservant ; au planning, un bouton par formule remplit l&apos;engagement. Le « Prix TTC » du créneau devient le plus petit tarif.
+              </div>
+            </div>
+          )}
 
           {/* Thème narratif (stages uniquement) */}
           {(creneau.activityType === "stage" || creneau.activityType === "stage_journee") && (

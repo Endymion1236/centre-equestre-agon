@@ -29,4 +29,7 @@ export interface CartItem {
   /** Séance prise sur une carte de séances : rien à payer. */
   cardId?: string;
   carteLabel?: string;
+  /** Compétition au tarif par passages : nombre choisi et formules proposées. */
+  passages?: number;
+  offrePassages?: { n: number; prix: number }[];
 }
