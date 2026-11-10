@@ -723,3 +723,23 @@ export function versementsActifsParLigne<T extends { id: string; bankLineKey?: s
   for (const e of ecritures) if (!e.correctionDe && !annulees.has(e.id) && e.bankLineKey) actifs.set(e.bankLineKey, e);
   return actifs;
 }
+
+/**
+ * Versement saisi à la main dans le livre de caisse (bouton « Versement
+ * banque », sans lien au relevé) qui correspond à une ligne du relevé :
+ * même montant, à 7 jours près, pas encore pris par une autre ligne ni
+ * annulé. Pointer la ligne ne doit alors RIEN créer : la sortie de caisse
+ * existe déjà (1 200 € du 09/11/2026, saisis avant le pointage).
+ */
+export function versementManuelCorrespondant<T extends { id: string; montant?: number; bankLineKey?: string; correctionDe?: string | null; date?: { seconds?: number } | null }>(
+  ecritures: T[], ligne: { amount: number; date: Date | null }, dejaPris: Set<string>,
+): T | null {
+  const annulees = new Set(ecritures.filter((e) => e.correctionDe).map((e) => e.correctionDe as string));
+  const candidats = ecritures
+    .filter((e) => !e.bankLineKey && !e.correctionDe && !annulees.has(e.id) && !dejaPris.has(e.id))
+    .filter((e) => Math.abs(Math.abs(Number(e.montant) || 0) - ligne.amount) < 0.01)
+    .map((e) => ({ e, jours: ligne.date && e.date?.seconds ? Math.abs(ligne.date.getTime() - e.date.seconds * 1000) / 86_400_000 : 999 }))
+    .filter((x) => x.jours <= 7)
+    .sort((a, b) => a.jours - b.jours);
+  return candidats[0]?.e || null;
+}

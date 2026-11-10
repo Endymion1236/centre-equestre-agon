@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/rapprochement-especes.test.ts
  */
 import assert from "node:assert/strict";
-import { bordereauxEspecesCandidats, estLigneVersementEspeces, versementsActifsParLigne } from "../../src/app/admin/comptabilite/rapprochement-utils";
+import { bordereauxEspecesCandidats, estLigneVersementEspeces, versementManuelCorrespondant, versementsActifsParLigne } from "../../src/app/admin/comptabilite/rapprochement-utils";
 
 let n = 0;
 const test = (nom: string, fn: () => void) => { try { fn(); n++; } catch (e) { console.error(`❌ ${nom}`); throw e; } };
@@ -35,5 +35,16 @@ test("dé-pointer annule le versement par contre-passation, sans rien effacer", 
   assert.equal(versementsActifsParLigne(annule).has(k), false);
   // Re-pointé ensuite : un nouveau versement redevient actif.
   assert.equal(versementsActifsParLigne([...annule, { id: "v2", bankLineKey: k }]).get(k)?.id, "v2");
+});
+test("versement déjà saisi à la main : retrouvé, jamais créé deux fois", () => {
+  const sec = (iso: string) => ({ seconds: Date.parse(iso) / 1000 });
+  const manuel = { id: "m", montant: -1200, date: sec("2026-11-09T12:00:00Z") };
+  const ligne = { amount: 1200, date: new Date("2026-11-09T12:00:00Z") };
+  assert.equal(versementManuelCorrespondant([manuel], ligne, new Set())?.id, "m");
+  assert.equal(versementManuelCorrespondant([manuel], ligne, new Set(["m"])), null, "déjà pris par une autre ligne");
+  assert.equal(versementManuelCorrespondant([manuel, { id: "x", montant: 1200, correctionDe: "m" }], ligne, new Set()), null, "annulé");
+  assert.equal(versementManuelCorrespondant([{ ...manuel, date: sec("2026-10-20T12:00:00Z") }], ligne, new Set()), null, "trop loin");
+  assert.equal(versementManuelCorrespondant([{ ...manuel, bankLineKey: "k" }], ligne, new Set()), null, "lié à une autre ligne");
+  assert.equal(versementManuelCorrespondant([{ ...manuel, montant: -1100 }], ligne, new Set()), null, "autre montant");
 });
 console.log(`✅ ${n} tests passés`);

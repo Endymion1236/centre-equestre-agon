@@ -31,7 +31,7 @@ import {
   encaissementsCouvertsParLigne,
   parserCsvBancaire,
 } from "./rapprochement-utils";
-import { fusionnerLignesBancaires, estLigneVersementEspeces, versementsActifsParLigne } from "./rapprochement-utils";
+import { fusionnerLignesBancaires, estLigneVersementEspeces, versementsActifsParLigne, versementManuelCorrespondant } from "./rapprochement-utils";
 import { rapprocherReleve } from "./rapprochement-matching";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { ligneDejaEncaissee } from "@/lib/ligne-bancaire-unique";
@@ -455,6 +455,8 @@ export function useRapprochement({
       const existing = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
       // Versements actifs : ceux qu'aucune contre-passation n'annule.
       const existingByKey = versementsActifsParLigne(existing);
+      // Versements saisis à la main déjà rattachés à une ligne de ce passage.
+      const manuelsPris = new Set<string>();
 
       // Parcourir les bankLines et créer/supprimer les versements
       for (const bl of lines) {
@@ -473,6 +475,9 @@ export function useRapprochement({
           const bankDateObj = p1
             ? new Date(`${p1[3]}-${p1[2].padStart(2, "0")}-${p1[1].padStart(2, "0")}T12:00:00`)
             : new Date();
+          // Déjà saisi à la main dans le livre de caisse : rien à créer.
+          const manuel = versementManuelCorrespondant(existing, { amount: Math.abs(bl.amount), date: p1 ? bankDateObj : null }, manuelsPris);
+          if (manuel) { manuelsPris.add(manuel.id); continue; }
           // Mois déjà envoyé au cabinet : on n'y ajoute pas d'écriture en
           // silence (son FEC est parti). Jusqu'au 10/11/2026, un libellé
           // accentué (« Versement d'espèces ») n'était pas reconnu : un
