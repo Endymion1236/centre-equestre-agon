@@ -19,6 +19,7 @@
 
 import { adminDb } from "@/lib/firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { completerCavalier, dateNaissanceCle, memeCavalier, placesApresReunion, repointerCavalier } from "@/lib/fusion-familles-regles";
 
 /** Collections dont les documents portent `familyId` et suivent la famille. */
 export const COLLECTIONS_SUIVANT_LA_FAMILLE = [
@@ -28,11 +29,9 @@ export const COLLECTIONS_SUIVANT_LA_FAMILLE = [
 ] as const;
 
 const norm = (s: unknown) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-const dateKey = (b: any): string => {
-  if (!b) return "";
-  const d = typeof b?.toDate === "function" ? b.toDate() : new Date(b);
-  return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
-};
+// Date lue en heure de Paris : une date de naissance enregistrée à minuit
+// (heure française) ne recule plus d'un jour (cas Cléa, 11/2026).
+const dateKey = dateNaissanceCle;
 export const nomCavalier = (c: any) => `${c?.firstName || ""} ${c?.lastName || ""}`.trim() || c?.name || "sans nom";
 
 export interface AppariementEnfants {
@@ -46,8 +45,8 @@ export interface AppariementEnfants {
  * Les deux fiches d'un doublon portent souvent les MÊMES enfants sous des ids
  * différents (fiche recréée à la connexion du parent, enfant re-saisi). On
  * reconnaît un même cavalier par prénom (sans accents ni majuscules) + date de
- * naissance identiques — le NOM peut différer (coquille, nom de l'autre
- * parent). Un enfant présent sous le même id des deux côtés (fiche copiée) n'a
+ * naissance identiques, à un jour près ou absente d'un côté (`memeCavalier`)
+ * — le NOM peut différer (coquille, nom de l'autre parent). Un enfant présent sous le même id des deux côtés (fiche copiée) n'a
  * rien à faire. Pur : testable sans base.
  */
 export function apparierEnfants(enfantsConserves: any[], enfantsAbsorbes: any[]): AppariementEnfants {
@@ -58,10 +57,10 @@ export function apparierEnfants(enfantsConserves: any[], enfantsAbsorbes: any[])
     if (!c) continue;
     if (idsConserves.has(c.id)) continue; // strictement le même enregistrement
     const candidats = (enfantsConserves || []).filter((k: any) => norm(k?.firstName) && norm(k.firstName) === norm(c.firstName));
-    // Date identique d'abord ; à défaut, prénom seul quand une date manque
-    // d'un côté. Deux dates renseignées et DIFFÉRENTES = deux enfants.
+    // Date identique d'abord ; à défaut, une date à un jour près (fuseau) ou
+    // manquante d'un côté. Deux dates nettement différentes = deux enfants.
     const exact = candidats.find((k: any) => dateKey(k.birthDate) && dateKey(k.birthDate) === dateKey(c.birthDate));
-    const souple = candidats.find((k: any) => !dateKey(k.birthDate) || !dateKey(c.birthDate));
+    const souple = candidats.find((k: any) => memeCavalier(k, c));
     const cible = exact || souple;
     if (cible && c.id) correspondances.set(c.id, cible);
     else aAjouter.push(c);
@@ -246,7 +245,14 @@ export async function fusionnerFamilles(params: {
   const cibleDe = (childId?: string) => (childId ? correspondances.get(childId) : null);
   const repointage = (dd: any) => {
     const cible = cibleDe(dd?.childId);
+    // Lignes d'une commande (`items[].childId`) et listes `childIds` aussi.
+    let patch: Record<string, unknown> = {};
+    for (const [ancien, k] of correspondances) {
+      const p = repointerCavalier({ ...dd, ...patch }, ancien, { id: k.id, nom: nomCavalier(k) });
+      if (p) patch = { ...patch, ...p };
+    }
     return {
+      ...patch,
       familyId: keepId, familyName: keepName,
       ...(cible ? { childId: cible.id, childName: nomCavalier(cible) } : {}),
     };
@@ -339,6 +345,96 @@ export async function fusionnerFamilles(params: {
     // comprendre, après coup, où sont passées les références d'un cavalier.
     enfantsApparies: [...correspondances.entries()].map(([de, k]) => ({ de, vers: k.id })),
     mergedBy, mergedAt: new Date(),
+  });
+  return { apercu, applique: true };
+}
+
+// ─── Réunir deux fiches du même cavalier dans une famille ─────────────────
+
+export interface ApercuReunionCavaliers {
+  garde: { id: string; nom: string; naissance: string };
+  doublon: { id: string; nom: string; naissance: string };
+  /** Documents repointés, par collection. */
+  documents: Record<string, number>;
+  creneaux: number;
+  /** Créneaux où les deux étaient inscrits : la place du doublon est libérée. */
+  doublesRetires: number;
+  progression: "copiee" | "gardee" | "aucune";
+}
+
+/**
+ * Le cavalier `doublonId` est la même personne que `gardeId` (même fiche
+ * famille) : ses commandes, cartes, forfaits, réservations et places au
+ * planning passent sur `gardeId`, ce que seul le doublon savait complète la
+ * fiche gardée, puis le doublon quitte la liste des cavaliers. Le journal des
+ * encaissements n'est jamais touché. Trace dans `family-merges` (type
+ * « cavalier »).
+ */
+export async function reunirCavaliers(params: {
+  familyId: string; gardeId: string; doublonId: string; dryRun?: boolean; par: string;
+}): Promise<{ apercu: ApercuReunionCavaliers; applique: boolean }> {
+  const { familyId, gardeId, doublonId, dryRun = false, par } = params;
+  if (!familyId || !gardeId || !doublonId || gardeId === doublonId) throw new Error("paramètres invalides");
+  const ref = adminDb.collection("families").doc(familyId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new Error("fiche introuvable");
+  const fiche = snap.data() as any;
+  const enfants: any[] = Array.isArray(fiche.children) ? fiche.children : [];
+  const garde = enfants.find((c) => c?.id === gardeId);
+  const doublon = enfants.find((c) => c?.id === doublonId);
+  if (!garde || !doublon) throw new Error("cavalier introuvable sur cette fiche");
+  if (!memeCavalier(garde, doublon)) throw new Error("ces deux cavaliers n'ont pas le même prénom ou pas la même date de naissance");
+  const gardeComplet = completerCavalier(garde, doublon);
+  const cible = { id: gardeId, nom: nomCavalier(gardeComplet) };
+
+  const documents: Record<string, number> = {};
+  const ops: { ref: FirebaseFirestore.DocumentReference; data: any }[] = [];
+  for (const coll of COLLECTIONS_SUIVANT_LA_FAMILLE) {
+    try {
+      const docs = await adminDb.collection(coll).where("familyId", "==", familyId).get();
+      for (const d of docs.docs) {
+        const patch = repointerCavalier(d.data() as any, doublonId, cible);
+        if (!patch) continue;
+        documents[coll] = (documents[coll] || 0) + 1;
+        ops.push({ ref: d.ref, data: patch });
+      }
+    } catch (e) {
+      console.warn(`[reunir-cavaliers] ${coll} illisible :`, e);
+    }
+  }
+  let creneaux = 0, doublesRetires = 0;
+  const crSnap = await adminDb.collection("creneaux").get();
+  for (const d of crSnap.docs) {
+    const r = placesApresReunion((d.data() as any).enrolled, familyId, doublonId, cible);
+    if (!r.change) continue;
+    creneaux++;
+    doublesRetires += r.doublesRetires;
+    ops.push({ ref: d.ref, data: { enrolled: r.enrolled } });
+  }
+  // Progression pédagogique (document `famille_cavalier`) : copiée vers le
+  // cavalier gardé s'il n'en a pas ; celle du doublon reste, jamais effacée.
+  const progDoublon = await adminDb.collection("progressions").doc(`${familyId}_${doublonId}`).get();
+  const progGarde = await adminDb.collection("progressions").doc(`${familyId}_${gardeId}`).get();
+  const progression: ApercuReunionCavaliers["progression"] = !progDoublon.exists ? "aucune" : progGarde.exists ? "gardee" : "copiee";
+
+  const apercu: ApercuReunionCavaliers = {
+    garde: { id: gardeId, nom: nomCavalier(garde), naissance: dateKey(garde.birthDate) },
+    doublon: { id: doublonId, nom: nomCavalier(doublon), naissance: dateKey(doublon.birthDate) },
+    documents, creneaux, doublesRetires, progression,
+  };
+  if (dryRun) return { apercu, applique: false };
+
+  await commitInBatches(ops);
+  if (progression === "copiee") {
+    await adminDb.collection("progressions").doc(`${familyId}_${gardeId}`).set({ ...progDoublon.data(), childId: gardeId }, { merge: true });
+  }
+  await ref.set({
+    children: enfants.filter((c) => c?.id !== doublonId).map((c) => (c?.id === gardeId ? gardeComplet : c)),
+  }, { merge: true });
+  await adminDb.collection("family-merges").add({
+    type: "cavalier", familyId, keepId: familyId, mergeId: familyId,
+    cavalierGarde: gardeId, cavalierRetire: doublonId, cavalierRetireFiche: doublon,
+    documents, creneaux, doublesRetires, mergedBy: par, mergedAt: new Date(),
   });
   return { apercu, applique: true };
 }

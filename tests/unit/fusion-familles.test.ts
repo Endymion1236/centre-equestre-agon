@@ -10,6 +10,9 @@ import {
   apparierEnfants, champsACompleter, choisirFicheARattacher, fusionnerChampsFiche,
   COLLECTIONS_SUIVANT_LA_FAMILLE, nomCavalier, estCompteDeConnexion, sensDeFusion, identifiantsRattaches,
 } from "../../src/lib/fusion-familles";
+import {
+  dateNaissanceCle, memeCavalier, cavaliersEnDouble, completerCavalier, repointerCavalier, placesApresReunion,
+} from "../../src/lib/fusion-familles-regles";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -62,6 +65,64 @@ test("les collections qui suivent la famille couvrent commandes, cartes et manda
   const c = COLLECTIONS_SUIVANT_LA_FAMILLE as readonly string[];
   for (const attendu of ["payments", "reservations", "cartes", "mandats-sepa", "forfaits", "avoirs"]) assert.ok(c.includes(attendu), attendu);
   assert.ok(!c.includes("encaissements"), "le journal est immuable (NF525)");
+});
+
+console.log("\n── Un même cavalier deux fois sur une fiche (Cléa, 11/2026) ──");
+
+test("une date de naissance enregistrée à minuit heure française garde son jour", () => {
+  assert.equal(dateNaissanceCle("2016-04-12"), "2016-04-12");
+  assert.equal(dateNaissanceCle(new Date("2016-04-11T22:00:00Z")), "2016-04-12", "minuit à Paris = 22 h UTC la veille");
+  assert.equal(dateNaissanceCle({ seconds: Date.parse("2016-04-11T22:00:00Z") / 1000 }), "2016-04-12");
+  assert.equal(dateNaissanceCle(""), "");
+  assert.equal(dateNaissanceCle("n'importe quoi"), "");
+});
+
+test("fusion de fiches : la date du compte Google décalée d'un jour n'ajoute plus un 2e cavalier", () => {
+  const r = apparierEnfants(
+    [{ id: "g1", firstName: "Cléa", lastName: "X", birthDate: "2016-04-12" }],
+    [{ id: "b1", firstName: "Clea", lastName: "X", birthDate: "2016-04-11T22:00:00.000Z" }],
+  );
+  assert.equal(r.aAjouter.length, 0);
+  assert.equal(r.correspondances.get("b1")?.id, "g1");
+  const decale = apparierEnfants([{ id: "g1", firstName: "Cléa", birthDate: "2016-04-12" }], [{ id: "b1", firstName: "Cléa", birthDate: "2016-04-13" }]);
+  assert.equal(decale.aAjouter.length, 0, "un jour d'écart : même cavalière");
+});
+
+test("deux cavaliers en double sur une fiche sont repérés, pas deux enfants différents", () => {
+  const enfants = [
+    { id: "a", firstName: "Cléa", birthDate: "2016-04-12" },
+    { id: "b", firstName: "Tom", birthDate: "2012-01-01" },
+    { id: "c", firstName: "clea ", birthDate: new Date("2016-04-11T22:00:00Z") },
+    { id: "d", firstName: "Tom", birthDate: "2018-01-01" },
+  ];
+  assert.deepEqual(cavaliersEnDouble(enfants), [["a", "c"]]);
+  assert.equal(memeCavalier({ firstName: "Tom", birthDate: "2012-01-01" }, { firstName: "Tom", birthDate: "2018-01-01" }), false);
+  assert.equal(memeCavalier({ firstName: "Léa" }, { firstName: "Lea", birthDate: "2015-01-01" }), true, "date manquante d'un côté");
+});
+
+test("le cavalier gardé est complété de ce que seul le doublon savait", () => {
+  const c = completerCavalier({ id: "a", firstName: "Cléa", birthDate: "", galopLevel: "G2" }, { id: "c", firstName: "Cléa", birthDate: "2016-04-12", galopLevel: "G1", allergies: "foin" });
+  assert.deepEqual(c, { id: "a", firstName: "Cléa", birthDate: "2016-04-12", galopLevel: "G2", allergies: "foin" });
+});
+
+test("commande, carte, réservation : le doublon est remplacé partout, y compris dans les lignes", () => {
+  const garde = { id: "a", nom: "Cléa X" };
+  assert.deepEqual(repointerCavalier({ childId: "c" }, "c", garde), { childId: "a", childName: "Cléa X" });
+  const p = repointerCavalier({ items: [{ childId: "c", label: "Stage" }, { childId: "z" }] }, "c", garde)!;
+  assert.deepEqual(p.items, [{ childId: "a", childName: "Cléa X", label: "Stage" }, { childId: "z" }]);
+  assert.deepEqual(repointerCavalier({ childIds: ["c", "a"] }, "c", garde), { childIds: ["a"] });
+  assert.equal(repointerCavalier({ childId: "z", items: [] }, "c", garde), null);
+});
+
+test("places au planning : repointée, ou libérée si les deux étaient inscrites au même créneau", () => {
+  const garde = { id: "a", nom: "Cléa X" };
+  const simple = placesApresReunion([{ familyId: "f", childId: "c" }, { familyId: "g", childId: "c" }], "f", "c", garde);
+  assert.equal(simple.change, true);
+  assert.deepEqual(simple.enrolled, [{ familyId: "f", childId: "a", childName: "Cléa X" }, { familyId: "g", childId: "c" }], "une autre famille n'est pas touchée");
+  const double = placesApresReunion([{ familyId: "f", childId: "a" }, { familyId: "f", childId: "c" }], "f", "c", garde);
+  assert.equal(double.doublesRetires, 1);
+  assert.deepEqual(double.enrolled, [{ familyId: "f", childId: "a" }]);
+  assert.equal(placesApresReunion([{ familyId: "f", childId: "a" }], "f", "c", garde).change, false);
 });
 
 console.log("\n── Le sens d'une fusion : le compte de connexion est conservé ──");

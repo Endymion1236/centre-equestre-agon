@@ -19,7 +19,9 @@ import { useToast } from "@/components/ui/Toast";
 interface Fiche {
   docId: string; parentName: string | null; parentEmail: string | null; parentPhone: string | null;
   authUid: string | null; authProvider: string | null; estCompte: boolean;
-  enfants: string[]; nbEnfants: number; status: string | null; mergedInto: string | null;
+  enfants: string[]; nbEnfants: number;
+  cavaliers?: { id: string; nom: string; naissance: string | null; niveau: string | null }[];
+  enDouble?: string[][]; status: string | null; mergedInto: string | null;
   commandes: number; commandesVivantes: number; totalCommandes: number; totalRegle: number; inscriptionsAVenir: number;
 }
 interface Encaissement { id: string; date: string | null; mode: string | null; modeLabel: string | null; montant: number; ref: string | null; raison: string | null }
@@ -46,6 +48,12 @@ const STATUT: Record<string, string> = { paid: "réglée", partial: "partielle",
 
 const eur = (n: number) => `${(Math.round((n || 0) * 100) / 100).toFixed(2).replace(".", ",")} €`;
 const dateFr = (iso: string) => (iso ? iso.split("-").reverse().join("/") : "");
+const LIBELLES_COLLECTIONS: Record<string, string> = {
+  payments: "commande(s)", forfaits: "forfait(s)", cartes: "carte(s)", reservations: "réservation(s)", avoirs: "avoir(s)",
+  "echeances-sepa": "échéance(s) SEPA", "mandats-sepa": "mandat(s) SEPA", rattrapages: "rattrapage(s)", waitlist: "liste(s) d'attente",
+  devis: "devis", recurrences: "inscription(s) récurrente(s)", bonsRecup: "bon(s) de récupération", fidelite: "fidélité",
+  payment_declarations: "déclaration(s) de paiement",
+};
 
 export default function DiagFamillePage() {
   const params = useSearchParams();
@@ -58,6 +66,9 @@ export default function DiagFamillePage() {
   const [fusion, setFusion] = useState<{ keepId: string; mergeId: string } | null>(null);
   const [apercu, setApercu] = useState<any>(null);
   const [busy, setBusy] = useState(false);
+  // Un même cavalier deux fois sur une fiche : lequel garder, et l'aperçu.
+  const [reunion, setReunion] = useState<{ familyId: string; ids: string[]; gardeId: string } | null>(null);
+  const [apercuReunion, setApercuReunion] = useState<any>(null);
 
   const chercher = useCallback(async (texte: string) => {
     const t = texte.trim();
@@ -89,6 +100,28 @@ export default function DiagFamillePage() {
       else {
         toast("✅ Fiche rattachée au compte : la famille retrouve ses inscriptions et ses paiements dans son espace.", "success", 8000);
         setFusion(null); setApercu(null);
+        await chercher(q);
+      }
+    } catch (e: any) { toast(e?.message || String(e), "error", 8000); }
+    finally { setBusy(false); }
+  };
+
+  const lancerReunion = async (dryRun: boolean) => {
+    if (!reunion) return;
+    const doublonId = reunion.ids.find((id) => id !== reunion.gardeId);
+    if (!doublonId) return;
+    setBusy(true);
+    try {
+      const res = await authFetch("/api/admin/reunir-cavaliers", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ familyId: reunion.familyId, gardeId: reunion.gardeId, doublonId, dryRun, confirm: !dryRun }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d?.error || "Erreur");
+      if (dryRun) setApercuReunion(d.apercu);
+      else {
+        toast("✅ Les deux fiches du cavalier sont réunies.", "success", 8000);
+        setReunion(null); setApercuReunion(null);
         await chercher(q);
       }
     } catch (e: any) { toast(e?.message || String(e), "error", 8000); }
@@ -156,6 +189,60 @@ export default function DiagFamillePage() {
                   <span className="inline-flex items-center gap-1"><CalendarDays size={11} />{f.inscriptionsAVenir} inscription{f.inscriptionsAVenir > 1 ? "s" : ""} à venir au planning</span>
                   <span className="text-[10px] text-slate-400">identifiant {f.docId}{f.authProvider ? ` · connexion ${f.authProvider}` : ""}</span>
                 </div>
+                {!absorbee && (f.enDouble || []).map((ids) => {
+                  const cav = (id: string) => f.cavaliers?.find((c) => c.id === id);
+                  const enCours = reunion?.familyId === f.docId && reunion.ids.join() === ids.slice(0, 2).join();
+                  return (
+                    <div key={ids.join()} className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 font-body text-xs text-amber-900">
+                      <div className="font-semibold mb-1">« {cav(ids[0])?.nom} » figure {ids.length} fois sur cette fiche : c&apos;est sans doute la même personne.</div>
+                      {!enCours ? (
+                        <button type="button" onClick={() => { setReunion({ familyId: f.docId, ids: ids.slice(0, 2), gardeId: ids[0] }); setApercuReunion(null); }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 font-semibold text-white cursor-pointer border-none hover:bg-amber-500">
+                          <GitMerge size={13} /> Réunir en un seul cavalier
+                        </button>
+                      ) : (
+                        <div className="space-y-2">
+                          <div>Quelle fiche garder ? L&apos;autre lui donne ses inscriptions, commandes, cartes et forfaits, puis disparaît de la famille.</div>
+                          {ids.slice(0, 2).map((id) => {
+                            const c = cav(id);
+                            return (
+                              <label key={id} className="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" checked={reunion!.gardeId === id} onChange={() => { setReunion({ ...reunion!, gardeId: id }); setApercuReunion(null); }} />
+                                <span><strong>{c?.nom}</strong>{c?.naissance ? ` · née/né le ${dateFr(c.naissance)}` : " · sans date de naissance"}{c?.niveau ? ` · ${c.niveau}` : ""} <span className="text-amber-700/60">({id.slice(-6)})</span></span>
+                              </label>
+                            );
+                          })}
+                          {apercuReunion && (
+                            <div className="rounded-lg bg-white border border-amber-200 p-2 text-slate-700">
+                              Seront repointés sur la fiche gardée :{" "}
+                              {Object.entries(apercuReunion.documents as Record<string, number>).map(([k, n]) => `${n} ${LIBELLES_COLLECTIONS[k] || k}`).join(", ") || "aucun document"}
+                              {apercuReunion.creneaux > 0 && `, ${apercuReunion.creneaux} créneau${apercuReunion.creneaux > 1 ? "x" : ""} du planning`}.
+                              {apercuReunion.doublesRetires > 0 && (
+                                <div className="text-rose-700 mt-1">Inscrite deux fois sur {apercuReunion.doublesRetires} créneau{apercuReunion.doublesRetires > 1 ? "x" : ""} : une place sera libérée. Vérifiez ensuite qu&apos;elle n&apos;a pas été facturée deux fois.</div>
+                              )}
+                              {apercuReunion.progression === "copiee" && <div className="mt-1">Sa progression pédagogique est recopiée sur la fiche gardée.</div>}
+                            </div>
+                          )}
+                          <div className="flex gap-2">
+                            {!apercuReunion ? (
+                              <button type="button" disabled={busy} onClick={() => lancerReunion(true)}
+                                className="rounded-lg bg-amber-600 px-3 py-1.5 font-semibold text-white cursor-pointer border-none disabled:opacity-50">
+                                {busy ? "…" : "Voir ce qui sera déplacé"}
+                              </button>
+                            ) : (
+                              <button type="button" disabled={busy} onClick={() => lancerReunion(false)}
+                                className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white cursor-pointer border-none disabled:opacity-50">
+                                {busy ? "…" : "Confirmer la réunion"}
+                              </button>
+                            )}
+                            <button type="button" disabled={busy} onClick={() => { setReunion(null); setApercuReunion(null); }}
+                              className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 cursor-pointer">Annuler</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
                 {absorbee && f.estCompte && f.mergedInto && !diag.fiches.find(x => x.docId === f.mergedInto)?.estCompte && (
                   <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
                     <button type="button" onClick={() => { setFusion({ keepId: f.docId, mergeId: f.mergedInto! }); setApercu(null); }}

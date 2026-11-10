@@ -17,6 +17,7 @@
  * Cette route les distingue en une réponse. Lecture seule, admin uniquement.
  */
 
+import { cavaliersEnDouble, dateNaissanceCle } from "@/lib/fusion-familles-regles";
 import { NextRequest, NextResponse } from "next/server";
 import { messageErreur } from "@/lib/message-erreur";
 import { adminDb } from "@/lib/firebase-admin";
@@ -69,6 +70,15 @@ export async function GET(req: NextRequest) {
           estCompte: !!f.authUid && f.authUid === d.id,
           enfants: (f.children || []).map((c: any) => `${c?.firstName || ""} ${c?.lastName || ""}`.trim() || c?.name || "?"),
           nbEnfants: (f.children || []).length,
+          // Détail des cavaliers, et ceux qui figurent deux fois (même prénom,
+          // même date de naissance à un jour près) : à réunir (cas Cléa, 11/2026).
+          cavaliers: (f.children || []).filter((c: any) => c?.id).map((c: any) => ({
+            id: String(c.id),
+            nom: `${c?.firstName || ""} ${c?.lastName || ""}`.trim() || c?.name || "?",
+            naissance: dateNaissanceCle(c?.birthDate) || null,
+            niveau: c?.galopLevel || c?.level || null,
+          })),
+          enDouble: cavaliersEnDouble(f.children || []),
           nbLies: (f.linkedChildren || []).length,
           status: f.status || null,
           mergedInto: f.mergedInto || null,
