@@ -5,9 +5,10 @@ import { Plus, Trash2, PencilLine, X, Check, UserPlus } from "lucide-react";
 import {
   CATEGORIES_SUGGEREES, INDICES_SUGGERES,
   retirerCavalier, retirerEquipe, resultatsTries,
-  bilanSaison, nomsCavaliers, equipesDuCavalier,
+  bilanSaison, equipesParCategorie, modifierEquipe, concoursAutreCategorie, participeAuConcours, nomsCavaliers, equipesDuCavalier,
   type SaisonPonyGames, type EquipeSaison, type CavalierSaison,
 } from "@/lib/concours/saisons";
+import { toParisDateString } from "@/lib/date-local";
 
 export type Maj = (f: (s: SaisonPonyGames) => SaisonPonyGames) => void;
 
@@ -98,6 +99,23 @@ function FormulaireEquipe({
           <input className={inp} list="pg-indices" value={b.indice} onChange={(e) => setB({ ...b, indice: e.target.value })} placeholder="Club 2" />
         </div>
       </div>
+      {(() => {
+        // Changement de catégorie d'une équipe qui a déjà couru : dire ce qui arrive aux concours passés.
+        const id = (initial as Partial<EquipeSaison>).id;
+        const change = b.categorie.trim() !== initial.categorie.trim() || b.indice.trim() !== initial.indice.trim();
+        if (!id || !change) return null;
+        const aujourdhui = toParisDateString();
+        const passes = resultatsTries(saison).filter((r) => r.date < aujourdhui && !r.categoriesFigees?.[id]
+          && participeAuConcours(r, id));
+        if (passes.length === 0) return null;
+        const ancienne = [initial.categorie, initial.indice].filter((x) => x.trim()).join(" · ") || "sans catégorie";
+        return (
+          <p className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+            {passes.map((r) => r.nom).join(", ")} : déjà couru{passes.length > 1 ? "s" : ""}, {passes.length > 1 ? "ils restent" : "il reste"} en « {ancienne} » dans
+            le classement de la saison. La nouvelle catégorie vaut pour les concours suivants.
+          </p>
+        );
+      })()}
 
       <div>
         <div className="text-xs font-semibold text-gray-600 mb-1.5">
@@ -150,7 +168,7 @@ function FormulaireEquipe({
 export function OngletEquipes({ saison, maj }: { saison: SaisonPonyGames; maj: Maj }) {
   const [creation, setCreation] = useState(false);
   const [edition, setEdition] = useState<string | null>(null);
-  const bilan = bilanSaison(saison);
+  const bilan = equipesParCategorie(saison);
 
   const supprimer = (e: EquipeSaison) => {
     if (!confirm(`Supprimer l'équipe « ${e.nom} » et ses résultats de la saison ?`)) return;
@@ -183,7 +201,8 @@ export function OngletEquipes({ saison, maj }: { saison: SaisonPonyGames; maj: M
                 <FormulaireEquipe key={equipe.id} saison={saison} maj={maj} initial={equipe} libelle="Enregistrer"
                   onAnnuler={() => setEdition(null)}
                   onValider={(b) => {
-                    maj((s) => ({ ...s, equipes: s.equipes.map((e) => (e.id === equipe.id ? { ...b, id: equipe.id } : e)) }));
+                    // Changement de catégorie : les concours déjà courus gardent l'ancienne.
+                    maj((s) => modifierEquipe(s, { ...b, id: equipe.id }, toParisDateString()));
                     setEdition(null);
                   }} />
               ) : (
@@ -199,6 +218,11 @@ export function OngletEquipes({ saison, maj }: { saison: SaisonPonyGames; maj: M
                     {nbConcours > 0 && (
                       <div className="text-xs text-gray-500 mt-1">{pointsTotal} pt(s) sur {nbConcours} concours</div>
                     )}
+                    {concoursAutreCategorie(saison, equipe).map(({ concours, categorie }) => (
+                      <div key={concours.id} className="text-xs text-amber-700 mt-0.5">
+                        {concours.nom} ({concours.date.slice(8, 10)}/{concours.date.slice(5, 7)}) couru en {[categorie.categorie, categorie.indice].filter((x) => x.trim()).join(" · ") || "sans catégorie"}
+                      </div>
+                    ))}
                   </div>
                   <button type="button" onClick={() => setEdition(equipe.id)} className="p-2 rounded-lg text-gray-400 hover:text-blue-700 hover:bg-blue-50 transition" title="Modifier">
                     <PencilLine size={16} />
@@ -306,18 +330,20 @@ export function OngletClassement({ saison }: { saison: SaisonPonyGames }) {
                 </tr>
               </thead>
               <tbody>
-                {g.equipes.map(({ equipe, pointsTotal }) => (
-                  <tr key={equipe.id} className="border-t border-gray-100">
+                {g.equipes.map(({ equipe, pointsTotal, concoursIds }) => (
+                  <tr key={`${equipe.id}|${equipe.indice}`} className="border-t border-gray-100">
                     <td className="px-3 py-2">
                       <div className="font-semibold text-gray-800">{equipe.nom}</div>
                       <div className="text-xs text-gray-400">{nomsCavaliers(saison, equipe).join(", ")}</div>
                     </td>
                     <td className="px-3 py-2 text-gray-600">{equipe.indice}</td>
                     {concours.map((c) => {
-                      const l = c.classements.find((x) => x.equipeId === equipe.id);
+                      // Seuls les concours courus dans la catégorie et l'indice de cette ligne.
+                      const l = concoursIds.includes(c.id) ? c.classements.find((x) => x.equipeId === equipe.id) : undefined;
+                      const ailleurs = !l && c.classements.some((x) => x.equipeId === equipe.id);
                       return (
                         <td key={c.id} className="px-3 py-2 text-center whitespace-nowrap">
-                          {l ? (
+                          {ailleurs ? <span className="text-xs text-gray-300" title="Couru dans une autre catégorie : compté là-bas">autre cat.</span> : l ? (
                             <>
                               {l.rang !== undefined && <span className="font-semibold">{l.rang}<sup>{l.rang === 1 ? "er" : "e"}</sup></span>}
                               {l.points !== undefined && <span className="text-gray-500 ml-1">· {l.points} pt</span>}

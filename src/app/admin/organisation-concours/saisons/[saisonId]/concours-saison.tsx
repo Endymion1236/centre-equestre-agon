@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import { listerPoneysBase } from "@/lib/concours/store";
 import {
-  bilanSaison, lireNombre, resultatsTries, saisirClassement,
-  type SaisonPonyGames, type ResultatConcours, type EquipeSaison,
+  categorieAuConcours, equipeAuConcours, equipesParCategorie, lireNombre, poserCategorieAuConcours, resultatsTries, saisirClassement,
+  CATEGORIES_SUGGEREES, INDICES_SUGGERES, type SaisonPonyGames, type ResultatConcours, type EquipeSaison,
 } from "@/lib/concours/saisons";
 import {
   avecHoraires, besoinRemplacant, deplacer, desengager, dureeEpreuve, dureePassage, engagerEquipes, estPaire,
@@ -180,7 +180,7 @@ function OrganisationConcours({ saison, concours, changer }: { saison: SaisonPon
 
   const engagements = concours.engagements ?? [];
   const engagees = new Set(engagements.map((g) => g.equipeId));
-  const libres = bilanSaison(saison)
+  const libres = equipesParCategorie(saison)
     .map((g) => ({ categorie: g.categorie, equipes: g.equipes.map((b) => b.equipe).filter((e) => !engagees.has(e.id)) }))
     .filter((g) => g.equipes.length > 0);
   const alertes = verifierOrganisation(saison, concours);
@@ -249,8 +249,9 @@ function OrganisationConcours({ saison, concours, changer }: { saison: SaisonPon
       ) : (
         <div className="space-y-2">
           {engagements.map((g, i) => {
-            const equipe = saison.equipes.find((e) => e.id === g.equipeId);
-            if (!equipe) return null;
+            const fiche = saison.equipes.find((e) => e.id === g.equipeId);
+            if (!fiche) return null;
+            const equipe = equipeAuConcours(concours, fiche);
             return (
               <CartePassage key={g.equipeId} saison={saison} equipe={equipe} engagement={g} rang={i + 1}
                 premier={i === 0} dernier={i === engagements.length - 1} changer={changer} />
@@ -370,11 +371,20 @@ function CartePassage({
 // ─── Résultats d'un concours ───────────────────────────────────────────────
 
 function ResultatsConcours({ saison, maj, concours: r }: { saison: SaisonPonyGames; maj: Maj; concours: ResultatConcours }) {
-  // Les équipes engagées si l'organisation est faite, sinon toutes celles de la saison.
+  // Les équipes engagées si l'organisation est faite, sinon toutes celles de la saison,
+  // rangées dans la catégorie où elles courent CE concours.
   const engagees = new Set((r.engagements ?? []).map((g) => g.equipeId));
-  const groupes = bilanSaison(saison)
-    .map((g) => ({ ...g, equipes: engagees.size ? g.equipes.filter((b) => engagees.has(b.equipe.id)) : g.equipes }))
-    .filter((g) => g.equipes.length > 0);
+  const [aCorriger, setACorriger] = useState<string | null>(null);
+  const parCategorie = new Map<string, EquipeSaison[]>();
+  for (const fiche of saison.equipes) {
+    if (engagees.size && !engagees.has(fiche.id)) continue;
+    const equipe = equipeAuConcours(r, fiche);
+    const cle = equipe.categorie.trim() || "Sans catégorie";
+    parCategorie.set(cle, [...(parCategorie.get(cle) ?? []), equipe]);
+  }
+  const groupes = [...parCategorie.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, "fr"))
+    .map(([categorie, equipes]) => ({ categorie, equipes: equipes.sort((a, b) => a.nom.localeCompare(b.nom, "fr")) }));
 
   const champ = (equipeId: string, cle: "rang" | "points", saisie: string) => {
     const actuel = r.classements.find((c) => c.equipeId === equipeId) ?? { equipeId };
@@ -388,7 +398,12 @@ function ResultatsConcours({ saison, maj, concours: r }: { saison: SaisonPonyGam
 
   return (
     <div className="rounded-xl border border-blue-500/15 bg-white p-4">
-      <p className="text-xs text-gray-500 mb-2">Saisis le classement et les points de chaque équipe ; laisse vide celles qui n&apos;ont pas couru.</p>
+      <p className="text-xs text-gray-500 mb-2">
+        Saisis le classement et les points de chaque équipe ; laisse vide celles qui n&apos;ont pas couru.
+        Une équipe qui courait ce jour-là dans une autre catégorie : bouton « Catégorie » sur sa ligne.
+      </p>
+      <datalist id="pg-res-categories">{CATEGORIES_SUGGEREES.map((c) => <option key={c} value={c} />)}</datalist>
+      <datalist id="pg-res-indices">{INDICES_SUGGERES.map((c) => <option key={c} value={c} />)}</datalist>
       <table className="w-full text-sm">
         <thead>
           <tr className="text-xs text-gray-500 text-left">
@@ -400,13 +415,22 @@ function ResultatsConcours({ saison, maj, concours: r }: { saison: SaisonPonyGam
         <tbody>
           {groupes.map((g) => [
             <tr key={`g-${g.categorie}`}><td colSpan={3} className="pt-3 pb-1 text-xs font-bold text-blue-900 uppercase tracking-wide">{g.categorie}</td></tr>,
-            ...g.equipes.map(({ equipe }) => {
+            ...g.equipes.flatMap((equipe) => {
               const c = r.classements.find((x) => x.equipeId === equipe.id);
-              return (
+              const fiche = saison.equipes.find((e) => e.id === equipe.id)!;
+              const figee = !!r.categoriesFigees?.[equipe.id];
+              const lignes = [
                 <tr key={equipe.id} className="border-t border-gray-100">
                   <td className="py-1.5 pr-2">
                     {equipe.nom}
                     {equipe.indice && <span className="text-xs text-gray-400 ml-1.5">{equipe.indice}</span>}
+                    {figee && (
+                      <span className="ml-1.5 text-[11px] text-amber-700" title="Catégorie de ce concours, différente de la fiche de l'équipe">
+                        (aujourd&apos;hui : {[fiche.categorie, fiche.indice].filter((x) => x.trim()).join(" · ") || "sans catégorie"})
+                      </span>
+                    )}
+                    <button type="button" onClick={() => setACorriger(aCorriger === equipe.id ? null : equipe.id)}
+                      className="ml-2 text-[11px] text-blue-600 hover:underline">Catégorie</button>
                   </td>
                   <td className="py-1.5 pr-2">
                     <input key={`${r.id}-${equipe.id}-rang-${c?.rang ?? ""}`} className={inp} inputMode="numeric" placeholder="—"
@@ -416,12 +440,58 @@ function ResultatsConcours({ saison, maj, concours: r }: { saison: SaisonPonyGam
                     <input key={`${r.id}-${equipe.id}-pts-${c?.points ?? ""}`} className={inp} inputMode="decimal" placeholder="—"
                       defaultValue={c?.points ?? ""} onBlur={(e) => champ(equipe.id, "points", e.target.value)} />
                   </td>
-                </tr>
-              );
+                </tr>,
+              ];
+              if (aCorriger === equipe.id) {
+                lignes.push(
+                  <tr key={`${equipe.id}-cat`}>
+                    <td colSpan={3} className="pb-2">
+                      <CategorieDuConcours concours={r} fiche={fiche}
+                        onValider={(v) => { maj((s) => poserCategorieAuConcours(s, r.id, equipe.id, v)); setACorriger(null); }}
+                        onAnnuler={() => setACorriger(null)} />
+                    </td>
+                  </tr>,
+                );
+              }
+              return lignes;
             }),
           ])}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Catégorie et indice d'une équipe à ce concours seulement : la fiche de l'équipe ne change pas. */
+function CategorieDuConcours({
+  concours, fiche, onValider, onAnnuler,
+}: {
+  concours: ResultatConcours;
+  fiche: EquipeSaison;
+  onValider: (v: { categorie: string; indice: string } | null) => void;
+  onAnnuler: () => void;
+}) {
+  const actuelle = categorieAuConcours(concours, fiche);
+  const [categorie, setCategorie] = useState(actuelle.categorie);
+  const [indice, setIndice] = useState(actuelle.indice);
+  return (
+    <div className="rounded-lg bg-amber-50/70 border border-amber-200 p-2.5 space-y-2">
+      <div className="text-xs text-amber-900">
+        Catégorie de « {fiche.nom} » <b>à ce concours seulement</b> ({concours.nom}). Le classement de la saison compte
+        ses points de ce jour dans cette catégorie ; sa fiche et les autres concours ne changent pas.
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <input className={`${inpSm} w-48`} list="pg-res-categories" value={categorie} onChange={(e) => setCategorie(e.target.value)} placeholder="Catégorie" />
+        <input className={`${inpSm} w-32`} list="pg-res-indices" value={indice} onChange={(e) => setIndice(e.target.value)} placeholder="Indice" />
+        <button type="button" className={btnPrimaire} onClick={() => onValider({ categorie, indice })}>Enregistrer</button>
+        {concours.categoriesFigees?.[fiche.id] && (
+          <button type="button" className={btnSecondaire} onClick={() => onValider(null)}
+            title="Ce concours reprend la catégorie de la fiche de l'équipe">
+            Reprendre celle de la fiche
+          </button>
+        )}
+        <button type="button" className="text-xs text-gray-500 hover:underline" onClick={onAnnuler}>Annuler</button>
+      </div>
     </div>
   );
 }

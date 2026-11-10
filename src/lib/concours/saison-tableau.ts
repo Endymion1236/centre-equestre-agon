@@ -10,7 +10,7 @@
 // Les vérifications signalent une personne prise à deux endroits à la fois.
 // =============================================================================
 
-import type { EngagementConcours, ResultatConcours, RolesPassage, SaisonPonyGames } from "./saisons";
+import { equipeAuConcours, type EngagementConcours, type ResultatConcours, type RolesPassage, type SaisonPonyGames } from "./saisons";
 import { dureePassage, minutes, versHeure } from "./saison-organisation";
 
 export const DUREE_PREPA_MIN = 30;
@@ -26,6 +26,8 @@ export interface LigneTableau {
   equipeId: string;
   equipe: string;
   categorie: string;
+  /** Indice de l'équipe à ce concours. */
+  indice?: string;
   /** Absentes quand le passage n'a pas d'horaire. */
   passage?: Plage;
   prepa?: Plage;
@@ -79,8 +81,10 @@ export function nomCavalier(s: SaisonPonyGames, id: string): string {
 export function lignesTableau(s: SaisonPonyGames, r: ResultatConcours): LigneTableau[] {
   const lignes: LigneTableau[] = [];
   for (const g of r.engagements ?? []) {
-    const equipe = s.equipes.find((e) => e.id === g.equipeId);
-    if (!equipe) continue;
+    const fiche = s.equipes.find((e) => e.id === g.equipeId);
+    if (!fiche) continue;
+    // Catégorie et indice de CE concours (une équipe peut avoir changé depuis).
+    const equipe = equipeAuConcours(r, fiche);
     const debut = minutes(g.heure);
     const plages = debut === undefined ? {} : {
       passage: { debut, fin: debut + dureePassage(s, g) },
@@ -91,6 +95,7 @@ export function lignesTableau(s: SaisonPonyGames, r: ResultatConcours): LigneTab
       equipeId: equipe.id,
       equipe: equipe.nom,
       categorie: equipe.categorie,
+      indice: equipe.indice,
       ...plages,
       cavaliers: equipe.cavalierIds
         .filter((id) => s.cavaliers.some((c) => c.id === id))
@@ -442,7 +447,7 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
 
   const cases = lignes.map((l, i) => {
     const couleur = COULEURS_EQUIPES[i % COULEURS_EQUIPES.length];
-    const titreEquipe = [l.categorie, s.equipes.find((e) => e.id === l.equipeId)?.indice].filter((x) => x?.trim()).join(" ");
+    const titreEquipe = [l.categorie, l.indice].filter((x) => x?.trim()).join(" ");
     const rangs = l.cavaliers.map((c) => ({
       cavalier: echapper(c.nom),
       poney: c.poney ? `${echapper(c.poney)}${c.dejaPretDepuis ? ' <span class="note">prêt</span>' : ""}` : "",

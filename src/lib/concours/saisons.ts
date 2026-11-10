@@ -85,6 +85,18 @@ export interface ResultatConcours {
   /** Équipes engagées, dans l'ordre de passage. */
   engagements?: EngagementConcours[];
   classements: ClassementEquipe[];
+  /**
+   * Catégorie et indice dans lesquels une équipe a couru CE concours, quand
+   * ils diffèrent de ceux de sa fiche (équipe changée de catégorie en cours de
+   * saison). Clé = id de l'équipe. Absent : la catégorie de la fiche.
+   */
+  categoriesFigees?: Record<string, CategorieCourue>;
+}
+
+/** Catégorie et indice d'une équipe à un concours donné. */
+export interface CategorieCourue {
+  categorie: string;
+  indice: string;
 }
 
 export interface SaisonPonyGames {
@@ -187,8 +199,94 @@ export function retirerEquipe(s: SaisonPonyGames, equipeId: string): SaisonPonyG
       ...r,
       classements: r.classements.filter((c) => c.equipeId !== equipeId),
       ...(r.engagements ? { engagements: r.engagements.filter((g) => g.equipeId !== equipeId) } : {}),
+      ...(r.categoriesFigees ? { categoriesFigees: sansCle(r.categoriesFigees, equipeId) } : {}),
     })),
   };
+}
+
+function sansCle<T>(o: Record<string, T>, cle: string): Record<string, T> {
+  const { [cle]: _retire, ...reste } = o;
+  return reste;
+}
+
+// ─── Catégorie courue à chaque concours ───────────────────────────────────
+// Une équipe peut changer de catégorie en cours de saison (Fred et Nico :
+// « Paire découverte » au premier concours, « Club 2 » ensuite). Les concours
+// déjà courus gardent la catégorie d'alors, pour que le classement de fin de
+// saison range chaque point dans la catégorie où il a été gagné.
+
+/** L'équipe a couru (ou est engagée à) ce concours. */
+export function participeAuConcours(r: ResultatConcours, equipeId: string): boolean {
+  return r.classements.some((c) => c.equipeId === equipeId) || (r.engagements ?? []).some((g) => g.equipeId === equipeId);
+}
+
+/** Catégorie et indice de l'équipe à ce concours : ceux figés pour lui, sinon ceux de la fiche. */
+export function categorieAuConcours(r: ResultatConcours, equipe: EquipeSaison): CategorieCourue {
+  const f = r.categoriesFigees?.[equipe.id];
+  return f ? { categorie: f.categorie, indice: f.indice } : { categorie: equipe.categorie, indice: equipe.indice };
+}
+
+/** L'équipe telle qu'elle a couru ce concours (catégorie et indice d'alors). */
+export function equipeAuConcours(r: ResultatConcours, equipe: EquipeSaison): EquipeSaison {
+  return { ...equipe, ...categorieAuConcours(r, equipe) };
+}
+
+/** Pose la catégorie courue à un concours ; identique à la fiche (ou null) → retirée. */
+export function poserCategorieAuConcours(
+  s: SaisonPonyGames,
+  resultatId: string,
+  equipeId: string,
+  valeur: CategorieCourue | null,
+): SaisonPonyGames {
+  const equipe = s.equipes.find((e) => e.id === equipeId);
+  if (!equipe) return s;
+  const v = valeur && { categorie: valeur.categorie.trim(), indice: valeur.indice.trim() };
+  const commeLaFiche = !v || (v.categorie === equipe.categorie.trim() && v.indice === equipe.indice.trim());
+  return {
+    ...s,
+    resultats: s.resultats.map((r) => {
+      if (r.id !== resultatId) return r;
+      const autres = sansCle(r.categoriesFigees ?? {}, equipeId);
+      return { ...r, categoriesFigees: commeLaFiche ? autres : { ...autres, [equipeId]: v! } };
+    }),
+  };
+}
+
+/**
+ * Remplace la fiche d'une équipe. Si sa catégorie ou son indice change, les
+ * concours déjà passés (date antérieure à aujourd'hui) où elle a couru gardent
+ * l'ancienne catégorie ; ceux d'aujourd'hui et à venir prennent la nouvelle.
+ */
+export function modifierEquipe(s: SaisonPonyGames, apres: EquipeSaison, aujourdhuiIso: string): SaisonPonyGames {
+  const avant = s.equipes.find((e) => e.id === apres.id);
+  const equipes = s.equipes.map((e) => (e.id === apres.id ? apres : e));
+  if (!avant) return { ...s, equipes };
+  const change = avant.categorie.trim() !== apres.categorie.trim() || avant.indice.trim() !== apres.indice.trim();
+  if (!change) return { ...s, equipes };
+  return {
+    ...s,
+    equipes,
+    resultats: s.resultats.map((r) => {
+      const figee = r.categoriesFigees?.[apres.id];
+      if (figee) {
+        // Déjà figée : la retirer si elle redevient celle de la fiche.
+        const pareil = figee.categorie.trim() === apres.categorie.trim() && figee.indice.trim() === apres.indice.trim();
+        return pareil ? { ...r, categoriesFigees: sansCle(r.categoriesFigees!, apres.id) } : r;
+      }
+      if (!(r.date < aujourdhuiIso) || !participeAuConcours(r, apres.id)) return r;
+      return {
+        ...r,
+        categoriesFigees: { ...(r.categoriesFigees ?? {}), [apres.id]: { categorie: avant.categorie.trim(), indice: avant.indice.trim() } },
+      };
+    }),
+  };
+}
+
+/** Concours passés où l'équipe a couru dans une autre catégorie que celle de sa fiche. */
+export function concoursAutreCategorie(s: SaisonPonyGames, equipe: EquipeSaison): { concours: ResultatConcours; categorie: CategorieCourue }[] {
+  return resultatsTries(s)
+    .filter((r) => r.categoriesFigees?.[equipe.id] && participeAuConcours(r, equipe.id))
+    .map((r) => ({ concours: r, categorie: categorieAuConcours(r, equipe) }));
 }
 
 /** Pose le rang et/ou les points d'une équipe à un concours (crée la ligne si besoin, la retire si vide). */
@@ -228,42 +326,83 @@ export function resultatsTries(s: SaisonPonyGames): ResultatConcours[] {
 // ─── Bilan de la saison ────────────────────────────────────────────────────
 
 export interface BilanEquipe {
+  /** L'équipe avec la catégorie et l'indice de cette ligne du classement. */
   equipe: EquipeSaison;
   pointsTotal: number;
   nbConcours: number;
   meilleurRang?: number;
+  /** Concours comptés sur cette ligne (une équipe changée de catégorie a une ligne par catégorie courue). */
+  concoursIds: string[];
 }
 
-/**
- * Points cumulés par équipe, groupés par catégorie (ordre alphabétique),
- * et dans chaque catégorie du plus grand total au plus petit.
- */
-export function bilanSaison(s: SaisonPonyGames): { categorie: string; equipes: BilanEquipe[] }[] {
-  const bilans = s.equipes.map((equipe): BilanEquipe => {
-    let pointsTotal = 0;
-    let nbConcours = 0;
-    let meilleurRang: number | undefined;
-    for (const r of s.resultats) {
-      const c = r.classements.find((x) => x.equipeId === equipe.id);
-      if (!c) continue;
-      nbConcours++;
-      pointsTotal += c.points ?? 0;
-      if (c.rang !== undefined && (meilleurRang === undefined || c.rang < meilleurRang)) meilleurRang = c.rang;
-    }
-    return { equipe, pointsTotal: Math.round(pointsTotal * 100) / 100, nbConcours, meilleurRang };
-  });
-
+const SANS_CATEGORIE = "Sans catégorie";
+const trierBilans = (l: BilanEquipe[]) =>
+  l.sort((a, b) => b.pointsTotal - a.pointsTotal || a.equipe.nom.localeCompare(b.equipe.nom, "fr") || a.equipe.indice.localeCompare(b.equipe.indice, "fr"));
+const grouper = (bilans: BilanEquipe[]) => {
   const parCategorie = new Map<string, BilanEquipe[]>();
   for (const b of bilans) {
-    const cle = b.equipe.categorie.trim() || "Sans catégorie";
+    const cle = b.equipe.categorie.trim() || SANS_CATEGORIE;
     parCategorie.set(cle, [...(parCategorie.get(cle) ?? []), b]);
   }
   return [...parCategorie.entries()]
     .sort(([a], [b]) => a.localeCompare(b, "fr"))
-    .map(([categorie, equipes]) => ({
-      categorie,
-      equipes: equipes.sort((a, b) => b.pointsTotal - a.pointsTotal || a.equipe.nom.localeCompare(b.equipe.nom, "fr")),
-    }));
+    .map(([categorie, equipes]) => ({ categorie, equipes: trierBilans(equipes) }));
+};
+
+/**
+ * Classement de la saison : points cumulés groupés par catégorie (ordre
+ * alphabétique), du plus grand total au plus petit. Chaque concours compte
+ * dans la catégorie où l'équipe l'a couru : une équipe passée de « Paire
+ * découverte » à « Club 2 » a une ligne dans chacune, avec ses points de
+ * chacune. Une équipe figure toujours dans sa catégorie actuelle, à 0 si elle
+ * n'y a pas encore couru.
+ */
+export function bilanSaison(s: SaisonPonyGames): { categorie: string; equipes: BilanEquipe[] }[] {
+  const bilans: BilanEquipe[] = [];
+  for (const equipe of s.equipes) {
+    const lignes = new Map<string, BilanEquipe>();
+    const ligne = (c: CategorieCourue) => {
+      const cle = `${c.categorie.trim()}|${c.indice.trim()}`;
+      let b = lignes.get(cle);
+      if (!b) {
+        b = { equipe: { ...equipe, categorie: c.categorie, indice: c.indice }, pointsTotal: 0, nbConcours: 0, concoursIds: [] };
+        lignes.set(cle, b);
+      }
+      return b;
+    };
+    for (const r of resultatsTries(s)) {
+      const c = r.classements.find((x) => x.equipeId === equipe.id);
+      if (!c) continue;
+      const b = ligne(categorieAuConcours(r, equipe));
+      b.nbConcours++;
+      b.concoursIds.push(r.id);
+      b.pointsTotal = Math.round((b.pointsTotal + (c.points ?? 0)) * 100) / 100;
+      if (c.rang !== undefined && (b.meilleurRang === undefined || c.rang < b.meilleurRang)) b.meilleurRang = c.rang;
+    }
+    ligne({ categorie: equipe.categorie, indice: equipe.indice });
+    bilans.push(...lignes.values());
+  }
+  return grouper(bilans);
+}
+
+/**
+ * Les équipes rangées par leur catégorie ACTUELLE (fiche), une ligne par
+ * équipe, avec tous les points de la saison : liste des équipes, choix des
+ * équipes à engager.
+ */
+export function equipesParCategorie(s: SaisonPonyGames): { categorie: string; equipes: BilanEquipe[] }[] {
+  return grouper(s.equipes.map((equipe): BilanEquipe => {
+    const b: BilanEquipe = { equipe, pointsTotal: 0, nbConcours: 0, concoursIds: [] };
+    for (const r of s.resultats) {
+      const c = r.classements.find((x) => x.equipeId === equipe.id);
+      if (!c) continue;
+      b.nbConcours++;
+      b.concoursIds.push(r.id);
+      b.pointsTotal = Math.round((b.pointsTotal + (c.points ?? 0)) * 100) / 100;
+      if (c.rang !== undefined && (b.meilleurRang === undefined || c.rang < b.meilleurRang)) b.meilleurRang = c.rang;
+    }
+    return b;
+  }));
 }
 
 /** « Zoé Martin, Léo » — noms des cavaliers d'une équipe, dans l'ordre de l'équipe. */

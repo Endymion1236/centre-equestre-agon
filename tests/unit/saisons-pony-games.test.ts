@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import {
   nomSaison, saisonDeLaDate, normaliserNomSaison, saisonAProposer, trierSaisons,
   retirerCavalier, retirerEquipe, saisirClassement, lireNombre, resultatsTries,
-  bilanSaison, nomsCavaliers, equipesDuCavalier, messageErreurSaison, type SaisonPonyGames,
+  bilanSaison, equipesParCategorie, modifierEquipe, poserCategorieAuConcours, categorieAuConcours, concoursAutreCategorie, nomsCavaliers, equipesDuCavalier, messageErreurSaison, type SaisonPonyGames,
 } from "../../src/lib/concours/saisons";
 
 let passes = 0;
@@ -135,6 +135,75 @@ test("une équipe sans catégorie reste visible", () => {
   const s = saison();
   s.equipes.push({ id: "eq4", nom: "Nouvelle", categorie: " ", indice: "", cavalierIds: [] });
   assert.ok(bilanSaison(s).some((g) => g.categorie === "Sans catégorie"));
+});
+
+console.log("\n── Équipe changée de catégorie en cours de saison ──");
+
+// Fred et Nico : « Paire découverte » au premier concours (Agon, 04/10), « Paire » Club 2 ensuite.
+function saisonPaire(): SaisonPonyGames {
+  return {
+    id: "s1", nom: "2026/2027",
+    cavaliers: [{ id: "fred", prenom: "Fred" }, { id: "nico", prenom: "Nico" }, { id: "ana", prenom: "Ana" }, { id: "eva", prenom: "Eva" }],
+    equipes: [
+      { id: "fn", nom: "Fred et Nico", categorie: "Paire découverte", indice: "", cavalierIds: ["fred", "nico"] },
+      { id: "ae", nom: "Ana et Eva", categorie: "Paire découverte", indice: "", cavalierIds: ["ana", "eva"] },
+    ],
+    resultats: [
+      { id: "r1", nom: "Agon", date: "2026-10-04", classements: [{ equipeId: "fn", rang: 1, points: 10 }, { equipeId: "ae", rang: 2, points: 8 }] },
+      { id: "r2", nom: "Pieux", date: "2026-11-22", classements: [], engagements: [{ equipeId: "fn", poneys: {} }] },
+    ],
+  };
+}
+
+test("changer la catégorie fige l'ancienne sur les concours déjà courus, pas sur ceux à venir", () => {
+  const s = modifierEquipe(saisonPaire(), { id: "fn", nom: "Fred et Nico", categorie: "Paire minime", indice: "Club 2", cavalierIds: ["fred", "nico"] }, "2026-11-10");
+  const fn = s.equipes.find((e) => e.id === "fn")!;
+  assert.equal(fn.categorie, "Paire minime");
+  assert.deepEqual(categorieAuConcours(s.resultats[0], fn), { categorie: "Paire découverte", indice: "" });
+  assert.deepEqual(categorieAuConcours(s.resultats[1], fn), { categorie: "Paire minime", indice: "Club 2" });
+  assert.equal(s.resultats[0].categoriesFigees?.ae, undefined, "les autres équipes ne bougent pas");
+  assert.deepEqual(concoursAutreCategorie(s, fn).map((x) => x.concours.id), ["r1"]);
+});
+
+test("le classement de la saison compte les points dans la catégorie où ils ont été gagnés", () => {
+  let s = modifierEquipe(saisonPaire(), { id: "fn", nom: "Fred et Nico", categorie: "Paire minime", indice: "Club 2", cavalierIds: ["fred", "nico"] }, "2026-11-10");
+  s = saisirClassement(s, "r2", "fn", { rang: 3, points: 6 });
+  const b = bilanSaison(s);
+  const decouverte = b.find((g) => g.categorie === "Paire découverte")!;
+  assert.deepEqual(decouverte.equipes.map((x) => [x.equipe.id, x.pointsTotal]), [["fn", 10], ["ae", 8]]);
+  const minime = b.find((g) => g.categorie === "Paire minime")!;
+  assert.deepEqual(minime.equipes.map((x) => [x.equipe.id, x.equipe.indice, x.pointsTotal, x.concoursIds]), [["fn", "Club 2", 6, ["r2"]]]);
+  // La liste des équipes, elle, garde une ligne par équipe dans sa catégorie actuelle.
+  const liste = equipesParCategorie(s);
+  assert.deepEqual(liste.find((g) => g.categorie === "Paire minime")!.equipes.map((x) => [x.equipe.id, x.pointsTotal]), [["fn", 16]]);
+});
+
+test("catégorie déjà changée sans effet sur le passé : on la corrige au concours", () => {
+  const s0 = saisonPaire();
+  s0.equipes[0] = { ...s0.equipes[0], categorie: "Paire minime", indice: "Club 2" }; // changée avant la règle
+  let s = poserCategorieAuConcours(s0, "r1", "fn", { categorie: " Paire découverte ", indice: "" });
+  assert.deepEqual(s.resultats[0].categoriesFigees, { fn: { categorie: "Paire découverte", indice: "" } });
+  assert.deepEqual(bilanSaison(s).find((g) => g.categorie === "Paire découverte")!.equipes.map((x) => x.equipe.id), ["fn", "ae"]);
+  // Reprendre la catégorie de la fiche (ou la même valeur) retire la correction.
+  s = poserCategorieAuConcours(s, "r1", "fn", null);
+  assert.deepEqual(s.resultats[0].categoriesFigees, {});
+  assert.deepEqual(poserCategorieAuConcours(s, "r1", "fn", { categorie: "Paire minime", indice: "Club 2" }).resultats[0].categoriesFigees, {});
+});
+
+test("revenir à l'ancienne catégorie efface ce qui était figé ; un concours non couru n'est pas figé", () => {
+  const avant = saisonPaire().equipes[0];
+  let s = modifierEquipe(saisonPaire(), { ...avant, categorie: "Paire minime" }, "2026-11-10");
+  s = modifierEquipe(s, avant, "2026-11-10");
+  assert.deepEqual(s.resultats[0].categoriesFigees, {});
+  const ae = saisonPaire().equipes[1];
+  const s2 = modifierEquipe(saisonPaire(), { ...ae, categorie: "Paire poussin" }, "2026-12-31");
+  assert.equal(s2.resultats[1].categoriesFigees, undefined, "Ana et Eva ne courent pas à Pieux");
+  assert.ok(s2.resultats[0].categoriesFigees?.ae);
+});
+
+test("retirer une équipe retire aussi sa catégorie figée", () => {
+  const s = modifierEquipe(saisonPaire(), { ...saisonPaire().equipes[0], categorie: "Paire minime" }, "2026-11-10");
+  assert.deepEqual(retirerEquipe(s, "fn").resultats[0].categoriesFigees, {});
 });
 
 console.log("\n── Erreurs ──");
