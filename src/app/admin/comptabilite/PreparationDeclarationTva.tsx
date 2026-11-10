@@ -5,6 +5,7 @@ import { Loader2 } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 import { euroDeclaration, type BaseTva, type ResultatDeclarationTva } from "@/lib/declaration-tva";
 import { trimestreDe } from "@/lib/tva-a-payer";
+import ComparaisonCabinetTva from "./ComparaisonCabinetTva";
 
 /**
  * Préparer la déclaration de TVA (CA3) : les chiffres case par case, à
@@ -126,6 +127,11 @@ export default function PreparationDeclarationTva({ moisReference }: { moisRefer
             <strong>{autre.credit > 0 ? `un crédit de ${eur(autre.credit)}` : `${eur(autre.netteDue)} à payer`}</strong>
             {Math.abs(ecart) >= 0.01 ? <> — écart de <strong>{eur(Math.abs(ecart))}</strong>{ecart > 0 ? " de plus avec la base choisie" : " de moins avec la base choisie"}.</> : " — aucun écart."}
           </div>
+
+          {periode === "trimestre" && (
+            <ComparaisonCabinetTva moisReference={moisReference} libelle={trimestreDe(moisReference).libelle}
+              calcul={r} base={base} credit={credit} setCredit={setCredit} />
+          )}
 
           {r.sources.some((s) => s.source === "celeris") && (
             <p className="font-body text-[11px] text-slate-500 mt-2">

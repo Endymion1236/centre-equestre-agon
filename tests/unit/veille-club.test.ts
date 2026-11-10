@@ -72,6 +72,16 @@ test("18 bis. factures numérotées absentes ou déplacées dans un FEC déjà t
   assert.equal(pointDe({ ...d, moisTransmis: [] }, "factures-hors-fec-transmis"), undefined, "sans mois transmis, rien");
 });
 
+test("20. TVA : déclaration du cabinet en écart, tant que l'écart n'est pas expliqué", () => {
+  const cabinet = { collectee: 5186, autresBiensServices: 475, netteDue: 4238 };
+  const decl = { id: "2026-T3", libelle: "3e trimestre 2026", cabinet, application: { collectee: 5186, autresBiensServices: 943, netteDue: 3770 }, ecartsImportants: 2 };
+  const d = { ...vide(), declarationsTvaCabinet: [decl] };
+  const p = pointDe(d, "tva-ecart-cabinet");
+  assert.equal(p?.nb, 1);
+  assert.match(p!.lignes[0], /3e trimestre 2026 — 2 lignes en écart important : 20 \(\+468 €\), TD \(-468 €\)/);
+  assert.equal(pointDe({ ...d, declarationsTvaCabinet: [{ ...decl, ecartExplique: "vu avec la comptable" }] }, "tva-ecart-cabinet"), undefined);
+});
+
 test("rien à signaler : aucune ligne (pas d'email)", () => {
   assert.deepEqual(analyserVeille(vide()), []);
 });

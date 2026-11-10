@@ -52,6 +52,7 @@ export const COLLECTIONS_FISCALES = [
   "cheques-differes",     // chèques encaissables à terme
   "mandats-sepa",         // mandats signés — valeur juridique
   "bons-cadeaux",         // dettes envers les clients
+  "tva-declarations-cabinet", // CA3 déposées par le cabinet, à comparer au calcul
 ] as const;
 
 export type CollectionFiscale = (typeof COLLECTIONS_FISCALES)[number];

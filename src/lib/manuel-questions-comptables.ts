@@ -319,6 +319,7 @@ export const CHAPITRE_QUESTIONS_COMPTABLES: ManualChapter = {
       href: "/admin/comptabilite",
       tips: [
         "Une dépense sans facture jointe n'apporte pas de TVA récupérable : réunis les factures avant de déclarer.",
+        "Chaque trimestre, reporte la déclaration déposée par la comptable (bouton « Saisir la déclaration du cabinet » sous la préparation) : l'écart ligne par ligne s'affiche, et la veille le signale tant qu'il n'est pas expliqué.",
       ],
     },
   ],

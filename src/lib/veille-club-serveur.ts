@@ -17,7 +17,7 @@ export async function calculerVeille(maintenant = new Date()): Promise<{ aujourd
   // Une collection illisible (absente, index manquant) ne doit pas priver
   // Nicolas des autres points : elle compte pour vide.
   const sur = (p: Promise<FirebaseFirestore.QuerySnapshot>) => p.catch((e) => { console.warn("[veille]", e?.message || e); return null; });
-  const [pay, sepa, enc, cr, resa, cartes, forfaits, fam, chq, wait, msg, avis, clot, envois] = await Promise.all([
+  const [pay, sepa, enc, cr, resa, cartes, forfaits, fam, chq, wait, msg, avis, clot, envois, tvaCabinet] = await Promise.all([
     sur(adminDb.collection("payments").get()),
     sur(adminDb.collection("echeances-sepa").get()),
     sur(adminDb.collection("encaissements").get()),
@@ -34,6 +34,7 @@ export async function calculerVeille(maintenant = new Date()): Promise<{ aujourd
     sur(adminDb.collection("cloturesJournalieres").get()),
     // Les mois déjà transmis au cabinet : un document par mois.
     sur(adminDb.collection("envois-comptable").select().get()),
+    sur(adminDb.collection("tva-declarations-cabinet").get()),
   ]);
   const points = analyserVeille({
     aujourdhui, maintenant,
@@ -41,6 +42,7 @@ export async function calculerVeille(maintenant = new Date()): Promise<{ aujourd
     reservations: lire(resa), cartes: lire(cartes), forfaits: lire(forfaits), familles: lire(fam),
     chequesDifferes: lire(chq), listeAttente: lire(wait), messagesContact: lire(msg), avis: lire(avis),
     cloturesJournalieres: lire(clot),
+    declarationsTvaCabinet: lire(tvaCabinet),
     moisTransmis: envois ? envois.docs.map(d => d.id).filter(id => /^\d{4}-\d{2}$/.test(id)) : [],
   });
   return { aujourdhui, points };

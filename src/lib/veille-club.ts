@@ -18,6 +18,7 @@
  */
 
 import { doublonsInscriptions } from "./conflit-horaire";
+import { declarationsEnEcart, type DeclarationCabinet } from "@/lib/tva-declaree";
 import { lignesEncaisseesPlusieursFois } from "./ligne-bancaire-unique";
 import { dateFactureSecondes, estFactureNumerotee, moisParisDeSecondes } from "./envoi-comptable-utils";
 import { analyserCoherence } from "@/lib/coherence";
@@ -29,7 +30,7 @@ import { prixForfaitDepuisCommandes } from "@/lib/forfaits";
 export type NiveauVeille = "rouge" | "orange" | "jaune" | "bleu" | "gris";
 
 export interface PointVeille {
-  /** Numéro dans la liste validée par Nicolas (1 à 18). */
+  /** Numéro dans la liste validée par Nicolas (1 à 20). */
   numero: number;
   code: string;
   niveau: NiveauVeille;
@@ -62,6 +63,8 @@ export interface DonneesVeille {
   cloturesJournalieres: any[];
   /** Mois déjà transmis au cabinet (« AAAA-MM »), facultatif. */
   moisTransmis?: string[];
+  /** CA3 déposées par le cabinet (lib/tva-declaree), facultatif. */
+  declarationsTvaCabinet?: DeclarationCabinet[];
 }
 
 export const LIBELLES_NIVEAU: Record<NiveauVeille, string> = {
@@ -383,6 +386,14 @@ export function analyserVeille(d: DonneesVeille): PointVeille[] {
       return `${premier.familyName || "Famille"} — virement de ${eur(premier.montant)} du ${dateFr(jourParis(premier.date))} encaissé ${ecritures.length} fois : ${enTrop} écriture${enTrop > 1 ? "s" : ""} à contre-passer (Journal → « Corriger », montant 0)`;
     }),
     "/admin/paiements?tab=journal"));
+
+  // ── 🟠 20. TVA : la déclaration du cabinet s'écarte du calcul ──
+  // Montants saisis dans Comptabilité → TVA (novembre 2026) ; un écart
+  // expliqué (champ « Écart expliqué ? ») n'est plus signalé.
+  points.push(point(20, "tva-ecart-cabinet", "orange",
+    "TVA : la déclaration du cabinet s'écarte du calcul de l'application",
+    declarationsEnEcart(d.declarationsTvaCabinet || []),
+    "/admin/comptabilite"));
 
   return points.filter(p => p.nb > 0);
 }
