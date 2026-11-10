@@ -243,7 +243,7 @@ export function construireFecComplet(params: {
 
     if (e.isVersementBanque) {
       debit = COMPTE_BANQUE; credit = COMPTES_REGLEMENT.especes;
-      libelle = "Versement d'espèces en banque";
+      libelle = `${e.correctionDe ? "Annulation — " : ""}Versement d'espèces en banque`;
     } else if (e.isApportCaisse) {
       debit = COMPTES_REGLEMENT.especes; credit = COMPTE_VIREMENTS_INTERNES;
       libelle = "Apport en caisse";
@@ -268,7 +268,8 @@ export function construireFecComplet(params: {
     // un apport en positif : leur sens est fixé ci-dessus, pas par le signe.
     const m = Math.abs(centimes);
     const sensFixe = e.isVersementBanque || e.isApportCaisse;
-    const [compteDebit, compteCredit] = sensFixe || centimes > 0 ? [debit, credit] : [credit, debit];
+    // Contre-passation d'un versement (ligne dé-pointée) : sens inverse.
+    const [compteDebit, compteCredit] = (sensFixe && !e.correctionDe) || (!sensFixe && centimes > 0) ? [debit, credit] : [credit, debit];
     const auxDebit = compteDebit === COMPTE_CLIENTS ? aux : {};
     const auxCredit = compteCredit === COMPTE_CLIENTS ? aux : {};
     const enOd = !sensFixe && (!!e.correctionDe || !!e.retablitDe || e.mode === "avoir");

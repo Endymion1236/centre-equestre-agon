@@ -31,7 +31,7 @@ import {
   encaissementsCouvertsParLigne,
   parserCsvBancaire,
 } from "./rapprochement-utils";
-import { fusionnerLignesBancaires } from "./rapprochement-utils";
+import { fusionnerLignesBancaires, estLigneVersementEspeces, versementsActifsParLigne } from "./rapprochement-utils";
 import { rapprocherReleve } from "./rapprochement-matching";
 import { createEncaissement } from "@/lib/compta-encaissement";
 import { ligneDejaEncaissee } from "@/lib/ligne-bancaire-unique";
@@ -448,19 +448,17 @@ export function useRapprochement({
   //  et les remises ne sortent pas du livre de caisse espèces).
   // ─────────────────────────────────────────────────────────────────────────
   const syncVersementsEspeces = async (lines: typeof bankLines) => {
+    const versementsNonEcrits: string[] = [];
     try {
       // Charger tous les versements existants (encaissements avec isVersementBanque=true)
       const snap = await getDocs(query(collection(db, "encaissements"), where("isVersementBanque", "==", true)));
       const existing = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) }));
-      const existingByKey = new Map<string, any>();
-      for (const v of existing) {
-        if (v.bankLineKey) existingByKey.set(v.bankLineKey, v);
-      }
+      // Versements actifs : ceux qu'aucune contre-passation n'annule.
+      const existingByKey = versementsActifsParLigne(existing);
 
       // Parcourir les bankLines et créer/supprimer les versements
       for (const bl of lines) {
-        const isVersement = bl.label.toUpperCase().includes("VERSEMENT") &&
-          (bl.label.toUpperCase().includes("ESPECE") || bl.label.toUpperCase().includes("ESP."));
+        const isVersement = estLigneVersementEspeces(bl.label);
         if (!isVersement) continue;
 
         const key = `${bl.date}|${bl.label}|${bl.amount.toFixed(2)}`;
@@ -475,6 +473,15 @@ export function useRapprochement({
           const bankDateObj = p1
             ? new Date(`${p1[3]}-${p1[2].padStart(2, "0")}-${p1[1].padStart(2, "0")}T12:00:00`)
             : new Date();
+          // Mois déjà envoyé au cabinet : on n'y ajoute pas d'écriture en
+          // silence (son FEC est parti). Jusqu'au 10/11/2026, un libellé
+          // accentué (« Versement d'espèces ») n'était pas reconnu : un
+          // versement ancien peut donc manquer. On le signale, sans l'écrire.
+          if (p1) {
+            const moisVers = `${p1[3]}-${p1[2].padStart(2, "0")}`;
+            const envoye = await getDoc(doc(db, "envois-comptable", moisVers)).then(d => d.exists()).catch(() => false);
+            if (envoye) { versementsNonEcrits.push(`${bl.date} — ${bl.amount.toFixed(2)} €`); continue; }
+          }
           // Via createEncaissement, comme tout mouvement de caisse : c'est
           // lui qui pose l'empreinte et le chaînage. Un encaissement écrit en
           // direct sort de la chaîne, et une chaîne trouée ne prouve rien.
@@ -495,10 +502,29 @@ export function useRapprochement({
           });
           console.log(`[sync-versements] ✅ Versement créé pour "${bl.label}" (${bl.amount}€)`);
         } else if (!shouldExist && existingVers) {
-          // Supprimer le versement (bankLine dé-pointée ou ignorée)
-          await deleteDoc(doc(db, "encaissements", existingVers.id));
-          console.log(`[sync-versements] 🗑️ Versement supprimé pour "${bl.label}" (${bl.amount}€)`);
+          // Ligne dé-pointée ou ignorée : le versement est ANNULÉ par une
+          // contre-passation datée du jour, jamais effacé — une écriture du
+          // journal chaîné ne disparaît pas (invariant 1, novembre 2026).
+          await createEncaissement({
+            mode: "especes",
+            modeLabel: "ANNUL. Versement banque",
+            montant: Math.abs(Number(existingVers.montant) || bl.amount),
+            familyName: "—",
+            activityTitle: "Annulation du versement en banque",
+            raison: `Versement dé-pointé au rapprochement (ligne du ${bl.date})`,
+            ref: existingVers.ref || "",
+            isVersementBanque: true,
+            correctionDe: existingVers.id,
+            bankLineKey: key,
+            bankLineLabel: bl.label,
+            bankLineAmount: bl.amount,
+            createdAt: serverTimestamp(),
+          });
+          console.log(`[sync-versements] ↩️ Versement contre-passé pour "${bl.label}" (${bl.amount}€)`);
         }
+      }
+      if (versementsNonEcrits.length && typeof window !== "undefined") {
+        window.alert(`Versement(s) d'espèces pointé(s) dans un mois déjà envoyé à la comptable, sans écriture de caisse :\n${versementsNonEcrits.join("\n")}\n\nRien n'a été ajouté à ce mois. Signalez-le à la comptable (sortie de caisse vers la banque à passer).`);
       }
     } catch (e) {
       console.error("[sync-versements] Erreur:", e);

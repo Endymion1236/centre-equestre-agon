@@ -40,6 +40,20 @@ const fec = construireFecComplet({ factures, encaissements, numeroFactureDe: (id
 const lignes = fec.contenu.split("\n").filter(Boolean);
 const cols = (l: string) => l.split("\t");
 
+console.log("\n── Versement d'espèces annulé ──");
+test("un versement dé-pointé est contre-passé : caisse au débit, banque au crédit, solde nul", () => {
+  const f = construireFecComplet({ factures: [], encaissements: [
+    { id: "v1", familyName: "—", montant: -1200, mode: "especes", isVersementBanque: true, date: sec("2026-11-09T14:00:00Z") },
+    { id: "v2", familyName: "—", montant: 1200, mode: "especes", isVersementBanque: true, correctionDe: "v1", date: sec("2026-11-10T10:00:00Z") },
+  ], maintenant: new Date("2026-12-01") });
+  const ls = f.contenu.split("\n").filter(Boolean).slice(1).map((l) => l.split("\t"));
+  const solde = (compte: string) => ls.filter((c) => c[4] === compte).reduce((s, c) => s + Number(c[11].replace(",", ".")) - Number(c[12].replace(",", ".")), 0);
+  assert.equal(Math.round(solde("51200000") * 100), 0);
+  const annul = ls.filter((c) => /Annulation/.test(c[10]));
+  assert.equal(annul.length, 2);
+  assert.ok(annul.some((c) => c[4] === "51200000" && c[12] === "1200,00"), JSON.stringify(annul));
+});
+
 console.log("\n── Format ──");
 test("en-tête réglementaire, 18 colonnes partout", () => {
   assert.equal(lignes[0], ENTETE_FEC);

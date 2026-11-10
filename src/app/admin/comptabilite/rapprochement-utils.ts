@@ -684,3 +684,42 @@ export function bordereauxChequesCandidats<T extends {
       return Math.abs(a.ecartJours ?? 999) - Math.abs(b.ecartJours ?? 999);
     });
 }
+
+/**
+ * Versement d'espèces au guichet (« Versement d'espèces AGON COUTAINVILLE »).
+ * Novembre 2026 : un dépôt de 1 200 €, fait de plusieurs jours de caisse, ne
+ * se pointait pas — l'automatique ne cherche qu'un bordereau ou une journée
+ * au même montant, et la fenêtre « Pointer » ne proposait que des virements.
+ * Même reconnaissance que la synchronisation du livre de caisse.
+ */
+export function estLigneVersementEspeces(label: string): boolean {
+  const l = String(label || "").toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return l.includes("VERSEMENT") && (l.includes("ESPECE") || l.includes("ESP."));
+}
+
+/** Bordereaux de remise d'espèces (ou mixtes) non pointés, proches de la ligne. */
+export function bordereauxEspecesCandidats<T extends {
+  paymentMode?: string; pointee?: boolean; total?: number; date?: { seconds?: number } | null;
+}>(remises: T[], ligne: { amount: number }, dateLigne: Date | null): { remise: T; montantExact: boolean; ecartJours: number | null }[] {
+  return (remises || [])
+    .filter((r) => (r.paymentMode === "especes" || r.paymentMode === "mixte") && !r.pointee)
+    .map((r) => ({
+      remise: r,
+      montantExact: Math.abs((r.total || 0) - ligne.amount) < 0.02,
+      ecartJours: dateLigne && r.date?.seconds ? Math.round((dateLigne.getTime() - r.date.seconds * 1000) / 86_400_000) : null,
+    }))
+    .filter((c) => c.ecartJours === null || Math.abs(c.ecartJours) <= 60)
+    .sort((a, b) => (a.montantExact !== b.montantExact ? (a.montantExact ? -1 : 1) : Math.abs(a.ecartJours ?? 999) - Math.abs(b.ecartJours ?? 999)));
+}
+
+/**
+ * Versements d'espèces encore actifs par ligne du relevé : une écriture de
+ * versement (isVersementBanque) compte tant qu'aucune contre-passation
+ * (correctionDe) ne l'annule. Dé-pointer annule, ne supprime plus rien.
+ */
+export function versementsActifsParLigne<T extends { id: string; bankLineKey?: string; correctionDe?: string | null }>(ecritures: T[]): Map<string, T> {
+  const annulees = new Set(ecritures.filter((e) => e.correctionDe).map((e) => e.correctionDe as string));
+  const actifs = new Map<string, T>();
+  for (const e of ecritures) if (!e.correctionDe && !annulees.has(e.id) && e.bankLineKey) actifs.set(e.bankLineKey, e);
+  return actifs;
+}

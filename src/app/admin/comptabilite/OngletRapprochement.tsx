@@ -23,6 +23,7 @@ import {
   encaissementEnDetail, encaissementsDeRemiseSepa,
   parserDateBancaire, parserDetailCa,
   estEncaissementCarte, estLibellePrelevement, estLigneRemiseCheques, jourDuLibelleRemise, virementsAttendus,
+  estLigneVersementEspeces, bordereauxEspecesCandidats,
 } from "./rapprochement-utils";
 import type { CanalRemiseCarte } from "./rapprochement-utils";
 import type { LigneBancaire } from "./useRapprochement";
@@ -1075,8 +1076,54 @@ export default function OngletRapprochement({
                   </>
                 );
 
+                // Versement d'espèces au guichet : l'argent vient de la caisse
+                // (sortie de caisse vers la banque), pas d'une vente. Un
+                // bordereau d'espèces s'il y en a un, sinon le versement lui-même.
+                const ligneVersement = estLigneVersementEspeces(ligne.label || "");
+                const pointerVersement = async (r?: any) => {
+                  const updated = [...bankLines];
+                  const jour = r?.date?.seconds ? new Date(r.date.seconds * 1000).toLocaleDateString("fr-FR") : "";
+                  const encIds: string[] = r?.encaissementIds || [];
+                  updated[showManualMatch!] = {
+                    ...updated[showManualMatch!],
+                    matched: true,
+                    matchType: "Espèces",
+                    matchDetail: r ? `Bordereau d'espèces du ${jour} = ${(r.total || 0).toFixed(2)}€ (pointé à la main)` : "Versement d'espèces de la caisse (pointé à la main)",
+                    matchedEncs: r ? (encaissementsCompta || []).filter((e: any) => encIds.includes(e.id)).map(encaissementEnDetail) : [],
+                    manualPaymentId: undefined, remiseSepaId: undefined, compteContrepartie: undefined, uncertain: false,
+                  };
+                  await updateAndSaveBankLines(updated);
+                  if (r?.id) {
+                    const dateBanque = dateLigne ? new Date(Date.UTC(dateLigne.getFullYear(), dateLigne.getMonth(), dateLigne.getDate(), 12)) : new Date();
+                    await updateDoc(doc(db, "remises", r.id), { pointee: true, pointeeDate: dateBanque.toISOString(), pointeeNote: `Pointée depuis le rapprochement bancaire — ligne du ${ligne.date} « ${ligne.label} »`, updatedAt: serverTimestamp() });
+                  }
+                  fetchData();
+                  setShowManualMatch(null);
+                };
+                const blocVersement = ligneVersement && (
+                  <>
+                    {titre("Versement d'espèces")}
+                    {bordereauxEspecesCandidats(remises || [], ligne, dateLigne).map(({ remise: r, montantExact }) => (
+                      <div key={(r as any).id} onClick={() => pointerVersement(r)}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-lg border cursor-pointer hover:border-blue-300 ${montantExact ? "border-green-300 bg-green-50/30" : "border-gray-100"}`}>
+                        <div className="font-body text-sm font-semibold text-blue-800">💶 Bordereau d'espèces du {(r as any).date?.seconds ? new Date((r as any).date.seconds * 1000).toLocaleDateString("fr-FR") : "?"}</div>
+                        <div className={`font-body text-sm font-bold ${montantExact ? "text-green-600" : "text-blue-500"}`}>{((r as any).total || 0).toFixed(2)}€</div>
+                      </div>
+                    ))}
+                    <div onClick={() => pointerVersement()}
+                      className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-green-300 bg-green-50/30 cursor-pointer hover:border-blue-300">
+                      <div>
+                        <div className="font-body text-sm font-semibold text-blue-800">💶 Versement d&apos;espèces de la caisse</div>
+                        <div className="font-body text-xs text-slate-500">Plusieurs jours de caisse déposés ensemble : la sortie de caisse vers la banque est enregistrée au livre de caisse, aucune vente n&apos;est ré-encaissée.</div>
+                      </div>
+                      <div className="font-body text-sm font-bold text-green-600">{ligne.amount.toFixed(2)}€</div>
+                    </div>
+                  </>
+                );
+
                 return (
                   <div className="flex flex-col gap-1.5">
+                    {blocVersement}
                     {lignePrelevement && blocRemisesSepa}
                     {ligneCheques && blocBordereauxCheques}
                     {encsVirement.length > 0 && titre(ligneAncv ? `Chèques-vacances encaissés, à relier (${encsVirement.length})` : ligneChequesSeule ? `Chèques encaissés, dans aucun bordereau (${encsVirement.length})` : remiseCarte ? `Encaissements CB de la semaine, à relier (${encsVirement.length})` : `Virements déjà encaissés, à relier (${encsVirement.length})`)}
