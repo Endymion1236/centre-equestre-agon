@@ -8,6 +8,7 @@
  */
 import { adminDb, adminStorage } from "@/lib/firebase-admin";
 import { zipSync } from "fflate";
+import { fichiersPieces } from "@/lib/pieces-zip";
 import type { LigneMois } from "@/lib/bilan-justificatifs";
 import { justifierParMasseSalariale, justifierCommissionsBancaires, moisMoins, type LigneMasseSalariale } from "@/lib/justification-paie";
 import { posteCommissionCarte } from "@/lib/postes-depenses";
@@ -70,8 +71,6 @@ export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneM
   return { lignes: avecPiece, pieces, limite: [ds, ms, ps, ars].some(s => s.size > 2000) };
 }
 
-const EXT: Record<string, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png" };
-const propre = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9 ._-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 
 /**
  * Les pièces du mois dans une archive, nommées « date - fournisseur - montant »
@@ -79,21 +78,15 @@ const propre = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
  * d'ajouter et on dit combien manquent — un email de 40 Mo ne part pas.
  */
 export async function archiverPiecesDuMois(lignes: LigneMois[], plafondOctets = 20 * 1024 * 1024): Promise<{ zip: Uint8Array | null; nb: number; nonJointes: number }> {
-  const vues = new Set<string>();
   const fichiers: Record<string, Uint8Array> = {};
   let total = 0, nb = 0, nonJointes = 0;
-  for (const l of lignes) {
-    const p = l.piece;
-    if (!p?.id || vues.has(p.id)) continue;
-    vues.add(p.id);
-    const ext = EXT[(p as { mime?: string }).mime || ""] || (p.nom || "").split(".").pop()?.toLowerCase() || "pdf";
-    const nom = `${l.dateOperation || l.mois || ""} - ${propre(l.fournisseur || "piece")} - ${(l.montant || 0).toFixed(2)} EUR.${ext}`;
+  for (const { id, nom } of fichiersPieces(lignes as any)) {
     try {
-      const [bytes] = await adminStorage.bucket().file(`justificatifs-prives/${p.id}`).download();
+      const [bytes] = await adminStorage.bucket().file(`justificatifs-prives/${id}`).download();
       if (total + bytes.length > plafondOctets) { nonJointes++; continue; }
       total += bytes.length; nb++;
-      fichiers[fichiers[nom] ? nom.replace(/\.(\w+)$/, ` (${p.id.slice(0, 6)}).$1`) : nom] = new Uint8Array(bytes);
-    } catch (e) { console.warn("[colis] pièce illisible", p.id, e); nonJointes++; }
+      fichiers[nom] = new Uint8Array(bytes);
+    } catch (e) { console.warn("[colis] pièce illisible", id, e); nonJointes++; }
   }
   return { zip: nb ? zipSync(fichiers, { level: 0 }) : null, nb, nonJointes };
 }

@@ -12,6 +12,8 @@ import SupprimerPieces from "./SupprimerPieces";
 import { posteCommissionCarte, POSTE_ASSURANCES, POSTE_IMPOTS, POSTES_DEPENSES } from "@/lib/postes-depenses";
 import { CATEGORIE_IMMOBILISATION, CATEGORIE_EMPRUNTS, CATEGORIE_COMPTE_FFE, SEUIL_ALERTE_IMMOBILISATION_TTC } from "@/lib/tableau-depenses";
 import { completudeJustificatifs, bilanTvaMois, construireExportTva, construireExportJustificatifs } from "@/lib/bilan-justificatifs";
+import { fichiersPieces } from "@/lib/pieces-zip";
+import { zipSync } from "fflate";
 import { bilanVentilationAchats, comptesProposes, construireExportVentilationAchats } from "@/lib/ventilation-achats";
 import { estAClasser, etatPiece, resteAFaire, sansFactureParNature, sansTvaParNature } from "@/lib/piece-attendue";
 import { resumeGroupe, verifierReglementGroupe } from "@/lib/reglement-groupe";
@@ -69,6 +71,30 @@ export default function DepensesPage() {
   }, [mois]);
   useEffect(() => { if (user && isAdmin && vue === "tableau") { setBusy(true); void charger().catch(e => setMessage(e.message)).finally(() => setBusy(false)); } }, [user, isAdmin, vue, charger]);
   // Une réponse sans JSON (délai dépassé côté hébergeur) garde un message lisible.
+  // Factures du mois en un ZIP, assemblé dans le navigateur (une réponse
+  // serveur est plafonnée à 4,5 Mo) : pour la comptable (TVA du trimestre, 11/2026).
+  async function telechargerFacturesZip() {
+    const liste = fichiersPieces(lignes as any);
+    if (!liste.length) { setMessage("Aucune facture jointe ce mois-ci."); return; }
+    setBusy(true);
+    try {
+      const fichiers: Record<string, Uint8Array> = {};
+      const echecs: string[] = [];
+      for (let i = 0; i < liste.length; i++) {
+        setMessage(`Téléchargement des factures : ${i + 1} / ${liste.length}…`);
+        try {
+          const r = await authFetch(`${justifs}?id=${encodeURIComponent(liste[i].id)}`);
+          if (!r.ok) throw new Error(String(r.status));
+          fichiers[liste[i].nom] = new Uint8Array(await r.arrayBuffer());
+        } catch { echecs.push(liste[i].nom); }
+      }
+      const zip = zipSync(fichiers, { level: 0 });
+      const url = URL.createObjectURL(new Blob([zip], { type: "application/zip" }));
+      const a = document.createElement("a"); a.href = url; a.download = `factures_${mois}.zip`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000);
+      setMessage(`✅ ${Object.keys(fichiers).length} facture(s) dans factures_${mois}.zip${echecs.length ? ` · ${echecs.length} illisible(s) : ${echecs.join(", ")}` : ""}.`);
+    } catch (e: any) { setMessage(`Erreur : ${e?.message || e}`); }
+    setBusy(false);
+  }
   async function post(url: string, body: object) { const r = await authFetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || (r.status === 504 ? "La lecture a pris trop de temps. La pièce est bien déposée : relancez la lecture." : `Erreur ${r.status}`)); return d; }
   /**
    * Rapprochement automatique du mois : aperçu d'abord, écriture seulement
@@ -354,7 +380,12 @@ export default function DepensesPage() {
         <p className={reste.factures ? "text-amber-900" : "text-green-800"}><b>{reste.factures}</b> facture{reste.factures > 1 ? "s" : ""} à obtenir{reste.factures ? ` (${eurosCourt(reste.montantFactures)})` : ""}{reste.releves ? <> · <b>{reste.releves}</b> ligne{reste.releves > 1 ? "s" : ""} que le relevé suffit à justifier ({eurosCourt(reste.montantReleves)}), en un clic depuis la ligne</> : null}. Commissions bancaires, échéances de prêt, salaires et versements au compte FFE n’attendent aucune facture.</p>
         <p><b>{comp.justifies} / {comp.total}</b> dépenses justifiées ({comp.pourcent} %) · <b className={comp.sansPiece ? "text-amber-800" : "text-green-800"}>{eurosCourt(comp.montantSansPiece)}</b> sans justificatif sur {comp.sansPiece} ligne{comp.sansPiece > 1 ? "s" : ""}. Un débit classé dans une catégorie de charge entre dans la synthèse des charges, justifié ou non ; salaires, virements internes, emprunts et immobilisations restent hors synthèse.</p>
         <p>TVA du mois : <b>{eurosCourt(tva.deductibleJustifiee)}</b> documentée sur {tva.nbJustifiees} paiement{tva.nbJustifiees > 1 ? "s" : ""} · {tva.aVerifier.nb} ligne{tva.aVerifier.nb > 1 ? "s" : ""} à vérifier ({eurosCourt(tva.aVerifier.ttc)} TTC){tva.pieceSansTva.nb ? ` · ${tva.pieceSansTva.nb} pièce(s) sans TVA lue` : ""} · {tva.sansTva.nb} sans TVA · {tva.nonRecuperee.nb} non récupérée{tva.nonRecuperee.nb > 1 ? "s" : ""}.
-          {" "}<button className="underline" onClick={() => telechargerTexte(`tva_${mois}.csv`, construireExportTva(lignes))}>CSV TVA</button> · <button className="underline" onClick={() => telechargerTexte(`justificatifs_${mois}.csv`, construireExportJustificatifs(lignes))}>CSV justificatifs</button></p>
+</p>
+        <div className="flex flex-wrap gap-2 py-1">
+          <button className="rounded border border-blue-300 bg-blue-50 px-3 py-1 font-semibold text-blue-800" onClick={() => telechargerTexte(`tva_${mois}.csv`, construireExportTva(lignes))} title="Une ligne par dépense : fournisseur, n° de facture, HT, TVA, TVA retenue — total en bas">📄 Liste TVA du mois (CSV)</button>
+          <button disabled={busy} className="rounded border border-blue-300 bg-blue-50 px-3 py-1 font-semibold text-blue-800" onClick={() => void telechargerFacturesZip()} title="Toutes les factures jointes du mois, nommées date - fournisseur - montant">🗂️ Factures du mois (ZIP)</button>
+          <button className="rounded border border-slate-300 bg-white px-3 py-1 text-slate-700" onClick={() => telechargerTexte(`justificatifs_${mois}.csv`, construireExportJustificatifs(lignes))}>CSV justificatifs</button>
+        </div>
         <p>Comptes proposés : {ventilation.total} opérations · <b>{ventilation.aVentiler} à ventiler</b> ({eurosCourt(ventilation.montantAVentiler)}). Les propositions sont à valider par la comptable. <button className="underline" onClick={() => telechargerTexte(`ventilation_achats_${mois}.csv`, construireExportVentilationAchats(lignes))}>CSV ventilation comptable</button></p>
         <p className="text-slate-600">La TVA des échéances et des factures partagées reste à vérifier, hors total automatique. La TVA totale de chaque facture reste visible dans le CSV ; elle ne se cumule pas entre paiements.</p>
       </div>; })()}
