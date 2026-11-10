@@ -28,6 +28,7 @@ import { construireFecCeleris, construireFecComplet, nomFichierFec, type CompteF
 import { construireAchatsBanque, type CreditBancaireFec } from "@/lib/fec-achats-banque";
 import type { ReglesVentilation } from "@/lib/ventilation-comptable";
 import { bilanTvaMois, completudeJustificatifs, construireExportJustificatifs, construireExportTva, type LigneMois } from "@/lib/bilan-justificatifs";
+import { casParticuliersAchats, construireExportCasParticuliers, phraseCas } from "@/lib/cas-particuliers-achats";
 
 import { bilanVentilationAchats, construireExportVentilationAchats } from "@/lib/ventilation-achats";
 import { rejetsDuJournal } from "@/lib/rejet-prelevement";
@@ -52,6 +53,8 @@ export interface ResumeColis {
   tvaDeductibleJustifiee?: number;
   tvaAVerifier?: { nb: number; ttc: number };
   ventilationAchats?: { total: number; aVentiler: number; montantAVentiler: number };
+  /** Achats hors de l'ordinaire (plusieurs fois, escompte, devise…), lib/cas-particuliers-achats. */
+  casParticuliers?: { nb: number; lignes: string[] };
   /**
    * Mois tenu dans Céleris (juillet–août 2026) : les ventes ne sont pas dans
    * l'application, elles sont dans les écritures importées. Montants en euros.
@@ -184,6 +187,8 @@ export function construireColisComptable(params: {
     resume.tvaDeductibleJustifiee = Math.round((tva.deductibleJustifiee - avoirsTva.immobilisations - avoirsTva.autresBiensServices) * 100) / 100;
     resume.tvaAVerifier = tva.aVerifier;
     resume.ventilationAchats = bilanVentilationAchats(lignesJustificatifs);
+    const cas = casParticuliersAchats(lignesJustificatifs);
+    resume.casParticuliers = { nb: cas.length, lignes: cas.map(phraseCas) };
   }
   const celeris = params.celeris && params.celeris.lignes.length ? params.celeris : null;
   if (celeris) {
@@ -221,6 +226,7 @@ export function construireColisComptable(params: {
       { filename: `justificatifs_${mois}.csv`, contenu: bom + construireExportJustificatifs(lignesJustificatifs), contentType: csv },
       { filename: `tva_${mois}.csv`, contenu: bom + construireExportTva(lignesJustificatifs), contentType: csv },
       { filename: `ventilation_achats_${mois}.csv`, contenu: bom + construireExportVentilationAchats(lignesJustificatifs), contentType: csv },
+      { filename: `cas-particuliers_${mois}.csv`, contenu: bom + construireExportCasParticuliers(casParticuliersAchats(lignesJustificatifs)), contentType: csv },
     ] : []),
     ...(celeris ? [{ filename: `ecritures-celeris_${mois}.csv`, contenu: bom + construireExportCeleris(celeris.lignes), contentType: csv }] : []),
   ];
@@ -365,9 +371,10 @@ export function corpsEmailComptable(params: {
       ${resume.fec ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">FEC</td><td style="padding:4px 0;"><b>${resume.fec.fichier}</b> — ${resume.fec.source === "celeris" ? `${resume.fec.ecrituresVentes} écriture(s) reprises de Céleris, journaux d'origine conservés` : `${resume.fec.ecrituresVentes} écriture(s) de ventes (VE), ${resume.fec.ecrituresReglements} de règlements clients (RG)${resume.fec.ecrituresOd ? `, ${resume.fec.ecrituresOd} d'opérations diverses (OD : corrections, avoirs imputés, TVA rendue exigible)` : ""}`}${resume.fec.ecrituresAchats || resume.fec.ecrituresBanque ? `, ${resume.fec.ecrituresAchats || 0} d'achats (HA), ${resume.fec.ecrituresBanque || 0} de banque (BQ)` : ""}${resume.fec.nbAnomalies ? ` — <span style="color:#b45309;">${resume.fec.nbAnomalies} point(s) à regarder, ci-dessous</span>` : ""}</td></tr>` : ""}
       ${resume.ventilationAchats ? `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;">Ventilation des achats</td><td>${resume.ventilationAchats.total} opérations, <b>${resume.ventilationAchats.aVentiler} à ventiler</b> (${eur(resume.ventilationAchats.montantAVentiler)}). Comptes proposés à valider.</td></tr>` : ""}
     </table>
-    ${resume.tvaDeductibleJustifiee != null ? "<p>Les paiements fractionnés et les factures partagées restent à vérifier, hors total TVA automatique. La TVA totale de la facture ne doit pas être cumulée entre paiements.</p>" : ""}
+    ${resume.tvaDeductibleJustifiee != null ? "<p>Les paiements fractionnés et les factures partagées restent à vérifier, hors total TVA automatique : la TVA totale de la facture ne doit pas être cumulée entre paiements. Chacun est expliqué, avec une TVA proposée, dans le fichier des cas particuliers.</p>" : ""}
     ${resume.fec?.source === "application" ? `<p style="font-size:13px;color:#374151;"><b>TVA sur les encaissements</b> (prestations de services, art. 269-2-c du CGI) : à la facture, la TVA est portée au 44574000 « TVA collectée en attente d'encaissement » ; chaque règlement en vire sa part au 4457x du taux. Le 4457x du mois correspond ainsi à la TVA exigible, et le solde du 44574000 à la TVA des factures non encaissées. Merci de nous confirmer que le club n'a pas opté pour les débits.</p>` : ""}
     ${resume.fec?.comptesAConfirmer.length ? `<p style="font-size:13px;color:#374151;"><b>Comptes à valider</b> (plan comptable général, faute de numéro dans votre plan) : ${resume.fec.comptesAConfirmer.map((c) => `${c.compte} ${c.libelle}`).join(" · ")}. Dites-nous s'il faut en changer : le fichier suivra.</p>` : ""}
+    ${resume.casParticuliers?.nb ? `<p style="font-size:13px;color:#374151;"><b>Cas particuliers des achats (${resume.casParticuliers.nb})</b> — paiements en plusieurs fois, escomptes, devises, écarts entre facture et paiement ; détail, TVA proposée et point à trancher dans <b>cas-particuliers_${mois}.csv</b> :<br/>${resume.casParticuliers.lignes.slice(0, 15).map((a) => `• ${a.replace(/&/g, "&amp;").replace(/</g, "&lt;")}`).join("<br/>")}${resume.casParticuliers.nb > 15 ? `<br/>… et ${resume.casParticuliers.nb - 15} autre(s), dans le fichier.` : ""}</p>` : ""}
     ${resume.fec?.nbAnomalies ? `<p style="font-size:13px;color:#b45309;"><b>Points à regarder dans le FEC :</b><br/>${resume.fec.anomalies.map((a) => `• ${a.replace(/&/g, "&amp;").replace(/</g, "&lt;")}`).join("<br/>")}${resume.fec.nbAnomalies > resume.fec.anomalies.length ? `<br/>… et ${resume.fec.nbAnomalies - resume.fec.anomalies.length} autre(s).` : ""}</p>` : ""}
     ${archive ? `<p style="font-size:13px;color:#374151;">L'archive des pièces contient <b>${archive.nb}</b> justificatif(s), nommés « date - fournisseur - montant ».${archive.nonJointes ? ` <span style="color:#b45309;">${archive.nonJointes} pièce(s) n'ont pas pu être jointes (taille) : elles restent consultables dans l'application.</span>` : ""}</p>` : ""}
     <p style="font-size:13px;color:#374151;"><b>Pièces jointes :</b><br/>${pieces.map((p) => `• ${p}`).join("<br/>")}</p>

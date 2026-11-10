@@ -290,6 +290,15 @@ export const CHAPITRE_QUESTIONS_COMPTABLES: ManualChapter = {
       `,
     },
     {
+      id: "cas-particuliers-achats",
+      title: "Facture payée en plusieurs fois, escompte, devise : comment la comptable le sait-elle ?",
+      text: `
+        <p>Le colis mensuel joint <strong>cas-particuliers_AAAA-MM.csv</strong>, résumé dans l'email : une ligne par achat hors de l'ordinaire (paiement en plusieurs fois, paiement partiel ou supérieur à la facture, escompte, devise étrangère, plusieurs factures pour un débit, même facture sur deux débits), avec ce qui s'est passé, la TVA proposée et ce que le cabinet doit trancher.</p>
+        <p>Ces cas restent au journal des achats et de la banque, jamais en OD : la facture une fois, les règlements lettrés dessus. Dans Dépenses, le bouton <strong>« Cas particuliers »</strong> donne le même fichier pour le mois affiché.</p>
+      `,
+      href: "/admin/comptabilite/depenses",
+    },
+    {
       id: "factures-super-pdp",
       title: "Les factures fournisseurs reçues par Super PDP : où arrivent-elles ?",
       text: `

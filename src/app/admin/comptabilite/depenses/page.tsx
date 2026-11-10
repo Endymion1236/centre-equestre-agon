@@ -13,6 +13,7 @@ import { posteCommissionCarte, POSTE_ASSURANCES, POSTE_IMPOTS, POSTES_DEPENSES }
 import { CATEGORIE_IMMOBILISATION, CATEGORIE_EMPRUNTS, CATEGORIE_COMPTE_FFE, SEUIL_ALERTE_IMMOBILISATION_TTC } from "@/lib/tableau-depenses";
 import { completudeJustificatifs, bilanTvaMois, construireExportTva, construireExportJustificatifs } from "@/lib/bilan-justificatifs";
 import { fichiersPieces } from "@/lib/pieces-zip";
+import { casParticuliersAchats, construireExportCasParticuliers } from "@/lib/cas-particuliers-achats";
 import { zipSync } from "fflate";
 import { bilanVentilationAchats, comptesProposes, construireExportVentilationAchats } from "@/lib/ventilation-achats";
 import { estAClasser, etatPiece, resteAFaire, sansFactureParNature, sansTvaParNature } from "@/lib/piece-attendue";
@@ -385,6 +386,7 @@ export default function DepensesPage() {
         <div className="flex flex-wrap gap-2 py-1">
           <button className="rounded border border-blue-300 bg-blue-50 px-3 py-1 font-semibold text-blue-800" onClick={() => telechargerTexte(`tva_${mois}.csv`, construireExportTva(lignes))} title="Une ligne par dépense : fournisseur, n° de facture, HT, TVA, TVA retenue — total en bas">📄 Liste TVA du mois (CSV)</button>
           <button disabled={busy} className="rounded border border-blue-300 bg-blue-50 px-3 py-1 font-semibold text-blue-800" onClick={() => void telechargerFacturesZip()} title="Toutes les factures jointes du mois, nommées date - fournisseur - montant">🗂️ Factures du mois (ZIP)</button>
+          <button className="rounded border border-blue-300 bg-blue-50 px-3 py-1 font-semibold text-blue-800" onClick={() => telechargerTexte(`cas-particuliers_${mois}.csv`, construireExportCasParticuliers(casParticuliersAchats(lignes)))} title="Paiements en plusieurs fois, escomptes, devises, écarts facture/paiement : explication et TVA proposée pour la comptable">🧾 Cas particuliers ({casParticuliersAchats(lignes).length})</button>
           <button className="rounded border border-slate-300 bg-white px-3 py-1 text-slate-700" onClick={() => telechargerTexte(`justificatifs_${mois}.csv`, construireExportJustificatifs(lignes))}>CSV justificatifs</button>
         </div>
         <p>Comptes proposés : {ventilation.total} opérations · <b>{ventilation.aVentiler} à ventiler</b> ({eurosCourt(ventilation.montantAVentiler)}). Les propositions sont à valider par la comptable. <button className="underline" onClick={() => telechargerTexte(`ventilation_achats_${mois}.csv`, construireExportVentilationAchats(lignes))}>CSV ventilation comptable</button></p>
