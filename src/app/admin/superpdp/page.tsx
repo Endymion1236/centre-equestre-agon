@@ -101,7 +101,7 @@ export default function SuperPdpPage() {
             {busy === "charger" ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Actualiser
           </button>
         </div>
-        {!etat ? <p className="font-body text-sm text-slate-500">Vérification…</p> : etat.map(r => (
+        {!etat ? <p className="font-body text-sm text-slate-500">Vérification…</p> : etat.filter(r => !(production && r.role === "fournisseur")).map(r => (
           <p key={r.role} className="font-body text-sm">
             <b>{LIBELLE[r.role]}</b> :{" "}
             {!r.configure ? <span className="text-amber-700">identifiants absents dans Vercel</span>
