@@ -4,6 +4,8 @@ import { appelSuperPdp, roleConfigure } from "@/lib/superpdp";
 import { resumerFacture, type RoleSuperPdp } from "@/lib/superpdp-regles";
 import { apercuDepense } from "@/lib/superpdp-depenses";
 import { adminDb } from "@/lib/firebase-admin";
+import { compteDeProductionDuClub } from "@/lib/superpdp-reception";
+import { importerFacturesRecues } from "@/lib/superpdp-import";
 
 // ═══════════════════════════════════════════════════════════════════
 // /api/admin/superpdp — essai de la plateforme agréée Super PDP
@@ -17,10 +19,13 @@ import { adminDb } from "@/lib/firebase-admin";
 //      comme elles arriveraient dans Dépenses (lecture seule, rien n'est écrit)
 // POST { action: "envoyer-test", de }     → facture d'essai générée par
 //      Super PDP, envoyée par « de » (club ou fournisseur) à l'autre
+//      (bac à sable seulement)
+// POST { action: "importer" }             → factures reçues sur le compte de
+//      PRODUCTION du club → pièces de Dépenses (lib/superpdp-import)
 // ═══════════════════════════════════════════════════════════════════
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const ROLES: RoleSuperPdp[] = ["club", "fournisseur"];
 const estRole = (r: unknown): r is RoleSuperPdp => r === "club" || r === "fournisseur";
@@ -35,7 +40,8 @@ export async function GET(req: NextRequest) {
         if (!roleConfigure(role)) return { role, configure: false };
         try {
           const c = await (await appelSuperPdp(role, "/v1.beta/companies/me")).json();
-          return { role, configure: true, ok: true, entreprise: c.formal_name || c.trade_name || "—", mode: c.env || "—" };
+          return { role, configure: true, ok: true, entreprise: c.formal_name || c.trade_name || "—", mode: c.env || "—",
+            ...(role === "club" ? { reception: compteDeProductionDuClub(c) } : {}) };
         } catch (e: any) {
           return { role, configure: true, ok: false, erreur: e?.message || String(e) };
         }
@@ -81,8 +87,17 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const body = await req.json().catch(() => ({} as any));
   try {
+    if (body.action === "importer") {
+      const bilan = await importerFacturesRecues(auth.uid || "admin");
+      return NextResponse.json(bilan, { status: bilan.ok ? 200 : 409 });
+    }
     if (body.action === "envoyer-test") {
       const de: RoleSuperPdp = estRole(body.de) ? body.de : "club";
+      // Jamais de facture d'essai depuis le compte réel du club.
+      if (de === "club") {
+        const c = await (await appelSuperPdp("club", "/v1.beta/companies/me")).json();
+        if (c.env === "production") return NextResponse.json({ error: "Compte de production : pas de facture d'essai." }, { status: 409 });
+      }
       // Super PDP fabrique une facture valide dont le vendeur est l'entreprise
       // du jeton et l'acheteur une autre entreprise du bac à sable.
       const xml = await (await appelSuperPdp(de, "/v1.beta/invoices/generate_test_invoice?format=ubl")).text();

@@ -8,7 +8,7 @@
  * Pur, sans import, testé (tests/unit/pieces-zip.test.ts).
  */
 
-const EXT: Record<string, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png" };
+const EXT: Record<string, string> = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "application/xml": "xml" };
 export const nomPropre = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9 ._-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
 
 interface LignePiece {

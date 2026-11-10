@@ -256,6 +256,8 @@ export async function POST(req: NextRequest) {
     }
     if (body.action === "analyser" || body.action === "relire") {
       if (doc.data()?.depenseId) return NextResponse.json({ error: "Annulez l’association avant de relire le document." }, { status: 409 });
+      // Facture reçue par la plateforme agréée : montants lus dans la facture électronique, rien à relire.
+      if (doc.data()?.source === "superpdp") return NextResponse.json({ error: "Facture électronique reçue par Super PDP : ses montants viennent de la facture elle-même, pas de relecture." }, { status: 409 });
       if (!process.env.ANTHROPIC_API_KEY) return NextResponse.json({ error: "Analyse non configurée ; la pièce est conservée." }, { status: 503 });
       const [bytes] = await adminStorage.bucket().file(chemin(body.id)).download();
       const mime = doc.data()!.mime;

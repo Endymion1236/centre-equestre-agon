@@ -290,6 +290,15 @@ export const CHAPITRE_QUESTIONS_COMPTABLES: ManualChapter = {
       `,
     },
     {
+      id: "factures-super-pdp",
+      title: "Les factures fournisseurs reçues par Super PDP : où arrivent-elles ?",
+      text: `
+        <p>Chaque matin, les factures reçues sur Super PDP entrent dans les <strong>pièces de Dépenses</strong>, avec leurs montants lus dans la facture électronique (pas de lecture automatique à vérifier). Lance ensuite <strong>« Rapprocher automatiquement les pièces »</strong> : chacune retrouve son débit du relevé.</p>
+        <p>Un <strong>avoir</strong> fournisseur arrive marqué « AVOIR » : il se joint au crédit du relevé dans Rapprochement. Pour importer sans attendre le lendemain : Dépenses → « Factures reçues (Super PDP) » → « Importer maintenant ».</p>
+      `,
+      href: "/admin/superpdp",
+    },
+    {
       id: "arret-medical-forfait",
       title: "Un cavalier au forfait est en arrêt médical : que rembourse-t-on ?",
       text: `
