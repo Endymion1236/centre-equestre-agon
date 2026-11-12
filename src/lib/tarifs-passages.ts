@@ -52,3 +52,46 @@ export function proposerPrixPassages(c: { activityType?: string; activityTitle?:
     || offrePassages(c).length > 0
     || /challenge|concours|comp[ée]t/i.test(String(c.activityTitle || ""));
 }
+
+/** « … — 2 passages » → 2 (titre de ligne de commande ou d'épreuve). */
+export function passagesDuTitre(titre: unknown): number | null {
+  const m = String(titre || "").match(/(\d)\s*passages?\b/i);
+  const n = m ? Number(m[1]) : NaN;
+  return n >= 1 && n <= MAX_PASSAGES ? n : null;
+}
+
+/**
+ * Nombre de passages d'un cavalier inscrit : posé sur l'inscription
+ * (`passages`), sinon retrouvé dans sa commande — ligne de ce créneau dont le
+ * titre dit « N passage(s) » (inscriptions faites avant le 12/11/2026).
+ */
+export function passagesDuCavalier(
+  e: { childId?: string; passages?: unknown },
+  creneauId: string,
+  paiements: { status?: string; items?: { childId?: string; creneauId?: string; creneauIds?: string[]; activityTitle?: string }[] }[],
+): number | null {
+  const pose = Number(e.passages);
+  if (pose >= 1 && pose <= MAX_PASSAGES) return pose;
+  for (const p of paiements || []) {
+    if (p.status === "cancelled") continue;
+    for (const i of p.items || []) {
+      if (i.childId !== e.childId) continue;
+      if (i.creneauId !== creneauId && !(i.creneauIds || []).includes(creneauId)) continue;
+      const n = passagesDuTitre(i.activityTitle);
+      if (n) return n;
+    }
+  }
+  return null;
+}
+
+/** Combien de cavaliers font 1, 2, 3 passages, et combien de passages en tout. */
+export function resumePassages(nombres: (number | null)[]): { parNombre: Record<number, number>; total: number; inconnus: number } {
+  const parNombre: Record<number, number> = {};
+  let total = 0, inconnus = 0;
+  for (const n of nombres) {
+    if (!n) { inconnus++; continue; }
+    parNombre[n] = (parNombre[n] || 0) + 1;
+    total += n;
+  }
+  return { parNombre, total, inconnus };
+}

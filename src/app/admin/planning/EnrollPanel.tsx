@@ -47,7 +47,7 @@ import { ChoixNiveauPromenade } from "./ChoixNiveauPromenade";
 import { estPromenadeADefinir, titreAvecNiveau } from "@/lib/promenade-niveau";
 import { estSurDemande } from "@/lib/creneau-sur-demande";
 import { estCoursParticulier, libelleTypeCarte, typeCarteCouvre, typeCarteDuCreneau } from "@/lib/cartes-seances";
-import { libellePassages, offrePassages, titreAvecPassages } from "@/lib/tarifs-passages";
+import { libellePassages, offrePassages, passagesDuCavalier, titreAvecPassages } from "@/lib/tarifs-passages";
 import type { ContexteActions, RappelsActions } from "./enroll-panel-actions";
 import {
   libelleModeAcompte, nomActuelInscrit, filtrerFamilles, cavaliersNonAttendusQuinzaine, prixAffiche, prixJourStage, lotUnJourAuPrixJournee,
@@ -981,6 +981,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     title="Ouvrir la fiche cavalier">
                     {nomActuel(e)}
                   </a>
+                  {(() => { const n = offrePassages(creneau as any).length ? passagesDuCavalier(e, creneau.id!, payments as any) : null; return n ? <span className="font-body text-[10px] font-bold text-orange-700 bg-orange-100 px-1.5 py-0.5 rounded-full flex-shrink-0" title="Nombre de passages choisi">🏁 {libellePassages(n)}</span> : null; })()}
                   {age && <span className="font-body text-[10px] text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded-full flex-shrink-0">{age}</span>}
                   {!age && ageInfo.ficheSansDate && (
                     <span className="font-body text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5" title="Date de naissance absente de la fiche cavalier — à compléter dans Cavaliers">âge ?</span>

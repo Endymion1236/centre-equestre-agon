@@ -40,6 +40,7 @@ import { lignesInscriptionAnnuelle } from "./inscription-annuelle-lignes";
 import { forfaitDejaActif } from "./forfait-fiche-utils";
 import { programmerEnvoiConfirmation } from "./minuteries-confirmation";
 import { verrouCommande } from "@/app/admin/paiements/commande-verrou";
+import { passagesDuTitre } from "@/lib/tarifs-passages";
 
 export interface ContexteInscriptionPanneau {
   children: any[];
@@ -1159,7 +1160,9 @@ export async function inscrireDepuisPanneau(ctx: ContexteInscriptionPanneau) {
         priceHT: coachingTTC / 1.055, tva: 5.5, priceTTC: coachingTTC,
       });
       const compOptions = compItems.length > 0 ? { competitionItems: compItems, skipEmail: false } : undefined;
-      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString() }, showPay ? payMode : undefined, selonChoix(compOptions));
+      // Formule « N passages » choisie : notée sur l'inscription (rappel au planning).
+      const passagesChoisis = compEpreuves.length === 1 ? passagesDuTitre(compEpreuves[0].epreuve) : null;
+      await onEnroll(creneau.id!, { childId: selChild, childName, familyId: fam.firestoreId, familyName: fam.parentName || "—", enrolledAt: new Date().toISOString(), ...(passagesChoisis ? { passages: passagesChoisis } : {}) } as any, showPay ? payMode : undefined, selonChoix(compOptions));
     } else {
       const freeEnrollOptions = freeEnroll ? { freeReason, skipEmail: false } : undefined;
       const rattrapageOptions = useRattrapage ? { rattrapageId: useRattrapage, skipEmail: false } : undefined;

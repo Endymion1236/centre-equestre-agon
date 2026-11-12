@@ -108,6 +108,7 @@ export async function payerPanier(ctx: ContextePaiement, rappels: RappelsPaiemen
             // Créneau sur demande : la formule choisie, fixée par le serveur à
             // la première réservation (refus si le créneau a été pris entre-temps).
             ...(item.formuleSurDemande ? { formuleSurDemande: item.formuleSurDemande } : {}),
+            ...(item.passages ? { passages: item.passages } : {}),
             // Carte de séances : le serveur la vérifie et rend la place ferme.
             ...(item.cardId ? { cardId: item.cardId } : {}),
           }],

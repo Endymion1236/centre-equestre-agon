@@ -27,6 +27,7 @@ import { deciderInscriptionNiveau, compatibiliteCavalier, LIBELLE_NIVEAU, estNiv
 import { carteCouvreCreneau, compterReservationsParCarte, libelleCarte, seancesDisponibles, type CarteLike } from "@/lib/cartes-seances";
 import { toParisDateString } from "@/lib/date-local";
 import { creneauxEnConflit, libelleConflit } from "@/lib/conflit-horaire";
+import { offrePassages } from "@/lib/tarifs-passages";
 
 interface EnrollItem {
   childId: string;
@@ -44,6 +45,8 @@ interface EnrollItem {
   niveauPromenade?: string;
   /** Créneau « sur demande » : formule choisie par la famille (anniversaire, cours particulier). */
   formuleSurDemande?: string;
+  /** Compétition au tarif par passages : nombre choisi au panier (1 à 3). */
+  passages?: number;
 }
 
 export async function POST(req: NextRequest) {
@@ -309,6 +312,8 @@ export async function POST(req: NextRequest) {
               }
             }
             if (item.niveauPromenade && estNiveauPromenade(item.niveauPromenade)) entry.niveauPromenade = item.niveauPromenade;
+            // Nombre de passages, seulement parmi les formules du créneau.
+            if (offrePassages(cr).some((o) => o.n === Number(item.passages))) entry.passages = Number(item.passages);
             const fixer = aFixer.get(i);
             const formule = formulesAFixer.get(i);
             if (formule) entry.formuleSurDemande = formule.formule.id;
