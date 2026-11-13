@@ -669,33 +669,56 @@ export default function DevisPage() {
             <div>
               <label className="font-body text-xs font-semibold text-blue-800 block mb-2">Lignes du devis</label>
               <div className="flex flex-col gap-2">
-                {items.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                    <input value={item.label} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, label: e.target.value } : it))}
-                      placeholder="Prestation..." className={`col-span-4 ${inp}`} />
-                    <input type="number" min="1" value={item.qty} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, qty: parseInt(e.target.value) || 1 } : it))}
-                      className={`col-span-1 ${inp} text-center`} />
-                    <input type="number" step="0.01" value={item.priceTTC} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, priceTTC: parseFloat(e.target.value) || 0 } : it))}
-                      placeholder="Prix €" className={`col-span-2 ${inp} text-right`} />
-                    <input type="number" step="1" min="0" max="100" value={item.remisePct ?? ""} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, remisePct: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) } : it))}
-                      placeholder="0" className={`col-span-2 ${inp} text-center ${item.remisePct ? "border-rose-400 text-rose-600 font-semibold" : ""}`} />
-                    <select value={item.tva} onChange={e => setItems(prev => prev.map((it, i) => i === idx ? { ...it, tva: parseFloat(e.target.value) } : it))}
-                      className={`col-span-2 ${inp}`}>
-                      <option value={0}>0%</option>
-                      <option value={5.5}>5,5%</option>
-                      <option value={10}>10%</option>
-                      <option value={20}>20%</option>
-                    </select>
-                    <button type="button" onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
-                      className="col-span-1 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer flex justify-center">
-                      <Trash2 size={14}/>
-                    </button>
-                  </div>
-                ))}
-                <div className="grid grid-cols-12 gap-2 text-[10px] text-slate-400 px-1">
+                {/* Téléphone et tablette : une carte par ligne, champs larges et
+                    nommés (les cases d'un douzième de largeur étaient
+                    impossibles à remplir, 11/2026). Grand écran : une ligne. */}
+                <div className="hidden lg:grid grid-cols-12 gap-2 text-[10px] text-slate-400 px-1">
                   <span className="col-span-4">Libellé</span><span className="col-span-1 text-center">Qté</span>
                   <span className="col-span-2 text-right">Prix TTC</span><span className="col-span-2 text-center">Remise %</span><span className="col-span-2">TVA</span>
                 </div>
+                {items.map((item, idx) => {
+                  const maj = (patch: Partial<typeof item>) => setItems(prev => prev.map((it, i) => i === idx ? { ...it, ...patch } : it));
+                  const etiquette = "lg:hidden block font-body text-[11px] text-slate-500 mb-0.5";
+                  return (
+                  <div key={idx} className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-2 items-end lg:items-center bg-sand lg:bg-transparent rounded-lg p-2 lg:p-0">
+                    <label className="col-span-2 sm:col-span-4 lg:col-span-4">
+                      <span className={etiquette}>Prestation</span>
+                      <input value={item.label} onChange={e => maj({ label: e.target.value })}
+                        placeholder="Prestation..." className={`w-full ${inp}`} />
+                    </label>
+                    <label className="lg:col-span-1">
+                      <span className={etiquette}>Quantité</span>
+                      <input type="number" inputMode="numeric" min="1" value={item.qty} onChange={e => maj({ qty: parseInt(e.target.value) || 1 })}
+                        className={`w-full ${inp} text-center text-base lg:text-sm`} />
+                    </label>
+                    <label className="lg:col-span-2">
+                      <span className={etiquette}>Prix TTC (€)</span>
+                      <input type="number" inputMode="decimal" step="0.01" value={item.priceTTC} onChange={e => maj({ priceTTC: parseFloat(e.target.value) || 0 })}
+                        placeholder="Prix €" className={`w-full ${inp} text-right text-base lg:text-sm`} />
+                    </label>
+                    <label className="lg:col-span-2">
+                      <span className={etiquette}>Remise (%)</span>
+                      <input type="number" inputMode="decimal" step="1" min="0" max="100" value={item.remisePct ?? ""} onChange={e => maj({ remisePct: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) })}
+                        placeholder="0" className={`w-full ${inp} text-center text-base lg:text-sm ${item.remisePct ? "border-rose-400 text-rose-600 font-semibold" : ""}`} />
+                    </label>
+                    <label className="lg:col-span-2">
+                      <span className={etiquette}>TVA</span>
+                      <select value={item.tva} onChange={e => maj({ tva: parseFloat(e.target.value) })}
+                        className={`w-full ${inp} text-base lg:text-sm`}>
+                        <option value={0}>0%</option>
+                        <option value={5.5}>5,5%</option>
+                        <option value={10}>10%</option>
+                        <option value={20}>20%</option>
+                      </select>
+                    </label>
+                    <button type="button" onClick={() => setItems(prev => prev.filter((_, i) => i !== idx))}
+                      title="Supprimer la ligne"
+                      className="col-span-2 sm:col-span-4 lg:col-span-1 text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer flex justify-center items-center gap-1 py-1 font-body text-xs">
+                      <Trash2 size={14}/><span className="lg:hidden">Supprimer la ligne</span>
+                    </button>
+                  </div>
+                  );
+                })}
               </div>
               <button type="button" onClick={() => setItems(prev => [...prev, { label: "", qty: 1, priceTTC: 0, tva: 5.5 }])}
                 className="mt-2 font-body text-xs text-blue-500 bg-transparent border-none cursor-pointer hover:underline">
