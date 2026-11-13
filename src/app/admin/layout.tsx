@@ -98,6 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/admin/montoir", icon: ClipboardList, label: "Montoir", moniteur: true },
       { href: "/admin/cavalerie", icon: Heart, label: "Cavalerie", moniteur: true },
+      { href: "/admin/cavalerie?tab=travail", icon: ClipboardList, label: "Travail des poneys", moniteur: true },
       { href: "/admin/pedagogie", icon: GraduationCap, label: "Suivi pédagogique", moniteur: true },
       { href: "/admin/management", icon: CalendarDays, label: "Équipe & planning", moniteur: true },
       { href: "/admin/mes-documents", icon: FolderLock, label: "Mes documents", moniteur: true },

@@ -82,6 +82,9 @@ export default function CavaleriePage() {
 
   useEffect(() => {
     fetchData();
+    // Lien direct du menu « Travail des poneys » (comptes moniteurs compris).
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t && ["fiches", "registre", "soins", "travail", "documents", "charge", "indispos", "ordre"].includes(t)) setTab(t as TabId);
   }, []);
 
   const nbAlertes = useMemo(
