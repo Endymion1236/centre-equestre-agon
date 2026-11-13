@@ -322,6 +322,15 @@ export const MANUAL: ManualChapter[] = [
         `,
       },
       {
+        id: "travail-poneys",
+        title: "Travail des poneys (dicté)",
+        text: `
+          <p>Onglet <strong>Travail des poneys</strong> : après avoir travaillé un poney, touche <strong>🎤 Dicter</strong> et dis le jour, le poney, qui l'a travaillé et ce qui a été fait (« Aujourd'hui j'ai longé Caramel vingt minutes, Léa a monté Pistache à l'obstacle »). « J'ai » = la personne connectée.</p>
+          <p>L'application propose une ligne par poney : vérifie (poney, travaillé par — obligatoire —, type, durée, remarques) puis <strong>Enregistrer</strong>. La grille de la semaine se remplit ; <strong>Imprimer la feuille</strong> donne la feuille A4 de la semaine.</p>
+        `,
+        href: "/admin/cavalerie",
+      },
+      {
         id: "registre",
         title: "Registre d'élevage",
         text: `

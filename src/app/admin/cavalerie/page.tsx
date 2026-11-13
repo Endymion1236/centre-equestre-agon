@@ -15,6 +15,7 @@ import TabDocuments from "./components/TabDocuments";
 import TabCharge from "./components/TabCharge";
 import TabIndispos from "./components/TabIndispos";
 import TabOrdre from "./components/TabOrdre";
+import TabTravail from "./components/TabTravail";
 import MouvementModal, { type MouvementParDefaut } from "./components/MouvementModal";
 
 const fmtDate = (d: Date) =>
@@ -26,7 +27,7 @@ const daysUntil = (d: any) => {
   return Math.ceil((target.getTime() - Date.now()) / 86400000);
 };
 
-type TabId = "fiches" | "registre" | "soins" | "documents" | "charge" | "indispos" | "ordre";
+type TabId = "fiches" | "registre" | "soins" | "travail" | "documents" | "charge" | "indispos" | "ordre";
 
 export default function CavaleriePage() {
   const { setAgentContext } = useAgentContext("cavalerie");
@@ -124,6 +125,7 @@ export default function CavaleriePage() {
     { id: "fiches" as TabId, label: "Fiches équidés", count: equides.length },
     { id: "registre" as TabId, label: "Mouvements", count: mouvements.length },
     { id: "soins" as TabId, label: "Soins & alertes", count: nbAlertes || undefined, alert: nbAlertes > 0 },
+    { id: "travail" as TabId, label: "Travail des poneys" },
     { id: "documents" as TabId, label: "Documents", count: documents.length },
     { id: "charge" as TabId, label: "Charge de travail" },
     { id: "indispos" as TabId, label: "Indisponibilités", count: indispos.filter((i: any) => i.active).length || undefined },
@@ -299,6 +301,7 @@ export default function CavaleriePage() {
           onRefresh={fetchData}
         />
       )}
+      {tab === "travail" && <TabTravail equides={equides} />}
       {tab === "documents" && <TabDocuments equides={equides} documents={documents} onRefresh={fetchData} />}
       {tab === "charge" && <TabCharge chargeJour={chargeJour} />}
       {tab === "indispos" && (
