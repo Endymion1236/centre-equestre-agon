@@ -192,7 +192,7 @@ const Medal = ({ rank }) => {
 // ================================================================
 // CHRONO — Fixed stop & apply
 // ================================================================
-function InlineChrono({ riders, onApply }) {
+function InlineChrono({ riders, onApply, discipline, roundId, getResult, setResult }) {
   const [displayMs, setDisplayMs] = useState(0);
   const [running, setRunning] = useState(false);
   const [selectedRider, setSelectedRider] = useState("");
@@ -361,6 +361,57 @@ function InlineChrono({ riders, onApply }) {
           📋 Appliquer {(displayMs / 1000).toFixed(2)}s à {riderName} (passage {selectedAttempt})
         </button>
       )}
+
+      {/* Pénalités du passage en cours, sous le chrono : plus besoin de
+          descendre jusqu'à la fiche du cavalier pendant le parcours. */}
+      {selectedRider && discipline && getResult && setResult && (() => {
+        const rid = parseInt(selectedRider);
+        const res = getResult(rid, discipline.id, roundId, selectedAttempt) || {};
+        const maj = (champ, valeur) => setResult(rid, discipline.id, roundId, selectedAttempt, champ, valeur);
+        const cso = discipline.type === "cso";
+        const totalEq = cso ? 0 : calcEquifunPenalties(res);
+        return (
+          <div style={{ marginTop: "10px", background: "#fff", borderRadius: "12px", padding: "10px", color: "#5B4A3A" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", gap: "8px", flexWrap: "wrap" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "#8B7D6B" }}>
+                Pénalités — {riderName}, passage {selectedAttempt}
+                {!cso && <span style={{ fontWeight: 400, textTransform: "none" }}> (tape pour ajouter, appui long pour enlever)</span>}
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", fontSize: "12px", fontWeight: 600, color: res.eliminated ? "#C0392B" : "#8B7D6B" }}>
+                <input type="checkbox" checked={res.eliminated || false} onChange={(e) => maj("eliminated", e.target.checked)} style={{ accentColor: "#C0392B", width: "18px", height: "18px" }} />
+                Éliminé
+              </label>
+            </div>
+            {res.eliminated ? (
+              <div style={{ textAlign: "center", fontWeight: 700, color: "#C0392B", padding: "8px" }}>Éliminé</div>
+            ) : cso ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "14px" }}>
+                <button onClick={() => maj("rails", Math.max(0, (res.rails || 0) - 1))} style={{ width: "56px", height: "56px", borderRadius: "12px", border: "2px solid #E8E0D0", background: "#F5F0E8", fontSize: "26px", fontWeight: 800, cursor: "pointer", color: "#6B5D4F" }}>−</button>
+                <div style={{ textAlign: "center", minWidth: "110px" }}>
+                  <div style={{ fontSize: "30px", fontWeight: 800, lineHeight: 1, color: (res.rails || 0) > 0 ? "#C0392B" : "#5B4A3A" }}>{res.rails || 0}</div>
+                  <div style={{ fontSize: "11px", color: "#8B7D6B" }}>barre{(res.rails || 0) > 1 ? "s" : ""} · {(res.rails || 0) * 4} pts</div>
+                </div>
+                <button onClick={() => maj("rails", (res.rails || 0) + 1)} style={{ width: "56px", height: "56px", borderRadius: "12px", border: "none", background: "#C0392B", fontSize: "26px", fontWeight: 800, cursor: "pointer", color: "#fff" }}>+</button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: "flex", gap: "5px", flexWrap: "wrap" }}>
+                  <PenTapButton label="Faute" seconds={5} value={res.pen5 || 0} onChange={(v) => maj("pen5", v)} color="#E67E22" />
+                  <PenTapButton label="Raté 1×" seconds={10} value={res.pen10 || 0} onChange={(v) => maj("pen10", v)} color="#E74C3C" />
+                  <PenTapButton label="Cassé" seconds={20} value={res.pen20 || 0} onChange={(v) => maj("pen20", v)} color="#C0392B" />
+                  <PenTapButton label="Raté 2×" seconds={25} value={res.pen25 || 0} onChange={(v) => maj("pen25", v)} color="#8E44AD" />
+                  <PenTapButton label="Porte" seconds={40} value={res.pen40 || 0} onChange={(v) => maj("pen40", v)} color="#2C3E50" />
+                </div>
+                {totalEq > 0 && (
+                  <div style={{ marginTop: "6px", fontSize: "13px", fontWeight: 700, color: "#C0392B", textAlign: "center", padding: "4px", background: "rgba(192,57,43,0.06)", borderRadius: "8px" }}>
+                    Total pénalités : +{totalEq}s
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -831,7 +882,7 @@ function ChallengeApp() {
         {/* SAISIE & CHRONO */}
         {tab === TAB_SAISIE && (
           <div>
-            <InlineChrono riders={ridersForDiscipline} onApply={handleChronoApply} />
+            <InlineChrono riders={ridersForDiscipline} onApply={handleChronoApply} discipline={discipline} roundId={selectedRound} getResult={getResult} setResult={setResult} />
             {ridersForDiscipline.length === 0 ? (
               <div style={{ textAlign: "center", padding: "30px", color: "#A09888" }}><p>Aucun cavalier en {discipline?.name}.</p></div>
             ) : (
