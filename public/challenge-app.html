@@ -73,6 +73,9 @@ const saveData = async (data) => {
   } catch(e) {
     console.warn("Sauvegarde Firebase échouée, fallback local:", e);
     try { localStorage.setItem(`challenge-${id}`, JSON.stringify(data)); } catch {}
+    // L'échec doit se voir : sans cela l'en-tête affichait « Sauvegardé »
+    // alors que rien n'était parti en ligne (connexion coupée au manège).
+    throw e;
   }
 };
 
@@ -599,16 +602,22 @@ function ChallengeApp() {
   useEffect(() => {
     if (!loaded) return;
     setSyncStatus("saving");
-    const timer = setTimeout(async () => {
+    let annule = false, timer = null;
+    const tenter = async () => {
       try {
         await saveData(data);
+        if (annule) return;
         setSyncStatus("saved");
         setTimeout(() => setSyncStatus("idle"), 2000);
       } catch {
+        if (annule) return;
         setSyncStatus("error");
+        // Connexion coupée : on réessaie toutes les 5 s jusqu'à ce que ça passe.
+        timer = setTimeout(tenter, 5000);
       }
-    }, 800); // debounce 800ms
-    return () => clearTimeout(timer);
+    };
+    timer = setTimeout(tenter, 800); // debounce 800ms
+    return () => { annule = true; clearTimeout(timer); };
   }, [data, loaded]);
 
   const updateData = useCallback((fn) => {
@@ -751,7 +760,7 @@ function ChallengeApp() {
             <div style={{ fontSize: "10px", opacity: 0.7, marginTop: "2px" }}>
               {syncStatus === "saving" && "⏳ Sauvegarde..."}
               {syncStatus === "saved" && "✅ Sauvegardé en ligne"}
-              {syncStatus === "error" && "⚠️ Erreur de synchronisation"}
+              {syncStatus === "error" && <span style={{ background: "#C0392B", color: "#fff", padding: "2px 8px", borderRadius: "8px", fontWeight: 700, opacity: 1 }}>⚠️ Non enregistré en ligne (connexion ?) — n'actualisez pas la page</span>}
               {syncStatus === "idle" && "☁️ Synchronisé avec Firebase"}
             </div>
           )}
