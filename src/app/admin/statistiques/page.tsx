@@ -6,6 +6,7 @@ import { db } from "@/lib/firebase";
 import { safeNumber } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { authFetch } from "@/lib/auth-fetch";
+import { celerisPourAnnee, type ResumeCeleris } from "@/lib/celeris-stats";
 import { Card, Badge } from "@/components/ui";
 import {
   Loader2,
@@ -179,6 +180,14 @@ export default function StatistiquesPage() {
   const [families, setFamilies] = useState<FamilyData[]>([]);
   const [equides, setEquides] = useState<Equide[]>([]);
   const [encaissements, setEncaissements] = useState<any[]>([]);
+  // Mois tenus dans Céleris avant la bascule (juillet–août 2026) : ventes et
+  // règlements repris des écritures importées (lib/celeris-stats).
+  const [resumesCeleris, setResumesCeleris] = useState<ResumeCeleris[]>([]);
+  useEffect(() => {
+    authFetch("/api/admin/comptabilite/celeris?resume=1")
+      .then(r => r.json()).then(d => setResumesCeleris(Array.isArray(d?.resumes) ? d.resumes : []))
+      .catch(() => {});
+  }, []);
   const [echeances, setEcheances] = useState<any[]>([]);
 
   // ─── Fetch ───
@@ -223,6 +232,11 @@ export default function StatistiquesPage() {
     });
   }, [creneaux, year]);
 
+  const celeris = useMemo(() => celerisPourAnnee(resumesCeleris, year), [resumesCeleris, year]);
+  const noteCeleris = celeris.mois.length
+    ? `dont ${Math.round(celeris.facture).toLocaleString("fr-FR")} € facturés et ${Math.round(celeris.encaisse).toLocaleString("fr-FR")} € encaissés repris de Céleris (${celeris.mois.map(m => new Date(`${m}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "long" })).join(", ")})`
+    : "";
+
   // ═══ CALCULS CA ═══
   const caParMois = useMemo(() => {
     const months = Array.from({ length: 12 }, () => 0);
@@ -230,8 +244,9 @@ export default function StatistiquesPage() {
       const d = toDate(p.date);
       if (d) months[d.getMonth()] += safeNumber(p.totalTTC);
     });
+    celeris.factureParMois.forEach((v, i) => { months[i] += v; });
     return months;
-  }, [yearPayments]);
+  }, [yearPayments, celeris]);
 
   const caParActivite = useMemo(() => {
     const map: Record<string, number> = {};
@@ -250,10 +265,12 @@ export default function StatistiquesPage() {
           map2[key] = (map2[key] || 0) + (item.priceTTC || 0);
         });
       });
+      if (celeris.facture > 0) map2["Ventes Céleris (avant la bascule)"] = celeris.facture;
       return Object.entries(map2).sort(([, a], [, b]) => b - a);
     }
+    if (celeris.facture > 0) map["Ventes Céleris (avant la bascule)"] = celeris.facture;
     return Object.entries(map).sort(([, a], [, b]) => b - a);
-  }, [yearPayments]);
+  }, [yearPayments, celeris]);
 
   const caTotal = caParMois.reduce((s, v) => s + v, 0);
 
@@ -440,7 +457,7 @@ export default function StatistiquesPage() {
   // ─── Styles ───
   // ═══ CALCULS FINANCES ═══
   const fin = useMemo(() => {
-    const caFacture = yearPayments.reduce((s, p: any) => s + safeNumber(p.totalTTC), 0);
+    const caFacture = yearPayments.reduce((s, p: any) => s + safeNumber(p.totalTTC), 0) + celeris.facture;
     const resteAEncaisser = yearPayments.reduce((s, p: any) => {
       if (p.isFree) return s;
       const du = safeNumber(p.totalTTC) - safeNumber(p.paidAmount);
@@ -461,9 +478,10 @@ export default function StatistiquesPage() {
       const d = toDate(e.date) || (e.dateIso ? new Date(e.dateIso) : null);
       return d && d.getFullYear() === year;
     });
-    const totalEncaisse = yearEnc.reduce((s, e: any) => s + safeNumber(e.montant), 0);
+    const totalEncaisse = yearEnc.reduce((s, e: any) => s + safeNumber(e.montant), 0) + celeris.encaisse;
     const parMode: Record<string, number> = {};
     yearEnc.forEach((e: any) => { const k = e.mode || "autre"; parMode[k] = (parMode[k] || 0) + safeNumber(e.montant); });
+    for (const [k, v] of Object.entries(celeris.parMode)) parMode[k] = (parMode[k] || 0) + v;
     // CA année précédente
     const caN1 = payments.filter((p: any) => {
       if (p.status === "cancelled") return false;
@@ -471,7 +489,7 @@ export default function StatistiquesPage() {
       return d && d.getFullYear() === year - 1;
     }).reduce((s, p: any) => s + safeNumber(p.totalTTC), 0);
     return { caFacture, resteAEncaisser, ht55, tva55, ht20, tva20, htAutre, tvaAutre, totalEncaisse, parMode, caN1 };
-  }, [yearPayments, encaissements, payments, year]);
+  }, [yearPayments, encaissements, payments, year, celeris]);
 
   // ═══ PRÉVISIONNEL DE TRÉSORERIE (6 prochains mois) ═══
   const previsionnel = useMemo(() => {
@@ -761,6 +779,7 @@ export default function StatistiquesPage() {
               value={fin.caN1 > 0 ? `${fin.caFacture >= fin.caN1 ? "+" : ""}${Math.round(((fin.caFacture - fin.caN1) / fin.caN1) * 100)}%` : "—"}
               accent={fin.caFacture >= fin.caN1 ? "green" : "rose"} />
           </div>
+          {noteCeleris && <p className="font-body text-xs text-slate-500 -mt-4 mb-6">Facturé et encaissé : {noteCeleris}. Le « reste à encaisser » ne porte que sur les commandes de l&apos;application.</p>}
 
           {/* Prévisionnel de trésorerie */}
           <Card padding="md" className="mb-6">

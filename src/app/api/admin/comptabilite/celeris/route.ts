@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { verifyAuth } from "@/lib/api-auth";
 import { analyserCeleris } from "@/lib/import-comptable-celeris";
+import { resumeCelerisMois } from "@/lib/celeris-stats";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +21,11 @@ export async function GET(req: NextRequest) {
       const doc = await collection().doc(mois).get();
       if (!doc.exists) return NextResponse.json({ error: "Mois absent" }, { status: 404 });
       return NextResponse.json({ lignes: doc.data()!.lignes }, { headers });
+    }
+    // ?resume=1 : ventes et règlements de chaque mois Céleris, pour les Statistiques.
+    if (req.nextUrl.searchParams.get("resume")) {
+      const tout = await collection().get();
+      return NextResponse.json({ resumes: tout.docs.map(d => resumeCelerisMois(String(d.data().mois || d.id), d.data().lignes || [])) }, { headers });
     }
     const snapshot = await collection().orderBy("mois", "desc").select("mois", "nom", "nombre", "totaux").get();
     return NextResponse.json({ imports: snapshot.docs.map(d => d.data()) }, { headers });
