@@ -163,7 +163,21 @@ export default function SuperPdpPage() {
       <section className="bg-white rounded-xl border border-gray-100 p-4">
         <h2 className="font-body text-sm font-bold text-slate-700 uppercase tracking-wide mb-2">Factures du club sur la plateforme</h2>
         {!factures ? <p className="font-body text-sm text-slate-500">—</p> : factures.length === 0 ? <p className="font-body text-sm text-slate-500">Aucune facture pour l&apos;instant.</p> : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Téléphone : une carte par facture (le tableau était coupé à gauche). */}
+            <div className="sm:hidden flex flex-col gap-2">
+              {factures.map(f => (
+                <div key={f.id} className="rounded-lg border border-gray-100 bg-sand p-3 font-body text-sm">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className={`font-semibold ${f.sens === "reçue" ? "text-purple-700" : "text-blue-700"}`}>{f.sens === "reçue" ? "Reçue" : "Envoyée"} · {f.date.split("-").reverse().join("/")}</span>
+                    <span className="font-bold text-blue-800 whitespace-nowrap">{eur(f.ttc)}</span>
+                  </div>
+                  <div className="text-slate-800 mt-0.5">{f.sens === "reçue" ? f.vendeur : f.acheteur}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">n° {f.numero} · {f.statut}</div>
+                </div>
+              ))}
+            </div>
+            <div className="hidden sm:block overflow-x-auto">
             <table className="w-full font-body text-sm">
               <thead><tr className="text-left text-slate-500 text-xs"><th className="py-1 pr-3">Sens</th><th className="pr-3">N°</th><th className="pr-3">Date</th><th className="pr-3">Vendeur</th><th className="pr-3">Acheteur</th><th className="pr-3 text-right">TTC</th><th>Statut</th></tr></thead>
               <tbody>{factures.map(f => (
@@ -175,6 +189,7 @@ export default function SuperPdpPage() {
               ))}</tbody>
             </table>
           </div>
+          </>
         )}
       </section>
     </div>
