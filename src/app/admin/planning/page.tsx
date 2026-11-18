@@ -3,7 +3,7 @@ import { champsEditionSurDemande, nettoyerFormules } from "@/lib/creneau-sur-dem
 import { useState, useEffect, useMemo } from "react";
 import { toLocalDateString } from "@/lib/date-local";
 import { estPerimee } from "@/lib/waitlist-cleanup";
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, where, serverTimestamp, arrayUnion } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAgentContext } from "@/hooks/useAgentContext";
 import { duplicateWeekCreneaux } from "@/lib/planning-services";
@@ -29,6 +29,7 @@ import SimpleCreneauForm from "./SimpleCreneauForm";
 import RdvModal, { RDV_CATEGORIES } from "./RdvModal";
 import DeleteCreneauModal from "./DeleteCreneauModal";
 import { libellePassages, nettoyerPrixPassages, offrePassages, passagesDuCavalier, prixMinimumPassages, resumePassages } from "@/lib/tarifs-passages";
+import { majForfaitsChangementHoraire } from "@/lib/forfaits";
 import EditCreneauModal from "./EditCreneauModal";
 import DuplicateCreneauModal from "./DuplicateCreneauModal";
 import MareesBandeau from "@/components/MareesBandeau";
@@ -724,7 +725,23 @@ export default function PlanningPage() {
           await updateDoc(doc(db, "creneaux", t.id), update);
         }
         updatedCount = targets.length;
-        toast(`✅ ${targets.length} créneaux mis à jour`, "success");
+        // Cours annuel déplacé : les fiches forfait suivent le nouvel horaire
+        // (l'ancienne référence reste connue pour les commandes déjà faites).
+        let fichesMaj = 0;
+        try {
+          const jour = new Date(editCreneau.date + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long" });
+          const fSnap = await getDocs(query(collection(db, "forfaits"), where("activityTitle", "==", editCreneau.activityTitle)));
+          const majs = majForfaitsChangementHoraire(
+            fSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) })),
+            { activityTitle: editCreneau.activityTitle, jour, startTime: editCreneau.startTime },
+            { activityTitle: editForm.activityTitle, startTime: editForm.startTime, endTime: editForm.endTime },
+          );
+          for (const m of majs) {
+            await updateDoc(doc(db, "forfaits", m.id), { ...m.patch, ...(m.ancienneRef ? { slotKeysAnterieurs: arrayUnion(m.ancienneRef) } : {}), updatedAt: serverTimestamp() });
+          }
+          fichesMaj = majs.length;
+        } catch (e) { console.error("Mise à jour des forfaits après changement d'horaire :", e); }
+        toast(`✅ ${targets.length} créneaux mis à jour${fichesMaj ? ` · ${fichesMaj} forfait${fichesMaj > 1 ? "s" : ""} passé${fichesMaj > 1 ? "s" : ""} au nouvel horaire` : ""}`, "success");
       } else {
         await updateDoc(doc(db, "creneaux", editCreneau.id), update);
         toast("✅ Créneau mis à jour", "success");

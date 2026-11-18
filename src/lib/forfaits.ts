@@ -215,3 +215,27 @@ export function refsOrphelinesDuCavalier(paiements: any[], forfaits: ForfaitRegl
   }
   return [...refs];
 }
+
+/**
+ * Cours annuel déplacé (planning → « appliquer à tous les créneaux ») : les
+ * fiches forfait de ce cours prennent le nouvel horaire. Sans cela elles
+ * gardaient l'ancien (« samedi 17:00 » pour un cours passé à 14 h 30,
+ * 11/2026) : créneau principal plus reconnu sur la fiche, arrêt médical sans
+ * séance trouvée. L'ancienne référence rejoint `slotKeysAnterieurs` : les
+ * commandes facturées sous l'ancien horaire restent rattachées.
+ */
+export function majForfaitsChangementHoraire<F extends { id: string; activityTitle?: string; dayLabel?: string; startTime?: string; slotKey?: string; status?: string }>(
+  forfaits: F[],
+  ancien: { activityTitle: string; jour: string; startTime: string },
+  nouveau: { activityTitle: string; startTime: string; endTime: string },
+): { id: string; patch: { activityTitle: string; startTime: string; endTime: string; slotKey: string }; ancienneRef: string | null }[] {
+  if (ancien.startTime === nouveau.startTime && ancien.activityTitle === nouveau.activityTitle) return [];
+  const jour = ancien.jour.toLowerCase();
+  return forfaits
+    .filter((f) => f.status !== "cancelled" && f.activityTitle === ancien.activityTitle && f.startTime === ancien.startTime && String(f.dayLabel || "").toLowerCase() === jour)
+    .map((f) => ({
+      id: f.id,
+      patch: { activityTitle: nouveau.activityTitle, startTime: nouveau.startTime, endTime: nouveau.endTime, slotKey: `${nouveau.activityTitle} — ${jour} ${nouveau.startTime}` },
+      ancienneRef: f.slotKey || null,
+    }));
+}
