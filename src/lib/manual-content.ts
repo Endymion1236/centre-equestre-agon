@@ -327,6 +327,7 @@ export const MANUAL: ManualChapter[] = [
         text: `
           <p>Onglet <strong>Travail des poneys</strong> : après avoir travaillé un poney, touche <strong>🎤 Dicter</strong> et dis le jour, le poney, qui l'a travaillé et ce qui a été fait (« Aujourd'hui j'ai longé Caramel vingt minutes, Léa a monté Pistache à l'obstacle »). « J'ai » = la personne connectée.</p>
           <p>L'application propose une ligne par poney : vérifie (poney, travaillé par — obligatoire —, type, durée, remarques) puis <strong>Enregistrer</strong>. La grille de la semaine se remplit ; <strong>Imprimer la feuille</strong> donne la feuille A4 de la semaine.</p>
+          <p><strong>Bilan du mois</strong> (en bas de l'onglet) : choisis le mois puis « Voir le bilan ». Tu obtiens, par poney, le nombre de séances, la durée, qui l'a travaillé, puis les <strong>points travaillés</strong> et les <strong>points à retravailler</strong> rédigés par l'IA à partir des remarques dictées. Le 1er de chaque mois, le bilan du mois écoulé arrive aussi par email.</p>
         `,
         href: "/admin/cavalerie",
       },

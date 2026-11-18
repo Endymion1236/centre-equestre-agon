@@ -5,6 +5,7 @@
  *   POST { action: "dicter", texte }              → { seances, remarques } (rien n'est écrit)
  *   POST { action: "enregistrer", seances: [...] } → { ok, ids }
  *   POST { action: "supprimer", id }              → { ok }
+ *   POST { action: "bilan", mois, regenerer? }    → { bilan } (chiffres + analyse IA du mois)
  *
  * Collection `travail-equides` (pas une pièce comptable). Staff : admin ou
  * moniteur. Écritures par le serveur : aucune règle Firestore à déployer.
@@ -16,10 +17,11 @@ import { verifyAuth } from "@/lib/api-auth";
 import { adminDb } from "@/lib/firebase-admin";
 import { MODELE_LEGER, texteReponse } from "@/lib/ia-modeles";
 import { toParisDateString } from "@/lib/date-local";
+import { genererBilanTravail, lireBilanTravail } from "@/lib/travail-bilan-serveur";
 import { consigneDicteeTravail, lireDicteeTravail, seanceValide, TYPES_TRAVAIL } from "@/lib/travail-equides";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 const COLLECTION = "travail-equides";
 const JOUR = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -78,6 +80,13 @@ export async function POST(req: NextRequest) {
       }
       await batch.commit();
       return NextResponse.json({ ok: true, ids });
+    }
+    // Bilan du mois : relu s'il existe, (re)calculé sur demande.
+    if (body.action === "bilan") {
+      const mois = String(body.mois || "");
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mois)) return NextResponse.json({ error: "Mois invalide" }, { status: 400 });
+      const existant = body.regenerer ? null : await lireBilanTravail(mois);
+      return NextResponse.json({ bilan: existant || await genererBilanTravail(mois, (auth as any).email || (auth as any).uid || "staff") });
     }
     if (body.action === "supprimer") {
       const id = String(body.id || "");

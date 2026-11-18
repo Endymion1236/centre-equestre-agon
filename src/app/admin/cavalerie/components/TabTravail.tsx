@@ -13,6 +13,7 @@ import {
   TYPES_TRAVAIL, grilleSemaine, htmlFeuilleTravail, isoJour, joursSemaine, lundiDe, seanceValide, typeTravail,
   type SeanceProposee, type SeanceTravail,
 } from "@/lib/travail-equides";
+import { htmlBilanTravail, moisPrecedent, nomMois, type AnalyseBilan, type StatsMois } from "@/lib/travail-bilan";
 import type { Equide } from "../types";
 import { useAuth } from "@/lib/auth-context";
 
@@ -110,6 +111,29 @@ export default function TabTravail({ equides }: { equides: Equide[] }) {
     if (!s.id || !confirm(`Supprimer la séance de ${s.equideNom} du ${jourCourt(s.date)} ?`)) return;
     await authFetch("/api/admin/travail-equides", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "supprimer", id: s.id }) });
     void charger();
+  };
+
+  // ── Bilan du mois : chiffres + analyse IA (points travaillés, à retravailler) ──
+  // Les cinq premiers jours du mois, on propose d'abord le mois qui vient de finir.
+  const [moisBilan, setMoisBilan] = useState(() => { const j = aujourdhui(); return Number(j.slice(8)) <= 5 ? moisPrecedent(j.slice(0, 7)) : j.slice(0, 7); });
+  const [bilan, setBilan] = useState<{ mois: string; stats: StatsMois; analyse: AnalyseBilan | null; erreurIa?: string; genereLe?: string } | null>(null);
+  const [bilanEnCours, setBilanEnCours] = useState(false);
+  const [messageBilan, setMessageBilan] = useState("");
+  const chargerBilan = async (regenerer: boolean) => {
+    setBilanEnCours(true); setMessageBilan("");
+    try {
+      const res = await authFetch("/api/admin/travail-equides", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "bilan", mois: moisBilan, regenerer }) });
+      const r = await res.json();
+      if (!res.ok) setMessageBilan(`❌ ${r.error || "Bilan impossible"}`); else setBilan(r.bilan);
+    } catch (e: any) { setMessageBilan(`❌ ${e?.message || "Erreur"}`); }
+    setBilanEnCours(false);
+  };
+  const imprimerBilan = () => {
+    if (!bilan) return;
+    const w = window.open("", "_blank");
+    if (!w) return;
+    w.document.write(htmlBilanTravail(bilan.stats, bilan.analyse, CLUB_DEFAUTS.nom, true));
+    w.document.close();
   };
 
   const grille = grilleSemaine(seances, actifs, lundi);
@@ -237,6 +261,37 @@ export default function TabTravail({ equides }: { equides: Equide[] }) {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col gap-3">
+        <div className="font-body text-sm font-semibold text-blue-800">Bilan du mois — points travaillés et à retravailler</div>
+        <p className="font-body text-xs text-slate-500">Les chiffres viennent des séances notées ; la synthèse est rédigée par l&apos;IA à partir des remarques des moniteurs. Le 1er de chaque mois, le bilan du mois écoulé vous est envoyé par email.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <input type="month" value={moisBilan} onChange={(e) => { setMoisBilan(e.target.value); setBilan(null); }} className={`${champ} w-auto`} />
+          <button type="button" onClick={() => void chargerBilan(false)} disabled={bilanEnCours || !moisBilan}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-500 text-white font-body text-sm font-semibold border-none cursor-pointer disabled:opacity-50">
+            {bilanEnCours ? <Loader2 size={14} className="animate-spin" /> : null} {bilanEnCours ? "Analyse en cours (jusqu'à 1 min)…" : "Voir le bilan"}
+          </button>
+          {bilan && bilan.mois === moisBilan && (
+            <>
+              <button type="button" onClick={() => void chargerBilan(true)} disabled={bilanEnCours} className="px-3 py-2 rounded-lg bg-white text-blue-700 border border-blue-200 font-body text-sm cursor-pointer disabled:opacity-50">Recalculer</button>
+              <button type="button" onClick={imprimerBilan} className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-800 text-white font-body text-sm border-none cursor-pointer"><Printer size={14} /> Imprimer</button>
+            </>
+          )}
+        </div>
+        {messageBilan && <p className="font-body text-sm">{messageBilan}</p>}
+        {bilan && bilan.mois === moisBilan && (
+          bilan.stats.nbSeances === 0 ? (
+            <p className="font-body text-sm text-slate-500">Aucune séance notée en {nomMois(moisBilan)}.</p>
+          ) : (
+            <>
+              {bilan.erreurIa && <p className="font-body text-xs text-amber-800">⚠️ {bilan.erreurIa}</p>}
+              {/* HTML construit par lib/travail-bilan (textes échappés). */}
+              <div dangerouslySetInnerHTML={{ __html: htmlBilanTravail(bilan.stats, bilan.analyse, CLUB_DEFAUTS.nom) }} />
+              {bilan.genereLe && <p className="font-body text-[11px] text-slate-400">Calculé le {new Date(bilan.genereLe).toLocaleString("fr-FR")}. « Recalculer » reprend les séances ajoutées depuis.</p>}
+            </>
+          )
         )}
       </div>
     </div>

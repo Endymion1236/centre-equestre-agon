@@ -75,6 +75,10 @@
     {
       "path": "/api/cron/superpdp-reception",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/travail-poneys-bilan",
+      "schedule": "0 6 1 * *"
     }
   ]
 }
