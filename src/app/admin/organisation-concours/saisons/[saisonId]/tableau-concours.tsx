@@ -5,7 +5,7 @@ import { AlertOctagon, AlertTriangle, CheckCircle2, Printer } from "lucide-react
 import type { ResultatConcours, SaisonPonyGames } from "@/lib/concours/saisons";
 import {
   DUREE_ECHAUFFEMENT_MIN, DUREE_PREPA_MIN, PLACEURS_MAX,
-  candidatsRole, estPersonne, htmlTableau, lignesTableau, nomCavalier, PERSONNE, plageLisible, poserPlaceur, poserPreparateur, poserRole, verifierTableau,
+  candidatsRole, coachTientRemplacant, estPersonne, htmlTableau, lignesTableau, nomCavalier, PERSONNE, plageLisible, poserCavalierRemplacant, poserPlaceur, poserPreparateur, poserRole, verifierTableau,
   type Candidat, type LigneTableau,
 } from "@/lib/concours/saison-tableau";
 
@@ -56,7 +56,7 @@ function ChoixPersonne({
       {!connu && <option value={valeur}>{libelle(valeur!)}</option>}
       {disponibles.length > 0 && (
         <optgroup label={`Disponibles (${disponibles.length})`}>
-          {disponibles.map((c) => <option key={valeurDe(c)} value={valeurDe(c)}>{c.nom} ({c.taches})</option>)}
+          {disponibles.map((c) => <option key={valeurDe(c)} value={valeurDe(c)}>{c.prevu ? "★ " : ""}{c.nom} ({c.taches}){c.prevu ? " — prévu" : ""}</option>)}
         </optgroup>
       )}
       {occupes.length > 0 && (
@@ -127,11 +127,15 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
             <ChoixPersonne valeur={l.roles.cavalierRemplacant} libre={false} vide="— cavalier du remplaçant —"
               candidats={candidatsRole(saison, concours, l.equipeId, "cavalierRemplacant").filter((c) => c.cavalierId)}
               valeurDe={(c) => c.cavalierId!} libelle={(id) => nomCavalier(saison, id)}
-              onChange={(v) => changer((c) => poserRole(c, l.equipeId, "cavalierRemplacant", v))} />
+              onChange={(v) => changer((c) => poserCavalierRemplacant(saison, c, l.equipeId, v))} />
+            {l.cavaliers.length === 4 && <div className="text-[11px] text-gray-500 whitespace-normal mt-0.5">Équipe de 4 : il fait facteur, le coach tient le remplaçant pendant le jeu.</div>}
           </div>
         )}
       </td>
-      <td className={td}>{deuxNoms("coach", "— coach —", "— 2e coach —")}</td>
+      <td className={td}>
+        {deuxNoms("coach", "— coach —", "— 2e coach —")}
+        {coachTientRemplacant(saison, l) && <div className="text-[11px] text-pink-700 mt-0.5">Tient le poney remplaçant ({l.remplacant}) pendant le jeu</div>}
+      </td>
       <td className={td}>
         <div className="text-xs font-semibold text-gray-600 mb-1 whitespace-nowrap">{plageLisible(l.prepa)}</div>
         {parNom("respPrepa", "— responsable —")}
@@ -149,7 +153,11 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
         ))}
       </td>
       <td className={td}>{parNom("juge", "— juge —")}</td>
-      <td className={td}>{parNom("facteur", "— facteur —")}</td>
+      <td className={td}>
+        {parNom("facteur", "— facteur —")}
+        {l.cavaliers.length >= 5 && <div className="text-[11px] text-gray-500 mt-0.5">Un des 5 cavaliers (★)</div>}
+        {l.cavaliers.length === 4 && <div className="text-[11px] text-gray-500 mt-0.5">Le cavalier du remplaçant (★)</div>}
+      </td>
     </tr>
   );
 }

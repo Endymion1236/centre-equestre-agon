@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import {
   lignesTableau, plageLisible, poserRole, poserPlaceur, verifierTableau, clePersonne, htmlTableau, candidatsRole, estPersonne, compterTaches, poserPreparateur, colonnesImpression,
+  regleFacteur, poserCavalierRemplacant, coachTientRemplacant,
 } from "../../src/lib/concours/saison-tableau";
 import { engagerEquipes, poserDuree, poserPoney, poserRemplacant } from "../../src/lib/concours/saison-organisation";
 import { retirerCavalier, type SaisonPonyGames, type ResultatConcours } from "../../src/lib/concours/saisons";
@@ -550,6 +551,50 @@ test("la page imprimable reprend tout, échappe le texte", () => {
   assert.match(htmlTableau(s, { ...complet(s), lieu: "Carrière" }), /Pieux — 15 novembre 2026 — Carrière/);
   assert.match(html, /&lt;Papa &amp; co&gt;/);
   assert.ok(!html.includes("<Papa"));
+});
+
+console.log("\n── Facteur : règle du club ──");
+
+test("équipe de 4 avec remplaçant : le cavalier du remplaçant fait facteur, le coach tient le PR", () => {
+  const s = { ...saison(), cavaliers: [...saison().cavaliers, { id: "ana", prenom: "Ana" }] };
+  let r = poserRemplacant(complet(s), "eq", "Pompon");
+  // Facteur « Léa B » posé avant : pas conforme une fois le remplaçant prévu.
+  r = poserRole(r, "eq", "cavalierRemplacant", "ana");
+  assert.ok(verifierTableau(s, r).some((a) => a.message.includes("c'est le cavalier du poney remplaçant (Ana) qui fait facteur")));
+  // Choisir le cavalier du remplaçant remplit le facteur s'il est vide.
+  let r2 = poserRole(poserRemplacant(complet(s), "eq", "Pompon"), "eq", "facteur", "");
+  r2 = poserCavalierRemplacant(s, r2, "eq", "ana");
+  const l = lignesTableau(s, r2).find((x) => x.equipeId === "eq")!;
+  assert.equal(l.roles.facteur, "Ana");
+  assert.deepEqual(regleFacteur(l), { regle: "remplacant4", id: "ana" });
+  assert.ok(coachTientRemplacant(s, l));
+  // Ana facteur pendant le jeu n'est pas « au remplaçant » en même temps : aucune erreur.
+  assert.deepEqual(verifierTableau(s, r2).filter((a) => a.gravite === "erreur"), []);
+  // Dans le menu facteur, Ana est libre et prévue, en tête.
+  const c = candidatsRole(s, r2, "eq", "facteur");
+  assert.equal(c[0].nom, "Ana");
+  assert.ok(c[0].prevu && !c[0].occupe);
+  // Changer de cavalier du remplaçant fait suivre le facteur.
+  const r3 = poserCavalierRemplacant(s, r2, "eq", "lea1");
+  assert.equal(lignesTableau(s, r3).find((x) => x.equipeId === "eq")!.roles.facteur, "Léa A");
+  assert.match(htmlTableau(s, r2), /tient le PR/);
+  // Sans poney remplaçant prévu, pas de règle.
+  assert.equal(regleFacteur(lignesTableau(s, complet(s)).find((x) => x.equipeId === "eq")!), null);
+});
+
+test("équipe de 5 : le facteur est un des cinq, sans conflit avec son jeu", () => {
+  const base = saison();
+  const s = { ...base, cavaliers: [...base.cavaliers, { id: "ana", prenom: "Ana" }],
+    equipes: base.equipes.map((e) => (e.id === "eq" ? { ...e, cavalierIds: [...e.cavalierIds, "ana"] } : e)) };
+  let r = complet(s);
+  assert.ok(verifierTableau(s, r).some((a) => a.message === "Les Fusées (équipe de 5) : le facteur doit être un des 5 cavaliers de l'équipe."));
+  const c = candidatsRole(s, r, "eq", "facteur");
+  const ana = c.find((x) => x.nom === "Ana")!;
+  assert.ok(ana.prevu && !ana.occupe, "un des cinq : proposé et libre");
+  assert.ok(c.find((x) => x.nom === "Lou")!.occupe, "Lou (Duo) est en échauffement pendant ce passage : reste occupé");
+  r = poserRole(r, "eq", "facteur", "Ana");
+  assert.deepEqual(verifierTableau(s, r).filter((a) => a.message.includes("facteur")), []);
+  assert.deepEqual(verifierTableau(s, r).filter((a) => a.gravite === "erreur"), []);
 });
 
 console.log(process.exitCode ? "\n❌ des tests ont échoué" : `\n✅ ${passes} tests passés`);

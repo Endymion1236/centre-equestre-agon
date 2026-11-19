@@ -136,6 +136,58 @@ export function lignesTableau(s: SaisonPonyGames, r: ResultatConcours): LigneTab
   return lignes;
 }
 
+// ─── Facteur : règle du club (novembre 2026) ───────────────────────────────
+
+/**
+ * Qui doit faire facteur pour une équipe :
+ *   - équipe de 5 : un des 5 cavaliers de l'équipe ;
+ *   - équipe de 4 : le cavalier du poney remplaçant ; pendant le jeu, c'est
+ *     alors le coach qui tient le poney remplaçant.
+ * `null` pour une paire, une équipe de 3, ou une équipe de 4 sans poney
+ * remplaçant prévu : n'importe qui.
+ */
+export function regleFacteur(l: LigneTableau): { regle: "equipe5"; ids: string[] } | { regle: "remplacant4"; id?: string } | null {
+  if (l.cavaliers.length >= 5) return { regle: "equipe5", ids: l.cavaliers.map((c) => c.id) };
+  // Équipe de 4 avec un poney remplaçant prévu (sans remplaçant, la règle ne s'applique pas).
+  if (l.cavaliers.length === 4 && l.remplacant) {
+    const id = l.roles.cavalierRemplacant;
+    return { regle: "remplacant4", ...(id && !estPersonne(id) ? { id } : {}) };
+  }
+  return null;
+}
+
+/** Le facteur désigné respecte-t-il la règle ? (vide = pas encore désigné) */
+function facteurConforme(s: SaisonPonyGames, l: LigneTableau): boolean | null {
+  const f = l.roles.facteur;
+  const regle = regleFacteur(l);
+  if (!regle || !f?.trim() || estPersonne(f)) return null;
+  const cle = clePersonne(s, f);
+  if (regle.regle === "equipe5") return regle.ids.some((id) => cleCavalier(s, id) === cle);
+  return !!regle.id && cleCavalier(s, regle.id) === cle;
+}
+
+/** Équipe de 4 où le cavalier du remplaçant fait facteur : le coach tient le poney remplaçant pendant le jeu. */
+export function coachTientRemplacant(s: SaisonPonyGames, l: LigneTableau): boolean {
+  return regleFacteur(l)?.regle === "remplacant4" && !!l.remplacant && facteurConforme(s, l) === true;
+}
+
+/**
+ * Choisit le cavalier du poney remplaçant ; dans une équipe de 4, il devient
+ * aussi le facteur (si la case était vide ou tenue par l'ancien cavalier du remplaçant).
+ */
+export function poserCavalierRemplacant(s: SaisonPonyGames, r: ResultatConcours, equipeId: string, cavalierId: string): ResultatConcours {
+  const l = lignesTableau(s, r).find((x) => x.equipeId === equipeId);
+  let suite = poserRole(r, equipeId, "cavalierRemplacant", cavalierId);
+  if (!l || l.cavaliers.length !== 4) return suite;
+  const ancien = l.roles.cavalierRemplacant;
+  const facteur = l.roles.facteur;
+  const suivaitAncien = !!ancien && !!facteur && !estPersonne(ancien) && clePersonne(s, facteur) === cleCavalier(s, ancien);
+  if (!facteur?.trim() || suivaitAncien) {
+    suite = poserRole(suite, equipeId, "facteur", cavalierId && !estPersonne(cavalierId) ? nomCavalier(s, cavalierId) : "");
+  }
+  return suite;
+}
+
 // ─── Saisie des rôles ──────────────────────────────────────────────────────
 
 type RoleTexte = "respPrepa" | "respEchauffement" | "respEchauffement2" | "juge" | "facteur" | "coach" | "coach2" | "cavalierRemplacant";
@@ -262,16 +314,23 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
     // Le cavalier du poney remplaçant suit l'équipe : préparation, échauffement et toute la session.
     // Compté seulement si un poney remplaçant est prévu.
     const remp = l.roles.cavalierRemplacant;
+    const conforme = facteurConforme(s, l) === true;
     if (l.remplacant && remp && !estPersonne(remp) && l.prepa && l.echauffement) {
       const base = { cle: cleCavalier(s, remp), qui: nomCavalier(s, remp), genre: `remplacant:${l.equipeId}` };
       occ.push({ ...base, quoi: `en préparation du remplaçant de ${l.equipe}`, plage: l.prepa });
       occ.push({ ...base, quoi: `en échauffement du remplaçant de ${l.equipe}`, plage: l.echauffement });
-      occ.push({ ...base, quoi: `au poney remplaçant de ${l.equipe}`, plage: l.passage });
+      // Équipe de 4 : pendant le jeu il fait facteur, le coach tient le poney remplaçant.
+      if (!(conforme && regleFacteur(l)?.regle === "remplacant4")) {
+        occ.push({ ...base, quoi: `au poney remplaçant de ${l.equipe}`, plage: l.passage });
+      }
     }
     parNom(l.roles.coach, `coach de ${l.equipe}`, `coach:${l.equipeId}`, l.passage);
     parNom(l.roles.coach2, `coach de ${l.equipe}`, `coach:${l.equipeId}`, l.passage);
     parNom(l.roles.juge, `juge pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
-    parNom(l.roles.facteur, `facteur pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
+    // Équipe de 5 : le facteur est un des cinq, déjà compté avec son équipe pendant le jeu.
+    if (!(conforme && regleFacteur(l)?.regle === "equipe5")) {
+      parNom(l.roles.facteur, `facteur pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
+    }
     parNom(l.roles.respPrepa, `responsable prépa de ${l.equipe}`, "prepa", l.prepa);
     parNom(l.roles.respEchauffement, `responsable échauffement de ${l.equipe}`, "echauffement", l.echauffement);
     parNom(l.roles.respEchauffement2, `responsable échauffement de ${l.equipe}`, "echauffement", l.echauffement);
@@ -293,6 +352,16 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
     if (!l.roles.facteur?.trim()) manque.push("facteur");
     if (!l.roles.coach?.trim() && !l.roles.coach2?.trim()) manque.push("coach");
     if (manque.length) out.push({ gravite: "alerte", message: `${l.equipe} : ${manque.join(", ")} à désigner.` });
+    const regle = regleFacteur(l);
+    if (regle && facteurConforme(s, l) === false) {
+      out.push({ gravite: "alerte", message: regle.regle === "equipe5"
+        ? `${l.equipe} (équipe de 5) : le facteur doit être un des 5 cavaliers de l'équipe.`
+        : regle.id
+          ? `${l.equipe} (équipe de 4) : c'est le cavalier du poney remplaçant (${nomCavalier(s, regle.id)}) qui fait facteur ; le coach tient alors le remplaçant pendant le jeu.`
+          : `${l.equipe} (équipe de 4) : le facteur est le cavalier du poney remplaçant — désignez-le.` });
+    } else if (regle?.regle === "remplacant4" && !regle.id && l.remplacant && !l.roles.facteur?.trim()) {
+      out.push({ gravite: "alerte", message: `${l.equipe} (équipe de 4) : désignez le cavalier du poney remplaçant, il fera facteur.` });
+    }
     for (const c of l.cavaliers) {
       if (!c.enchaineAvec || c.preparateur) continue;
       const poney = c.poney ? `son poney (${c.poney})` : "son poney";
@@ -335,6 +404,8 @@ export interface Candidat {
   occupe?: string;
   /** Tâches déjà confiées dans ce concours (hors préparation, échauffement et jeu avec son équipe). */
   taches: number;
+  /** Prévu par la règle du club pour ce rôle (facteur : un des 5, ou le cavalier du remplaçant). */
+  prevu?: boolean;
 }
 
 /**
@@ -402,13 +473,21 @@ export function candidatsRole(
   for (const o of occ) if (!personnes.has(o.cle)) personnes.set(o.cle, { nom: o.qui });
 
   const taches = compterTaches(s, r);
+  // Facteur : les personnes prévues par la règle du club passent en tête, et
+  // leur place dans l'équipe (ou au poney remplaçant) ne compte pas comme une gêne.
+  const regle = role === "facteur" && l ? regleFacteur(l) : null;
+  const prevus = new Set<string>(
+    !regle ? [] : regle.regle === "equipe5" ? regle.ids.map((id) => cleCavalier(s, id)) : regle.id ? [cleCavalier(s, regle.id)] : [],
+  );
+  const genresCompatibles = new Set<string>(!regle ? [] : regle.regle === "equipe5" ? [`cheval:${equipeId}`] : [`remplacant:${equipeId}`]);
   const out = [...personnes.entries()].map(([cle, sansTaches]): Candidat => {
-    const cand = { ...sansTaches, taches: taches.get(cle) ?? 0 };
-    const gene = plage && occ.find((o) => o.cle === cle && o.genre !== genre && chevauche(o.plage, plage));
+    const cand = { ...sansTaches, taches: taches.get(cle) ?? 0, ...(prevus.has(cle) ? { prevu: true } : {}) };
+    const gene = plage && occ.find((o) => o.cle === cle && o.genre !== genre
+      && !(prevus.has(cle) && genresCompatibles.has(o.genre)) && chevauche(o.plage, plage));
     if (gene) return { ...cand, occupe: `${gene.quoi} (${plageLisible(gene.plage)})` };
     return sansHoraire.has(cle) ? { ...cand, occupe: sansHoraire.get(cle) } : cand;
   });
-  return out.sort((a, b) => Number(!!a.occupe) - Number(!!b.occupe) || a.nom.localeCompare(b.nom, "fr"));
+  return out.sort((a, b) => Number(!!a.occupe) - Number(!!b.occupe) || Number(!!b.prevu) - Number(!!a.prevu) || a.nom.localeCompare(b.nom, "fr"));
 }
 
 // ─── Impression ────────────────────────────────────────────────────────────
@@ -469,7 +548,7 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
       poneys: `<div class="pile">${rangs.map((x) => pastille(x.poney)).join("")}</div>`,
       prepa: caseHeure(heureCourte(l.prepa?.debut), noms(l.roles.respPrepa), prepares),
       cheval: caseHeure(heureCourte(l.echauffement?.debut), noms(l.roles.respEchauffement, l.roles.respEchauffement2)),
-      passage: caseHeure(heureCourte(l.passage?.debut), noms(l.roles.coach, l.roles.coach2)),
+      passage: caseHeure(heureCourte(l.passage?.debut), noms(l.roles.coach, l.roles.coach2), coachTientRemplacant(s, l) ? '<span class="note">tient le PR</span>' : ""),
       placeur: `<div class="pile">${placeurs.join("")}</div>`,
       juge: grande(nom(l.roles.juge)),
       facteur: grande(nom(l.roles.facteur)),
