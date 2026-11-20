@@ -23,6 +23,8 @@ export interface PieceMois {
   paieValidee: boolean; modeRattachement: string | null; paiementsAssocies: { id: string; montant: number }[];
   associationDevise?: { deviseFacture: string; montantFacture: number; montantDebiteEUR: number } | null;
   associationEcart?: { type: string; taux: number; montant: number } | null;
+  /** Virement trop élevé par erreur : surplus attendu en remboursement (tableau-depenses, tropPayePossible). */
+  associationTropPaye?: { montant: number } | null;
   mime?: string;
   /** Avoir fournisseur joint à un crédit du relevé (lib/avoir-fournisseur). */
   avoirFournisseur?: RattachementAvoir | null;
@@ -42,7 +44,7 @@ export async function chargerLignesMois(mois: string): Promise<{ lignes: (LigneM
     const p = d.data();
     return { id: d.id, nom: p.nom, retire: !!p.retire, extraction: p.extraction || null, depenseId: p.depenseId || null, paieValidee: !!p.paieValidee,
       modeRattachement: p.modeRattachement || null, paiementsAssocies: p.paiementsAssocies || [], associationDevise: p.associationDevise || null,
-      associationEcart: p.associationEcart || null, mime: p.mime, avoirFournisseur: p.avoirFournisseur || null };
+      associationEcart: p.associationEcart || null, associationTropPaye: p.associationTropPaye || null, mime: p.mime, avoirFournisseur: p.avoirFournisseur || null };
   });
   const archives = new Set(ars.docs.map(d => d.id));
   const lignes = new Map<string, Record<string, unknown>>();

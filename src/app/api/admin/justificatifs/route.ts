@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
           const ids: string[] = lien.exists ? (lien.data()?.pieceIds || [lien.data()?.pieceId]).filter(Boolean) : [];
           if (!ids.length) throw new Error("Aucun règlement groupé sur ce paiement.");
           for (const pid of ids) {
-            tx.update(adminDb.collection("justificatifs").doc(pid), { depenseId: null, modeRattachement: null, associationMode: null, associationEcart: null });
+            tx.update(adminDb.collection("justificatifs").doc(pid), { depenseId: null, modeRattachement: null, associationMode: null, associationEcart: null, associationTropPaye: null });
             tx.create(adminDb.collection("justificatifs").doc(pid).collection("historique").doc(), { action: "degrouper", avant: depenseId, apres: null, uid: auth.uid, at: FieldValue.serverTimestamp() });
           }
           tx.delete(lienRef);
@@ -177,7 +177,7 @@ export async function POST(req: NextRequest) {
         for (const id of pieceIds) {
           tx.update(adminDb.collection("justificatifs").doc(id), {
             depenseId, modeRattachement: "groupe", associationMode: "manuel", autoBloque: true,
-            associationDevise: null, operationAssociee: null, associationEcart,
+            associationDevise: null, operationAssociee: null, associationEcart, associationTropPaye: null,
           });
           tx.create(adminDb.collection("justificatifs").doc(id).collection("historique").doc(), {
             action: "grouper", avant: null, apres: depenseId, groupe: pieceIds, uid: auth.uid, at: FieldValue.serverTimestamp(),
@@ -355,7 +355,7 @@ export async function POST(req: NextRequest) {
         }
         if (ancien && ancien !== id) tx.delete(adminDb.collection("justificatifs-liens").doc(ancien));
         if (associer) tx.set(lock!, { pieceId: body.id });
-        tx.update(ref, { depenseId: associer ? id : null, associationMode: "manuel", autoBloque: true, associationDevise, operationAssociee: null });
+        tx.update(ref, { depenseId: associer ? id : null, associationMode: "manuel", autoBloque: true, associationDevise, operationAssociee: null, associationTropPaye: null });
         // Ce que le gérant vient d'établir et qu'aucune règle textuelle ne
         // pouvait deviner : « SAS CONSTELLACOM » édite les imprimés facturés
         // « Printoclock Toulouse », « Anthropic, PBC » se débite « Anthropic

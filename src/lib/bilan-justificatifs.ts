@@ -41,7 +41,7 @@ export interface LigneMois {
    * n'en attend qu'une ; le total de TVA, lui, les additionne.
    */
   piecesGroupe?: { extraction?: ExtractionMin | null }[];
-  piece?: { id?: string; nom?: string; retire?: boolean; modeRattachement?: string | null; paiementsAssocies?: { id: string; montant: number }[]; extraction?: ExtractionMin | null; associationDevise?: { deviseFacture: string; montantFacture: number; montantDebiteEUR: number } | null; associationEcart?: { type: string; taux: number; montant: number } | null } | null;
+  piece?: { id?: string; nom?: string; retire?: boolean; modeRattachement?: string | null; paiementsAssocies?: { id: string; montant: number }[]; extraction?: ExtractionMin | null; associationDevise?: { deviseFacture: string; montantFacture: number; montantDebiteEUR: number } | null; associationEcart?: { type: string; taux: number; montant: number } | null; associationTropPaye?: { montant: number } | null } | null;
 }
 
 const c = (n: number) => Math.round(n * 100) / 100;

@@ -121,9 +121,13 @@ export function casParticuliersAchats(lignes: LigneMois[]): CasParticulier[] {
           detail: `Payé ${eur(l.montant)} sur une facture de ${eur(ttc)} (${eur(-ecart / 100)} non réglés ce mois).`,
           tvaProposee: prorata(l.montant || 0), aTrancher: "Acompte, paiement partiel ou escompte non indiqué : TVA proposée au prorata du paiement." });
       } else if (ecart > 0) {
+        const erreur = !!p.associationTropPaye;
         out.push({ ...base, type: "superieur",
-          detail: `Payé ${eur(l.montant)} pour une facture de ${eur(ttc)} : ${eur(ecart / 100)} de plus.`,
-          tvaProposee: exclue || !tva ? null : c(tva), aTrancher: "Le surplus règle une facture antérieure, à réclamer au fournisseur (laissé au débit de son compte dans le FEC)." });
+          detail: erreur ? `Virement de ${eur(l.montant)} au lieu de ${eur(ttc)} (erreur de montant) : ${eur(ecart / 100)} versés en trop, remboursement demandé au fournisseur.`
+            : `Payé ${eur(l.montant)} pour une facture de ${eur(ttc)} : ${eur(ecart / 100)} de plus.`,
+          tvaProposee: exclue || !tva ? null : c(tva),
+          aTrancher: erreur ? "Trop-payé à récupérer : laissé au débit du compte du fournisseur dans le FEC, soldé par son remboursement."
+            : "Le surplus règle une facture antérieure, à réclamer au fournisseur (laissé au débit de son compte dans le FEC)." });
       }
     }
   }

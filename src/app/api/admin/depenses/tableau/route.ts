@@ -214,12 +214,13 @@ export async function POST(req: NextRequest) {
         const attendu = p.extraction.typeDocument === "paie" ? p.extraction.netAPayer : p.extraction.ttc;
         if (b.montantEUR !== d.data()!.montant || b.montantPiece !== attendu || b.devise !== p.extraction.devise) throw new Error("Montants modifiés : actualisez l’aperçu");
         if (d.data()!.source !== "releve-bancaire") throw new Error("Cette ligne est une saisie manuelle, pas un mouvement bancaire");
-        const association = verifierAssociationTableau(p.extraction, { ...d.data(), id: b.id } as DepenseCandidate);
+        const association = verifierAssociationTableau(p.extraction, { ...d.data(), id: b.id } as DepenseCandidate, b.tropPaye === true);
         tx.set(lr, { pieceId: b.pieceId });
         tx.update(pr, { depenseId: b.id, associationMode: "manuel", autoBloque: true,
           operationAssociee: { id: b.id, fournisseur: d.data()!.fournisseur || "", montant: d.data()!.montant, dateOperation: d.data()!.dateOperation || "", compte: d.data()!.compte || "" },
           associationDevise: association.nature === "devise" ? { deviseFacture: association.devisePiece, montantFacture: association.montantPiece, montantDebiteEUR: association.montantEUR } : null,
-          associationEcart: association.nature === "escompte" && "ecart" in association ? association.ecart : null });
+          associationEcart: association.nature === "escompte" && "ecart" in association ? association.ecart : null,
+          associationTropPaye: association.nature === "trop-paye" && "tropPaye" in association ? { montant: association.tropPaye } : null });
         tx.create(pr.collection("historique").doc(), { action: "associer-tableau", apres: b.id, ...association, uid: auth.uid, at: FieldValue.serverTimestamp() });
       } else throw new Error("Action inconnue");
       tx.create(adminDb.collection("tableau-depenses-historique").doc(), { action: b.action, id: b.id, ...(b.action === "compte-banque" ? { avantCompteBanque: d.data()!.compteBanqueConfirme || null, apresCompteBanque: b.compteBanqueConfirme } : {}), avantJustificatifReleve: !!d.data()!.justificatifReleve, apresJustificatifReleve: b.action === "justifier-releve" ? b.confirme : null, avantPiecePerdue: d.data()!.piecePerdue?.motif || null, apresPiecePerdue: b.action === "piece-perdue" ? (b.confirme ? String(b.motif).trim().slice(0, 300) : false) : null, avantTVA: d.data()!.statutTVA || "a-verifier", apresTVA: b.action === "tva" ? b.statutTVA : null, avantCategorie: d.data()!.poste || null, apresCategorie: b.poste || null, promueEnDepense: b.action === "categorie" && !ds.exists && (POSTES_DEPENSES.some(p => p.nom === b.poste) || b.poste === CATEGORIE_IMMOBILISATION), exclue: b.exclue ?? null, uid: auth.uid, at: FieldValue.serverTimestamp() });

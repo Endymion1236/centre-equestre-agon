@@ -321,7 +321,8 @@ export function construireAchatsBanque(params: {
       const montantAchat = ttcFacture && ttcFacture < montant ? ttcFacture : montant;
       // Lettrage seulement quand facture et règlement se soldent.
       const lettrage = montantAchat === montant ? { lettrage: codeLettrage(l.id), dateLettrage: date } : {};
-      if (montantAchat < montant) anomalies.push(`${fournisseurTexte} : ${euros(montant)} € payés pour une facture de ${euros(montantAchat)} € ; seule la facture est passée en achat. Les ${euros(montant - montantAchat)} € de plus règlent une facture antérieure : réclamez-la au fournisseur pour la comptabiliser (en attendant, au débit du compte ${fournisseur.compte}).`);
+      if (montantAchat < montant && l.piece?.associationTropPaye) anomalies.push(`${fournisseurTexte} : ${euros(montant)} € virés par erreur pour une facture de ${euros(montantAchat)} € ; seule la facture est passée en achat. Les ${euros(montant - montantAchat)} € versés en trop restent au débit du compte ${fournisseur.compte} jusqu'au remboursement du fournisseur (crédit classé « Remboursement fournisseur » dans le Rapprochement, qui solde ce compte).`);
+      else if (montantAchat < montant) anomalies.push(`${fournisseurTexte} : ${euros(montant)} € payés pour une facture de ${euros(montantAchat)} € ; seule la facture est passée en achat. Les ${euros(montant - montantAchat)} € de plus règlent une facture antérieure : réclamez-la au fournisseur pour la comptabiliser (en attendant, au débit du compte ${fournisseur.compte}).`);
       if (l.poste === "Repas à plusieurs (invités, 2 repas et plus)") anomalies.push(`${fournisseurTexte} (${euros(montant)} €) : repas à plusieurs, TVA déduite ; notez le nom des invités sur le justificatif.`);
       const tva = Math.min(cents(tvaJustifiee(l) ?? 0), montantAchat - 1);
       lignesHa.push(ligneFec({ journal: JOURNAL_ACHATS, numero, date: dateAchat, compte: imputation, piece, libelle, debit: montantAchat - Math.max(tva, 0) }));
@@ -392,7 +393,7 @@ export function construireAchatsBanque(params: {
         // Au compte du fournisseur, à lettrer avec l'achat et l'avoir.
         const f = compteFournisseur(c.label);
         lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: f.collectif ? COMPTE_FOURNISSEURS : { compte: f.compte, libelle: f.libelle }, piece, libelle: `Remboursement ${libelle}`, credit: net, ...tiersFournisseur(libelle, f) }));
-        anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : remboursement fournisseur, au compte ${f.collectif ? COMPTE_FOURNISSEURS.compte : f.compte} ; joignez son avoir dans le Rapprochement (« Joindre l'avoir ») pour annuler l'achat (charge et TVA), sinon transmettez-le à la comptable.`);
+        anomalies.push(`Crédit du ${jj} « ${libelle.slice(0, 60)} » (${euros(net)} €) : remboursement fournisseur, au compte ${f.collectif ? COMPTE_FOURNISSEURS.compte : f.compte} ; joignez son avoir dans le Rapprochement (« Joindre l'avoir ») pour annuler l'achat (charge et TVA), sinon transmettez-le à la comptable ; s'il rend un virement trop élevé fait par erreur (trop-payé noté dans Dépenses), il n'y a pas d'avoir : ce crédit solde le compte du fournisseur.`);
       }
       else lignesBq.push(ligneFec({ journal: JOURNAL_BANQUE, numero, date, compte: { compte: cp.compte, libelle: CONTREPARTIES_CREDIT.find((x) => x.compte === cp.compte)?.compteLib || cp.libelle }, piece, libelle, credit: net }));
       numero++; nbBq++;

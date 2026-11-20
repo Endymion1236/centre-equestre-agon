@@ -71,7 +71,22 @@ export function decisionCategorie(params: {
   return { decision: "promouvoir" };
 }
 
-export function verifierAssociationTableau(extraction: Record<string, unknown>, depense: DepenseCandidate) {
+/**
+ * Virement d'un montant supérieur à la facture PAR ERREUR (333,60 € versés
+ * pour une facture de 33,60 €, Nicolas 20/11/2026) : la facture justifie le
+ * débit, le surplus est un trop-payé que le fournisseur doit rembourser.
+ * Montant du trop-payé (en euros), ou null si la facture n'est pas une
+ * facture d'achat en euros inférieure au débit.
+ */
+export function tropPayePossible(extraction: Record<string, unknown>, depense: DepenseCandidate): number | null {
+  const p = nettoyerPiece(extraction);
+  if (p.typeDocument === "paie" || p.typeDocument === "vente" || p.typeDocument === "autre" || p.devise !== "EUR" || p.ttc === null || p.ttc <= 0) return null;
+  if (depense.source !== "releve-bancaire" || !Number.isFinite(depense.montant)) return null;
+  const ecart = Math.round(depense.montant * 100) - Math.round(p.ttc * 100);
+  return ecart > 0 ? ecart / 100 : null;
+}
+
+export function verifierAssociationTableau(extraction: Record<string, unknown>, depense: DepenseCandidate, tropPaye = false) {
   if (depense.source !== "releve-bancaire" || !Number.isFinite(depense.montant) || depense.montant <= 0) throw new Error("Un débit bancaire positif est requis.");
   const p = nettoyerPiece(extraction);
   if (p.typeDocument === "paie") {
@@ -86,6 +101,11 @@ export function verifierAssociationTableau(extraction: Record<string, unknown>, 
   if (["vente", "autre"].includes(p.typeDocument || "")) throw new Error(`La lecture a classé ce document en « ${p.typeDocument === "vente" ? "vente" : "autre"} » : il n’est donc pas traité comme une facture reçue d’un fournisseur. Une facture d’achat est souvent lue « vente » parce qu’elle en est une pour son émetteur. Si le club en est bien le destinataire, ouvrez « Corriger la lecture ici », mettez Nature sur « achat », enregistrez, puis confirmez l’association. Pour une attestation PER, choisissez plutôt le rattachement correspondant.`);
   if (p.ttc === null || p.ttc <= 0) throw new Error("Montant TTC absent ou invalide : corrigez la lecture de la facture.");
   const [proposition] = proposerAssociations(p, [depense]);
+  if (tropPaye) {
+    const surplus = tropPayePossible(extraction, depense);
+    if (surplus === null) throw new Error("Trop-payé impossible : la facture doit être une facture d’achat en euros d’un montant inférieur au débit.");
+    return { nature: "trop-paye", montantPiece: p.ttc, devisePiece: "EUR", montantEUR: depense.montant, tropPaye: surplus };
+  }
   if (!proposition) throw new Error(`Facture : ${p.ttc.toFixed(2)} ${p.devise}${p.ttcEscompte !== null ? ` (${p.ttcEscompte.toFixed(2)} escompte déduit)` : ""} ; paiement : ${depense.montant.toFixed(2)} EUR. Si ce paiement est une échéance, choisissez Échéance d’une facture. Si la facture accorde un escompte, renseignez « TTC escompte déduit » via Corriger la lecture ici. Sinon, vérifiez les montants et la pièce sélectionnée.`);
   if (proposition.ecart) return { nature: "escompte", montantPiece: p.ttc!, devisePiece: "EUR", montantEUR: depense.montant, ecart: proposition.ecart };
   return { nature: "facture", montantPiece: p.ttc!, devisePiece: "EUR", montantEUR: depense.montant };

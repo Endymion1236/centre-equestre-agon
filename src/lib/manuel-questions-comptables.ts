@@ -263,6 +263,15 @@ export const CHAPITRE_QUESTIONS_COMPTABLES: ManualChapter = {
       href: "/admin/comptabilite/depenses",
     },
     {
+      id: "virement-trop-eleve",
+      title: "J'ai viré trop par erreur à un fournisseur (333,60 € au lieu de 33,60 €)",
+      text: `
+        <p>Dans <strong>Dépenses</strong>, sur la ligne du virement : choisis la facture (33,60 €), puis coche <strong>« J'ai viré trop par erreur »</strong> et confirme. La facture justifie le virement ; seule la facture passe en achat (avec sa TVA), les 300 € de trop restent dus par le fournisseur.</p>
+        <p>Demande-lui le remboursement. Quand il arrive sur le relevé, dans <strong>Comptabilité → Rapprochement</strong>, classe ce crédit en « Remboursement fournisseur » : pas d'avoir à joindre, le compte du fournisseur se solde.</p>
+      `,
+      href: "/admin/comptabilite/depenses",
+    },
+    {
       id: "comptes-cabinet",
       title: "Quel compte pour Orange, HelloAsso, Avem, Equiclic… ?",
       text: `
