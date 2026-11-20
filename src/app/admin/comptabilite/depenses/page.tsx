@@ -284,7 +284,7 @@ export default function DepensesPage() {
           // qu'une facture oubliée fausse la TVA du mois.
           const dispo = pieces.filter(p => !p.retire && !p.avoirFournisseur && (!p.depenseId || p.depenseId === ligne.id));
           const q = rechercheePiece.trim().toLowerCase().replace(",", ".");
-          const listees = q ? dispo.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.ttcEscompte ?? ""} ${p.extraction?.fournisseur ?? ""}`.toLowerCase().replace(/,/g, ".").includes(q)) : dispo;
+          const listees = q ? dispo.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.ttcEscompte ?? ""} ${p.extraction?.fournisseur ?? ""} ${(p.extraction?.factures || []).map(x => x.ttc ?? "").join(" ")}`.toLowerCase().replace(/,/g, ".").includes(q)) : dispo;
           const retenues = dispo.filter(p => groupe.includes(p.id));
           const v = verifierReglementGroupe(retenues.map(p => ({ id: p.id, nom: p.nom, extraction: p.extraction, retire: p.retire, depenseId: p.depenseId, paiementsAssocies: p.paiementsAssocies })), ligne.montant, ligne.id);
           return <div className="space-y-2">
@@ -317,7 +317,7 @@ export default function DepensesPage() {
           // « 199,98 » comme « 199.98 » doivent tomber sur la même pièce.
           const q = rechercheePiece.trim().toLowerCase().replace(",", ".");
           const filtrees = q
-            ? disponibles.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.ttcEscompte ?? ""} ${p.extraction?.fournisseur ?? ""}`.toLowerCase().replace(/,/g, ".").includes(q))
+            ? disponibles.filter(p => `${p.nom} ${p.extraction?.ttc ?? ""} ${p.extraction?.ttcEscompte ?? ""} ${p.extraction?.fournisseur ?? ""} ${(p.extraction?.factures || []).map(x => x.ttc ?? "").join(" ")}`.toLowerCase().replace(/,/g, ".").includes(q))
             : disponibles;
           return <>
             <label className="block text-sm">Rechercher une pièce (montant, fournisseur, nom du fichier)

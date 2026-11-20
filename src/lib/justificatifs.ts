@@ -26,6 +26,12 @@ export interface PieceExtraite {
    * recherche par montant doivent le connaître.
    */
   ttcEscompte: number | null;
+  /**
+   * Fichier qui contient plusieurs factures d'un même paiement (commande
+   * Amazon facturée par plusieurs vendeurs, 20/11/2026) : le détail de
+   * chacune ; les montants ci-dessus en sont la somme.
+   */
+  factures?: { fournisseur: string; numero: string; date: string; ht: number | null; tva: number | null; ttc: number | null }[];
 }
 export interface DepenseCandidate {
   id: string;
@@ -61,6 +67,44 @@ export function nettoyerPiece(v: Record<string, unknown>): PieceExtraite {
     debutPeriode: dateValide(v.debutPeriode), finPeriode: dateValide(v.finPeriode),
     ht: paie ? null : montant(v.ht), tva: paie ? null : montant(v.tva), ttc: paie ? null : montant(v.ttc),
     ttcEscompte: paie ? null : ttcEscompteValide(montant(v.ttcEscompte), montant(v.ttc)) };
+}
+/**
+ * Plusieurs factures lues dans un seul fichier → une pièce, somme des montants.
+ *
+ * Amazon met dans un même PDF une facture par vendeur (et parfois une page
+ * sans montant) pour une commande que la banque prélève en une fois. Avant
+ * le 20/11/2026 la lecture refusait ces fichiers (« une seule pièce par
+ * fichier »). Ici : les pages « autre » sont écartées ; des factures d'achat
+ * dans une même devise sont réunies (fournisseurs et numéros mis bout à
+ * bout, date la plus récente, HT et TVA additionnés seulement s'ils sont
+ * tous lus) ; des bulletins de paie, des ventes ou des devises mêlées restent
+ * refusés, avec la raison. Renvoie un message d'erreur ou la pièce réunie.
+ */
+export function reunirFactures(liste: unknown[]): PieceExtraite | string {
+  const lues = liste.filter(v => v && typeof v === "object" && !Array.isArray(v)).map(v => nettoyerPiece(v as Record<string, unknown>));
+  const utiles = lues.filter(p => p.typeDocument !== "autre");
+  if (!utiles.length) return "Aucune facture lisible dans ce fichier : vérifiez le document ou saisissez les montants à la main.";
+  if (utiles.length === 1) return utiles[0];
+  if (utiles.length > 20) return "Trop de factures dans ce fichier (plus de 20) : déposez-les séparément.";
+  if (utiles.some(p => p.typeDocument === "paie")) return "Ce fichier contient plusieurs bulletins de paie : déposez un bulletin par fichier.";
+  if (utiles.some(p => p.typeDocument === "vente")) return "Ce fichier mêle plusieurs pièces dont une vente : déposez une facture par fichier.";
+  const devises = [...new Set(utiles.map(p => p.devise).filter(Boolean))];
+  if (devises.length > 1) return "Ce fichier contient des factures en devises différentes : déposez-les séparément.";
+  const somme = (cle: "ht" | "tva" | "ttc") => utiles.every(p => p[cle] !== null)
+    ? Math.round(utiles.reduce((s, p) => s + Math.round((p[cle] as number) * 100), 0)) / 100 : null;
+  const noms: string[] = [];
+  for (const p of utiles) if (p.fournisseur && !noms.some(n => normaliser(n) === normaliser(p.fournisseur))) noms.push(p.fournisseur);
+  const dates = utiles.map(p => p.date).filter(Boolean).sort();
+  const debuts = utiles.map(p => p.debutPeriode), fins = utiles.map(p => p.finPeriode);
+  return {
+    devise: devises[0] || "", typeDocument: utiles.every(p => p.typeDocument === "achat") ? "achat" : "inconnu",
+    salarie: "", employeur: "", moisPaie: "", brut: null, netAPayer: null, cotisationsSalariales: null, cotisationsPatronales: null, prelevementSource: null,
+    fournisseur: noms.join(" / ").slice(0, 180), numero: utiles.map(p => p.numero).filter(Boolean).join(" + ").slice(0, 180),
+    date: dates[dates.length - 1] || "",
+    debutPeriode: debuts.every(Boolean) ? [...debuts].sort()[0] : "", finPeriode: fins.every(Boolean) ? [...fins].sort()[fins.length - 1] : "",
+    ht: somme("ht"), tva: somme("tva"), ttc: somme("ttc"), ttcEscompte: null,
+    factures: utiles.map(p => ({ fournisseur: p.fournisseur, numero: p.numero, date: p.date, ht: p.ht, tva: p.tva, ttc: p.ttc })),
+  };
 }
 /** Un TTC escompte déduit n'a de sens que positif et inférieur au TTC. */
 const ttcEscompteValide = (e: number | null, ttc: number | null) => e !== null && ttc !== null && e > 0 && e < ttc ? e : null;
