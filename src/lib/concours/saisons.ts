@@ -71,6 +71,14 @@ export interface RolesPassage {
    * Clé = cavalier qui monte ; valeur = cavalier qui prépare (ou « X »).
    */
   preparateurs?: Record<string, string>;
+  /** Tâches ajoutées pour ce concours (`ResultatConcours.taches`) : id de la tâche → nom de la personne. */
+  taches?: Record<string, string>;
+}
+
+/** Tâche en plus pour un concours (concours organisé au club : parking, buvette, speaker…), tenue pendant le passage. */
+export interface TacheConcours {
+  id: string;
+  nom: string;
 }
 
 /** Un concours de la saison : son organisation puis ses résultats. */
@@ -91,6 +99,8 @@ export interface ResultatConcours {
    * saison). Clé = id de l'équipe. Absent : la catégorie de la fiche.
    */
   categoriesFigees?: Record<string, CategorieCourue>;
+  /** Colonnes de tâches ajoutées au tableau de la journée, dans l'ordre. */
+  taches?: TacheConcours[];
 }
 
 /** Catégorie et indice d'une équipe à un concours donné. */

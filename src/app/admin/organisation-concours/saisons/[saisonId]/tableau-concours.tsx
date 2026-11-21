@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { AlertOctagon, AlertTriangle, CheckCircle2, Printer } from "lucide-react";
+import { AlertOctagon, AlertTriangle, CheckCircle2, Plus, Printer, X } from "lucide-react";
 import type { ResultatConcours, SaisonPonyGames } from "@/lib/concours/saisons";
 import {
   DUREE_ECHAUFFEMENT_MIN, DUREE_PREPA_MIN, PLACEURS_MAX,
-  candidatsRole, coachTientRemplacant, estPersonne, htmlTableau, lignesTableau, nomCavalier, PERSONNE, plageLisible, poserCavalierRemplacant, poserPlaceur, poserPreparateur, poserRole, verifierTableau,
+  TACHES_MAX, ajouterTache, candidatsRole, coachTientRemplacant, poserTache, renommerTache, supprimerTache, estPersonne, htmlTableau, lignesTableau, nomCavalier, PERSONNE, plageLisible, poserCavalierRemplacant, poserPlaceur, poserPreparateur, poserRole, verifierTableau,
   type Candidat, type LigneTableau,
 } from "@/lib/concours/saison-tableau";
 
@@ -158,7 +158,77 @@ function LignePassage({ saison, concours, ligne: l, changer }: { saison: SaisonP
         {l.cavaliers.length >= 5 && <div className="text-[11px] text-gray-500 mt-0.5">Un des 5 cavaliers (★)</div>}
         {l.cavaliers.length === 4 && <div className="text-[11px] text-gray-500 mt-0.5">Le cavalier du remplaçant (★)</div>}
       </td>
+      {(concours.taches ?? []).map((t) => (
+        <td key={t.id} className={td}>
+          <ChoixPersonne valeur={l.roles.taches?.[t.id]} vide={`— ${t.nom.toLowerCase()} —`} valeurDe={(c) => c.nom}
+            candidats={candidatsRole(saison, concours, l.equipeId, "tache", t.id)}
+            onChange={(v) => changer((c) => poserTache(c, l.equipeId, t.id, v))} />
+        </td>
+      ))}
     </tr>
+  );
+}
+
+function idTache(): string {
+  return `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+}
+
+/**
+ * Colonnes de tâches en plus pour ce concours (concours au club : parking,
+ * buvette, speaker…) : ajouter, renommer, supprimer, ou reprendre celles
+ * d'un autre concours de la saison.
+ */
+function TachesEnPlus({ saison, concours, changer }: { saison: SaisonPonyGames; concours: ResultatConcours; changer: Changer }) {
+  const [nom, setNom] = useState("");
+  const taches = concours.taches ?? [];
+  const modele = saison.resultats.filter((r) => r.id !== concours.id && r.taches?.length).sort((a, b) => b.date.localeCompare(a.date))[0];
+  const ajouter = () => {
+    if (!nom.trim()) return;
+    changer((r) => ajouterTache(r, nom, idTache()));
+    setNom("");
+  };
+  const supprimer = (id: string, libelle: string) => {
+    const remplis = (concours.engagements ?? []).filter((g) => g.roles?.taches?.[id]?.trim()).length;
+    if (remplis && !confirm(`Supprimer la colonne « ${libelle} » et les ${remplis} nom(s) saisis dessous ?`)) return;
+    changer((r) => supprimerTache(r, id));
+  };
+  const reprendre = () => {
+    if (!modele?.taches) return;
+    changer((r) => modele.taches!.reduce<ResultatConcours>((acc, t) => ajouterTache(acc, t.nom, idTache()), r));
+  };
+  return (
+    <div className="rounded-xl border border-blue-500/12 bg-white px-4 py-3 space-y-2">
+      <div className="text-sm font-semibold text-blue-900">Tâches en plus pour ce concours</div>
+      <p className="text-xs text-gray-500">Une colonne par tâche (parking, buvette, speaker…), avec une personne par passage, prise pendant le passage.</p>
+      <div className="flex flex-wrap gap-2">
+        {taches.map((t) => (
+          <span key={t.id} className="inline-flex items-center gap-1 rounded-full bg-blue-50 pl-1 pr-1 py-0.5">
+            <input className="bg-transparent px-2 py-1 text-sm font-semibold text-blue-900 w-32 focus:outline-none focus:bg-white rounded-full"
+              defaultValue={t.nom} aria-label="Nom de la tâche"
+              onBlur={(e) => { if (e.target.value.trim() && e.target.value.trim() !== t.nom) changer((r) => renommerTache(r, t.id, e.target.value)); else e.target.value = t.nom; }}
+              onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }} />
+            <button type="button" onClick={() => supprimer(t.id, t.nom)} className="p-1.5 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50" aria-label={`Supprimer ${t.nom}`}>
+              <X size={14} />
+            </button>
+          </span>
+        ))}
+        {taches.length < TACHES_MAX && (
+          <span className="inline-flex items-center gap-1">
+            <input className={`${inpSm} !w-44`} placeholder="Nouvelle tâche (ex. Parking)" value={nom}
+              onChange={(e) => setNom(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") ajouter(); }} />
+            <button type="button" onClick={ajouter} disabled={!nom.trim()}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+              <Plus size={14} /> Ajouter
+            </button>
+          </span>
+        )}
+        {!taches.length && modele && (
+          <button type="button" onClick={reprendre} className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-sm font-semibold hover:bg-blue-100">
+            Reprendre celles de « {modele.nom} » ({modele.taches!.map((t) => t.nom).join(", ")})
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -214,6 +284,8 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
         </div>
       )}
 
+      <TachesEnPlus saison={saison} concours={concours} changer={changer} />
+
       <div className="overflow-x-auto rounded-xl border border-blue-500/12 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-blue-50/60">
@@ -226,6 +298,7 @@ export function TableauConcours({ saison, concours, changer }: { saison: SaisonP
               <th className={th}>Placeurs</th>
               <th className={th}>Juge de ligne</th>
               <th className={th}>Facteur</th>
+              {(concours.taches ?? []).map((t) => <th key={t.id} className={th}>{t.nom}</th>)}
             </tr>
           </thead>
           <tbody>

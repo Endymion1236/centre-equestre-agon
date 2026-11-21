@@ -223,6 +223,42 @@ export function poserPlaceur(r: ResultatConcours, equipeId: string, index: numbe
   });
 }
 
+// ─── Tâches en plus (colonnes ajoutées par Nicolas, 21/11/2026) ────────────
+
+export const TACHES_MAX = 8;
+
+/** Ajoute une colonne de tâche au concours ; nom vide ou déjà présent : inchangé. */
+export function ajouterTache(r: ResultatConcours, nom: string, id: string): ResultatConcours {
+  const propre = nom.trim().replace(/\s+/g, " ").slice(0, 40);
+  const taches = r.taches ?? [];
+  if (!propre || taches.length >= TACHES_MAX || taches.some((t) => simplifier(t.nom) === simplifier(propre) || t.id === id)) return r;
+  return { ...r, taches: [...taches, { id, nom: propre }] };
+}
+
+export function renommerTache(r: ResultatConcours, id: string, nom: string): ResultatConcours {
+  const propre = nom.trim().replace(/\s+/g, " ").slice(0, 40);
+  if (!propre) return r;
+  return { ...r, taches: (r.taches ?? []).map((t) => (t.id === id ? { ...t, nom: propre } : t)) };
+}
+
+/** Retire la colonne et les noms saisis dessous, sur tous les passages. */
+export function supprimerTache(r: ResultatConcours, id: string): ResultatConcours {
+  const reste = (r.taches ?? []).filter((t) => t.id !== id);
+  let suite: ResultatConcours = { ...r, taches: reste.length ? reste : undefined };
+  if (!reste.length) delete suite.taches;
+  for (const g of r.engagements ?? []) if (g.roles?.taches?.[id] !== undefined) suite = poserTache(suite, g.equipeId, id, "");
+  return suite;
+}
+
+/** Personne (nom) sur la tâche `tacheId` pendant ce passage ("" pour retirer). */
+export function poserTache(r: ResultatConcours, equipeId: string, tacheId: string, nom: string): ResultatConcours {
+  return majRoles(r, equipeId, (roles) => {
+    const { [tacheId]: _ancien, ...autres } = roles.taches ?? {};
+    const liste = nom.trim() ? { ...autres, [tacheId]: nom.trim() } : autres;
+    return { ...roles, taches: Object.keys(liste).length ? liste : undefined };
+  });
+}
+
 /** Qui prépare et échauffe le poney de `cavalierId` pour ce passage ("" pour retirer). */
 export function poserPreparateur(r: ResultatConcours, equipeId: string, cavalierId: string, preparateur: string): ResultatConcours {
   return majRoles(r, equipeId, (roles) => {
@@ -331,6 +367,7 @@ function occupations(s: SaisonPonyGames, r: ResultatConcours): Occupation[] {
     if (!(conforme && regleFacteur(l)?.regle === "equipe5")) {
       parNom(l.roles.facteur, `facteur pour ${l.equipe}`, `piste:${l.equipeId}`, l.passage);
     }
+    for (const t of r.taches ?? []) parNom(l.roles.taches?.[t.id], `${t.nom.toLowerCase()} pour ${l.equipe}`, `tache:${t.id}:${l.equipeId}`, l.passage);
     parNom(l.roles.respPrepa, `responsable prépa de ${l.equipe}`, "prepa", l.prepa);
     parNom(l.roles.respEchauffement, `responsable échauffement de ${l.equipe}`, "echauffement", l.echauffement);
     parNom(l.roles.respEchauffement2, `responsable échauffement de ${l.equipe}`, "echauffement", l.echauffement);
@@ -351,6 +388,7 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
     if (!l.roles.juge?.trim()) manque.push("juge de ligne");
     if (!l.roles.facteur?.trim()) manque.push("facteur");
     if (!l.roles.coach?.trim() && !l.roles.coach2?.trim()) manque.push("coach");
+    for (const t of r.taches ?? []) if (!l.roles.taches?.[t.id]?.trim()) manque.push(t.nom.toLowerCase());
     if (manque.length) out.push({ gravite: "alerte", message: `${l.equipe} : ${manque.join(", ")} à désigner.` });
     const regle = regleFacteur(l);
     if (regle && facteurConforme(s, l) === false) {
@@ -393,7 +431,7 @@ export function verifierTableau(s: SaisonPonyGames, r: ResultatConcours): Alerte
 
 export type RolePassage =
   | "respPrepa" | "respEchauffement" | "respEchauffement2" | "placeur" | "juge" | "facteur" | "coach" | "coach2" | "cavalierRemplacant"
-  | "preparateur";
+  | "preparateur" | "tache";
 
 export interface Candidat {
   /** Nom à inscrire dans la case. */
@@ -421,7 +459,7 @@ export function compterTaches(s: SaisonPonyGames, r: ResultatConcours): Map<stri
     for (const id of ro.placeurs ?? []) if (!estPersonne(id)) ajouter(cleCavalier(s, id));
     if (l.remplacant && ro.cavalierRemplacant && !estPersonne(ro.cavalierRemplacant)) ajouter(cleCavalier(s, ro.cavalierRemplacant));
     for (const c of l.cavaliers) if (c.enchaineAvec && c.preparateur && !estPersonne(c.preparateur)) ajouter(cleCavalier(s, c.preparateur));
-    for (const nom of [ro.respPrepa, ro.respEchauffement, ro.respEchauffement2, ro.juge, ro.facteur, ro.coach, ro.coach2]) {
+    for (const nom of [ro.respPrepa, ro.respEchauffement, ro.respEchauffement2, ro.juge, ro.facteur, ro.coach, ro.coach2, ...(r.taches ?? []).map((t) => ro.taches?.[t.id])]) {
       if (nom?.trim() && !estPersonne(nom)) ajouter(clePersonne(s, nom));
     }
   }
@@ -438,7 +476,7 @@ export function candidatsRole(
   r: ResultatConcours,
   equipeId: string,
   roleDemande: RolePassage,
-  /** Pour « preparateur » : le cavalier dont on prépare le poney. */
+  /** Pour « preparateur » : le cavalier dont on prépare le poney ; pour « tache » : l'id de la tâche. */
   pourCavalier?: string,
 ): Candidat[] {
   // Le 2e coach ou 2e responsable a le même créneau que le premier.
@@ -455,6 +493,7 @@ export function candidatsRole(
     : role === "cavalierRemplacant" ? `remplacant:${equipeId}`
     : role === "preparateur" ? `prepa-poney:${equipeId}:${pourCavalier}`
     : role === "coach" ? `coach:${equipeId}`
+    : role === "tache" ? `tache:${pourCavalier}:${equipeId}`
     : `piste:${equipeId}`;
   const occ = occupations(s, r);
 
@@ -552,7 +591,8 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
       placeur: `<div class="pile">${placeurs.join("")}</div>`,
       juge: grande(nom(l.roles.juge)),
       facteur: grande(nom(l.roles.facteur)),
-    };
+      ...Object.fromEntries((r.taches ?? []).map((t) => [`tache:${t.id}`, grande(nom(l.roles.taches?.[t.id]))])),
+    } as Record<string, string>;
   });
 
   const colonnes = colonnesImpression(s, r);
@@ -610,7 +650,8 @@ export function htmlTableau(s: SaisonPonyGames, r: ResultatConcours): string {
 }
 
 export interface ColonneImpression {
-  cle: "equipe" | "cavaliers" | "poneys" | "prepa" | "cheval" | "passage" | "placeur" | "juge" | "facteur";
+  /** Colonne fixe, ou `tache:<id>` pour une tâche ajoutée au concours. */
+  cle: "equipe" | "cavaliers" | "poneys" | "prepa" | "cheval" | "passage" | "placeur" | "juge" | "facteur" | `tache:${string}`;
   entete: string;
   /** Largeur dans la grille : étroite (« max-content ») pour une colonne d'heures sans nom. */
   largeur: string;
@@ -636,6 +677,7 @@ export function colonnesImpression(s: SaisonPonyGames, r: ResultatConcours): Col
     auMoinsUn((l) => (l.roles.placeurs ?? []).some(rempli)) && { cle: "placeur", entete: "Placeur", largeur: "1fr" },
     auMoinsUn((l) => rempli(l.roles.juge)) && { cle: "juge", entete: "Juge de ligne", largeur: "1fr" },
     auMoinsUn((l) => rempli(l.roles.facteur)) && { cle: "facteur", entete: "Facteur", largeur: "1fr" },
+    ...(r.taches ?? []).map((t) => auMoinsUn((l) => rempli(l.roles.taches?.[t.id])) && { cle: `tache:${t.id}` as const, entete: echapper(t.nom), largeur: "1fr" }),
   ];
   return cols.filter((c): c is ColonneImpression => !!c);
 }
