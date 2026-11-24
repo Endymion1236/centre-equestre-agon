@@ -48,8 +48,38 @@ test("Identité CSV stable malgré CRLF/BOM ; nouveau fichier distinct rapproch�
   const r = preparerSourceImport({ format: "csv", compte: s.compte, nom: "copie.csv", texte: "\uFEFFDate;Libellé;Débit;Crédit\r\n01/09/2026;PRLV AGRIAL;125,34;" });
   assert.equal(s.empreinte, r.empreinte); assert.equal(s.operations[0].ref, r.operations[0].ref);
   const autre = csv("01/09/2026;PRLV AGRIAL;125,34;\n20/09/2026;EDF;42;");
+  // Même opération dans l'export du lendemain : même référence (24/11/2026), donc « déjà importée ».
+  assert.equal(autre.operations[0].ref, s.operations[0].ref);
   const plan = rapprocherImportBancaire(autre, [existante(s)], {});
-  assert.equal(plan.rapproches, 1); assert.equal(plan.nouveaux, 1);
+  assert.equal(plan.deja, 1); assert.equal(plan.nouveaux, 1);
+  // Sans lien de provenance (ligne venue d'ailleurs), rapprochée par son contenu.
+  const plan2 = rapprocherImportBancaire(autre, [{ ...existante(s), sourceOperation: "" }], {});
+  assert.equal(plan2.rapproches, 1); assert.equal(plan2.nouveaux, 1);
+});
+test("CSV du lendemain : le choix « Lier à » de la veille est retrouvé, plus rien à refaire (24/11/2026)", () => {
+  const veille = csv("16/11/2026;Prélèvement GROUPAMA CENTRE MANCHE FR66ZZZ412624;676,81;\n18/11/2026;EDF;42;");
+  const lendemain = csv("16/11/2026;Prélèvement GROUPAMA CENTRE MANCHE FR66ZZZ412624;676,81;\n18/11/2026;EDF;42;\n20/11/2026;ORANGE;30;");
+  const ref = veille.operations[0].ref;
+  assert.equal(lendemain.operations[0].ref, ref);
+  // Trace laissée par l'import de la veille (choix manuel « Lier à »).
+  const pdfLigne: ExistanteImport = { id: "pdf-groupama", collection: "depenses", source: "releve-bancaire", sourceOperation: "abc:0:3", origineBancaire: "pdf", mois: "2026-11",
+    dateOperation: "2026-11-16", fournisseur: "Prélèvement GROUPAMA CENTRE MANCHE - Groupama - P077476780", montant: 676.81, poste: "Assurances", compte: veille.compte };
+  const liens: Record<string, LienImport> = { [ref]: { cible: "pdf-groupama", date: "2026-11-16", centimes: 67681, libelle: veille.operations[0].libelle } };
+  const plan = rapprocherImportBancaire(lendemain, [pdfLigne], liens);
+  const g = plan.lignes.find(l => l.operation.ref === ref)!;
+  assert.equal(g.etat, "deja"); assert.equal(g.cible, "pdf-groupama");
+  assert.ok(!plan.aEnregistrer.includes(ref));
+});
+test("CSV face à une ligne du relevé PDF au libellé découpé autrement : même jour, montant et mot commun → rapprochée", () => {
+  const s = csv("15/11/2026;Remboursement de prêt 10003232830 15/11/26 CAPITAL - AUTRES BOVINS E.A.R.L.;147,36;");
+  const pdfLigne: ExistanteImport = { id: "pret", collection: "mouvements-rapprochement", source: "releve-bancaire", sourceOperation: "abc:1:2", origineBancaire: "pdf", mois: "2026-11",
+    dateOperation: "2026-11-15", fournisseur: "Remboursement de prêt 10003232830 15/11/26 CAPITAL", montant: 147.36, poste: "Emprunts", compte: s.compte };
+  const plan = rapprocherImportBancaire(s, [pdfLigne], {});
+  assert.equal(plan.lignes[0].etat, "rapproche"); assert.equal(plan.lignes[0].cible, "pret");
+});
+test("CSV : deux opérations identiques le même jour gardent deux références distinctes", () => {
+  const s = csv("16/11/2026;CAFE;2,50;\n16/11/2026;CAFE;2,50;");
+  assert.notEqual(s.operations[0].ref, s.operations[1].ref);
 });
 test("Reconnaissance PDF : même compte, date, fournisseur normalisé et montant", () => {
   const p = pdf(unique()); p.operations[0].libelle = "AGRIAL";

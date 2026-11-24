@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { COMPTES_BANQUE_DEPENSE } from "./banque-depense";
 import { POSTES_DEPENSES } from "./postes-depenses";
 import { CATEGORIE_IMMOBILISATION, CATEGORIE_PERSONNELLE, CATEGORIE_COMPTE_FFE } from "./tableau-depenses";
-import { CATEGORIES_IMPORT, cleLienSecondaire, ErreurImportBancaire, dateImportValide, lireCsvDepenses, rapprocherImportBancaire, type SourceImport, type ExistanteImport, type LienImport, type DecisionsImport, type PlanImportBancaire } from "./import-bancaire";
+import { CATEGORIES_IMPORT, cleLienSecondaire, refsStablesCsv, ErreurImportBancaire, dateImportValide, lireCsvDepenses, rapprocherImportBancaire, type SourceImport, type ExistanteImport, type LienImport, type DecisionsImport, type PlanImportBancaire } from "./import-bancaire";
 
 export const hashImport = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 export const idLienImport = (s: SourceImport, ref: string) => hashImport([s.compte, s.format, ref]);
@@ -18,7 +18,7 @@ export function preparerSourceImport(value: unknown): SourceImport {
     const lu = lireCsvDepenses(b.texte), empreinte = hashImport(b.texte.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n"));
     if (Date.parse(lu.fin) - Date.parse(lu.debut) > 370 * 86400000) throw new ErreurImportBancaire("Choisissez une période d’un an maximum.");
     return { ...base, format: "csv", empreinte, debut: lu.debut, fin: lu.fin, credits: lu.credits, creditsCentimes: lu.creditsCentimes,
-      operations: lu.operations.map((o, i) => ({ ...o, ref: `${empreinte}:csv:${i}` })) };
+      operations: (() => { const refs = refsStablesCsv(lu.operations); return lu.operations.map((o, i) => ({ ...o, ref: refs[i] })); })() };
   }
   if (b.format !== "pdf" || typeof b.empreinte !== "string" || !/^[a-f0-9]{64}$/.test(b.empreinte) || !Array.isArray(b.operations) || !b.operations.length || b.operations.length > 2000)
     throw new ErreurImportBancaire("Relevé PDF incomplet ou supérieur à 2 000 débits.");

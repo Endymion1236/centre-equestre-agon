@@ -183,6 +183,27 @@ export function lireCsvDepenses(brut: string) {
   const dates = operations.map(o => o.date).sort();
   return { operations, credits, creditsCentimes, zeros, debut: dates[0], fin: dates.at(-1)! };
 }
+/**
+ * Référence d'une ligne de CSV bancaire, la même d'un fichier à l'autre.
+ *
+ * Nicolas importe chaque jour l'export CSV de la banque, qui reprend les
+ * jours précédents. La référence était « empreinte du fichier : rang » :
+ * chaque nouveau fichier changeait toutes les références, la trace de la
+ * veille (`imports-bancaires-liens`) ne se retrouvait plus et ses choix
+ * (« Lier à … ») étaient à refaire tous les jours (24/11/2026). Ici : la
+ * date, le montant et le libellé de la ligne, plus son rang parmi les lignes
+ * identiques du fichier (deux cafés de 2,50 € le même jour).
+ */
+export function refsStablesCsv(operations: Pick<OperationImport, "date" | "centimes" | "libelle">[]): string[] {
+  const vus = new Map<string, number>();
+  return operations.map(o => {
+    const libelle = String(o.libelle ?? "").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase().slice(0, 120);
+    const base = `csv:${o.date}:${o.centimes}:${libelle}`;
+    const k = vus.get(base) ?? 0;
+    vus.set(base, k + 1);
+    return `${base}:${k}`;
+  });
+}
 export function verifierDecisionsImport(value: unknown, refs: Set<string>): DecisionsImport {
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length > 2000) throw new ErreurImportBancaire("Choix d’import invalides.");
   for (const [ref, d] of Object.entries(value)) {
@@ -312,7 +333,9 @@ export function rapprocherImportBancaire(source: SourceImport, existantes: Exist
     // Même compte, même montant, MÊME JOUR et un mot ou numéro commun : c'est
     // la même opération. Une seule candidate, sinon le choix reste au gérant ;
     // une date décalée reste toujours à vérifier.
-    if (source.format === "pdf" && (counts.get(cle(o.date, o.centimes, o.libelle)) || 0) === 1) {
+    // Même règle pour un CSV face à une ligne venue du relevé PDF (ou d'un
+    // CSV au libellé autrement découpé) : Groupama, échéances de prêt, 11/2026.
+    if ((counts.get(cle(o.date, o.centimes, o.libelle)) || 0) === 1) {
       const memeJour = proche.filter(e => banque(e) === source.compte && sameAmount(e) && !e.archive && !e.rapprochementExclu
         && e.dateOperation === o.date && libellesCompatibles(e.fournisseur, o.libelle));
       if (memeJour.length === 1) return { ...r, candidats: [memeJour[0]], etat: "rapproche", cible: memeJour[0].id, motif: "Même compte, jour et montant ; libellé abrégé par la banque. Informations existantes conservées." };
