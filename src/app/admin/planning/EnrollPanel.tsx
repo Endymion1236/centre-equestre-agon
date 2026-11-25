@@ -41,6 +41,7 @@ import { BandeauPrenotificationSepa } from "@/components/admin/BandeauPrenotific
 import { FormulaireAjoutCavalier } from "./FormulaireAjoutCavalier";
 import { PanneauJoursSupplementaires } from "./PanneauJoursSupplementaires";
 import { ModaleChangerGroupe } from "./ModaleChangerGroupe";
+import { ServicesAInscrire } from "./ServicesAInscrire";
 import * as actions from "./enroll-panel-actions";
 import { ChoixFormuleSurDemande } from "./ChoixFormuleSurDemande";
 import { ChoixNiveauPromenade } from "./ChoixNiveauPromenade";
@@ -1192,6 +1193,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     </div>
                   </div>
                 )}
+                <ServicesAInscrire fam={fam} setChildOverrides={setChildOverrides} multiple={inscriptionMode !== "annuel"}
+                  selectedChildren={selectedChildren} setSelectedChildren={setSelectedChildren} selChild={selChild} setSelChild={setSelChild} panelToast={panelToast} />
                 <div className="flex flex-wrap gap-2">{available.map((c:any) => {
                   const sel = selectedChildren.includes(c.id);
                   return (
@@ -1258,7 +1261,7 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
               </div>
             )}
 
-            {fam && children.length === 0 && (
+            {fam && children.length === 0 && !(fam as any).services?.length && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-3 font-body text-xs text-red-700">
                 Cette famille n'a aucun cavalier enregistré. Ajoutez-en un depuis la fiche famille.
               </div>
@@ -1274,6 +1277,8 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
                     ou occupés au même horaire. Vous pouvez en ajouter un nouveau.
                   </div>
                 )}
+                <ServicesAInscrire fam={fam} setChildOverrides={setChildOverrides} multiple
+                  selectedChildren={selectedChildren} setSelectedChildren={setSelectedChildren} selChild={selChild} setSelChild={setSelChild} panelToast={panelToast} />
                 <div className="flex flex-wrap gap-2 mb-3">
                   {available.map((c: any) => {
                     const sel = selectedChildren.includes(c.id);

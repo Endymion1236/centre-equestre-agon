@@ -156,3 +156,39 @@ export function destinatairesFiche(fiche: { parentName?: string; parentEmail?: s
   }
   return liste;
 }
+
+// ─── Inscrire un service au planning (25/11/2026) ──────────────────────────
+//
+// Au planning, on inscrit des « cavaliers » de la fiche. Pour un
+// établissement (Coutances mer et bocage), ce sont ses services — écoles,
+// centres de loisirs — qu'on veut placer sur un créneau, et ils n'y
+// apparaissaient pas. Un service devient, au premier clic, un cavalier de
+// la fiche portant son nom (`serviceEtablissement`), réutilisé ensuite.
+
+const cleNom = (t: unknown) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+
+/** Le cavalier de la fiche qui représente ce service, s'il existe déjà. */
+export function cavalierDuService(
+  enfants: { id: string; firstName?: string; lastName?: string; serviceEtablissement?: string }[] | undefined,
+  service: string,
+): { id: string } | undefined {
+  const cle = cleNom(service);
+  if (!cle) return undefined;
+  return (enfants ?? []).find((c) =>
+    cleNom(c.serviceEtablissement) === cle
+    || cleNom(c.firstName) === cle
+    || cleNom([c.firstName, c.lastName].filter(Boolean).join(" ")) === cle);
+}
+
+/** Services de la fiche qui n'ont pas encore de cavalier pour les représenter. */
+export function servicesSansCavalier(
+  fiche: { services?: unknown; children?: { id: string; firstName?: string; lastName?: string; serviceEtablissement?: string }[] } | undefined,
+): ServiceEtablissement[] {
+  return normaliserServices(fiche?.services).filter((s) => !cavalierDuService(fiche?.children, s.nom));
+}
+
+/** Le cavalier à créer pour inscrire ce service au planning. */
+export function cavalierPourService(service: string, id: string) {
+  const nom = service.trim().slice(0, 120);
+  return { id, firstName: nom, lastName: "", birthDate: null, galopLevel: "—", sanitaryForm: null, serviceEtablissement: nom };
+}
