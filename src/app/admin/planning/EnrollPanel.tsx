@@ -2156,7 +2156,24 @@ function EnrollPanel({ creneau, families, allCreneaux, payments, allCartes, allF
             ) : (
               /* Activités ponctuelles (balade, promenade, animation) — encaissement direct */
               <div className="bg-sand rounded-xl p-4 space-y-3">
-                {priceTTC > 0 && (
+                {/* Inscription établissement aussi pour une animation ou une balade
+                    (écoles, centres de loisirs : 25/11/2026). Même règle que pour un cours :
+                    paiement à 0 € motif « Établissement », l'établissement est facturé à part. */}
+                {!useRattrapage && !isCompetition && (
+                  freeEnroll && freeReason === "Établissement" ? (
+                    <div className="flex items-center justify-between gap-2 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                      <span className="font-body text-xs font-semibold text-purple-700">🏫 Inscription établissement — aucune facture à cette séance (établissement facturé à part)</span>
+                      <button onClick={() => { setFreeEnroll(false); setFreeReason("Rattrapage"); }}
+                        className="font-body text-[10px] text-slate-500 bg-transparent border-none cursor-pointer underline">Annuler</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setFreeEnroll(true); setFreeReason("Établissement"); setShowPay(false); }}
+                      className="w-full flex items-center justify-center gap-1.5 font-body text-xs font-semibold text-purple-700 bg-white border border-purple-200 rounded-lg px-3 py-2 cursor-pointer hover:bg-purple-50">
+                      🏫 Inscrire pour un établissement (école, centre de loisirs…)
+                    </button>
+                  )
+                )}
+                {priceTTC > 0 && !(freeEnroll && freeReason === "Établissement") && (
                   <div>
                     {/* Montant affiché = ce qui sera réellement encaissé. Avec
                         plusieurs cavaliers, montrer le prix unitaire ici et le
