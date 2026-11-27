@@ -47,3 +47,18 @@ export function tarifSemaineStage(cr: CreneauTarifStage | null | undefined, nbJo
 export function nbJoursDistincts(creneaux: { date?: string }[]): number {
   return Math.max(1, new Set(creneaux.map((c) => c.date).filter(Boolean)).size);
 }
+
+/**
+ * Prix plancher réellement applicable à un stage de prix `prixBase`.
+ *
+ * Le plancher (Réglages → Réductions) borne les remises : il empêche une
+ * réduction de faire descendre un stage trop bas. Il ne doit jamais faire
+ * MONTER un stage au-dessus de son propre prix : réglé à 160 €, il portait
+ * un stage Baby Poney de 88 € et une semaine de 4 jours à 144 € à 160 €
+ * chacun (COSTEGROSSE, 27/11/2026). Plancher = min(réglage, prix du stage).
+ */
+export function plancherEffectif(plancher: number | null | undefined, prixBase: number): number {
+  const p = Number(plancher) || 0;
+  if (p <= 0 || !(prixBase > 0)) return 0;
+  return Math.min(p, Math.round(prixBase * 100) / 100);
+}

@@ -32,6 +32,7 @@
 //
 // ═══════════════════════════════════════════════════════════════════
 
+import { plancherEffectif } from "./tarif-stage-jours";
 import {
   collection,
   doc,
@@ -418,7 +419,8 @@ export async function applyDiscounts(params: {
   // le prix final ne peut pas descendre sous ce seuil. Utile pour borner
   // les cas multi-jours (1 stage 5j compte comme 5 reservations donc nth
   // multi-stages monte vite). 0 ou undefined = pas de plancher applique.
-  const plancher = params.settings.prixPlancherStage || 0;
+  // Jamais au-dessus du prix du stage lui-même (lib/tarif-stage-jours).
+  const plancher = plancherEffectif(params.settings.prixPlancherStage, originalPriceTTC);
   let plancherApplied = false;
   if (plancher > 0 && finalPriceTTC < plancher) {
     finalPriceTTC = Math.round(plancher * 100) / 100;

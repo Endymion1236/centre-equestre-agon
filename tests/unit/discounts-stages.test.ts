@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import * as tarifStageJours from "../../src/lib/tarif-stage-jours";
 
 function charger(reservations: any[]) {
   const source = readFileSync(resolve("src/lib/discounts.ts"), "utf8");
@@ -29,6 +30,8 @@ function charger(reservations: any[]) {
       Timestamp: class {},
     },
     "@/lib/firebase": { db: {} },
+    // Module pur : le vrai, pas un simulacre.
+    "./tarif-stage-jours": tarifStageJours,
   };
   const module = { exports: {} as any };
   runInNewContext(outputText, {

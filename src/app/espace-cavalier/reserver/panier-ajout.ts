@@ -16,7 +16,7 @@ import { creneauAvecFormule, estSurDemande, formuleDuCreneau, formulesProposees,
 import { todayLocalString } from "@/lib/date-local";
 import type { CartItem, Creneau } from "./types";
 import { offrePassages, titreAvecPassages } from "@/lib/tarifs-passages";
-import { nbJoursDistincts, tarifSemaineStage } from "@/lib/tarif-stage-jours";
+import { nbJoursDistincts, plancherEffectif, tarifSemaineStage } from "@/lib/tarif-stage-jours";
 
 /** Ce que la page sait, et que l'ajout au panier doit lire. */
 export interface ContexteAjout {
@@ -205,9 +205,11 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setShowCart } = rappel
       prixFinal = Math.max(0, Math.round((prixBase - remiseSemaine) * 100) / 100);
       remiseEffective = remiseSemaine;
       // Plancher uniquement en mode semaine.
-      if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
-        prixFinal = prixPlancherStage;
-        remiseEffective = Math.max(0, Math.round((prixBase - prixPlancherStage) * 100) / 100);
+      // Jamais au-dessus du prix du stage lui-même (lib/tarif-stage-jours).
+      const plancher = plancherEffectif(prixPlancherStage, prixBase);
+      if (plancher > 0 && prixFinal < plancher) {
+        prixFinal = plancher;
+        remiseEffective = Math.max(0, Math.round((prixBase - plancher) * 100) / 100);
       }
     }
     return {

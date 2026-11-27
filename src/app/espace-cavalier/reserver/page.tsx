@@ -1,6 +1,6 @@
 "use client";
 
-import { nbJoursDistincts, tarifSemaineStage } from "@/lib/tarif-stage-jours";
+import { nbJoursDistincts, plancherEffectif, tarifSemaineStage } from "@/lib/tarif-stage-jours";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { derouleEstRempli } from "@/lib/stage-deroule";
 import { totauxPanier } from "@/lib/panier-reservation";
@@ -1269,9 +1269,10 @@ export default function ReserverPage() {
                                   const remiseSemaine = rang === 0 ? 0 : rang === 1 ? 10 : rang === 2 ? 20 : 20 + (rang - 2) * 10;
                                   remise = remiseSemaine;
                                   prixFinal = Math.max(0, Math.round((prixEffectif - remiseSemaine) * 100) / 100);
-                                  if (prixPlancherStage > 0 && prixFinal < prixPlancherStage) {
-                                    prixFinal = prixPlancherStage;
-                                    remise = Math.max(0, Math.round((prixEffectif - prixPlancherStage) * 100) / 100);
+                                  const plancher = plancherEffectif(prixPlancherStage, prixEffectif);
+                                  if (plancher > 0 && prixFinal < plancher) {
+                                    prixFinal = plancher;
+                                    remise = Math.max(0, Math.round((prixEffectif - plancher) * 100) / 100);
                                   }
                                 }
                                 return (

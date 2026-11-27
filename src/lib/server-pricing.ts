@@ -29,7 +29,7 @@ import { memeStage } from "@/lib/meme-stage";
 //   (applyDiscounts en %) et l'avoir seront branchés dans un second temps.
 // ═══════════════════════════════════════════════════════════════════
 
-import { tarifSemaineStage } from "@/lib/tarif-stage-jours";
+import { plancherEffectif, tarifSemaineStage } from "@/lib/tarif-stage-jours";
 import { adminDb } from "@/lib/firebase-admin";
 
 const TVA_STAGE_DEFAUT = 5.5;
@@ -221,7 +221,7 @@ export async function auditPaymentPricing(opts: {
       const dayPrice =
         cr && typeof cr.priceTTCDay === "number" && cr.priceTTCDay > 0 ? cr.priceTTCDay : null;
       const nbDaysItem = Array.isArray(it.creneauIds) ? it.creneauIds.length : 1;
-      const floor = isStage && !isDayMode && prixPlancherStage > 0 ? prixPlancherStage : 0;
+      const floor = isStage && !isDayMode && refWeek !== null ? plancherEffectif(prixPlancherStage, refWeek) : 0;
 
       const issues: string[] = [];
 

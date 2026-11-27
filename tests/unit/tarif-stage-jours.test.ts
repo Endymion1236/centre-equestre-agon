@@ -3,7 +3,7 @@
  *   npx tsx tests/unit/tarif-stage-jours.test.ts
  */
 import assert from "node:assert/strict";
-import { nbJoursDistincts, prixPleinStage, tarifSemaineStage } from "../../src/lib/tarif-stage-jours";
+import { nbJoursDistincts, plancherEffectif, prixPleinStage, tarifSemaineStage } from "../../src/lib/tarif-stage-jours";
 
 let passes = 0;
 function test(nom: string, fn: () => void) {
@@ -34,6 +34,15 @@ test("prix plein depuis le HT quand le TTC manque ; créneau absent : 0", () => 
 test("jours distincts : deux créneaux le même jour comptent pour un", () => {
   assert.equal(nbJoursDistincts([{ date: "2026-12-21" }, { date: "2026-12-22" }, { date: "2026-12-22" }, { date: "2026-12-23" }, { date: "2026-12-24" }]), 4);
   assert.equal(nbJoursDistincts([]), 1);
+});
+
+test("plancher : jamais au-dessus du prix du stage (Baby Poney 88 €, plancher 160 €)", () => {
+  assert.equal(plancherEffectif(160, 88), 88);
+  assert.equal(plancherEffectif(160, 144), 144);
+  assert.equal(plancherEffectif(120, 160), 120);
+  assert.equal(plancherEffectif(0, 160), 0);
+  assert.equal(plancherEffectif(undefined, 160), 0);
+  assert.equal(plancherEffectif(120, 0), 0);
 });
 
 console.log(`\n✅ ${passes} tests passés`);

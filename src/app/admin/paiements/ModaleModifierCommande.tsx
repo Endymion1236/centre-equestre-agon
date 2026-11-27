@@ -15,6 +15,7 @@
  * et inaltérable (CGI art. 242 nonies A). C'est un avoir qu'il faut alors.
  */
 
+import { plancherEffectif } from "@/lib/tarif-stage-jours";
 import { useState, useEffect } from "react";
 import {
   collection, addDoc, updateDoc, deleteDoc, doc, getDoc, getDocs,
@@ -297,8 +298,9 @@ export default function ModaleModifierCommande({
                           const totalPct = Math.min(fd.percent + md.percent, 50);
                           let newPrice = Math.round((originalPrice * (100 - totalPct)) / 100 * 100) / 100;
                           // Plancher
-                          if (settings.prixPlancherStage && newPrice < settings.prixPlancherStage) {
-                            newPrice = settings.prixPlancherStage;
+                          const plancher = plancherEffectif(settings.prixPlancherStage, originalPrice);
+                          if (plancher > 0 && newPrice < plancher) {
+                            newPrice = plancher;
                           }
                           // Mise à jour titre pour refléter la nouvelle réduction
                           const baseTitle = (it.activityTitle || "").replace(/\s*\(-[\d.]+€\)$/, "").replace(/\s*—\s*\d+\.?\d*€$/, "");
