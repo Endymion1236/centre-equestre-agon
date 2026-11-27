@@ -16,6 +16,7 @@ import { creneauAvecFormule, estSurDemande, formuleDuCreneau, formulesProposees,
 import { todayLocalString } from "@/lib/date-local";
 import type { CartItem, Creneau } from "./types";
 import { offrePassages, titreAvecPassages } from "@/lib/tarifs-passages";
+import { nbJoursDistincts, tarifSemaineStage } from "@/lib/tarif-stage-jours";
 
 /** Ce que la page sait, et que l'ajout au panier doit lire. */
 export interface ContexteAjout {
@@ -88,9 +89,11 @@ const { setCart, setSelectedChildren, setSelectedCreneau, setShowCart } = rappel
   const enfantsAAjouter = childIdsParam ?? selectedChildren;
   if (enfantsAAjouter.length === 0) return;
   const first = stageCreneaux[0];
-  const prixSemaine = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux ?? 5.5) / 100);
   const allowDay = stageCreneaux.some((c: any) => c.allowDayBooking);
   const isJourMode = allowDay && stageBookingMode === "jour";
+  // Semaine courte (Noël : 4 jours) : le tarif « N jours » de l'activité.
+  const joursSemaine = isJourMode ? (totalJoursStageParam || nbJoursDistincts(stageCreneaux)) : nbJoursDistincts(stageCreneaux);
+  const prixSemaine = tarifSemaineStage(first as any, joursSemaine);
 
   // Calculer le prix effectif
   let prixBase: number;

@@ -29,6 +29,7 @@ import { memeStage } from "@/lib/meme-stage";
 //   (applyDiscounts en %) et l'avoir seront branchés dans un second temps.
 // ═══════════════════════════════════════════════════════════════════
 
+import { tarifSemaineStage } from "@/lib/tarif-stage-jours";
 import { adminDb } from "@/lib/firebase-admin";
 
 const TVA_STAGE_DEFAUT = 5.5;
@@ -204,7 +205,11 @@ export async function auditPaymentPricing(opts: {
       const creneauRef: string | null =
         it.creneauId || (Array.isArray(it.creneauIds) ? it.creneauIds[0] : null);
       const cr = creneauRef ? creneauMap.get(creneauRef) : null;
-      const refWeek = weekPriceFromCreneau(cr);
+      // Stage : tarif de la semaine selon son nombre de jours (semaine de Noël
+      // à 4 jours = tarif « 4 jours », lib/tarif-stage-jours), sinon prix plein.
+      const refWeek = isStage && cr && weekPriceFromCreneau(cr) !== null
+        ? tarifSemaineStage(cr, await getStageDayCount(cr))
+        : weekPriceFromCreneau(cr);
 
       const claimedFinal = Math.round(Number(it.priceTTC || 0) * 100) / 100;
       const claimedBase = Math.round(Number(it.originalPriceTTC || it.priceTTC || 0) * 100) / 100;

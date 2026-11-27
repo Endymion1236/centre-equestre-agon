@@ -1,5 +1,6 @@
 "use client";
 
+import { nbJoursDistincts, tarifSemaineStage } from "@/lib/tarif-stage-jours";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { derouleEstRempli } from "@/lib/stage-deroule";
 import { totauxPanier } from "@/lib/panier-reservation";
@@ -842,7 +843,8 @@ export default function ReserverPage() {
                     return `Semaine du ${f(mon, !sameMonth)} au ${f(sun, true)}`;
                   })();
                   const first = stageCreneaux[0];
-                  const prix = (first as any).priceTTC || first.priceHT * (1 + (first.tvaTaux ?? 5.5) / 100);
+                  // Semaine courte : tarif « N jours » de l'activité (lib/tarif-stage-jours).
+                  const prix = tarifSemaineStage(first as any, nbJoursDistincts(stageCreneaux));
                   // `spots` = places pour la SEMAINE COMPLÈTE (le jour le plus
                   // plein fait foi) : 0 dès qu'UN jour est plein. Ça ne veut PAS
                   // dire que le stage est plein — sur un stage ouvert à la
