@@ -7,6 +7,7 @@ import { db } from "@/lib/firebase";
 import { enregistrerEncaissement } from "@/lib/encaissement";
 import { commandesApplicables, fichesOuChercherLaCommande, planifierApplicationAvoir, resteDu, utilisationsSansCommande, montantUtilisation } from "@/lib/avoir-application";
 import { identifiantsRattaches } from "@/lib/fusion-familles-regles";
+import { filtrerFamilles } from "@/app/admin/planning/enroll-panel-utils";
 import { echeanceAvoir } from "@/lib/planning-services";
 import { Card, Badge } from "@/components/ui";
 import { downloadAvoirPdf } from "@/lib/download-avoir";
@@ -57,6 +58,8 @@ export default function AvoirsPage() {
 
   // Create form
   const [selFamily, setSelFamily] = useState("");
+  // Recherche par nom (parent, email ou cavalier) : la liste déroulante seule était trop longue.
+  const [rechercheFamille, setRechercheFamille] = useState("");
   const [avoirType, setAvoirType] = useState<AvoirType>("avoir");
   const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
@@ -502,13 +505,20 @@ export default function AvoirsPage() {
             </div>
             <div>
               <label className={labelStyle}>Famille *</label>
+              <input type="search" className={`${inputStyle} mb-2`} value={rechercheFamille} placeholder="Tapez un nom (parent ou cavalier)…"
+                onChange={e => {
+                  const q = e.target.value;
+                  setRechercheFamille(q);
+                  const trouvees = filtrerFamilles(families.filter((f: any) => f.status !== "merged"), q);
+                  if (q.trim() && trouvees.length === 1) setSelFamily(trouvees[0].firestoreId);
+                }} />
               <select className={inputStyle} value={selFamily} onChange={e => setSelFamily(e.target.value)}>
-                <option value="">— Sélectionner —</option>
+                <option value="">{rechercheFamille.trim() ? `— ${filtrerFamilles(families.filter((f: any) => f.status !== "merged"), rechercheFamille).length} famille(s) trouvée(s) —` : "— Sélectionner —"}</option>
                 {/* Les fiches absorbées n'apparaissent pas : un avoir créé sur
                     l'ancienne fiche COSTEGROSSE ne trouvait pas la commande,
                     passée sur le compte de connexion (19/10/2026). */}
-                {families
-                  .filter((f: any) => f.status !== "merged")
+                {filtrerFamilles(families.filter((f: any) => f.status !== "merged"), rechercheFamille)
+                  .concat(families.filter((f: any) => f.firestoreId === selFamily && !filtrerFamilles(families, rechercheFamille).includes(f)))
                   .slice()
                   .sort((a: any, b: any) => String(a.parentName || "").localeCompare(String(b.parentName || ""), "fr"))
                   .map(f => <option key={f.firestoreId} value={f.firestoreId}>{f.parentName}{f.parentEmail ? ` · ${f.parentEmail}` : ""}</option>)}
